@@ -198,3 +198,341 @@ jobs:
       - name: Check JavaScript syntax
         shell: bash
         run: node --check Code.js
+
+      - name: Verify audio semantic invariants
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+
+          const source = fs.readFileSync('Code.js', 'utf8');
+          const context = vm.createContext({
+            console,
+            Utilities: {
+              DigestAlgorithm: { SHA_256: 'SHA_256' },
+              Charset: { UTF_8: 'UTF_8' },
+              computeDigest: (_algorithm, text) =>
+                Array.from(
+                  crypto.createHash('sha256')
+                    .update(String(text), 'utf8')
+                    .digest()
+                )
+            }
+          });
+
+          vm.runInContext(source, context, {
+            filename: 'Code.js'
+          });
+
+          const run = expression =>
+            vm.runInContext(expression, context);
+
+          const fail = message => {
+            throw new Error(message);
+          };
+
+          const assert = (condition, message) => {
+            if (!condition) fail(message);
+          };
+
+          const same = (actual, expected, message) => {
+            if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+              fail(
+                message + '\nexpected=' + JSON.stringify(expected) +
+                '\nactual=' + JSON.stringify(actual)
+              );
+            }
+          };
+
+          const expectThrow = (fn, message) => {
+            let threw = false;
+            try {
+              fn();
+            } catch (_error) {
+              threw = true;
+            }
+            assert(threw, message);
+          };
+
+          const validate = (plan, section) =>
+            run(
+              'validateListeningAudioPlan_(' +
+              JSON.stringify(JSON.stringify(plan)) + ',' +
+              JSON.stringify(section) +
+              ')'
+            );
+
+          const listeningSpec = plan =>
+            run(
+              'listeningAudioSpec_(' +
+              JSON.stringify({ plan }) + ',' +
+              '{voice:"JiMin",audioVersion:HQ_LISTENING_AUDIO_VERSION}' +
+              ')'
+            );
+
+          same(
+            run('HQ_VOICES'),
+            [
+              { label: 'Hyunsu', id: 'ko-KR-HyunsuNeural', rate: '+20%' },
+              { label: 'InJoon', id: 'ko-KR-InJoonNeural', rate: '+5%' },
+              { label: 'JiMin', id: 'ko-KR-JiMinNeural', rate: '+0%' },
+              { label: 'YuJin', id: 'ko-KR-YuJinNeural', rate: '+0%' }
+            ],
+            'HQ_VOICES changed unexpectedly.'
+          );
+
+          same(
+            run('HQ_K1_NUMBER_VOICE'),
+            {
+              label: 'Nanami',
+              id: 'ja-JP-NanamiNeural',
+              rate: '+0%'
+            },
+            'K1 number voice changed unexpectedly.'
+          );
+
+          same(
+            run('HQ_K1_NUMBER_TEXTS'),
+            {
+              choice_number1: 'マルイチ',
+              choice_number2: 'マルニ',
+              choice_number3: 'マルサン',
+              choice_number4: 'マルヨン'
+            },
+            'K1 number text mapping changed unexpectedly.'
+          );
+
+          same(
+            [
+              run('HQ_AUDIO_VERSION_LEGACY'),
+              run('HQ_AUDIO_VERSION_V4_1200'),
+              run('HQ_AUDIO_VERSION'),
+              run('HQ_LISTENING_AUDIO_VERSION')
+            ],
+            [
+              'azure-v2-24k160k-1.2s-0.65s-100ms',
+              'azure-v4-24k160k-leading5s-q3dual-1.2s-0.65s-100ms',
+              'azure-v4-24k160k-leading5s-q3dual-final2.1s-1.2s-0.65s-100ms',
+              'azure-listening-v1-24k160k-leading5s-segments'
+            ],
+            'Audio version constants changed unexpectedly.'
+          );
+
+          const oldK1Plan = [1, 2, 3, 4].map(n => ({
+            role: 'choice' + n,
+            text: '한국어',
+            repeat: 2,
+            pause_ms_after: 3200
+          }));
+
+          validate(oldK1Plan, 'K1');
+
+          for (const section of ['K2', 'K3', 'K4', 'K5']) {
+            validate([
+              {
+                role: 'passage',
+                text: '한국어',
+                repeat: 1,
+                pause_ms_after: 1200
+              }
+            ], section);
+          }
+
+          const newK1Plan = [];
+          const numberTexts = [
+            'マルイチ',
+            'マルニ',
+            'マルサン',
+            'マルヨン'
+          ];
+
+          for (let i = 0; i < 4; i++) {
+            newK1Plan.push({
+              role: 'choice_number' + (i + 1),
+              text: numberTexts[i],
+              repeat: 1,
+              pause_ms_after: 731
+            });
+            newK1Plan.push({
+              role: 'choice' + (i + 1),
+              text: '한국어',
+              repeat: 2,
+              pause_ms_after: 3200
+            });
+          }
+
+          validate(newK1Plan, 'K1');
+
+          expectThrow(
+            () => validate([
+              {
+                role: 'choice_number1',
+                text: 'マルイチ',
+                repeat: 1,
+                pause_ms_after: 700
+              }
+            ], 'K2'),
+            'K2 accepted a K1 choice-number role.'
+          );
+
+          expectThrow(
+            () => validate([
+              {
+                role: 'choice_number1',
+                text: 'マルニ',
+                repeat: 1,
+                pause_ms_after: 700
+              }
+            ], 'K1'),
+            'choice_number1 accepted mismatched text.'
+          );
+
+          expectThrow(
+            () => validate([
+              {
+                role: 'choice_number1',
+                text: 'マルイチ',
+                repeat: 2,
+                pause_ms_after: 700
+              }
+            ], 'K1'),
+            'K1 choice-number role accepted repeat=2.'
+          );
+
+          expectThrow(
+            () => validate([
+              {
+                role: 'choice1',
+                text: 'マルイチ',
+                repeat: 1,
+                pause_ms_after: 700
+              }
+            ], 'K1'),
+            'General role accepted Japanese number text.'
+          );
+
+          expectThrow(
+            () => validate([
+              {
+                role: 'choice_number1',
+                text: 'テスト',
+                repeat: 1,
+                pause_ms_after: 700
+              }
+            ], 'K1'),
+            'K1 choice-number role accepted arbitrary Japanese.'
+          );
+
+          expectThrow(
+            () => validate([
+              {
+                role: 'choice_number1',
+                text: 'マルイチ',
+                repeat: 1,
+                pause_ms_after: 700,
+                voice: 'ja-JP-NanamiNeural'
+              }
+            ], 'K1'),
+            'AUDIO_PLAN_JSON accepted an extra field.'
+          );
+
+          const oldListeningSpec = listeningSpec(oldK1Plan);
+          assert(
+            oldListeningSpec.assignment === 'VOICE=JiMin',
+            'Legacy Listening assignment format changed.'
+          );
+          assert(
+            !oldListeningSpec.ssml.includes('ja-JP-NanamiNeural'),
+            'Legacy Listening plan unexpectedly uses Japanese voice.'
+          );
+
+          const numberedListeningSpec = listeningSpec(newK1Plan);
+          assert(
+            numberedListeningSpec.assignment ===
+              'VOICE=JiMin;NUMBER_VOICE=Nanami',
+            'Numbered K1 assignment format is incorrect.'
+          );
+          assert(
+            numberedListeningSpec.ssml.includes('ja-JP-NanamiNeural') &&
+            numberedListeningSpec.ssml.includes('ko-KR-JiMinNeural'),
+            'Numbered K1 SSML does not contain both Japanese and Korean voices.'
+          );
+          assert(
+            numberedListeningSpec.ssml.includes('<break time="731ms"/>'),
+            'Number gap is not sourced from pause_ms_after.'
+          );
+          assert(
+            oldListeningSpec.fingerprint !== numberedListeningSpec.fingerprint,
+            'Listening fingerprint did not change when SSML changed.'
+          );
+
+          const writtenJob = {
+            audio: [
+              '하나',
+              '둘',
+              '원문\n완성문',
+              '넷',
+              '다섯',
+              '여섯',
+              '일곱'
+            ]
+          };
+          const voices = [
+            'Hyunsu',
+            'InJoon',
+            'JiMin',
+            'YuJin',
+            'Hyunsu',
+            'InJoon'
+          ];
+
+          const oldV4Spec = run(
+            'audioSpec_(' +
+            JSON.stringify(writtenJob) + ',' +
+            JSON.stringify({
+              voices,
+              audioVersion:
+                'azure-v4-24k160k-leading5s-q3dual-1.2s-0.65s-100ms'
+            }) +
+            ')'
+          );
+
+          const newV4Spec = run(
+            'audioSpec_(' +
+            JSON.stringify(writtenJob) + ',' +
+            JSON.stringify({
+              voices,
+              audioVersion:
+                'azure-v4-24k160k-leading5s-q3dual-final2.1s-1.2s-0.65s-100ms'
+            }) +
+            ')'
+          );
+
+          assert(
+            newV4Spec.ssml.replace('2.1s', '1.2s') === oldV4Spec.ssml,
+            'Old-v4/new-v4 SSML differ by more than the approved final tail.'
+          );
+          assert(
+            newV4Spec.fingerprint !== oldV4Spec.fingerprint,
+            'Old-v4/new-v4 fingerprints must remain distinct.'
+          );
+
+          const legacySpec = run(
+            'audioSpec_(' +
+            JSON.stringify(writtenJob) + ',' +
+            JSON.stringify({ voices }) +
+            ')'
+          );
+          assert(
+            legacySpec.description.startsWith('HANGUL_AUDIO_V3:'),
+            'Missing audioVersion no longer falls back to legacy written audio.'
+          );
+          assert(
+            !legacySpec.ssml.includes('5000ms'),
+            'Legacy written audio unexpectedly gained v4 leading silence.'
+          );
+
+          console.log('Audio semantic regression checks passed.');
+          NODE

@@ -106,9 +106,9 @@ jobs:
                   findings.append((raw, 'non-UTF-8 tracked file'))
                   continue
               for pattern in patterns:
-                if pattern.search(text):
-                    findings.append((raw, 'likely embedded credential/secret'))
-                    break
+                  if pattern.search(text):
+                      findings.append((raw, 'likely embedded credential/secret'))
+                      break
 
           if bad_paths:
               print('Forbidden credential-like files are tracked:')

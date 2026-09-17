@@ -35,6 +35,7 @@ jobs:
               '.gitignore',
               'Code.js',
               'appsscript.json',
+              'OPERATIONS.md',
               '.github/workflows/repository-audit.yml',
           }
           tracked = set(

@@ -36,6 +36,7 @@ jobs:
               'Code.js',
               'appsscript.json',
               'OPERATIONS.md',
+              'RECOVERY.md',
               '.github/workflows/repository-audit.yml',
           }
           tracked = set(

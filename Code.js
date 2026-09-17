@@ -115,8 +115,11 @@ const HQ_NOTE = 'HANGUL_QUEUE_STATE_V3\n';
 const HQ_AUDIO_VERSION_LEGACY =
   'azure-v2-24k160k-1.2s-0.65s-100ms';
 
-const HQ_AUDIO_VERSION =
+const HQ_AUDIO_VERSION_V4_1200 =
   'azure-v4-24k160k-leading5s-q3dual-1.2s-0.65s-100ms';
+
+const HQ_AUDIO_VERSION =
+  'azure-v4-24k160k-leading5s-q3dual-final2.1s-1.2s-0.65s-100ms';
 
 const HQ_LEADING_SILENCE_MS = 5000;
 
@@ -2325,10 +2328,13 @@ function audioSpec_(
 
   const isV4 =
     audioVersion ===
-    HQ_AUDIO_VERSION;
+      HQ_AUDIO_VERSION ||
+    audioVersion ===
+      HQ_AUDIO_VERSION_V4_1200;
 
   if (
     audioVersion !== HQ_AUDIO_VERSION &&
+    audioVersion !== HQ_AUDIO_VERSION_V4_1200 &&
     audioVersion !== HQ_AUDIO_VERSION_LEGACY
   ) {
     throw new Error(
@@ -2431,7 +2437,9 @@ function audioSpec_(
       azureVoiceBlock_(
         voices[4],
         j.audio[6],
-        '1.2s'
+        audioVersion === HQ_AUDIO_VERSION
+          ? '2.1s'
+          : '1.2s'
       );
 
   } else {

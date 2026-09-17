@@ -1,0 +1,200 @@
+name: Repository audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repository-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify tracked-file allowlist
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          import sys
+
+          allowed = {
+              '.clasp.json',
+              '.gitignore',
+              'Code.js',
+              'appsscript.json',
+              '.github/workflows/repository-audit.yml',
+          }
+          tracked = set(
+              subprocess.check_output(
+                  ['git', 'ls-files'], text=True
+              ).splitlines()
+          )
+          unexpected = sorted(tracked - allowed)
+          missing = sorted({'.clasp.json', '.gitignore', 'Code.js', 'appsscript.json'} - tracked)
+
+          if unexpected:
+              print('Unexpected tracked files:')
+              print('\n'.join(f'  - {p}' for p in unexpected))
+          if missing:
+              print('Required tracked files missing:')
+              print('\n'.join(f'  - {p}' for p in missing))
+          if unexpected or missing:
+              sys.exit(1)
+          PY
+
+      - name: Reject credential files and likely embedded secrets
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import re
+          import subprocess
+          import sys
+
+          tracked = subprocess.check_output(
+              ['git', 'ls-files'], text=True
+          ).splitlines()
+
+          forbidden_names = {
+              '.clasprc.json',
+              '.env',
+              'credentials.json',
+              'client_secret.json',
+              'service-account.json',
+          }
+          forbidden_suffixes = {'.pem', '.p12', '.pfx', '.key'}
+
+          bad_paths = []
+          for raw in tracked:
+              p = pathlib.PurePosixPath(raw)
+              if p.name.lower() in forbidden_names or p.suffix.lower() in forbidden_suffixes:
+                  bad_paths.append(raw)
+
+          patterns = [
+              re.compile(r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----'),
+              re.compile(r'(?i)\b(?:client_secret|refresh_token)\b\s*[:=]\s*["\'][^"\']{8,}'),
+              re.compile(r'(?i)\bAZURE_SPEECH_KEY\b\s*[:=]\s*["\'][A-Za-z0-9+/=_-]{16,}'),
+              re.compile(r'\bgh[pousr]_[A-Za-z0-9]{20,}\b'),
+              re.compile(r'\bAIza[0-9A-Za-z_-]{35}\b'),
+              re.compile(r'\bGOCSPX-[A-Za-z0-9_-]{20,}\b'),
+          ]
+
+          findings = []
+          scan_targets = [
+              p for p in tracked
+              if p != '.github/workflows/repository-audit.yml'
+          ]
+          for raw in scan_targets:
+              path = pathlib.Path(raw)
+              try:
+                  text = path.read_text(encoding='utf-8')
+              except UnicodeDecodeError:
+                  findings.append((raw, 'non-UTF-8 tracked file'))
+                  continue
+              for pattern in patterns:
+                  if pattern.search(text):
+                      findings.append((raw, 'likely embedded credential/secret'))
+                      break
+
+          if bad_paths:
+              print('Forbidden credential-like files are tracked:')
+              print('\n'.join(f'  - {p}' for p in sorted(bad_paths)))
+          if findings:
+              print('Potential secret findings:')
+              print('\n'.join(f'  - {p}: {reason}' for p, reason in findings))
+          if bad_paths or findings:
+              sys.exit(1)
+          PY
+
+      - name: Verify gitignore protections
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import sys
+
+          required = {'.clasprc.json', '.env', 'node_modules/', '*.log'}
+          lines = {
+              line.strip()
+              for line in pathlib.Path('.gitignore').read_text(encoding='utf-8').splitlines()
+              if line.strip() and not line.lstrip().startswith('#')
+          }
+          missing = sorted(required - lines)
+          if missing:
+              print('Required .gitignore entries missing:')
+              print('\n'.join(f'  - {x}' for x in missing))
+              sys.exit(1)
+          PY
+
+      - name: Verify clasp target
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          expected_script_id = '1p_e1jKICTZXHpCrQ7rwU9HilloZdkFBpHry_lCq5YgXpaiU4FNEQlDa-'
+          data = json.loads(pathlib.Path('.clasp.json').read_text(encoding='utf-8'))
+
+          errors = []
+          if data.get('scriptId') != expected_script_id:
+              errors.append('scriptId mismatch')
+          if data.get('rootDir') != '':
+              errors.append('rootDir must be empty')
+          if data.get('skipSubdirectories') is not False:
+              errors.append('skipSubdirectories must be false')
+
+          if errors:
+              print('\n'.join(errors))
+              sys.exit(1)
+          PY
+
+      - name: Verify Apps Script manifest policy
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          data = json.loads(pathlib.Path('appsscript.json').read_text(encoding='utf-8'))
+          expected = {
+              'timeZone': 'Asia/Tokyo',
+              'runtimeVersion': 'V8',
+          }
+
+          errors = []
+          for key, value in expected.items():
+              if data.get(key) != value:
+                  errors.append(f'{key} must be {value!r}')
+
+          webapp = data.get('webapp') or {}
+          if webapp.get('executeAs') != 'USER_DEPLOYING':
+              errors.append('webapp.executeAs must be USER_DEPLOYING')
+          if webapp.get('access') != 'MYSELF':
+              errors.append('webapp.access must be MYSELF')
+          if data.get('dependencies') != {}:
+              errors.append('dependencies must remain empty')
+
+          if errors:
+              print('\n'.join(errors))
+              sys.exit(1)
+          PY
+
+      - name: Check JavaScript syntax
+        shell: bash
+        run: node --check Code.js

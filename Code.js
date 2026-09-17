@@ -158,6 +158,19 @@ const HQ_LISTENING_NOTE =
 const HQ_LISTENING_AUDIO_VERSION =
   'azure-listening-v1-24k160k-leading5s-segments';
 
+const HQ_K1_NUMBER_VOICE = {
+  label: 'Nanami',
+  id: 'ja-JP-NanamiNeural',
+  rate: '+0%'
+};
+
+const HQ_K1_NUMBER_TEXTS = {
+  choice_number1: 'マルイチ',
+  choice_number2: 'マルニ',
+  choice_number3: 'マルサン',
+  choice_number4: 'マルヨン'
+};
+
 const HQ_LISTENING_MAX_SEGMENTS = 12;
 const HQ_LISTENING_MAX_TOTAL_CHARS = 12000;
 
@@ -823,7 +836,8 @@ function readListeningJob_(
 
   j.plan =
     validateListeningAudioPlan_(
-      j.audioPlanRaw
+      j.audioPlanRaw,
+      j.section
     );
 
   j.hash =
@@ -845,7 +859,8 @@ function readListeningJob_(
 
 
 function validateListeningAudioPlan_(
-  raw
+  raw,
+  section
 ) {
   let plan;
 
@@ -919,10 +934,18 @@ function validateListeningAudioPlan_(
         );
       }
 
+      const isNumberRole =
+        Object.prototype
+          .hasOwnProperty.call(
+            HQ_K1_NUMBER_TEXTS,
+            segment.role
+          );
+
       if (
         !roles.has(
           segment.role
-        )
+        ) &&
+        !isNumberRole
       ) {
         throw new Error(
           'Invalid audio role at segment ' +
@@ -932,6 +955,30 @@ function validateListeningAudioPlan_(
       }
 
       if (
+        isNumberRole &&
+        section !== 'K1'
+      ) {
+        throw new Error(
+          'K1 choice-number roles are not allowed in ' +
+          section +
+          '.'
+        );
+      }
+
+      if (isNumberRole) {
+        if (
+          segment.text !==
+          HQ_K1_NUMBER_TEXTS[
+            segment.role
+          ]
+        ) {
+          throw new Error(
+            'Invalid K1 choice-number text at segment ' +
+            (i + 1) +
+            '.'
+          );
+        }
+      } else if (
         typeof segment.text !==
           'string' ||
         !segment.text.trim() ||
@@ -957,6 +1004,17 @@ function validateListeningAudioPlan_(
       ) {
         throw new Error(
           'repeat must be 1 or 2 at segment ' +
+          (i + 1) +
+          '.'
+        );
+      }
+
+      if (
+        isNumberRole &&
+        segment.repeat !== 1
+      ) {
+        throw new Error(
+          'K1 choice-number repeat must be 1 at segment ' +
           (i + 1) +
           '.'
         );
@@ -1508,11 +1566,30 @@ function listeningAudioSpec_(
     );
   }
 
+  const hasNumberVoice =
+    j.plan.some(
+      segment =>
+        Object.prototype
+          .hasOwnProperty.call(
+            HQ_K1_NUMBER_TEXTS,
+            segment.role
+          )
+    );
+
   let body = '';
   let first = true;
 
   j.plan.forEach(
     segment => {
+      const segmentVoice =
+        Object.prototype
+          .hasOwnProperty.call(
+            HQ_K1_NUMBER_TEXTS,
+            segment.role
+          )
+          ? HQ_K1_NUMBER_VOICE
+          : voice;
+
       for (
         let n = 0;
         n < segment.repeat;
@@ -1531,7 +1608,7 @@ function listeningAudioSpec_(
 
         body +=
           azureVoiceBlock_(
-            voice,
+            segmentVoice,
             segment.text,
             pauseMs + 'ms',
             first
@@ -1564,7 +1641,13 @@ function listeningAudioSpec_(
 
     assignment:
       'VOICE=' +
-      state.voice,
+      state.voice +
+      (
+        hasNumberVoice
+          ? ';NUMBER_VOICE=' +
+            HQ_K1_NUMBER_VOICE.label
+          : ''
+      ),
 
     fingerprint:
       fingerprint,

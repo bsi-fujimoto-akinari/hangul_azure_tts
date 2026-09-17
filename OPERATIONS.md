@@ -296,3 +296,45 @@ The following are prohibited in normal operation:
 - Moving runtime data or secrets into GitHub merely to centralize sources of truth
 
 Recovery exceptions must be explicitly authorized and audited. Even during recovery, do not solve problems by force-pushing `main`, moving protected tags, or treating deletion of an exposed secret as sufficient remediation.
+
+## 11. Canonical release history
+
+Release history is interpreted by role, not by treating every commit as a release.
+
+Canonical history classes:
+
+- `BASELINE`: an immutable verified fallback marker.
+- `PRODUCTION`: repository changes that reached Apps Script production and are represented by a verified production snapshot tag.
+- `INFRASTRUCTURE`: repository CI, audit, or safety controls that do not by themselves create a production release.
+- `POLICY`: operations, recovery, governance, or history documentation that does not by itself create a production release.
+
+The normalized history through GH-07 is:
+
+| Commit | Class | Meaning |
+| --- | --- | --- |
+| `e52a133eeaa48866f284b7e76a1ccfd44df4057b` | BASELINE | G1 live PASS / Listening Stage B ACTIVE historical baseline |
+| `a0db5fe89416df7d4df41272e5c4bf6bc18b86f5` | PRODUCTION | Restrict web-app access to deployer only |
+| `372581317bc42a486fb2873742698b5f92d65513` | INFRASTRUCTURE | Add secret-free repository audit CI |
+| `73d7fb62eebc41c1c740603e1b82ff438f5c5ae7` | PRODUCTION | Preserve v4 audio compatibility and add the 2.1 s final tail |
+| `67419486c6594762cf0f4582fa2ff6bb08edcab4` | PRODUCTION | Add K1 Japanese choice-number voice segments; verified production snapshot |
+| `877e9fd26c8f8d4e6229fba1a5e72d152b65b32e` | INFRASTRUCTURE | Add semantic audio regression checks |
+| `c83425b78449a0a1d65096a80763721bcd80abf0` | POLICY | Add source-of-truth operations policy |
+| `3d6393020d87c9e96cf3fd762809156c8c3f2512` | POLICY | Add recovery and rollback procedure |
+
+Protected snapshot markers:
+
+```text
+g1-live-pass-stageb-active-20260917
+  -> e52a133eeaa48866f284b7e76a1ccfd44df4057b
+
+k1-jp-number-audio-prod-20260917
+  -> 67419486c6594762cf0f4582fa2ff6bb08edcab4
+```
+
+The production tag, not every production-affecting intermediate commit, is the canonical marker of a verified production release. The intermediate production commits remain part of traceable Git history.
+
+`main` may contain later infrastructure or policy changes while Apps Script production remains represented by the latest verified production tag. Such a state is normal when `Code.js`, `appsscript.json`, and `.clasp.json` have not drifted from the production snapshot.
+
+A historical baseline is a fallback reference, not a routine direct full-snapshot deployment source. Recovery must follow `RECOVERY.md`, including recovery-source selection and forward corrective history.
+
+GitHub Release objects are optional presentation metadata and are not a source of truth. They are not required retroactively for existing tags. If adopted later, they must reference existing immutable tags rather than replace or redefine them.

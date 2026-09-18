@@ -174,6 +174,31 @@ const HQ_K1_NUMBER_TEXTS = {
 const HQ_LISTENING_MAX_SEGMENTS = 12;
 const HQ_LISTENING_MAX_TOTAL_CHARS = 12000;
 
+/**
+ * N5-P0 5L set bridge.
+ * Legacy column name LISTENING_ISSUE_NO is retained in the audio queue,
+ * but live 5L rows now share one set-level sequence number across K1-K5.
+ */
+const HQ_LISTENING_SET_SIZE = 5;
+const HQ_LISTENING_SET_AUDIO_TAB =
+  'listening_set_audio_v1';
+const HQ_LISTENING_SET_AUDIO_HEADERS = [
+  'PARENT_SET_ID',
+  'STATUS',
+  'CREATED_AT',
+  'LISTENING_SET_NO',
+  'PAYLOAD_HASH',
+  'AUDIO_FILE_ID',
+  'AUDIO_URL',
+  'ERROR',
+  'PROCESSED_AT',
+  'STORAGE_MODE'
+];
+const HQ_LISTENING_SET_STORAGE_MODE =
+  'listening_set_audio_v1';
+const HQ_LISTENING_SET_AUDIO_VERSION =
+  'azure-listening-set-v1-24k160k-source-locked';
+
 
 /* =========================================================
  * CONFIG
@@ -608,10 +633,6 @@ function processListeningAudioQueue_(
       false
     );
 
-  /**
-   * Listening tab未作成なら、
-   * v4 written既存挙動と同じidle。
-   */
   if (!sheet) {
     return idle_();
   }
@@ -646,10 +667,10 @@ function processListeningAudioQueue_(
 
   const row = index + 2;
 
-  let job;
+  let seed;
 
   try {
-    job =
+    seed =
       readListeningJob_(
         sheet,
         row
@@ -657,7 +678,7 @@ function processListeningAudioQueue_(
 
     locateListening_(
       sheet,
-      job.id
+      seed.id
     );
 
   } catch (e) {
@@ -687,11 +708,731 @@ function processListeningAudioQueue_(
     };
   }
 
-  return runListeningJob_(
+  const members =
+    collectListeningSetRows_(
+      sheet,
+      seed.parentSetId
+    );
+
+  if (
+    seed.parentSetId.indexOf(
+      'SYSTEM_TEST-'
+    ) === 0 &&
+    members.length === 1
+  ) {
+    return runListeningJob_(
+      sheet,
+      seed,
+      c
+    );
+  }
+
+  return processListeningAudioSet_(
     sheet,
-    job,
+    seed,
     c
   );
+}
+
+
+function collectListeningSetRows_(
+  sheet,
+  parentSetId
+) {
+  const last =
+    sheet.getLastRow();
+
+  if (last < 2) {
+    return [];
+  }
+
+  return sheet
+    .getRange(
+      2,
+      1,
+      last - 1,
+      HQ_LISTENING_HEADERS.length
+    )
+    .getDisplayValues()
+    .map(
+      (values, i) => ({
+        row: i + 2,
+        values: values
+      })
+    )
+    .filter(
+      x =>
+        x.values[3] ===
+        parentSetId
+    );
+}
+
+
+function processListeningAudioSet_(
+  sheet,
+  seed,
+  c
+) {
+  let members =
+    collectListeningSetRows_(
+      sheet,
+      seed.parentSetId
+    );
+
+  if (
+    members.length !==
+    HQ_LISTENING_SET_SIZE
+  ) {
+    throw new Error(
+      '5L PARENT_SET_ID must contain exactly ' +
+      HQ_LISTENING_SET_SIZE +
+      ' rows.'
+    );
+  }
+
+  const sections =
+    members
+      .map(x => x.values[5])
+      .sort();
+
+  if (
+    JSON.stringify(sections) !==
+    JSON.stringify([
+      'K1','K2','K3','K4','K5'
+    ])
+  ) {
+    throw new Error(
+      '5L PARENT_SET_ID must contain exactly one K1-K5 row.'
+    );
+  }
+
+  const setNos =
+    Array.from(
+      new Set(
+        members.map(
+          x => Number(x.values[4])
+        )
+      )
+    );
+
+  if (
+    setNos.length !== 1 ||
+    !Number.isInteger(setNos[0]) ||
+    setNos[0] < 1
+  ) {
+    throw new Error(
+      'All K1-K5 rows must share one positive LISTENING_SET_NO in legacy LISTENING_ISSUE_NO.'
+    );
+  }
+
+  const order = {
+    K1: 1,
+    K2: 2,
+    K3: 3,
+    K4: 4,
+    K5: 5
+  };
+
+  members =
+    members.sort(
+      (a, b) =>
+        order[a.values[5]] -
+        order[b.values[5]]
+    );
+
+  for (
+    let i = 0;
+    i < members.length;
+    i++
+  ) {
+    const m = members[i];
+    const status = m.values[1];
+
+    if (status === 'done') {
+      continue;
+    }
+
+    if (
+      status !== 'pending' &&
+      status !== 'processing'
+    ) {
+      throw new Error(
+        '5L member ' +
+        m.values[0] +
+        ' has non-runnable status ' +
+        status +
+        '.'
+      );
+    }
+
+    const job =
+      readListeningJob_(
+        sheet,
+        m.row
+      );
+
+    const result =
+      runListeningJob_(
+        sheet,
+        job,
+        c
+      );
+
+    if (
+      !result ||
+      result.status !== 'done'
+    ) {
+      return {
+        status:
+          result &&
+          result.status ||
+          'error',
+        queue: 'listening_set',
+        parent_set_id:
+          seed.parentSetId,
+        listening_set_no:
+          setNos[0],
+        member_result:
+          result || null
+      };
+    }
+  }
+
+  members =
+    collectListeningSetRows_(
+      sheet,
+      seed.parentSetId
+    )
+      .sort(
+        (a, b) =>
+          order[a.values[5]] -
+          order[b.values[5]]
+      );
+
+  if (
+    members.some(
+      x => x.values[1] !== 'done'
+    )
+  ) {
+    return {
+      status: 'partial',
+      queue: 'listening_set',
+      parent_set_id:
+        seed.parentSetId,
+      listening_set_no:
+        setNos[0]
+    };
+  }
+
+  const combined =
+    publishListeningSetAudio_(
+      sheet,
+      seed.parentSetId,
+      setNos[0],
+      c
+    );
+
+  return {
+    status: 'done',
+    queue: 'listening_set',
+    parent_set_id:
+      seed.parentSetId,
+    listening_set_no:
+      setNos[0],
+    combined_file_id:
+      combined.file_id,
+    combined_audio_url:
+      combined.audio_url
+  };
+}
+
+
+function listeningSetAudioSheet_(
+  c
+) {
+  const ss =
+    SpreadsheetApp
+      .openById(
+        c.QUEUE_SHEET_ID
+      );
+
+  let sheet =
+    ss.getSheetByName(
+      HQ_LISTENING_SET_AUDIO_TAB
+    );
+
+  if (!sheet) {
+    sheet =
+      ss.insertSheet(
+        HQ_LISTENING_SET_AUDIO_TAB
+      );
+
+    sheet
+      .getRange(
+        1,
+        1,
+        1,
+        HQ_LISTENING_SET_AUDIO_HEADERS.length
+      )
+      .setValues([
+        HQ_LISTENING_SET_AUDIO_HEADERS
+      ]);
+
+    sheet.setFrozenRows(1);
+  }
+
+  const actual =
+    sheet
+      .getRange(
+        1,
+        1,
+        1,
+        HQ_LISTENING_SET_AUDIO_HEADERS.length
+      )
+      .getDisplayValues()[0];
+
+  if (
+    JSON.stringify(actual) !==
+    JSON.stringify(
+      HQ_LISTENING_SET_AUDIO_HEADERS
+    )
+  ) {
+    throw new Error(
+      'listening_set_audio_v1 header mismatch.'
+    );
+  }
+
+  return sheet;
+}
+
+
+function parseListeningVoice_(
+  assignment
+) {
+  const m =
+    /^VOICE=([^;]+)(?:;NUMBER_VOICE=([^;]+))?$/
+      .exec(
+        String(assignment)
+      );
+
+  if (!m) {
+    throw new Error(
+      'Invalid persisted Listening ASSIGNMENT.'
+    );
+  }
+
+  const voice =
+    HQ_VOICES.find(
+      v => v.label === m[1]
+    );
+
+  if (!voice) {
+    throw new Error(
+      'Unknown Listening voice in ASSIGNMENT.'
+    );
+  }
+
+  if (
+    m[2] &&
+    m[2] !==
+      HQ_K1_NUMBER_VOICE.label
+  ) {
+    throw new Error(
+      'Unexpected Listening number voice in ASSIGNMENT.'
+    );
+  }
+
+  return voice;
+}
+
+
+function combinedListeningSetSpec_(
+  members
+) {
+  let body = '';
+  let first = true;
+  const fingerprintInput = [];
+
+  members.forEach(
+    m => {
+      const values = m.values;
+      const section = values[5];
+      const plan =
+        validateListeningAudioPlan_(
+          values[7],
+          section
+        );
+      const normalVoice =
+        parseListeningVoice_(
+          values[9]
+        );
+
+      fingerprintInput.push([
+        values[0],
+        section,
+        values[8],
+        values[9],
+        values[7]
+      ]);
+
+      plan.forEach(
+        segment => {
+          const segmentVoice =
+            Object.prototype
+              .hasOwnProperty.call(
+                HQ_K1_NUMBER_TEXTS,
+                segment.role
+              )
+              ? HQ_K1_NUMBER_VOICE
+              : normalVoice;
+
+          for (
+            let n = 0;
+            n < segment.repeat;
+            n++
+          ) {
+            const isBetweenRepeats =
+              n <
+              segment.repeat - 1;
+
+            const pauseMs =
+              isBetweenRepeats
+                ? Math.max(
+                    650,
+                    segment.pause_ms_after
+                  )
+                : segment.pause_ms_after;
+
+            body +=
+              azureVoiceBlock_(
+                segmentVoice,
+                segment.text,
+                pauseMs + 'ms',
+                first
+                  ? HQ_LEADING_SILENCE_MS +
+                    'ms'
+                  : null
+              );
+
+            first = false;
+          }
+        }
+      );
+    }
+  );
+
+  const ssml =
+    '<speak version="1.0" ' +
+    'xmlns="http://www.w3.org/2001/10/synthesis" ' +
+    'xmlns:mstts="http://www.w3.org/2001/mstts" ' +
+    'xml:lang="ko-KR">' +
+    body +
+    '</speak>';
+
+  const payloadHash =
+    hash_(
+      JSON.stringify(
+        fingerprintInput
+      )
+    );
+
+  const fingerprint =
+    hash_(
+      HQ_LISTENING_SET_AUDIO_VERSION +
+      ssml
+    );
+
+  return {
+    ssml: ssml,
+    payloadHash: payloadHash,
+    fingerprint: fingerprint
+  };
+}
+
+
+function locateListeningSetAudioRow_(
+  sheet,
+  parentSetId
+) {
+  const last =
+    sheet.getLastRow();
+
+  if (last < 2) {
+    return null;
+  }
+
+  const ids =
+    sheet
+      .getRange(
+        2,
+        1,
+        last - 1,
+        1
+      )
+      .getDisplayValues()
+      .map(r => r[0]);
+
+  const matches = [];
+
+  ids.forEach(
+    (id, i) => {
+      if (id === parentSetId) {
+        matches.push(i + 2);
+      }
+    }
+  );
+
+  if (matches.length > 1) {
+    throw new Error(
+      'PARENT_SET_ID must occur at most once in listening_set_audio_v1.'
+    );
+  }
+
+  return matches.length
+    ? matches[0]
+    : null;
+}
+
+
+function publishListeningSetAudio_(
+  listeningSheet,
+  parentSetId,
+  setNo,
+  c
+) {
+  const members =
+    collectListeningSetRows_(
+      listeningSheet,
+      parentSetId
+    )
+      .sort(
+        (a, b) => {
+          const order = {
+            K1:1,K2:2,K3:3,K4:4,K5:5
+          };
+          return (
+            order[a.values[5]] -
+            order[b.values[5]]
+          );
+        }
+      );
+
+  if (
+    members.length !==
+      HQ_LISTENING_SET_SIZE ||
+    members.some(
+      x => x.values[1] !== 'done'
+    )
+  ) {
+    throw new Error(
+      'Combined 5L audio requires five done K1-K5 rows.'
+    );
+  }
+
+  const spec =
+    combinedListeningSetSpec_(
+      members
+    );
+
+  const setSheet =
+    listeningSetAudioSheet_(
+      c
+    );
+
+  let row =
+    locateListeningSetAudioRow_(
+      setSheet,
+      parentSetId
+    );
+
+  if (!row) {
+    row =
+      setSheet.getLastRow() + 1;
+
+    setSheet
+      .getRange(
+        row,
+        1,
+        1,
+        HQ_LISTENING_SET_AUDIO_HEADERS.length
+      )
+      .setValues([[
+        parentSetId,
+        'processing',
+        new Date().toISOString(),
+        setNo,
+        spec.payloadHash,
+        '',
+        '',
+        '',
+        '',
+        HQ_LISTENING_SET_STORAGE_MODE
+      ]]);
+
+    SpreadsheetApp.flush();
+  } else {
+    const values =
+      setSheet
+        .getRange(
+          row,
+          1,
+          1,
+          HQ_LISTENING_SET_AUDIO_HEADERS.length
+        )
+        .getDisplayValues()[0];
+
+    if (
+      Number(values[3]) !== setNo ||
+      values[4] !== spec.payloadHash ||
+      values[9] !==
+        HQ_LISTENING_SET_STORAGE_MODE
+    ) {
+      throw new Error(
+        'Existing combined 5L row conflicts with the source-locked set.'
+      );
+    }
+
+    if (
+      values[1] === 'done' &&
+      values[5] &&
+      values[6]
+    ) {
+      return {
+        file_id: values[5],
+        audio_url: values[6],
+        payload_hash: values[4]
+      };
+    }
+
+    setSheet
+      .getRange(
+        row,
+        2
+      )
+      .setValue('processing');
+
+    setSheet
+      .getRange(
+        row,
+        8
+      )
+      .clearContent();
+
+    SpreadsheetApp.flush();
+  }
+
+  try {
+    const folder =
+      DriveApp.getFolderById(
+        c.VOICE_FOLDER_ID
+      );
+
+    const id =
+      parentSetId +
+      '.combined';
+
+    const fileSpec = {
+      tempName:
+        id +
+        '.' +
+        spec.fingerprint +
+        '.mp3',
+      description:
+        'HANGUL_LISTENING_SET_AUDIO_V1:' +
+        spec.fingerprint
+    };
+
+    let audio =
+      findAudio_(
+        folder,
+        id,
+        fileSpec,
+        {}
+      );
+
+    if (!audio) {
+      const blob =
+        synthesize_(
+          spec.ssml,
+          c
+        );
+
+      blob.setName(
+        fileSpec.tempName
+      );
+
+      audio =
+        folder.createFile(
+          blob
+        );
+    }
+
+    audio.setDescription(
+      fileSpec.description
+    );
+
+    audio.setName(
+      id + '.mp3'
+    );
+
+    const completed =
+      new Date().toISOString();
+
+    setSheet
+      .getRange(
+        row,
+        1,
+        1,
+        HQ_LISTENING_SET_AUDIO_HEADERS.length
+      )
+      .setValues([[
+        parentSetId,
+        'done',
+        setSheet
+          .getRange(row, 3)
+          .getDisplayValue() ||
+          completed,
+        setNo,
+        spec.payloadHash,
+        audio.getId(),
+        audio.getUrl(),
+        '',
+        completed,
+        HQ_LISTENING_SET_STORAGE_MODE
+      ]]);
+
+    SpreadsheetApp.flush();
+
+    return {
+      file_id:
+        audio.getId(),
+      audio_url:
+        audio.getUrl(),
+      payload_hash:
+        spec.payloadHash
+    };
+
+  } catch (e) {
+    setSheet
+      .getRange(
+        row,
+        2
+      )
+      .setValue('error');
+
+    setSheet
+      .getRange(
+        row,
+        8
+      )
+      .setValue(
+        safeError_(e, c)
+      );
+
+    SpreadsheetApp.flush();
+
+    throw e;
+  }
 }
 
 

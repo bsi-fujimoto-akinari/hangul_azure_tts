@@ -172,6 +172,7 @@ const HQ_K1_NUMBER_TEXTS = {
 };
 
 const HQ_LISTENING_MAX_SEGMENTS = 12;
+const HQ_LISTENING_MAX_PAUSE_MS = 6000;
 const HQ_LISTENING_MAX_TOTAL_CHARS = 12000;
 
 /**
@@ -1766,10 +1767,13 @@ function validateListeningAudioPlan_(
           segment.pause_ms_after
         ) ||
         segment.pause_ms_after < 0 ||
-        segment.pause_ms_after > 5000
+        segment.pause_ms_after >
+          HQ_LISTENING_MAX_PAUSE_MS
       ) {
         throw new Error(
-          'pause_ms_after must be an integer 0-5000 at segment ' +
+          'pause_ms_after must be an integer 0-' +
+          HQ_LISTENING_MAX_PAUSE_MS +
+          ' at segment ' +
           (i + 1) +
           '.'
         );

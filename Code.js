@@ -200,6 +200,25 @@ const HQ_LISTENING_SET_STORAGE_MODE =
 const HQ_LISTENING_SET_AUDIO_VERSION =
   'azure-listening-set-v1-24k160k-source-locked';
 
+const HQ_K1_READY_TAB =
+  'listening_k1_ready_v1';
+
+const HQ_K1_READY_HEADERS = [
+  'K1_READY_ID',
+  'CREATED_AT',
+  'STATUS',
+  'IMAGE_FILE_ID',
+  'IMAGE_URL',
+  'IMAGE_SHA256',
+  'FINAL_CHOICES_JSON',
+  'ANSWER_KEY',
+  'TTS_SCRIPT_JSON',
+  'QA_PROFILE',
+  'AUDIT_RESULT',
+  'BOUND_LISTENING_SET_ID',
+  'CONSUMED_AT'
+];
+
 
 /* =========================================================
  * CONFIG
@@ -225,6 +244,18 @@ function config_() {
       );
     }
   });
+
+  /**
+   * K1_READY runtime is required only by
+   * persistent Listening K1 operations.
+   * Keeping this optional here avoids coupling
+   * written audio processing to the new runtime
+   * before deployment configuration is staged.
+   */
+  c.K1_READY_SHEET_ID =
+    props.getProperty(
+      'K1_READY_SHEET_ID'
+    ) || '';
 
   if (
     !/^[a-z0-9-]+$/.test(
@@ -343,6 +374,824 @@ function listeningAudioSheet_(
   }
 
   return sheet;
+}
+
+
+/**
+ * Persistent K1_READY source of truth.
+ */
+function k1ReadySheet_(c) {
+  if (!c.K1_READY_SHEET_ID) {
+    throw new Error(
+      'Missing Script Property: K1_READY_SHEET_ID'
+    );
+  }
+
+  const sheet =
+    SpreadsheetApp
+      .openById(
+        c.K1_READY_SHEET_ID
+      )
+      .getSheetByName(
+        HQ_K1_READY_TAB
+      );
+
+  if (!sheet) {
+    throw new Error(
+      HQ_K1_READY_TAB +
+      ' tab is missing.'
+    );
+  }
+
+  if (
+    sheet.getMaxColumns() <
+      HQ_K1_READY_HEADERS.length
+  ) {
+    throw new Error(
+      HQ_K1_READY_TAB +
+      ' has too few columns.'
+    );
+  }
+
+  const headers =
+    sheet
+      .getRange(
+        1,
+        1,
+        1,
+        HQ_K1_READY_HEADERS.length
+      )
+      .getDisplayValues()[0];
+
+  if (
+    JSON.stringify(headers) !==
+    JSON.stringify(
+      HQ_K1_READY_HEADERS
+    )
+  ) {
+    throw new Error(
+      HQ_K1_READY_TAB +
+      '!A1:M1 header mismatch.'
+    );
+  }
+
+  return sheet;
+}
+
+
+function k1ReadyRecordFromRow_(
+  sheet,
+  row
+) {
+  const range =
+    sheet.getRange(
+      row,
+      1,
+      1,
+      HQ_K1_READY_HEADERS.length
+    );
+
+  const formulas =
+    range.getFormulas()[0];
+
+  if (
+    formulas.some(
+      value => Boolean(value)
+    )
+  ) {
+    throw new Error(
+      'K1_READY A:M must contain literal values, not formulas.'
+    );
+  }
+
+  const values =
+    range.getValues()[0];
+
+  return {
+    row: row,
+    values: values,
+    id: String(values[0] || ''),
+    createdAt: String(values[1] || ''),
+    status: String(values[2] || ''),
+    imageFileId: String(values[3] || ''),
+    imageUrl: String(values[4] || ''),
+    imageSha256: String(values[5] || ''),
+    finalChoicesRaw: String(values[6] || ''),
+    answerKeyRaw: String(values[7] || ''),
+    ttsScriptRaw: String(values[8] || ''),
+    qaProfileRaw: String(values[9] || ''),
+    auditResultRaw: String(values[10] || ''),
+    boundListeningSetId:
+      String(values[11] || ''),
+    consumedAt:
+      String(values[12] || '')
+  };
+}
+
+
+function readK1ReadyRecord_(
+  c,
+  k1ReadyId
+) {
+  const id =
+    String(k1ReadyId || '');
+
+  if (!id) {
+    throw new Error(
+      'K1_READY_ID is required.'
+    );
+  }
+
+  const sheet =
+    k1ReadySheet_(c);
+
+  const last =
+    sheet.getLastRow();
+
+  if (last < 2) {
+    throw new Error(
+      'K1_READY record not found.'
+    );
+  }
+
+  const ids =
+    sheet
+      .getRange(
+        2,
+        1,
+        last - 1,
+        1
+      )
+      .getValues()
+      .map(
+        row => String(row[0] || '')
+      );
+
+  const rows = [];
+
+  ids.forEach(
+    (value, index) => {
+      if (value === id) {
+        rows.push(index + 2);
+      }
+    }
+  );
+
+  if (rows.length !== 1) {
+    throw new Error(
+      'K1_READY_ID must resolve to exactly one row.'
+    );
+  }
+
+  return k1ReadyRecordFromRow_(
+    sheet,
+    rows[0]
+  );
+}
+
+
+function readBoundK1ReadyForSet_(
+  c,
+  listeningSetId
+) {
+  const setId =
+    String(listeningSetId || '');
+
+  if (!setId) {
+    throw new Error(
+      'LISTENING_SET_ID is required.'
+    );
+  }
+
+  const sheet =
+    k1ReadySheet_(c);
+
+  const last =
+    sheet.getLastRow();
+
+  if (last < 2) {
+    throw new Error(
+      'Bound K1_READY record not found.'
+    );
+  }
+
+  const boundIds =
+    sheet
+      .getRange(
+        2,
+        12,
+        last - 1,
+        1
+      )
+      .getValues()
+      .map(
+        row => String(row[0] || '')
+      );
+
+  const rows = [];
+
+  boundIds.forEach(
+    (value, index) => {
+      if (value === setId) {
+        rows.push(index + 2);
+      }
+    }
+  );
+
+  if (rows.length !== 1) {
+    throw new Error(
+      'LISTENING_SET_ID must resolve to exactly one bound K1_READY row.'
+    );
+  }
+
+  return k1ReadyRecordFromRow_(
+    sheet,
+    rows[0]
+  );
+}
+
+
+function computeK1ImageSha256_(
+  imageFileId
+) {
+  const fileId =
+    String(imageFileId || '');
+
+  if (!fileId) {
+    throw new Error(
+      'K1_READY IMAGE_FILE_ID is required.'
+    );
+  }
+
+  const file =
+    DriveApp.getFileById(
+      fileId
+    );
+
+  if (file.isTrashed()) {
+    throw new Error(
+      'K1_READY image file is trashed.'
+    );
+  }
+
+  const digest =
+    Utilities.computeDigest(
+      Utilities.DigestAlgorithm.SHA_256,
+      file.getBlob().getBytes()
+    );
+
+  return digest
+    .map(
+      value =>
+        (value & 0xff)
+          .toString(16)
+          .padStart(2, '0')
+    )
+    .join('');
+}
+
+
+function validateK1ReadyPayload_(
+  record
+) {
+  if (
+    !record ||
+    typeof record !== 'object'
+  ) {
+    throw new Error(
+      'K1_READY record is required.'
+    );
+  }
+
+  const required = [
+    record.id,
+    record.createdAt,
+    record.status,
+    record.imageFileId,
+    record.imageUrl,
+    record.imageSha256,
+    record.finalChoicesRaw,
+    record.answerKeyRaw,
+    record.ttsScriptRaw,
+    record.qaProfileRaw,
+    record.auditResultRaw
+  ];
+
+  if (
+    required.some(
+      value =>
+        String(value || '') === ''
+    )
+  ) {
+    throw new Error(
+      'K1_READY required field is blank.'
+    );
+  }
+
+  if (
+    !/^H3-K1R-\d{8}-\d{3}$/
+      .test(record.id)
+  ) {
+    throw new Error(
+      'Invalid K1_READY_ID.'
+    );
+  }
+
+  if (
+    !Number.isFinite(
+      Date.parse(record.createdAt)
+    )
+  ) {
+    throw new Error(
+      'Invalid K1_READY CREATED_AT.'
+    );
+  }
+
+  if (
+    !/^[0-9a-f]{64}$/
+      .test(record.imageSha256)
+  ) {
+    throw new Error(
+      'Invalid K1_READY IMAGE_SHA256.'
+    );
+  }
+
+  let choices;
+  let tts;
+  let qa;
+  let audit;
+
+  try {
+    choices =
+      JSON.parse(
+        record.finalChoicesRaw
+      );
+  } catch (e) {
+    throw new Error(
+      'FINAL_CHOICES_JSON is malformed.'
+    );
+  }
+
+  try {
+    tts =
+      JSON.parse(
+        record.ttsScriptRaw
+      );
+  } catch (e) {
+    throw new Error(
+      'TTS_SCRIPT_JSON is malformed.'
+    );
+  }
+
+  try {
+    qa =
+      JSON.parse(
+        record.qaProfileRaw
+      );
+  } catch (e) {
+    throw new Error(
+      'QA_PROFILE is malformed.'
+    );
+  }
+
+  try {
+    audit =
+      JSON.parse(
+        record.auditResultRaw
+      );
+  } catch (e) {
+    throw new Error(
+      'AUDIT_RESULT is malformed.'
+    );
+  }
+
+  if (
+    !Array.isArray(choices) ||
+    choices.length !== 4 ||
+    choices.some(
+      value =>
+        typeof value !== 'string' ||
+        value === ''
+    )
+  ) {
+    throw new Error(
+      'FINAL_CHOICES_JSON must contain exactly four nonblank strings.'
+    );
+  }
+
+  if (
+    new Set(choices).size !== 4
+  ) {
+    throw new Error(
+      'K1_READY choices must be unique.'
+    );
+  }
+
+  const answer =
+    Number(
+      record.answerKeyRaw
+    );
+
+  if (
+    !Number.isInteger(answer) ||
+    answer < 1 ||
+    answer > 4
+  ) {
+    throw new Error(
+      'ANSWER_KEY must be 1-4.'
+    );
+  }
+
+  if (
+    !tts ||
+    typeof tts !== 'object' ||
+    Array.isArray(tts) ||
+    tts.number_voice !==
+      HQ_K1_NUMBER_VOICE.id ||
+    !Array.isArray(tts.segments)
+  ) {
+    throw new Error(
+      'Invalid K1_READY TTS_SCRIPT_JSON.'
+    );
+  }
+
+  const expectedRoles = [
+    'choice_number1',
+    'choice1',
+    'choice_number2',
+    'choice2',
+    'choice_number3',
+    'choice3',
+    'choice_number4',
+    'choice4'
+  ];
+
+  if (
+    JSON.stringify(
+      tts.segments.map(
+        segment =>
+          segment &&
+          segment.role
+      )
+    ) !==
+    JSON.stringify(
+      expectedRoles
+    )
+  ) {
+    throw new Error(
+      'K1_READY TTS segment order mismatch.'
+    );
+  }
+
+  validateListeningAudioPlan_(
+    JSON.stringify(
+      tts.segments
+    ),
+    'K1'
+  );
+
+  const choiceTexts =
+    tts.segments
+      .filter(
+        segment =>
+          /^choice[1-4]$/
+            .test(
+              segment.role
+            )
+      )
+      .map(
+        segment =>
+          segment.text
+      );
+
+  if (
+    JSON.stringify(
+      choiceTexts
+    ) !==
+    JSON.stringify(
+      choices
+    )
+  ) {
+    throw new Error(
+      'K1_READY choices and TTS text mismatch.'
+    );
+  }
+
+  if (
+    !qa ||
+    typeof qa !== 'object' ||
+    Array.isArray(qa) ||
+    !qa.group ||
+    !qa.mode ||
+    !qa.profile
+  ) {
+    throw new Error(
+      'Invalid K1_READY QA_PROFILE.'
+    );
+  }
+
+  if (
+    !audit ||
+    typeof audit !== 'object' ||
+    Array.isArray(audit) ||
+    audit.result !== 'PASS' ||
+    audit.visual_qa !== 'PASS' ||
+    audit.blind_audit !== 'PASS' ||
+    Number(
+      audit.exactly_one_choice
+    ) !== answer
+  ) {
+    throw new Error(
+      'K1_READY audit is not PASS or answer-consistent.'
+    );
+  }
+
+  const actualImageSha =
+    computeK1ImageSha256_(
+      record.imageFileId
+    );
+
+  if (
+    actualImageSha !==
+    record.imageSha256
+  ) {
+    throw new Error(
+      'K1_READY image SHA256 mismatch.'
+    );
+  }
+
+  record.choices = choices;
+  record.answerKey = answer;
+  record.ttsScript = tts;
+  record.qaProfile = qa;
+  record.auditResult = audit;
+  record.actualImageSha256 =
+    actualImageSha;
+
+  return record;
+}
+
+
+function bindK1ReadyToListeningSet_(
+  k1ReadyId,
+  listeningSetId
+) {
+  const c = config_();
+
+  const setId =
+    String(listeningSetId || '');
+
+  if (
+    !setId ||
+    setId.length > 128 ||
+    /[\x00-\x1F]/
+      .test(setId)
+  ) {
+    throw new Error(
+      'Invalid LISTENING_SET_ID.'
+    );
+  }
+
+  const record =
+    validateK1ReadyPayload_(
+      readK1ReadyRecord_(
+        c,
+        k1ReadyId
+      )
+    );
+
+  if (record.status !== 'READY') {
+    throw new Error(
+      'K1_READY STATUS must be READY before bind.'
+    );
+  }
+
+  if (record.consumedAt !== '') {
+    throw new Error(
+      'K1_READY CONSUMED_AT must be blank before bind.'
+    );
+  }
+
+  if (
+    record.boundListeningSetId !== ''
+  ) {
+    throw new Error(
+      'K1_READY BOUND_LISTENING_SET_ID must be blank before bind.'
+    );
+  }
+
+  const before =
+    record.values.map(
+      value => String(value || '')
+    );
+
+  const sheet =
+    k1ReadySheet_(c);
+
+  sheet
+    .getRange(
+      record.row,
+      12
+    )
+    .setValue(setId);
+
+  SpreadsheetApp.flush();
+
+  const after =
+    k1ReadyRecordFromRow_(
+      sheet,
+      record.row
+    );
+
+  if (
+    after.id !== record.id ||
+    after.boundListeningSetId !== setId ||
+    after.status !== 'READY' ||
+    after.consumedAt !== ''
+  ) {
+    throw new Error(
+      'K1_READY bind readback mismatch.'
+    );
+  }
+
+  const afterValues =
+    after.values.map(
+      value => String(value || '')
+    );
+
+  for (
+    let i = 0;
+    i < before.length;
+    i++
+  ) {
+    if (i === 11) {
+      continue;
+    }
+
+    if (
+      before[i] !==
+      afterValues[i]
+    ) {
+      throw new Error(
+        'K1_READY bind changed an unrelated field.'
+      );
+    }
+  }
+
+  validateK1ReadyPayload_(
+    after
+  );
+
+  return {
+    k1_ready_id: after.id,
+    listening_set_id: setId,
+    status: after.status
+  };
+}
+
+
+function assertBoundK1ReadyForSet_(
+  listeningSetId,
+  members,
+  c
+) {
+  const record =
+    validateK1ReadyPayload_(
+      readBoundK1ReadyForSet_(
+        c,
+        listeningSetId
+      )
+    );
+
+  if (
+    record.status !== 'READY' ||
+    record.consumedAt !== '' ||
+    record.boundListeningSetId !==
+      listeningSetId
+  ) {
+    throw new Error(
+      'Bound K1_READY state is not valid for audio start.'
+    );
+  }
+
+  const k1Members =
+    members.filter(
+      member =>
+        member.values[5] === 'K1'
+    );
+
+  if (
+    k1Members.length !== 1
+  ) {
+    throw new Error(
+      'Bound 5L set must contain exactly one K1 row.'
+    );
+  }
+
+  const queueK1PlanRaw =
+    String(
+      k1Members[0].values[7] || ''
+    );
+
+  const expectedK1PlanRaw =
+    JSON.stringify(
+      record.ttsScript.segments
+    );
+
+  if (
+    queueK1PlanRaw !==
+    expectedK1PlanRaw
+  ) {
+    throw new Error(
+      'Bound K1_READY and queue K1 audio payload mismatch.'
+    );
+  }
+
+  return record;
+}
+
+
+function consumeK1ReadyAfterIssue_(
+  k1ReadyId,
+  listeningSetId,
+  issueSucceeded
+) {
+  if (issueSucceeded !== true) {
+    throw new Error(
+      'K1_READY consume requires confirmed learner-facing issue success.'
+    );
+  }
+
+  const c = config_();
+
+  const record =
+    validateK1ReadyPayload_(
+      readK1ReadyRecord_(
+        c,
+        k1ReadyId
+      )
+    );
+
+  if (
+    record.status !== 'READY' ||
+    record.consumedAt !== '' ||
+    record.boundListeningSetId !==
+      listeningSetId
+  ) {
+    throw new Error(
+      'K1_READY is not eligible for consume.'
+    );
+  }
+
+  const sheet =
+    k1ReadySheet_(c);
+
+  const consumedAt =
+    new Date().toISOString();
+
+  sheet
+    .getRange(
+      record.row,
+      3
+    )
+    .setValue('CONSUMED');
+
+  sheet
+    .getRange(
+      record.row,
+      13
+    )
+    .setValue(
+      consumedAt
+    );
+
+  SpreadsheetApp.flush();
+
+  const after =
+    k1ReadyRecordFromRow_(
+      sheet,
+      record.row
+    );
+
+  if (
+    after.status !== 'CONSUMED' ||
+    after.consumedAt !== consumedAt ||
+    after.boundListeningSetId !==
+      listeningSetId
+  ) {
+    throw new Error(
+      'K1_READY consume readback mismatch.'
+    );
+  }
+
+  return {
+    k1_ready_id: after.id,
+    listening_set_id:
+      after.boundListeningSetId,
+    status: after.status,
+    consumed_at:
+      after.consumedAt
+  };
 }
 
 
@@ -840,6 +1689,18 @@ function processListeningAudioSet_(
         order[a.values[5]] -
         order[b.values[5]]
     );
+
+  /**
+   * Persistent K1_READY is the source authority.
+   * This gate runs before any runListeningJob_ call,
+   * therefore before Apps Script writes audio state
+   * or starts Azure generation for the set.
+   */
+  assertBoundK1ReadyForSet_(
+    seed.parentSetId,
+    members,
+    c
+  );
 
   for (
     let i = 0;

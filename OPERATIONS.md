@@ -561,3 +561,46 @@ Learner defaults:
 - Review history v1 filters are only `すべて` and `要復習あり`.
 
 R3-09B V2 remains architecture/documentation only. Runtime persistence begins in R3-09C.
+
+## 17. R3-09C review persistence implementation
+
+R3-09C implements the persistence layer defined by `H3_REVIEW_ARCHITECTURE.md` V2 without activating the learner Review route.
+
+Canonical runtime additions in `hangul_official_question_pool`:
+- `listening_explanation_payload_v1` (sheetId `810000203`);
+- `listening_review_binding_v1` (sheetId `810000204`).
+
+Apps Script implementation:
+- `WebAppReviewPersistence.js`;
+- canonical sorted compact JSON hashing;
+- exact item-payload SHA recomputation from the issued source lock;
+- exact five-section explanation SHA/set-SHA verification;
+- exact committed transaction/result hash verification;
+- exact audio-binding and K1-image binding verification;
+- one immutable review binding per production TXN_ID;
+- `buildPersistentReviewPayload_(txnId)` as the single semantic builder for immediate and reopened Review;
+- `validatePersistentReviewBinding_(txnId)` as a read-only persistence gate;
+- `h3ReviewEnsureBindingForCommittedTxn_(txnId)` as the idempotent review-binding writer for future activation.
+
+L03 compatibility fixture:
+- TXN_ID: `H3TX-20260919-000005`;
+- five explanation rows are `LOCKED`;
+- each explanation explicitly carries `LEGACY_POSTCOMMIT_BACKFILL`;
+- one `LOCKED` review binding exists;
+- learner answer/history/state/counters/pointers are not rewritten.
+
+Frozen L03 hashes:
+- ITEM_PAYLOAD_SHA256 = `fb65e816186b65db6b266eec7431c31eb4882105d335f02587484989f45180e7`;
+- EXPLANATION_SET_SHA256 = `e1abe02f1bb48c19d498c54641f2623afbce028de4063db7379e77f73da2fbc5`;
+- RESULT_SHA256 = `a40a4d1d17b46f817b74ca725a2a74100a831ebc30f124d6400c90572189a44e`;
+- AUDIO_BINDING_SHA256 = `21db3cb3a93aa69b92ac79437a431ba1bd3220ebe132aafd15e494475b545bf1`;
+- REVIEW_BINDING_SHA256 = `0c6bdbb1d88460211861ba29658d0e3ef50df200f876b98e1f13312ec11a3b72`.
+
+R3-09C activation boundary:
+- no `mode=REVIEW` Web route yet;
+- no Client.html Review renderer yet;
+- production submit does not yet require review-binding creation before returning COMMITTED;
+- no REVIEW_REPLAY yet;
+- normal-live production remains unchanged.
+
+Next stage is R3-09D `REVIEW_WEB_UI_AND_ROUTE_IMPLEMENTATION`.

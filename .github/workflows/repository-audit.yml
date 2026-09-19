@@ -40,6 +40,7 @@ jobs:
               'WebAppProductionRender.js',
               'WebAppPreissue.js',
               'WebAppReceipt.js',
+              'WebAppReviewPersistence.js',
               'MaintenanceR305.js',
               'H3_WEB_CHAT_CONTRACT.md',
               'H3_REVIEW_ARCHITECTURE.md',
@@ -1020,6 +1021,78 @@ jobs:
               raise SystemExit('R3-09B active-runtime boundary is missing.')
           PY
 
+      - name: Check R3-09C review persistence
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          operations = Path('OPERATIONS.md').read_text(encoding='utf-8')
+
+          required = [
+              "'listening_explanation_payload_v1'",
+              "'listening_review_binding_v1'",
+              "'H3-REVIEW-CONTRACT-20260919-V1'",
+              'function buildPersistentReviewPayload_(',
+              'function validatePersistentReviewBinding_(',
+              'function h3ReviewEnsureBindingForCommittedTxn_(',
+              "'H3_PERSISTENT_REVIEW_PAYLOAD_V1'",
+              "'H3_REVIEW_PERSISTENCE_GATE_V1'",
+              "'REVIEW_ITEM_PAYLOAD_SHA_MISMATCH'",
+              "'REVIEW_BINDING_HASH_MISMATCH'",
+              "'NEEDS_REVIEW'",
+          ]
+          for needle in required:
+              if needle not in source:
+                  raise SystemExit(f'R3-09C persistence invariant missing: {needle}')
+
+          if '## 17. R3-09C review persistence implementation' not in operations:
+              raise SystemExit('OPERATIONS does not record R3-09C persistence.')
+
+          forbidden = [
+              'listening_state_v1).set',
+              'listening_log_v1).set',
+          ]
+          for needle in forbidden:
+              if needle in source:
+                  raise SystemExit(f'R3-09C learner-runtime write detected: {needle}')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+
+          const source = fs.readFileSync('WebAppReviewPersistence.js', 'utf8');
+          const context = vm.createContext({
+            console,
+            h3Sha256Hex_: value =>
+              crypto.createHash('sha256').update(String(value), 'utf8').digest('hex')
+          });
+          vm.runInContext(source, context, { filename: 'WebAppReviewPersistence.js' });
+
+          const canonical = vm.runInContext(
+            "h3ReviewCanonicalJson_({z:1,a:{d:4,b:2},m:[{y:2,x:1}]})",
+            context
+          );
+          const expected = '{"a":{"b":2,"d":4},"m":[{"x":1,"y":2}],"z":1}';
+          if (canonical !== expected) {
+            throw new Error('R3-09C canonical JSON ordering changed.');
+          }
+
+          const hash = vm.runInContext(
+            "h3ReviewHash_({b:2,a:1})",
+            context
+          );
+          const expectedHash = crypto.createHash('sha256')
+            .update('{"a":1,"b":2}', 'utf8')
+            .digest('hex');
+          if (hash !== expectedHash) {
+            throw new Error('R3-09C canonical hash mismatch.');
+          }
+          NODE
+
       - name: Check JavaScript syntax
         shell: bash
         run: |
@@ -1030,6 +1103,7 @@ jobs:
           node --check WebAppProductionRender.js
           node --check WebAppPreissue.js
           node --check WebAppReceipt.js
+          node --check WebAppReviewPersistence.js
           node --check MaintenanceR305.js
           python3 - <<'PY'
           from pathlib import Path

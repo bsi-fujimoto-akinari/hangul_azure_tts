@@ -478,3 +478,40 @@ Script TXT storage is co-located with audio:
 5L script TXT is generated automatically after all five source-locked K1-K5 audio rows are done. Its content is reconstructed from the same AUDIO_PLAN_JSON surface, with repetitions/cues collapsed to one semantic script surface. Existing same-name TXT must match exactly; conflicting content is a hard stop.
 
 Until the R3-W written Web App migration, 5W DAILY_TXT remains Chat-owned after verified answer sync, but Drive storage is `03_AUDIO/01_5W`, not `04_LEARNER_ARTIFACTS`.
+
+
+## 15. R3-07 production preissue gate
+
+R3-07 prepares one real learner set without issuing it.
+
+Current gate function:
+
+`validateProductionPreissueSet(setId)`
+
+This gate is read-only. It must PASS before any R3-08 issue mutation.
+
+Required preissue state:
+- `listening_set_payload_v1` has exactly one target row with `STATUS=AUDIO_BOUND` and blank `ISSUED_AT`;
+- the bound K1_READY row is `READY`, bound to the exact target SET_ID, and has blank `CONSUMED_AT`;
+- K1 image bytes match the persisted SHA256 and K1 choices/answer/TTS/QA/audit are internally consistent;
+- K2-K5 item JSON and answer keys satisfy their section/visibility contracts;
+- `ITEM_PAYLOAD_SHA256` recomputes exactly from the canonical sorted compact JSON contract;
+- every K1-K5 slot has explicit `PRIMARY` or `RETEST` provenance;
+- the retest slot matches the persisted overload plan and per-set retest cap;
+- exactly five queue rows exist for the target set, all are `done`, error-free, and match the persisted individual audio binding;
+- every bound MP3 exists;
+- exactly one co-located `{LISTENING_SET_ID}.txt` exists and equals the semantic script reconstructed from the same audio plans;
+- learner history rows for the target set are zero;
+- production transaction rows for the target set are zero;
+- no unresolved production `RECOVERY_REQUIRED` transaction exists;
+- learner counters/state still point to the previously scored set.
+
+The preissue gate must not:
+- mark the payload `ISSUED`;
+- consume K1_READY;
+- create learner history;
+- advance counters;
+- enable the production answer commit gate;
+- expose the unissued set through the learner Web route.
+
+R3-08 must re-run the same gate immediately before its atomic issue transition.

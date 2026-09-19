@@ -213,6 +213,45 @@ A change to `.clasp.json` is an infrastructure-sensitive target change and must 
 
 Script Properties, Google Sheets data, and Azure-side configuration are outside `clasp push` and must not be treated as though a GitHub deploy changed them.
 
+### Persistent K1_READY runtime
+
+Repository-managed `Code.js` is the implementation source of truth for persistent K1_READY handling. The `listening_k1_ready_v1` Google Sheet is the persistent runtime data source; chat-local K1_READY state is a cache only and must not be used as the sole source of truth.
+
+The runtime connection uses Script Property `K1_READY_SHEET_ID`, read by `config_()` and required by `k1ReadySheet_()` when persistent K1_READY operations are invoked. It identifies the Spreadsheet containing `listening_k1_ready_v1`. Although the Spreadsheet ID is not a secret, keep it in Script Properties under the same runtime-configuration discipline as the existing configuration values and do not hard-code or commit environment-specific values.
+
+The required runtime order is:
+
+```text
+K1_READY persist
+  -> exact readback / validation
+  -> fresh prebind gate
+  -> BOUND_LISTENING_SET_ID bind
+  -> audio queue
+  -> individual audio
+  -> combined audio
+  -> learner-facing issue
+  -> issue success
+  -> consume
+```
+
+Fresh binding is permitted only after `readK1ReadyRecord_()` and `validateK1ReadyPayload_()` establish all of the following:
+
+- `STATUS=READY`
+- `CONSUMED_AT` is blank
+- `BOUND_LISTENING_SET_ID` is blank
+- required fields are nonblank
+- exact payload validation passes
+
+If any prebind condition fails, do not bind, do not write the Listening audio queue, and do not issue the 5L set. Do not guess missing values, reconstruct a fallback payload, or auto-repair the persistent record.
+
+`bindK1ReadyToListeningSet_()` may change only `BOUND_LISTENING_SET_ID`, from blank to the target LISTENING_SET_ID, and must read it back exactly. An already-bound record must not be rebound to another set.
+
+Before `processListeningAudioSet_()` reaches any `runListeningJob_()` call, `assertBoundK1ReadyForSet_()` must re-read the persistent bound record and verify that the bound SET_ID matches the set being processed, `STATUS=READY`, `CONSUMED_AT` remains blank, and the queue-side K1 audio payload exactly matches the persistent K1_READY payload. Any mismatch stops processing before audio work starts.
+
+`consumeK1ReadyAfterIssue_()` is an explicit post-issue operation only. It may run only after confirmed learner-facing 5L issue success and may update only `STATUS=CONSUMED` and `CONSUMED_AT=<timestamp>`; `BOUND_LISTENING_SET_ID` remains unchanged. Individual-audio completion, combined-audio completion, preissue state, or a failed issue must never consume K1_READY.
+
+For recovery, do not reconstruct a READY record by inference and do not move an existing `BOUND_LISTENING_SET_ID` to another set. Ambiguous, missing, or mismatched persistent state is a STOP condition requiring audit. Persistent K1_READY recovery is independent of learner history, counters, and valid-count state.
+
 ## 9. Verification checklist
 
 For each repository change, verify as applicable:

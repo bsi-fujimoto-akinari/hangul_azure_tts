@@ -124,7 +124,8 @@ function h3ReviewTxnContext_(
       'MODE',
       'RAW_INPUT_JSON',
       'STATUS',
-      'RESULT_JSON'
+      'RESULT_JSON',
+      'COMMITTED_AT'
     ],
     H3_WEB_PROD_TXN_SHEET
   );
@@ -823,6 +824,16 @@ function h3ReviewQuestionSurface_(
   var kr = source.k1Row;
 
   if (section === 'K1') {
+    var image =
+      h3DriveDataUri_(
+        String(
+          kr[km.IMAGE_FILE_ID] || ''
+        ),
+        null,
+        source.k1ImageSha256,
+        1024 * 1024
+      );
+
     return {
       choices: source.k1Choices.slice(),
       image_file_id: String(
@@ -832,7 +843,11 @@ function h3ReviewQuestionSurface_(
         kr[km.IMAGE_URL] || ''
       ),
       image_sha256:
-        source.k1ImageSha256
+        source.k1ImageSha256,
+      image_data_uri:
+        image.data_uri,
+      image_size_bytes:
+        image.size_bytes
     };
   }
 
@@ -1340,6 +1355,10 @@ function h3ReviewHistoryEntries_(
     spreadsheet.getSheetByName(
       H3_REVIEW_BINDING_SHEET
     );
+  var txnSheet =
+    spreadsheet.getSheetByName(
+      H3_WEB_PROD_TXN_SHEET
+    );
 
   h3ReviewRequireExactHeader_(
     bindingSheet,
@@ -1347,91 +1366,292 @@ function h3ReviewHistoryEntries_(
     'REVIEW_BINDING'
   );
 
+  if (!txnSheet) {
+    throw new Error(
+      'REVIEW_TXN_SHEET_MISSING'
+    );
+  }
+
   var bindingTable =
     h3ReviewTable_(
       bindingSheet
     );
+  var txnTable =
+    h3ReviewTable_(
+      txnSheet
+    );
+
+  h3ProdRequireColumns_(
+    txnTable,
+    [
+      'TXN_ID',
+      'SET_ID',
+      'LISTENING_SET_NO',
+      'MODE',
+      'RAW_INPUT_JSON',
+      'STATUS',
+      'RESULT_JSON',
+      'COMMITTED_AT'
+    ],
+    H3_WEB_PROD_TXN_SHEET
+  );
+
+  var txnById = {};
+  txnTable.rows.forEach(
+    function (row) {
+      var txnId = String(
+        row[txnTable.map.TXN_ID] ||
+        ''
+      );
+      if (!txnId) return;
+
+      if (txnById[txnId]) {
+        txnById[txnId] =
+          'DUPLICATE';
+        return;
+      }
+
+      txnById[txnId] = row;
+    }
+  );
+
   var entries = [];
 
   bindingTable.rows.forEach(
     function (row) {
+      var map =
+        bindingTable.map;
+      var txnId = String(
+        row[map.TXN_ID] || ''
+      );
+
       if (
+        !txnId ||
         String(
-          row[
-            bindingTable.map.STATUS
-          ] || ''
-        ) !== 'LOCKED'
+          row[map.STATUS] || ''
+        ) !== 'LOCKED' ||
+        !String(
+          row[map.LOCKED_AT] || ''
+        )
       ) {
         return;
       }
 
-      var txnId = String(
-        row[
-          bindingTable.map.TXN_ID
-        ] || ''
-      );
-      if (!txnId) return;
+      var txnRow =
+        txnById[txnId];
 
-      try {
-        var payload =
-          buildPersistentReviewPayload_(
-            txnId
-          );
-
-        var txn =
-          h3ReviewTxnContext_(
-            spreadsheet,
-            txnId
-          );
-        var committedAt = String(
-          txn.row[
-            txn.map.COMMITTED_AT
+      if (
+        !txnRow ||
+        txnRow === 'DUPLICATE' ||
+        String(
+          txnRow[
+            txnTable.map.MODE
           ] || ''
-        );
-
-        var wrongCount = 0;
-        var uncertainCount = 0;
-
-        payload.sections.forEach(
-          function (part) {
-            if (
-              part.result === '×'
-            ) {
-              wrongCount += 1;
-            }
-            if (part.uncertain) {
-              uncertainCount += 1;
-            }
-          }
-        );
-
-        entries.push({
-          txn_id: payload.txn_id,
-          set_id: payload.set_id,
-          listening_set_no:
-            payload.listening_set_no,
-          committed_at:
-            committedAt,
-          score: payload.score,
-          total: payload.total,
-          wrong_count:
-            wrongCount,
-          uncertain_count:
-            uncertainCount,
-          needs_review:
-            payload.sections.some(
-              function (part) {
-                return (
-                  part.result !== '○'
-                );
-              }
-            )
-        });
-      } catch (err) {
-        // Fail closed at open time. Invalid/corrupt
-        // bindings are not exposed in the learner
-        // history library.
+        ) !== 'LISTENING' ||
+        String(
+          txnRow[
+            txnTable.map.STATUS
+          ] || ''
+        ) !== 'COMMITTED'
+      ) {
+        return;
       }
+
+      if (
+        String(
+          txnRow[
+            txnTable.map.SET_ID
+          ] || ''
+        ) !== String(
+          row[
+            map.LISTENING_SET_ID
+          ] || ''
+        ) ||
+        Number(
+          txnRow[
+            txnTable.map
+              .LISTENING_SET_NO
+          ]
+        ) !== Number(
+          row[
+            map.LISTENING_SET_NO
+          ]
+        )
+      ) {
+        return;
+      }
+
+      var result;
+      var rawInput;
+      try {
+        result =
+          h3ProdParseJson_(
+            txnRow[
+              txnTable.map.RESULT_JSON
+            ],
+            'REVIEW_HISTORY_RESULT_INVALID'
+          );
+        rawInput =
+          h3ProdParseJson_(
+            txnRow[
+              txnTable.map.RAW_INPUT_JSON
+            ],
+            'REVIEW_HISTORY_INPUT_INVALID'
+          );
+      } catch (err) {
+        return;
+      }
+
+      if (
+        !result ||
+        result.txn_id !== txnId ||
+        result.status !==
+          'COMMITTED' ||
+        !Array.isArray(
+          result.summary
+        ) ||
+        result.summary.length !== 5 ||
+        !rawInput ||
+        !Array.isArray(
+          rawInput.answers
+        ) ||
+        rawInput.answers.length !== 5
+      ) {
+        return;
+      }
+
+      var resultSha =
+        h3ReviewHash_(result);
+
+      if (
+        resultSha !== String(
+          row[
+            map.RESULT_SHA256
+          ] || ''
+        )
+      ) {
+        return;
+      }
+
+      var bindingHashObject = {
+        TXN_ID: txnId,
+        LISTENING_SET_ID:
+          String(
+            row[
+              map.LISTENING_SET_ID
+            ] || ''
+          ),
+        LISTENING_SET_NO:
+          Number(
+            row[
+              map.LISTENING_SET_NO
+            ]
+          ),
+        RESULT_SHA256:
+          String(
+            row[
+              map.RESULT_SHA256
+            ] || ''
+          ),
+        ITEM_PAYLOAD_SHA256:
+          String(
+            row[
+              map.ITEM_PAYLOAD_SHA256
+            ] || ''
+          ),
+        EXPLANATION_SET_SHA256:
+          String(
+            row[
+              map.EXPLANATION_SET_SHA256
+            ] || ''
+          ),
+        AUDIO_BINDING_SHA256:
+          String(
+            row[
+              map.AUDIO_BINDING_SHA256
+            ] || ''
+          ),
+        K1_IMAGE_SHA256:
+          String(
+            row[
+              map.K1_IMAGE_SHA256
+            ] || ''
+          ),
+        REVIEW_CONTRACT_ID:
+          String(
+            row[
+              map.REVIEW_CONTRACT_ID
+            ] || ''
+          )
+      };
+
+      if (
+        bindingHashObject
+          .REVIEW_CONTRACT_ID !==
+          H3_REVIEW_CONTRACT_ID ||
+        h3ReviewHash_(
+          bindingHashObject
+        ) !== String(
+          row[
+            map.REVIEW_BINDING_SHA256
+          ] || ''
+        )
+      ) {
+        return;
+      }
+
+      var wrongCount = 0;
+      result.summary.forEach(
+        function (item) {
+          if (
+            item.result === '×'
+          ) {
+            wrongCount += 1;
+          }
+        }
+      );
+
+      var uncertainCount = 0;
+      rawInput.answers.forEach(
+        function (item) {
+          if (item.uncertain) {
+            uncertainCount += 1;
+          }
+        }
+      );
+
+      entries.push({
+        txn_id: txnId,
+        set_id:
+          bindingHashObject
+            .LISTENING_SET_ID,
+        listening_set_no:
+          bindingHashObject
+            .LISTENING_SET_NO,
+        committed_at: String(
+          txnRow[
+            txnTable.map.COMMITTED_AT
+          ] || ''
+        ),
+        score: Number(
+          result.score
+        ),
+        total: Number(
+          result.total
+        ),
+        wrong_count:
+          wrongCount,
+        uncertain_count:
+          uncertainCount,
+        needs_review:
+          result.summary.some(
+            function (item) {
+              return (
+                item.result !== '○'
+              );
+            }
+          )
+      });
     }
   );
 

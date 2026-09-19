@@ -1,0 +1,49 @@
+<style>
+  :root {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    line-height: 1.5;
+    color: #171717;
+    background: #f5f5f5;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f5f5f5; }
+  button, input { font: inherit; }
+  .shell { width: min(760px, 100%); margin: 0 auto; padding: 20px 14px 48px; }
+  .page-header { margin-bottom: 14px; }
+  .eyebrow { margin: 0 0 4px; font-size: 12px; font-weight: 700; letter-spacing: .06em; }
+  h1 { margin: 0; font-size: 24px; }
+  .set-id { margin: 5px 0 0; font-size: 12px; overflow-wrap: anywhere; }
+  .notice, .panel, .question-card { background: #fff; border: 1px solid #d8d8d8; border-radius: 12px; }
+  .notice { padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }
+  .panel { padding: 14px; margin-top: 12px; }
+  .questions { display: grid; gap: 12px; }
+  .question-card { padding: 14px; }
+  .question-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .question-title { margin: 0; font-size: 17px; }
+  .audio-link { display: inline-block; margin-bottom: 10px; font-weight: 700; }
+  .k1-image { display: block; width: 100%; height: auto; max-height: 420px; object-fit: contain; border: 1px solid #ddd; border-radius: 8px; margin: 4px 0 12px; }
+  .choices { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .choice { width: 100%; text-align: left; border: 1px solid #b9b9b9; border-radius: 10px; background: #fff; padding: 11px 12px; cursor: pointer; }
+  .choice.selected { border-width: 2px; font-weight: 700; }
+  .choice:disabled, .uncertain:disabled, .secondary:disabled, .primary:disabled { cursor: default; opacity: .55; }
+  .uncertain { min-width: 44px; border: 1px solid #b9b9b9; border-radius: 10px; background: #fff; padding: 7px 11px; font-weight: 700; }
+  .uncertain.active { border-width: 2px; }
+  .control-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .secondary, .primary, .copy-button { border-radius: 10px; padding: 11px 12px; font-weight: 700; }
+  .secondary { border: 1px solid #aaa; background: #fff; }
+  .primary { border: 1px solid #222; background: #222; color: #fff; }
+  .copy-button { border: 1px solid #aaa; background: #fff; margin-top: 8px; }
+  .live-summary { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .score { font-size: 20px; font-weight: 800; margin: 0 0 10px; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+  th, td { border-bottom: 1px solid #ddd; padding: 8px 5px; text-align: left; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #f2f2f2; padding: 10px; border-radius: 8px; user-select: text; }
+  .asset-links { display: grid; gap: 8px; margin-top: 14px; }
+  .poc-note { font-size: 13px; margin: 10px 0 0; }
+  .error { border-color: #a33; }
+  .hidden { display: none !important; }
+  @media (min-width: 620px) {
+    .choices.textless { grid-template-columns: repeat(4, 1fr); }
+    .choices.textless .choice { text-align: center; }
+  }
+</style>

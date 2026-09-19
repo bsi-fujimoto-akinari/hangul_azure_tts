@@ -515,3 +515,35 @@ The preissue gate must not:
 - expose the unissued set through the learner Web route.
 
 R3-08 must re-run the same gate immediately before its atomic issue transition.
+
+## 16. R3-09B persistent review architecture freeze
+
+R3-09B freezes the target architecture in `H3_REVIEW_ARCHITECTURE.md`.
+
+Key decisions:
+- the Apps Script Web App is the complete learner surface for issue, answer, grading, full explanation, persistent review, and optional nonlearning replay;
+- the current production transaction/history/scheduler authorities remain unchanged;
+- future sets receive source-locked explanation payloads before issue;
+- committed transactions receive exact persistent review bindings;
+- review reopening is reconstructed from canonical persisted sources, never browser memory;
+- `mode=REVIEW&txn_id=<TXN_ID>` is the exact read-only deep-review route;
+- the parameterless launcher provides review history;
+- `REVIEW_REPLAY` is strictly nonlearning and may not mutate learner history/state/scheduler/counters/pointers;
+- the four-line Web receipt remains valid, but sending it to Chat becomes optional after review activation;
+- L03 may receive review-only legacy backfill without rewriting its committed learning transaction.
+
+R3-09B changes documentation/architecture only. It does not create the new Sheets, patch Apps Script behavior, alter learner state, or enable normal-live production.
+
+The implementation sequence is:
+
+```text
+R3-09B = REVIEW_ARCHITECTURE_FREEZE
+R3-09C = REVIEW_PERSISTENCE_IMPLEMENTATION
+R3-09D = REVIEW_WEB_UI_AND_ROUTE_IMPLEMENTATION
+R3-09E = REVIEW_REPLAY_LIBRARY_DEVICE_VALIDATION
+R3-10  = FULL_E2E_AUDIT
+R3-11  = NORMAL_LIVE_ACTIVATION
+```
+
+R3-10 must include persistent-review reopen and REVIEW_REPLAY zero-mutation checks.
+

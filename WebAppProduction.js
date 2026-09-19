@@ -11,8 +11,8 @@
 
 var H3_R3_PRODUCTION_COMMIT_ENABLED = true;
 
-var H3_R3_PRODUCTION_COMMIT_SET_ID =
-  'H3-20260919-L03';
+var H3_R3_PRODUCTION_GATE_MODE =
+  'NORMAL_LIVE_ACTIVE';
 
 var H3_WEB_PROD_TXN_SHEET = 'listening_web_txn_v1';
 
@@ -410,20 +410,16 @@ function h3ProdReadContext_(spreadsheet, setId) {
     String(policyMap.STATUS || '') !==
       'N5_AUDIO_TIMING_STAGED' ||
     String(policyMap.PRODUCTION_GATE || '') !==
-      'N5_E2E_ARMED_ONE_SET' ||
-    String(policyMap.E2E_TARGET_SET_ID || '') !==
-      String(setId) ||
-    String(policyMap.E2E_TARGET_K1_READY_ID || '') !==
-      k1ReadyId ||
+      H3_R3_PRODUCTION_GATE_MODE ||
     String(
       stateMap.STATUS && stateMap.STATUS.value || ''
     ) !== 'N5_AUDIO_TIMING_STAGED' ||
     String(
       stateMap.PRODUCTION_GATE && stateMap.PRODUCTION_GATE.value || ''
-    ) !== 'N5_E2E_ARMED_ONE_SET'
+    ) !== H3_R3_PRODUCTION_GATE_MODE
   ) {
     throw new Error(
-      'R3_08_CONTROLLED_E2E_GATE_MISMATCH'
+      'NORMAL_LIVE_PRODUCTION_GATE_MISMATCH'
     );
   }
 
@@ -1467,15 +1463,6 @@ function h3ProdSubmit_(request) {
   if (!H3_R3_PRODUCTION_COMMIT_ENABLED) {
     throw new Error(
       'R3_03_PRODUCTION_COMMIT_DISABLED'
-    );
-  }
-
-  if (
-    String(request && request.set_id || '') !==
-      H3_R3_PRODUCTION_COMMIT_SET_ID
-  ) {
-    throw new Error(
-      'R3_08_PRODUCTION_SET_NOT_ARMED'
     );
   }
 

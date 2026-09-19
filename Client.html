@@ -21,8 +21,6 @@
   document.addEventListener('DOMContentLoaded', function () {
     applyDeviceProfile();
 
-    document.getElementById('reset').addEventListener('click', resetAll);
-    document.getElementById('submit').addEventListener('click', submitAnswers);
     if (mobileQuery.addEventListener) {
       mobileQuery.addEventListener('change', syncResponsiveState);
     } else if (mobileQuery.addListener) {
@@ -72,7 +70,6 @@
         buildMobileProgress(payload.questions.length);
 
         document.getElementById('questions').classList.remove('hidden');
-        document.getElementById('controls').classList.remove('hidden');
         document.getElementById('mobile-progress').classList.remove('hidden');
 
         app.activeIndex = 0;
@@ -157,15 +154,29 @@
 
           updateLiveSummary();
 
-          if (
-            app.payload &&
-            index < app.payload.questions.length - 1
-          ) {
+          if (!app.payload) return;
+
+          if (index < app.payload.questions.length - 1) {
             var nextIndex = index + 1;
             var nextSection = sections[nextIndex];
 
             setActiveIndex(nextIndex);
             playAudioAssetNow(nextSection);
+            return;
+          }
+
+          if (allAnswered()) {
+            window.setTimeout(function () {
+              submitAnswers();
+            }, 80);
+          } else {
+            var firstMissing = sections.findIndex(function (section) {
+              return typeof app.answers[section] !== 'number';
+            });
+            if (firstMissing >= 0) {
+              setActiveIndex(firstMissing);
+              playAudioAssetNow(sections[firstMissing]);
+            }
           }
         });
 
@@ -517,18 +528,6 @@
   }
 
   function updateLiveSummary() {
-    var parts = sections.map(function (section, index) {
-      var answer = app.answers[section];
-      return 'Q' + (index + 1) + ' ' +
-        (answer ? String(answer) + (app.uncertain[section] ? '?' : '') : '—');
-    });
-
-    document.getElementById('live-summary').textContent = parts.join(' / ');
-    document.getElementById('submit').disabled =
-      app.locked || app.submitting || !allAnswered();
-    document.getElementById('reset').disabled =
-      app.locked || app.submitting;
-
     updateMobilePager();
   }
 
@@ -536,31 +535,6 @@
     return sections.every(function (section) {
       return typeof app.answers[section] === 'number';
     });
-  }
-
-  function resetAll() {
-    if (app.locked || app.submitting) return;
-
-    app.answers = {};
-    app.uncertain = {};
-    app.activeIndex = 0;
-
-    Array.prototype.forEach.call(
-      document.querySelectorAll('.choice'),
-      function (node) {
-        node.classList.remove('selected');
-      }
-    );
-
-    Array.prototype.forEach.call(
-      document.querySelectorAll('.uncertain'),
-      function (node) {
-        node.classList.remove('active');
-        node.setAttribute('aria-pressed', 'false');
-      }
-    );
-
-    updateLiveSummary();
   }
 
   function submitAnswers() {
@@ -593,7 +567,6 @@
         pauseOtherAudio(null);
 
         document.getElementById('questions').classList.add('hidden');
-        document.getElementById('controls').classList.add('hidden');
         document.getElementById('mobile-progress').classList.add('hidden');
 
         renderResult(result);
@@ -627,8 +600,6 @@
       }
     );
 
-    document.getElementById('reset').disabled = disabled;
-    document.getElementById('submit').disabled = disabled;
   }
 
   function renderResult(result) {

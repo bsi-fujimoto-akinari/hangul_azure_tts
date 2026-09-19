@@ -42,6 +42,7 @@ jobs:
               'WebAppReceipt.js',
               'MaintenanceR305.js',
               'H3_WEB_CHAT_CONTRACT.md',
+    'H3_REVIEW_ARCHITECTURE.md',
               'Index.html',
               'Stylesheet.html',
               'Client.html',

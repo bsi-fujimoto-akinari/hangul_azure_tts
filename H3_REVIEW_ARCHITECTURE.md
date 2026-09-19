@@ -1,6 +1,6 @@
 # H3 Review Architecture
 
-Version: H3-R3-09B-REVIEW-ARCHITECTURE-20260919-V1  
+Version: H3-R3-09B-REVIEW-ARCHITECTURE-20260919-V2  
 Status: FROZEN_TARGET_NOT_ACTIVE
 
 ## 1. Purpose
@@ -345,6 +345,142 @@ For immediate review:
 The learner may freely expand/collapse any section.
 
 This is a presentation default only; it never changes learner history.
+
+
+## 8A. Frozen Review UI contract (V2)
+
+The learner-facing Review UI is frozen as follows.
+
+### 8A.1 Immediate postgrade landing
+
+```text
+POSTGRADE_DEFAULT_VIEW=REVIEW
+DEFAULT_FILTER=NEEDS_REVIEW
+EXPAND_DEFAULT=WRONG,UNCERTAIN
+COLLAPSE_DEFAULT=CORRECT
+IMMEDIATE_REVIEW_BUILDER=PERSISTENT_REVIEW_BUILDER
+RECEIPT_UI=TECHNICAL_DETAILS_COLLAPSED
+```
+
+Immediately after a successful COMMITTED transaction, the page must render the exact same persistent Review payload that a later reopen uses.
+
+A separate transient postgrade-only explanation implementation is prohibited.
+
+The initial filter preserves original Q1-Q5 order and hides only fully-correct `○` questions. The learner may switch to `ALL` at any time.
+
+### 8A.2 Summary surface
+
+The top Review summary contains only learner-useful information:
+
+```text
+5L set number
+score
+wrong count
+uncertain count
+Q1-Q5 result strip
+filter: 要復習 / 全問
+```
+
+Do not make SET_ID, TXN_ID, hashes, scheduler state, or source metadata primary learner UI.
+
+### 8A.3 Per-question Review card
+
+Each question is one self-contained vertical Review card containing, in this order:
+
+```text
+Qx [section display] + result + inline audio control
+user answer + uncertain marker
+correct answer
+exact problem/script surface
+full explanation
+```
+
+For K1 the exact verified image is displayed in the same card.
+
+For K2/K3 the Korean prompt/choices that were hidden before grading become visible after grading.
+
+For K4/K5 the passage, visible choices, Japanese/Korean surfaces, and explanation remain in one card.
+
+Audio, script, and explanation must not require navigation to separate pages.
+
+### 8A.4 Explanation presentation
+
+For `×` and `△`, full explanation is expanded by default.
+
+For `○`, full explanation is collapsed by default but remains immediately expandable.
+
+The full explanation follows the active H3 explanation rules and may include:
+- reason / decisive cue;
+- meaning;
+- grammar;
+- pronunciation only when H3/準2 learning value exists;
+- vocabulary network;
+- collocation / same-context contrast;
+- Hanja when relevant.
+
+System metadata, scheduler commentary, source-lock hashes, and progress diagnostics are not learner-facing explanation content.
+
+### 8A.5 Audio behavior
+
+The compact inline audio player remains on the question-title row when device width permits.
+
+Rules:
+- exact bound K1-K5 MP3 only;
+- one active player at a time;
+- replay freely during Review;
+- Drive link is fallback only;
+- playback-speed controls and sentence-level seeking are deferred from v1.
+
+### 8A.6 Technical details
+
+Receipt and transaction identifiers are retained but collapsed under a learner-secondary technical-details disclosure.
+
+```text
+[技術情報]
+SET_ID
+TXN_ID
+receipt copy control
+```
+
+The receipt must not interrupt the normal Review flow.
+
+### 8A.7 Review history UI
+
+The parameterless launcher Review library uses the minimum v1 filters:
+
+```text
+すべて
+要復習あり
+```
+
+Each history entry shows:
+- date/time;
+- 5L set number;
+- score;
+- wrong count;
+- uncertain count;
+- Review action;
+- Replay action when available.
+
+Default order is newest first.
+
+### 8A.8 Builder identity
+
+Both entry paths MUST call one server-side semantic builder:
+
+```text
+immediate COMMITTED result
+  -> TXN_ID
+  -> persistent Review builder
+  -> Review renderer
+
+later Review history / deep link
+  -> TXN_ID
+  -> the same persistent Review builder
+  -> the same Review renderer
+```
+
+This is a hard reproducibility invariant. Browser-local answer state must never be required to reconstruct the Review page.
 
 ## 9. Review history library
 

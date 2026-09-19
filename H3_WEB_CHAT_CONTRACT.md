@@ -260,3 +260,24 @@ The learner-facing Review surface is now page-based rather than a vertically sta
 - REVIEW_REPLAY starts directly with the question surface and has no separate intro block.
 
 No Chat ownership or backend-write rule changes.
+
+### R3-09E close
+
+R3-09E has passed learner-device / zero-mutation validation.
+
+Operational ownership after close:
+- HOME / REVIEW / REVIEW_REPLAY are learner-facing Web surfaces;
+- REVIEW_REPLAY remains nonlearning and nonpersistent;
+- Chat is not required for replay grading;
+- Chat may audit the canonical transaction and Review state;
+- Chat must never synthesize or persist a replay result into learner history.
+
+Canonical close state for the R3 validation set:
+- `SET_ID=H3-20260919-L03`;
+- `TXN_ID=H3TX-20260919-000005`;
+- one COMMITTED production transaction only;
+- five learner log rows only;
+- Review binding remains LOCKED;
+- learner state remains issue 2 / next set 3 / last set L03.
+
+Next stage is R3-10 full E2E audit. Normal-live activation remains outside this contract until R3-11.

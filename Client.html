@@ -642,10 +642,12 @@
     table.appendChild(tbody);
     root.appendChild(table);
 
-    var note = el('p', 'poc-note');
-    note.textContent =
-      'R3-02 SYSTEM_TESTのreceiptは専用test journalへ永続化済みです。学習runtime/historyにはWRITEしていません。';
-    root.appendChild(note);
+    if (result.mode === 'SYSTEM_TEST') {
+      var note = el('p', 'poc-note');
+      note.textContent =
+        'SYSTEM_TESTのreceiptは専用test journalへ永続化済みです。学習runtime/historyにはWRITEしていません。';
+      root.appendChild(note);
+    }
 
     var pre = document.createElement('pre');
     pre.id = 'receipt';
@@ -705,13 +707,15 @@
       panel.appendChild(card);
     });
 
-    var scriptFallback = document.createElement('a');
-    scriptFallback.className = 'media-fallback review-script-fallback';
-    scriptFallback.href = review.review_script_fallback_url;
-    scriptFallback.target = '_blank';
-    scriptFallback.rel = 'noopener';
-    scriptFallback.textContent = '元の復習スクリプトTXTをDriveで開く';
-    panel.appendChild(scriptFallback);
+    if (review.review_script_fallback_url) {
+      var scriptFallback = document.createElement('a');
+      scriptFallback.className = 'media-fallback review-script-fallback';
+      scriptFallback.href = review.review_script_fallback_url;
+      scriptFallback.target = '_blank';
+      scriptFallback.rel = 'noopener';
+      scriptFallback.textContent = '元の復習スクリプトTXTをDriveで開く';
+      panel.appendChild(scriptFallback);
+    }
 
     root.appendChild(panel);
 

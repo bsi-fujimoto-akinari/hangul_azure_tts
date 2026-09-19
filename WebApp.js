@@ -9,7 +9,7 @@ function h3WebDoGet_(e) {
   template.bootJson = JSON.stringify(h3WebBootRequest_(e));
   return template
     .evaluate()
-    .setTitle('H3 5L SYSTEM TEST')
+    .setTitle('H3 5L')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
 }
 
@@ -18,15 +18,32 @@ function include_(filename) {
 }
 
 function getListeningWebSet(request) {
+  if (request && request.mode === 'LISTENING') {
+    return buildProductionRenderPayload_(request);
+  }
+
   validateSystemTestRenderRequest_(request);
   return buildSystemTestRenderPayload_();
 }
 
 function getListeningWebMedia(request) {
+  if (request && request.mode === 'LISTENING') {
+    return getProductionMediaPayload_(request);
+  }
+
   return getSystemTestMediaPayload_(request);
 }
 
 function submitListeningWebAnswers(request) {
+  if (request && request.mode === 'LISTENING') {
+    var review = buildProductionReviewPayload_(
+      request.set_id
+    );
+    var result = h3ProdSubmit_(request);
+    result.after_sync = review;
+    return result;
+  }
+
   return gradeSystemTestSubmission_(request);
 }
 
@@ -36,8 +53,18 @@ function h3WebBootRequest_(e) {
   var setId = expected;
 
   if (e && e.parameter) {
-    if (e.parameter.mode === 'SYSTEM_TEST') mode = 'SYSTEM_TEST';
-    if (e.parameter.set_id === expected) setId = expected;
+    if (
+      e.parameter.mode === 'LISTENING' &&
+      e.parameter.set_id
+    ) {
+      mode = 'LISTENING';
+      setId = String(e.parameter.set_id);
+    } else {
+      mode = 'SYSTEM_TEST';
+      if (e.parameter.set_id === expected) {
+        setId = expected;
+      }
+    }
   }
 
   return {

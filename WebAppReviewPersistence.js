@@ -326,6 +326,80 @@ function h3ReviewSourceContext_(
     );
   }
 
+  if (
+    Number(kr[km.ANSWER_KEY]) !==
+      Number(answerKey.K1)
+  ) {
+    throw new Error(
+      'REVIEW_K1_ANSWER_KEY_MISMATCH'
+    );
+  }
+
+  var sourceItems = {};
+  ['K2','K3','K4','K5']
+    .forEach(function (section) {
+      sourceItems[section] =
+        h3ProdParseJson_(
+          p[
+            pm[
+              section +
+              '_ITEM_JSON'
+            ]
+          ],
+          'REVIEW_ITEM_JSON_INVALID:' +
+            section
+        );
+    });
+
+  var itemHashObject = {
+    LISTENING_SET_ID:
+      String(setId),
+    LISTENING_SET_NO:
+      Number(
+        p[pm.LISTENING_SET_NO]
+      ),
+    K1_READY_ID:
+      k1ReadyId,
+    K1_READY_IMAGE_SHA256:
+      String(
+        kr[km.IMAGE_SHA256] || ''
+      ),
+    K1_READY_FINAL_CHOICES_JSON:
+      k1Choices,
+    K1_READY_ANSWER_KEY:
+      Number(answerKey.K1),
+    K2_ITEM_JSON:
+      sourceItems.K2,
+    K3_ITEM_JSON:
+      sourceItems.K3,
+    K4_ITEM_JSON:
+      sourceItems.K4,
+    K5_ITEM_JSON:
+      sourceItems.K5,
+    ANSWER_KEY_JSON:
+      answerKey
+  };
+
+  var calculatedItemSha =
+    h3ReviewHash_(
+      itemHashObject
+    );
+  var storedItemSha =
+    String(
+      p[
+        pm.ITEM_PAYLOAD_SHA256
+      ] || ''
+    );
+
+  if (
+    calculatedItemSha !==
+      storedItemSha
+  ) {
+    throw new Error(
+      'REVIEW_ITEM_PAYLOAD_SHA_MISMATCH'
+    );
+  }
+
   H3_WEB_PROD_SECTIONS.forEach(
     function (section) {
       var binding =
@@ -370,9 +444,10 @@ function h3ReviewSourceContext_(
     setNo: Number(
       p[pm.LISTENING_SET_NO]
     ),
-    itemPayloadSha256: String(
-      p[pm.ITEM_PAYLOAD_SHA256] || ''
-    ),
+    itemPayloadSha256:
+      calculatedItemSha,
+    sourceItems:
+      sourceItems,
     audioBinding: audioBinding,
     answerKey: answerKey,
     k1Choices: k1Choices,
@@ -448,7 +523,15 @@ function h3ReviewExplanationSet_(
 
       if (
         String(row[map.STATUS] || '') !==
-          'LOCKED'
+          'LOCKED' ||
+        !String(
+          row[
+            map.EXPLANATION_REVISION_ID
+          ] || ''
+        ) ||
+        !String(
+          row[map.LOCKED_AT] || ''
+        )
       ) {
         throw new Error(
           'REVIEW_EXPLANATION_NOT_LOCKED:' +
@@ -673,6 +756,7 @@ function h3ReviewRequireBinding_(
   if (
     String(row[map.STATUS] || '') !==
       'LOCKED' ||
+    !String(row[map.LOCKED_AT] || '') ||
     String(
       row[map.LISTENING_SET_ID] ||
       ''

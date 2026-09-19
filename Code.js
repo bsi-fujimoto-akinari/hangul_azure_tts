@@ -118,10 +118,13 @@ const HQ_AUDIO_VERSION_LEGACY =
 const HQ_AUDIO_VERSION_V4_1200 =
   'azure-v4-24k160k-leading5s-q3dual-1.2s-0.65s-100ms';
 
-const HQ_AUDIO_VERSION =
+const HQ_AUDIO_VERSION_V4_LEADING5S =
   'azure-v4-24k160k-leading5s-q3dual-final2.1s-1.2s-0.65s-100ms';
 
-const HQ_LEADING_SILENCE_MS = 5000;
+const HQ_AUDIO_VERSION =
+  'azure-v5-24k160k-no-leading-q3dual-final2.1s-1.2s-0.65s-100ms';
+
+const HQ_LEADING_SILENCE_MS_LEGACY = 5000;
 
 
 /**
@@ -155,8 +158,11 @@ const HQ_LISTENING_STORAGE_MODE =
 const HQ_LISTENING_NOTE =
   'HANGUL_LISTENING_AUDIO_STATE_V1\n';
 
-const HQ_LISTENING_AUDIO_VERSION =
+const HQ_LISTENING_AUDIO_VERSION_LEADING5S =
   'azure-listening-v1-24k160k-leading5s-segments';
+
+const HQ_LISTENING_AUDIO_VERSION =
+  'azure-listening-v2-24k160k-no-leading-segments';
 
 const HQ_K1_NUMBER_VOICE = {
   label: 'Nanami',
@@ -197,8 +203,11 @@ const HQ_LISTENING_SET_AUDIO_HEADERS = [
 ];
 const HQ_LISTENING_SET_STORAGE_MODE =
   'listening_set_audio_v1';
-const HQ_LISTENING_SET_AUDIO_VERSION =
+const HQ_LISTENING_SET_AUDIO_VERSION_LEADING5S =
   'azure-listening-set-v1-24k160k-source-locked';
+
+const HQ_LISTENING_SET_AUDIO_VERSION =
+  'azure-listening-set-v2-24k160k-no-leading-source-locked';
 
 const HQ_K1_READY_TAB =
   'listening_k1_ready_v1';
@@ -1970,10 +1979,7 @@ function combinedListeningSetSpec_(
                 segmentVoice,
                 segment.text,
                 pauseMs + 'ms',
-                first
-                  ? HQ_LEADING_SILENCE_MS +
-                    'ms'
-                  : null
+                null
               );
 
             first = false;
@@ -2854,7 +2860,9 @@ function runListeningJob_(
 
     if (
       state.audioVersion !==
-      HQ_LISTENING_AUDIO_VERSION
+        HQ_LISTENING_AUDIO_VERSION &&
+      state.audioVersion !==
+        HQ_LISTENING_AUDIO_VERSION_LEADING5S
     ) {
       throw new Error(
         'Unknown persisted Listening audio version.'
@@ -3165,7 +3173,9 @@ function listeningAudioSpec_(
 
   if (
     state.audioVersion !==
-    HQ_LISTENING_AUDIO_VERSION
+      HQ_LISTENING_AUDIO_VERSION &&
+    state.audioVersion !==
+      HQ_LISTENING_AUDIO_VERSION_LEADING5S
   ) {
     throw new Error(
       'Unknown persisted Listening audio version.'
@@ -3217,8 +3227,10 @@ function listeningAudioSpec_(
             segmentVoice,
             segment.text,
             pauseMs + 'ms',
-            first
-              ? HQ_LEADING_SILENCE_MS +
+            first &&
+            state.audioVersion ===
+              HQ_LISTENING_AUDIO_VERSION_LEADING5S
+              ? HQ_LEADING_SILENCE_MS_LEGACY +
                 'ms'
               : null
           );
@@ -3238,7 +3250,7 @@ function listeningAudioSpec_(
 
   const fingerprint =
     hash_(
-      HQ_LISTENING_AUDIO_VERSION +
+      state.audioVersion +
       ssml
     );
 
@@ -4019,10 +4031,19 @@ function audioSpec_(
     audioVersion ===
       HQ_AUDIO_VERSION ||
     audioVersion ===
+      HQ_AUDIO_VERSION_V4_LEADING5S ||
+    audioVersion ===
+      HQ_AUDIO_VERSION_V4_1200;
+
+  const usesLeadingSilence =
+    audioVersion ===
+      HQ_AUDIO_VERSION_V4_LEADING5S ||
+    audioVersion ===
       HQ_AUDIO_VERSION_V4_1200;
 
   if (
     audioVersion !== HQ_AUDIO_VERSION &&
+    audioVersion !== HQ_AUDIO_VERSION_V4_LEADING5S &&
     audioVersion !== HQ_AUDIO_VERSION_V4_1200 &&
     audioVersion !== HQ_AUDIO_VERSION_LEGACY
   ) {
@@ -4068,8 +4089,7 @@ function audioSpec_(
 
   if (isV4) {
     /**
-     * v4 logical order:
-     * 5000ms silence
+     * v4/v5 logical order:
      * Q1
      * Q2
      * Q3 original
@@ -4079,16 +4099,18 @@ function audioSpec_(
      * Q5B
      * Q5A
      *
-     * 先頭無音は最初のQ1 voice内の<break>として1回だけ置く。
-     * Azureが単一MP3としてエンコードするため、MP3 bytesへの
-     * 非互換データprependは行わない。
+     * v5 current generation has no leading silence.
+     * v4 persisted checkpoints keep the historical 5000ms leading break
+     * for recovery compatibility only.
      */
     body =
       azureVoiceBlock_(
         voices[0],
         j.audio[0],
         '1.2s',
-        HQ_LEADING_SILENCE_MS + 'ms'
+        usesLeadingSilence
+          ? HQ_LEADING_SILENCE_MS_LEGACY + 'ms'
+          : null
       ) +
 
       azureVoiceBlock_(
@@ -4126,7 +4148,10 @@ function audioSpec_(
       azureVoiceBlock_(
         voices[4],
         j.audio[6],
-        audioVersion === HQ_AUDIO_VERSION
+        (
+          audioVersion === HQ_AUDIO_VERSION ||
+          audioVersion === HQ_AUDIO_VERSION_V4_LEADING5S
+        )
           ? '2.1s'
           : '1.2s'
       );
@@ -4206,9 +4231,13 @@ function audioSpec_(
       '.mp3',
 
     description:
-      (isV4
-        ? 'HANGUL_AUDIO_V4:'
-        : 'HANGUL_AUDIO_V3:') +
+      (
+        audioVersion === HQ_AUDIO_VERSION
+          ? 'HANGUL_AUDIO_V5:'
+          : isV4
+            ? 'HANGUL_AUDIO_V4:'
+            : 'HANGUL_AUDIO_V3:'
+      ) +
       fingerprint
   };
 }

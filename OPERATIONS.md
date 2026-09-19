@@ -547,3 +547,17 @@ R3-11  = NORMAL_LIVE_ACTIVATION
 
 R3-10 must include persistent-review reopen and REVIEW_REPLAY zero-mutation checks.
 
+### R3-09B V2 UI freeze
+
+The frozen review target is now `H3-R3-09B-REVIEW-ARCHITECTURE-20260919-V2`.
+
+Learner defaults:
+- `POSTGRADE_DEFAULT_VIEW=REVIEW`;
+- `DEFAULT_FILTER=NEEDS_REVIEW`;
+- `×/△` explanation expanded, `○` collapsed;
+- immediate and reopened Review use the exact same server-side persistent Review builder and renderer;
+- audio/script/full explanation stay in one question card;
+- receipt/SET_ID/TXN_ID are secondary collapsed technical details;
+- Review history v1 filters are only `すべて` and `要復習あり`.
+
+R3-09B V2 remains architecture/documentation only. Runtime persistence begins in R3-09C.

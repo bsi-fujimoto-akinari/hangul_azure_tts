@@ -1229,11 +1229,16 @@ jobs:
               {role:'choice4',text:'넷입니다.',repeat:2,pause_ms_after:3200}
             ]],
             ['K2',[
-              {role:'prompt',text:'질문입니다.',repeat:2,pause_ms_after:3200},
-              {role:'choice1',text:'선택 하나.',repeat:2,pause_ms_after:3200},
-              {role:'choice2',text:'선택 둘.',repeat:2,pause_ms_after:3200},
-              {role:'choice3',text:'선택 셋.',repeat:2,pause_ms_after:3200},
-              {role:'choice4',text:'선택 넷.',repeat:2,pause_ms_after:3200}
+              {role:'prompt',text:'질문입니다.',repeat:1,pause_ms_after:3200},
+              {role:'prompt',text:'질문입니다.',repeat:1,pause_ms_after:3200},
+              {role:'choice1',text:'선택 하나.',repeat:1,pause_ms_after:3200},
+              {role:'choice1',text:'선택 하나.',repeat:1,pause_ms_after:3200},
+              {role:'choice2',text:'선택 둘.',repeat:1,pause_ms_after:3200},
+              {role:'choice2',text:'선택 둘.',repeat:1,pause_ms_after:3200},
+              {role:'choice3',text:'선택 셋.',repeat:1,pause_ms_after:3200},
+              {role:'choice3',text:'선택 셋.',repeat:1,pause_ms_after:3200},
+              {role:'choice4',text:'선택 넷.',repeat:1,pause_ms_after:3200},
+              {role:'choice4',text:'선택 넷.',repeat:1,pause_ms_after:3200}
             ]],
             ['K3',[
               {role:'prompt',text:'응답 질문입니다.',repeat:2,pause_ms_after:3200},
@@ -1243,10 +1248,14 @@ jobs:
               {role:'choice4',text:'응답 넷.',repeat:2,pause_ms_after:3200}
             ]],
             ['K4',[
-              {role:'passage',text:'네 번째 지문입니다.',repeat:2,pause_ms_after:3200}
+              {role:'passage',text:'네 번째 지문입니다.',repeat:1,pause_ms_after:2200},
+              {role:'passage',text:'다시 한 번 들으세요.',repeat:1,pause_ms_after:2200},
+              {role:'passage',text:'네 번째 지문입니다.',repeat:1,pause_ms_after:3200}
             ]],
             ['K5',[
-              {role:'passage',text:'다섯 번째 지문입니다.',repeat:2,pause_ms_after:3200}
+              {role:'passage',text:'다섯 번째 지문입니다.',repeat:1,pause_ms_after:2200},
+              {role:'passage',text:'다시 한 번 들으세요.',repeat:1,pause_ms_after:2200},
+              {role:'passage',text:'다섯 번째 지문입니다.',repeat:1,pause_ms_after:3200}
             ]]
           ].map(([section,plan],i)=>({
             row:i+2,
@@ -1259,6 +1268,10 @@ jobs:
           assert(scriptText.includes('① 하나입니다.'), '5L script missing collapsed K1 choice.');
           assert(!scriptText.includes('マルイチ'), '5L script leaked Japanese number cue.');
           assert(scriptText.includes('[聞4/一致]\n네 번째 지문입니다.'), '5L script K4 passage mismatch.');
+          assert(!scriptText.includes('다시 한 번 들으세요.'), '5L script leaked replay cue.');
+          if ((scriptText.match(/네 번째 지문입니다\./g) || []).length !== 1) {
+            throw new Error('5L script did not collapse repeated K4 passage.');
+          }
 
           console.log('Audio semantic regression checks passed.');
           NODE

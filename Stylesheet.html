@@ -57,7 +57,32 @@
     font-size: 13px;
     font-weight: 700;
   }
-  .audio-player { width: 100%; display: block; }
+  .audio-engine { display: none; }
+  .custom-audio-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+  }
+  .audio-toggle {
+    flex: 0 0 auto;
+    min-width: 112px;
+    min-height: 46px;
+    border: 1px solid #222;
+    border-radius: 10px;
+    background: #222;
+    color: #fff;
+    padding: 9px 14px;
+    font-weight: 700;
+  }
+  .audio-toggle:disabled {
+    opacity: .5;
+  }
+  .audio-time {
+    min-width: 92px;
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+  }
   .media-fallback {
     display: inline-block;
     margin-top: 5px;
@@ -281,9 +306,16 @@
 
     .audio-wrap { margin-bottom: 8px; }
     .audio-label { font-size: 12px; }
-    .audio-player {
-      min-height: 44px;
-      max-width: 100%;
+    .custom-audio-controls {
+      gap: 8px;
+    }
+    .audio-toggle {
+      min-width: 126px;
+      min-height: 48px;
+      font-size: 16px;
+    }
+    .audio-time {
+      font-size: 14px;
     }
 
     .k1-image {
@@ -386,8 +418,20 @@
   .audio-status.media-error {
     color: #8a1f1f;
   }
-  .audio-player.media-pending {
-    display: none;
+  .sr-only {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+  }
+  .compact-status {
+    padding: 10px 2px;
+    font-size: 13px;
   }
   .review-script-fallback {
     display: inline-block;
@@ -402,7 +446,7 @@
   body.mobile-device .shell {
     width: 100%;
     max-width: none;
-    padding-top: 10px;
+    padding-top: 6px;
     padding-left: max(10px, env(safe-area-inset-left));
     padding-right: max(10px, env(safe-area-inset-right));
     padding-bottom: calc(86px + env(safe-area-inset-bottom));
@@ -470,9 +514,16 @@
   body.mobile-device .audio-label {
     font-size: 12px;
   }
-  body.mobile-device .audio-player {
-    min-height: 44px;
-    max-width: 100%;
+  body.mobile-device .custom-audio-controls {
+    gap: 8px;
+  }
+  body.mobile-device .audio-toggle {
+    min-width: 126px;
+    min-height: 48px;
+    font-size: 16px;
+  }
+  body.mobile-device .audio-time {
+    font-size: 14px;
   }
 
   body.mobile-device .k1-image {

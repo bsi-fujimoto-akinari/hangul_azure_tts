@@ -289,11 +289,13 @@ jobs:
               ')'
             );
 
-          const listeningSpec = plan =>
+          const listeningSpec = (plan, versionExpression) =>
             run(
               'listeningAudioSpec_(' +
               JSON.stringify({ plan }) + ',' +
-              '{voice:"JiMin",audioVersion:HQ_LISTENING_AUDIO_VERSION}' +
+              '{voice:"JiMin",audioVersion:' +
+              (versionExpression || 'HQ_LISTENING_AUDIO_VERSION') +
+              '}' +
               ')'
             );
 
@@ -333,14 +335,22 @@ jobs:
             [
               run('HQ_AUDIO_VERSION_LEGACY'),
               run('HQ_AUDIO_VERSION_V4_1200'),
+              run('HQ_AUDIO_VERSION_V4_LEADING5S'),
               run('HQ_AUDIO_VERSION'),
-              run('HQ_LISTENING_AUDIO_VERSION')
+              run('HQ_LISTENING_AUDIO_VERSION_LEADING5S'),
+              run('HQ_LISTENING_AUDIO_VERSION'),
+              run('HQ_LISTENING_SET_AUDIO_VERSION_LEADING5S'),
+              run('HQ_LISTENING_SET_AUDIO_VERSION')
             ],
             [
               'azure-v2-24k160k-1.2s-0.65s-100ms',
               'azure-v4-24k160k-leading5s-q3dual-1.2s-0.65s-100ms',
               'azure-v4-24k160k-leading5s-q3dual-final2.1s-1.2s-0.65s-100ms',
-              'azure-listening-v1-24k160k-leading5s-segments'
+              'azure-v5-24k160k-no-leading-q3dual-final2.1s-1.2s-0.65s-100ms',
+              'azure-listening-v1-24k160k-leading5s-segments',
+              'azure-listening-v2-24k160k-no-leading-segments',
+              'azure-listening-set-v1-24k160k-source-locked',
+              'azure-listening-set-v2-24k160k-no-leading-source-locked'
             ],
             'Audio version constants changed unexpectedly.'
           );
@@ -466,11 +476,28 @@ jobs:
           const oldListeningSpec = listeningSpec(oldK1Plan);
           assert(
             oldListeningSpec.assignment === 'VOICE=JiMin',
-            'Legacy Listening assignment format changed.'
+            'Current Listening assignment format changed.'
           );
           assert(
             !oldListeningSpec.ssml.includes('ja-JP-NanamiNeural'),
-            'Legacy Listening plan unexpectedly uses Japanese voice.'
+            'Current Listening plan unexpectedly uses Japanese voice.'
+          );
+          assert(
+            !oldListeningSpec.ssml.includes('5000ms'),
+            'Current Listening audio still contains the retired 5000ms lead-in.'
+          );
+
+          const legacyLeadingListeningSpec = listeningSpec(
+            oldK1Plan,
+            'HQ_LISTENING_AUDIO_VERSION_LEADING5S'
+          );
+          assert(
+            legacyLeadingListeningSpec.ssml.includes('5000ms'),
+            'Legacy Listening checkpoint lost its recovery-compatible 5000ms lead-in.'
+          );
+          assert(
+            legacyLeadingListeningSpec.fingerprint !== oldListeningSpec.fingerprint,
+            'Legacy/current Listening fingerprints must remain distinct.'
           );
 
           const numberedListeningSpec = listeningSpec(newK1Plan);
@@ -524,7 +551,7 @@ jobs:
             ')'
           );
 
-          const newV4Spec = run(
+          const leadingFinalV4Spec = run(
             'audioSpec_(' +
             JSON.stringify(writtenJob) + ',' +
             JSON.stringify({
@@ -536,12 +563,48 @@ jobs:
           );
 
           assert(
-            newV4Spec.ssml.replace('2.1s', '1.2s') === oldV4Spec.ssml,
-            'Old-v4/new-v4 SSML differ by more than the approved final tail.'
+            leadingFinalV4Spec.ssml.replace('2.1s', '1.2s') === oldV4Spec.ssml,
+            'Historical v4 SSML differs by more than the approved final tail.'
           );
           assert(
-            newV4Spec.fingerprint !== oldV4Spec.fingerprint,
-            'Old-v4/new-v4 fingerprints must remain distinct.'
+            leadingFinalV4Spec.ssml.includes('5000ms'),
+            'Historical v4 checkpoint lost its recovery-compatible lead-in.'
+          );
+          assert(
+            leadingFinalV4Spec.fingerprint !== oldV4Spec.fingerprint,
+            'Historical v4 fingerprints must remain distinct.'
+          );
+
+          const currentV5Spec = run(
+            'audioSpec_(' +
+            JSON.stringify(writtenJob) + ',' +
+            JSON.stringify({
+              voices,
+              audioVersion:
+                'azure-v5-24k160k-no-leading-q3dual-final2.1s-1.2s-0.65s-100ms'
+            }) +
+            ')'
+          );
+          assert(
+            !currentV5Spec.ssml.includes('5000ms'),
+            'Current written audio still contains the retired 5000ms lead-in.'
+          );
+          assert(
+            currentV5Spec.ssml.includes('<break time="2.1s"/>'),
+            'Current written audio lost the approved final 2.1s tail.'
+          );
+          assert(
+            currentV5Spec.fingerprint !== leadingFinalV4Spec.fingerprint,
+            'Current/legacy written fingerprints must remain distinct.'
+          );
+
+          const combinedBuilderSource = source.slice(
+            source.indexOf('function combinedListeningSetSpec_'),
+            source.indexOf('function locateListeningSetAudioRow_')
+          );
+          assert(
+            !combinedBuilderSource.includes('HQ_LEADING_SILENCE_MS_LEGACY'),
+            'Current combined 5L builder still injects the retired lead-in.'
           );
 
           const legacySpec = run(

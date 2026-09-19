@@ -645,3 +645,19 @@ R3-09D boundaries:
 
 R3-09D exits at `IMPLEMENTED_AWAITING_DEVICE_VALIDATION`.
 Next stage: R3-09E `REVIEW_REPLAY_LIBRARY_DEVICE_VALIDATION`.
+
+### R3-09D UTF-8 hash correction
+
+Persistent Review semantic hashes contain Korean/Japanese text and therefore MUST use the repository's explicit UTF-8 string helper:
+
+```text
+hash_(canonicalJson)
+```
+
+Do not use `h3Sha256Hex_(string)` for semantic JSON/string hashes. `h3Sha256Hex_` remains valid for byte-array/file hashing.
+
+Affected canonical paths:
+- R3 preissue item payload SHA recomputation;
+- persistent Review item/explanation/result/audio/binding SHA recomputation.
+
+The stored L03 hashes were independently rederived from current canonical Sheet data and all matched exactly; no Review or learner data rewrite is required.

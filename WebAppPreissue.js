@@ -1153,7 +1153,7 @@ function h3ProdValidatePreissueSet_(
   };
 
   var calculatedItemHash =
-    h3Sha256Hex_(
+    hash_(
       h3PreissueCanonicalJson_(
         hashObject
       )

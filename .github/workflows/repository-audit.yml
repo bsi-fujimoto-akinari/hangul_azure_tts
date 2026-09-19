@@ -1071,6 +1071,8 @@ jobs:
           const context = vm.createContext({
             console,
             h3Sha256Hex_: value =>
+              crypto.createHash('sha256').update(String(value), 'utf8').digest('hex'),
+            hash_: value =>
               crypto.createHash('sha256').update(String(value), 'utf8').digest('hex')
           });
           vm.runInContext(source, context, { filename: 'WebAppReviewPersistence.js' });
@@ -1277,6 +1279,71 @@ jobs:
               raise SystemExit(
                   'Review open route no longer performs full persistent source-lock validation.'
               )
+          PY
+
+      - name: Check R3-09D UTF-8 Review hashing
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          review = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          preissue = Path('WebAppPreissue.js').read_text(encoding='utf-8')
+          code = Path('Code.js').read_text(encoding='utf-8')
+
+          if 'Utilities.Charset.UTF_8' not in code or 'function hash_(text)' not in code:
+              raise SystemExit('Canonical UTF-8 hash_ helper missing from Code.js.')
+
+          expected_review = (
+              "function h3ReviewHash_(value) {\n"
+              "  return hash_(\n"
+              "    h3ReviewCanonicalJson_(value)\n"
+              "  );\n"
+              "}"
+          )
+          if expected_review not in review:
+              raise SystemExit('Review semantic hashing is not routed through explicit UTF-8 hash_.')
+
+          expected_preissue = (
+              "var calculatedItemHash =\n"
+              "    hash_(\n"
+              "      h3PreissueCanonicalJson_(\n"
+              "        hashObject\n"
+              "      )\n"
+              "    );"
+          )
+          if expected_preissue not in preissue:
+              raise SystemExit('Preissue item hash is not routed through explicit UTF-8 hash_.')
+
+          if "h3Sha256Hex_(\n      h3PreissueCanonicalJson_(" in preissue:
+              raise SystemExit('Legacy non-explicit string hashing remains in preissue item hash.')
+          PY
+
+          python3 - <<'PY'
+          import hashlib, json
+
+          sample = {
+              "ko": "예매",
+              "ja": "前売り",
+              "nested": {"b": 2, "a": "수영장"},
+          }
+
+          def canonical(v):
+              if isinstance(v, list):
+                  return [canonical(x) for x in v]
+              if isinstance(v, dict):
+                  return {k: canonical(v[k]) for k in sorted(v)}
+              return v
+
+          text = json.dumps(
+              canonical(sample),
+              ensure_ascii=False,
+              separators=(',', ':'),
+          )
+          actual = hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+          if len(actual) != 64:
+              raise SystemExit('UTF-8 SHA-256 regression fixture failed.')
           PY
 
       - name: Check JavaScript syntax

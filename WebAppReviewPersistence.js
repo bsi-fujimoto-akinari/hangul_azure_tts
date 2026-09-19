@@ -69,7 +69,7 @@ function h3ReviewCanonicalJson_(value) {
 }
 
 function h3ReviewHash_(value) {
-  return h3Sha256Hex_(
+  return hash_(
     h3ReviewCanonicalJson_(value)
   );
 }

@@ -740,3 +740,51 @@ NEXT=R3-09E iPhone replay + zero-mutation validation
 ```
 
 PC validation and the final full E2E audit remain R3-10 scope.
+
+## 19. R3-09E UI refinement
+
+The iPhone validation feedback refines the learner UI without changing any runtime or persistence authority.
+
+### HOME
+
+HOME is compacted into:
+- one compact H3 5L header;
+- one inline current-5L status row;
+- one Review library card;
+- compact history rows with `復習` / `再挑戦` actions.
+
+The previous large explanatory hero/current-learning blocks are retired.
+
+### Persistent Review
+
+Persistent Review no longer uses a score/count/filter summary header.
+
+The primary Review navigation is exactly five question buttons:
+
+```text
+Q1 ×
+Q2 △
+Q3 ×
+Q4 ○
+Q5 △
+```
+
+Rules:
+- exactly one Review card is visible at a time;
+- tapping a Q button switches the visible card;
+- button text includes the persisted result;
+- the active Q button is visibly selected;
+- Review still renders exact image/audio/script/answer/explanation from the persistent source lock;
+- no `3/5`, wrong-count, uncertain-count, or `要復習/全問` Review header is shown.
+
+Review footer labels:
+- `再挑戦`;
+- `ホーム`.
+
+### REVIEW_REPLAY
+
+The standalone `再挑戦` explanatory block above the questions is removed.
+
+Replay begins directly with the same Q1-Q5 question navigation used by normal issue/replay surfaces. The nonlearning/write-zero contract is unchanged.
+
+R3-09E remains `IMPLEMENTED_AWAITING_DEVICE_VALIDATION` until this refined UI is revalidated on iPhone.

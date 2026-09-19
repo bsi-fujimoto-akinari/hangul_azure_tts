@@ -1181,3 +1181,425 @@ function r309cValidateL03Persistence() {
     'H3TX-20260919-000005'
   );
 }
+
+function h3ReviewValidateRequest_(request) {
+  if (
+    !request ||
+    request.schema !==
+      'H3_WEB_RENDER_REQUEST_V1' ||
+    request.mode !== 'REVIEW' ||
+    !request.txn_id
+  ) {
+    throw new Error(
+      'INVALID_REVIEW_RENDER_REQUEST'
+    );
+  }
+
+  var txnId = String(
+    request.txn_id
+  );
+
+  if (
+    txnId.length > 128 ||
+    /[\x00-\x1F]/.test(txnId)
+  ) {
+    throw new Error(
+      'INVALID_REVIEW_TXN_ID'
+    );
+  }
+
+  return txnId;
+}
+
+function getPersistentReviewPayload_(
+  request
+) {
+  var txnId =
+    h3ReviewValidateRequest_(
+      request
+    );
+  return buildPersistentReviewPayload_(
+    txnId
+  );
+}
+
+function getPersistentReviewMediaPayload_(
+  request
+) {
+  if (
+    !request ||
+    request.schema !==
+      'H3_WEB_MEDIA_REQUEST_V1' ||
+    request.mode !== 'REVIEW' ||
+    !request.txn_id ||
+    !request.asset_key
+  ) {
+    throw new Error(
+      'INVALID_REVIEW_MEDIA_REQUEST'
+    );
+  }
+
+  var section = String(
+    request.asset_key
+  );
+  if (
+    H3_WEB_PROD_SECTIONS.indexOf(
+      section
+    ) < 0
+  ) {
+    throw new Error(
+      'REVIEW_MEDIA_ASSET_NOT_ALLOWLISTED'
+    );
+  }
+
+  var spreadsheet =
+    SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+  var txn =
+    h3ReviewTxnContext_(
+      spreadsheet,
+      String(request.txn_id)
+    );
+
+  if (
+    request.set_id &&
+    String(request.set_id) !==
+      txn.setId
+  ) {
+    throw new Error(
+      'REVIEW_MEDIA_SET_MISMATCH'
+    );
+  }
+
+  var source =
+    h3ReviewSourceContext_(
+      spreadsheet,
+      txn.setId
+    );
+  var explanations =
+    h3ReviewExplanationSet_(
+      spreadsheet,
+      source
+    );
+
+  h3ReviewRequireBinding_(
+    spreadsheet,
+    txn,
+    source,
+    explanations
+  );
+
+  var binding =
+    source.audioBinding
+      .individual[section];
+
+  if (
+    !binding ||
+    !binding.audio_file_id ||
+    !binding.audio_url
+  ) {
+    throw new Error(
+      'REVIEW_MEDIA_BINDING_INVALID:' +
+        section
+    );
+  }
+
+  var media =
+    h3DriveDataUri_(
+      binding.audio_file_id,
+      'audio/mpeg',
+      null,
+      8 * 1024 * 1024
+    );
+
+  return {
+    schema:
+      'H3_WEB_MEDIA_V1',
+    mode: 'REVIEW',
+    read_only: true,
+    txn_id: txn.txnId,
+    set_id: txn.setId,
+    asset_key: section,
+    data_uri:
+      media.data_uri,
+    mime_type:
+      media.mime_type,
+    size_bytes:
+      media.size_bytes,
+    trim_start_ms: 0,
+    fallback_url:
+      binding.audio_url
+  };
+}
+
+function h3ReviewHistoryEntries_(
+  spreadsheet
+) {
+  var bindingSheet =
+    spreadsheet.getSheetByName(
+      H3_REVIEW_BINDING_SHEET
+    );
+
+  h3ReviewRequireExactHeader_(
+    bindingSheet,
+    H3_REVIEW_BINDING_HEADERS,
+    'REVIEW_BINDING'
+  );
+
+  var bindingTable =
+    h3ReviewTable_(
+      bindingSheet
+    );
+  var entries = [];
+
+  bindingTable.rows.forEach(
+    function (row) {
+      if (
+        String(
+          row[
+            bindingTable.map.STATUS
+          ] || ''
+        ) !== 'LOCKED'
+      ) {
+        return;
+      }
+
+      var txnId = String(
+        row[
+          bindingTable.map.TXN_ID
+        ] || ''
+      );
+      if (!txnId) return;
+
+      try {
+        var payload =
+          buildPersistentReviewPayload_(
+            txnId
+          );
+
+        var txn =
+          h3ReviewTxnContext_(
+            spreadsheet,
+            txnId
+          );
+        var committedAt = String(
+          txn.row[
+            txn.map.COMMITTED_AT
+          ] || ''
+        );
+
+        var wrongCount = 0;
+        var uncertainCount = 0;
+
+        payload.sections.forEach(
+          function (part) {
+            if (
+              part.result === '×'
+            ) {
+              wrongCount += 1;
+            }
+            if (part.uncertain) {
+              uncertainCount += 1;
+            }
+          }
+        );
+
+        entries.push({
+          txn_id: payload.txn_id,
+          set_id: payload.set_id,
+          listening_set_no:
+            payload.listening_set_no,
+          committed_at:
+            committedAt,
+          score: payload.score,
+          total: payload.total,
+          wrong_count:
+            wrongCount,
+          uncertain_count:
+            uncertainCount,
+          needs_review:
+            payload.sections.some(
+              function (part) {
+                return (
+                  part.result !== '○'
+                );
+              }
+            )
+        });
+      } catch (err) {
+        // Fail closed at open time. Invalid/corrupt
+        // bindings are not exposed in the learner
+        // history library.
+      }
+    }
+  );
+
+  entries.sort(function (a, b) {
+    var at =
+      String(a.committed_at || '');
+    var bt =
+      String(b.committed_at || '');
+
+    if (at !== bt) {
+      return at < bt ? 1 : -1;
+    }
+
+    return (
+      Number(
+        b.listening_set_no || 0
+      ) -
+      Number(
+        a.listening_set_no || 0
+      )
+    );
+  });
+
+  return entries.slice(0, 50);
+}
+
+function h3ReviewCurrentLearning_(
+  spreadsheet
+) {
+  var payloadSheet =
+    spreadsheet.getSheetByName(
+      'listening_set_payload_v1'
+    );
+  var txnSheet =
+    spreadsheet.getSheetByName(
+      H3_WEB_PROD_TXN_SHEET
+    );
+
+  if (!payloadSheet || !txnSheet) {
+    return null;
+  }
+
+  var payload =
+    h3ReviewTable_(
+      payloadSheet
+    );
+  var txn =
+    h3ReviewTable_(
+      txnSheet
+    );
+
+  h3ProdRequireColumns_(
+    payload,
+    [
+      'LISTENING_SET_ID',
+      'LISTENING_SET_NO',
+      'STATUS'
+    ],
+    'listening_set_payload_v1'
+  );
+  h3ProdRequireColumns_(
+    txn,
+    [
+      'SET_ID',
+      'STATUS'
+    ],
+    H3_WEB_PROD_TXN_SHEET
+  );
+
+  var committed = {};
+  txn.rows.forEach(function (row) {
+    if (
+      String(
+        row[txn.map.STATUS] || ''
+      ) === 'COMMITTED'
+    ) {
+      committed[
+        String(
+          row[txn.map.SET_ID] || ''
+        )
+      ] = true;
+    }
+  });
+
+  var candidates = [];
+  payload.rows.forEach(
+    function (row) {
+      var setId = String(
+        row[
+          payload.map.LISTENING_SET_ID
+        ] || ''
+      );
+      var setNo = Number(
+        row[
+          payload.map.LISTENING_SET_NO
+        ]
+      );
+
+      if (
+        String(
+          row[
+            payload.map.STATUS
+          ] || ''
+        ) === 'ISSUED' &&
+        setId &&
+        Number.isInteger(setNo) &&
+        !committed[setId]
+      ) {
+        candidates.push({
+          set_id: setId,
+          listening_set_no:
+            setNo
+        });
+      }
+    }
+  );
+
+  if (!candidates.length) {
+    return null;
+  }
+
+  candidates.sort(function (a, b) {
+    return (
+      b.listening_set_no -
+      a.listening_set_no
+    );
+  });
+
+  var latest =
+    candidates[0];
+
+  try {
+    buildProductionRenderPayload_({
+      schema:
+        'H3_WEB_RENDER_REQUEST_V1',
+      mode: 'LISTENING',
+      set_id:
+        latest.set_id
+    });
+    return latest;
+  } catch (err) {
+    return null;
+  }
+}
+
+function buildReviewHomePayload_() {
+  var spreadsheet =
+    SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+
+  return {
+    schema:
+      'H3_WEB_HOME_V1',
+    mode: 'HOME',
+    read_only: true,
+    current_learning:
+      h3ReviewCurrentLearning_(
+        spreadsheet
+      ),
+    review_history:
+      h3ReviewHistoryEntries_(
+        spreadsheet
+      ),
+    review_filters: [
+      'ALL',
+      'NEEDS_REVIEW'
+    ]
+  };
+}
+

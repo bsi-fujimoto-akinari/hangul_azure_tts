@@ -717,3 +717,23 @@ Current learner UI:
 - Replay has no introductory/explanatory block and opens directly on Q1.
 
 This is presentation-only. REVIEW/HOME/REVIEW_REPLAY runtime write boundaries remain unchanged.
+
+### R3-09E close
+
+R3-09E is `PASS_DEVICE_VALIDATED_ZERO_MUTATION`.
+
+Close evidence:
+- L03 production transaction count remains exactly 1;
+- exact committed transaction remains `H3TX-20260919-000005`;
+- L03 learner history remains exactly five K1-K5 rows;
+- learner state remains issue 2 / next set 3 / last set L03;
+- persistent Review binding remains `LOCKED`;
+- L03 payload remains `ISSUED`;
+- bound K1_READY remains `CONSUMED`;
+- REVIEW_REPLAY created no learner-runtime, scheduler, retest, counter, pointer, payload, K1_READY, or Review-binding write.
+
+The replay result remains intentionally nonpersistent.
+
+`NEXT=R3-10 FULL_E2E_AUDIT`.
+
+Normal-live production remains blocked until R3-10 passes and R3-11 explicitly activates it.

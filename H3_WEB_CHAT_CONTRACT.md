@@ -210,3 +210,16 @@ After that activation:
 
 The exact persistent-review and REVIEW_REPLAY boundaries are frozen in `H3_REVIEW_ARCHITECTURE.md`.
 
+## 11. R3-09D persistent Review implementation
+
+The persistent Review Web surface is implemented against the frozen R3-09B V2 contract.
+
+Implemented:
+- parameterless HOME with Review history;
+- exact `mode=REVIEW&txn_id=<TXN_ID>` reopening;
+- postgrade transition to the same persistent Review builder used by later reopening;
+- inline exact audio and K1 image;
+- full explanation in the Web App;
+- receipt hidden under technical details.
+
+Until R3-09E device validation passes, the existing Chat receipt workflow remains the operational fallback for the R3 test sequence. R3-09D implementation alone does not activate normal-live production or REVIEW_REPLAY.

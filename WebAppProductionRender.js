@@ -274,7 +274,7 @@ function buildProductionRenderPayload_(request) {
       image:
         'APPS_SCRIPT_INLINE_EXACT_SHA256_VERIFIED',
       review:
-        'POSTGRADE_INLINE_SPLIT_AUDIO_SCRIPT'
+        'PERSISTENT_REVIEW_V1'
     },
     questions: questions
   };

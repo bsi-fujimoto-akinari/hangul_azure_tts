@@ -489,12 +489,40 @@ function h3PreissueRequireProvenance_(
     stateMap.OVERLOAD_PLAN_JSON &&
     stateMap.OVERLOAD_PLAN_JSON.value;
 
+  if (!overloadText) {
+    throw new Error(
+      'PREISSUE_OVERLOAD_PLAN_MISSING'
+    );
+  }
+
   if (overloadText) {
     var overload =
       h3ProdParseJson_(
         overloadText,
         'PREISSUE_OVERLOAD_PLAN_INVALID'
       );
+
+    if (
+      String(overload.schema || '') !==
+        'H3_LISTENING_OVERLOAD_PLAN_V2' ||
+      Number(overload.next_set_no) !==
+        Number(setNo)
+    ) {
+      throw new Error(
+        'PREISSUE_OVERLOAD_PLAN_STALE'
+      );
+    }
+
+    if (
+      Array.isArray(
+        overload.blocking_overflow
+      ) &&
+      overload.blocking_overflow.length
+    ) {
+      throw new Error(
+        'PREISSUE_OVERLOAD_PLAN_BLOCKED'
+      );
+    }
 
     var planned =
       (

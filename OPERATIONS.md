@@ -737,3 +737,97 @@ The replay result remains intentionally nonpersistent.
 `NEXT=R3-10 FULL_E2E_AUDIT`.
 
 Normal-live production remains blocked until R3-10 passes and R3-11 explicitly activates it.
+
+## 20. R3-10 FULL_E2E_AUDIT
+
+R3-10 audits the one real production transaction and the persistent Review/Replay stack before normal-live activation.
+
+Audit target:
+- `SET_ID=H3-20260919-L03`
+- `TXN_ID=H3TX-20260919-000005`
+- learner set no = 2.
+
+### PASS — transaction / history / counter
+
+Live canonical readback:
+- exactly one production transaction exists for L03;
+- status is `COMMITTED`;
+- no `RECOVERY_REQUIRED` production transaction exists;
+- exactly five L03 learner-log rows exist;
+- results are `K1×, K2△, K3×, K4○, K5△`;
+- `LISTENING_ISSUE_NO=2`;
+- `NEXT_LISTENING_SET_NO=3`;
+- `LAST_LISTENING_SET_ID=H3-20260919-L03`;
+- `PHASE=BASELINE_2`;
+- primary-valid counts are `K1=2,K2=1,K3=2,K4=2,K5=2`;
+- active skill count is 5 and `OVERLOAD_STATUS=LISTENING_OVERLOAD_REVIEW`.
+
+### PASS — source lock / artifacts / Review
+
+- L03 payload remains `ISSUED`;
+- exact K1_READY remains `CONSUMED`;
+- K1 image exists;
+- all five split MP3 files exist and queue rows remain `done` with no error;
+- learner Review Script `H3-20260919-L03.txt` exists beside the split audio;
+- five explanation rows remain `LOCKED`;
+- persistent Review binding remains `LOCKED`;
+- item/explanation/audio/image binding hashes remain cross-bound to the exact L03 transaction;
+- HOME / REVIEW / REVIEW_REPLAY access caused zero learner-runtime mutation.
+
+### PASS — idempotency contract
+
+Static production path remains:
+- same SET + same fingerprint after COMMITTED => return stored committed result;
+- same SET + different fingerprint after COMMITTED => `CONFLICT_ALREADY_COMMITTED`;
+- any unresolved `RECOVERY_REQUIRED` blocks a new production commit;
+- REVIEW_REPLAY is `persisted:false` with `runtime_write_count:0`.
+
+### BLOCKER R3-10-B1 — Listening scheduler plan not refreshed after L03
+
+The backend commit correctly persisted per-section retest evidence, but it does not recalculate or persist `OVERLOAD_PLAN_JSON`.
+
+Current inconsistency:
+- learner state says `NEXT_LISTENING_SET_NO=3`;
+- `OVERLOAD_PLAN_JSON.next_set_no=2`;
+- the stored plan is still the pre-L03 R3-07 plan;
+- the stored plan itself says `reevaluate_after_each_scored_learning_surface=true`;
+- production `h3ProdBuildPlan_` updates counts/status/provenance but never updates `OVERLOAD_PLAN_JSON`;
+- `generation_log_v1` and `skill_queue_v1` contain no L03 scheduler-sync record.
+
+This is blocking because preissue validation consumes `OVERLOAD_PLAN_JSON` when validating the next set's retest assignment. Normal-live activation must not proceed with a stale next-set scheduler plan.
+
+Required repair:
+1. derive active Listening retest obligations from canonical learner history/provenance;
+2. deterministically recompute the overload plan for `NEXT_LISTENING_SET_NO`;
+3. persist/read back the new plan atomically after a committed scored 5L set;
+4. backfill the current L03 post-commit state once, without rewriting learner answers/history;
+5. add regression coverage that the persisted plan advances after each scored surface.
+
+### BLOCKER R3-10-B2 — PC validation pending for persistent Review/Replay
+
+iPhone learner validation is complete.
+
+R3-10 still requires the current Apps Script Web App to be checked on PC for:
+- parameterless HOME;
+- reopening the persistent L03 Review;
+- Q1-Q5 one-question paging;
+- exact K1 image;
+- inline K1-K5 audio playback;
+- scripts/explanations;
+- HOME -> REVIEW_REPLAY;
+- replay grading and return to persistent Review.
+
+This is a device-validation blocker only; it must not create a new learning transaction.
+
+### R3-10 interim result
+
+```text
+RESULT=BLOCKED_2
+PASS=history,counter,transaction,idempotency,artifacts,review_source_lock,iPhone
+BLOCKER_1=LISTENING_SCHEDULER_PLAN_STALE_AFTER_L03
+BLOCKER_2=PC_PERSISTENT_REVIEW_REPLAY_VALIDATION_PENDING
+NORMAL_LIVE_ACTIVATION=BLOCKED
+NEXT=R3-10B scheduler repair + PC validation
+```
+
+R3-11 MUST NOT start until both blockers are closed and R3-10 is re-read as `blocking=0`.

@@ -1137,6 +1137,40 @@ function h3ProdRequireJournal_(spreadsheet) {
   return sheet;
 }
 
+function h3ProdNextTxnId_(spreadsheet) {
+  var datePart = Utilities.formatDate(
+    new Date(),
+    'Asia/Tokyo',
+    'yyyyMMdd'
+  );
+  var prefix = 'H3TX-' + datePart + '-';
+  var max = 0;
+
+  [
+    H3_WEB_PROD_TXN_SHEET,
+    H3_WEB_TEST_TXN_SHEET
+  ].forEach(function (sheetName) {
+    var sheet = spreadsheet.getSheetByName(sheetName);
+    if (!sheet || sheet.getLastRow() < 2) return;
+
+    var ids = sheet
+      .getRange(2, 1, sheet.getLastRow() - 1, 1)
+      .getDisplayValues();
+
+    ids.forEach(function (row) {
+      var value = String(row[0] || '');
+      if (value.indexOf(prefix) !== 0) return;
+      var suffix = value.slice(prefix.length);
+      if (!/^\d{6}$/.test(suffix)) return;
+      max = Math.max(max, Number(suffix));
+    });
+  });
+
+  var next = String(max + 1);
+  while (next.length < 6) next = '0' + next;
+  return prefix + next;
+}
+
 function h3ProdBuildResult_(plan, context, txnId) {
   return {
     schema: 'H3_WEB_SUBMIT_RESULT_V1',
@@ -1273,6 +1307,14 @@ function h3ProdSubmit_(request) {
             );
           }
 
+          if (
+            String(row[5] || '') !== fingerprint
+          ) {
+            throw new Error(
+              'CONFLICT_ALREADY_COMMITTED'
+            );
+          }
+
           return storedResult;
         }
 
@@ -1322,7 +1364,7 @@ function h3ProdSubmit_(request) {
       nowText
     );
 
-    var txnId = h3NextTestTxnId_(rows);
+    var txnId = h3ProdNextTxnId_(spreadsheet);
     h3ProdApplyTxnId_(plan, txnId);
 
     prestate = h3ProdRuntimeSnapshot_(context);

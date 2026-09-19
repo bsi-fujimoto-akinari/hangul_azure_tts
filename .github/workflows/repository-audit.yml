@@ -1824,6 +1824,64 @@ jobs:
           }
           NODE
 
+      - name: Check R3-10 close
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
+          arch = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
+          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
+          prod = Path('WebAppProduction.js').read_text(encoding='utf-8')
+          pre = Path('WebAppPreissue.js').read_text(encoding='utf-8')
+
+          for needle in [
+              '### R3-10B repair / R3-10 close',
+              'RESULT=PASS',
+              'BLOCKING=0',
+              'B1_SCHEDULER_REFRESH=PASS',
+              'B2_PC_GATE=PASS_POLICY_NONBLOCKING',
+              'OVERLOAD_PLAN_SCHEMA=H3_LISTENING_OVERLOAD_PLAN_V2',
+              'NEXT=R3-11 NORMAL_LIVE_ACTIVATION',
+          ]:
+              if needle not in ops:
+                  raise SystemExit(f'R3-10 close operations evidence missing: {needle}')
+
+          for needle in [
+              '## 22. R3-10 close',
+              'BLOCKING=0',
+              'PC_VALIDATION=OPTIONAL_NONBLOCKING_BY_DEFAULT',
+              '3:K4,4:K1,5:K3,6:K2,7:K5',
+          ]:
+              if needle not in arch:
+                  raise SystemExit(f'R3-10 close architecture evidence missing: {needle}')
+
+          for needle in [
+              '## 14. R3-10 device release policy',
+              'PC validation is optional and nonblocking by default.',
+              'Canonical Listening render source: `H3-LISTENING-RENDER-RULES-20260920-V19`',
+          ]:
+              if needle not in chat:
+                  raise SystemExit(f'R3-10 device policy evidence missing: {needle}')
+
+          for needle in [
+              'H3_LISTENING_OVERLOAD_PLAN_V2',
+              'function h3ProdBuildOverloadPlan_(',
+              "'OVERLOAD_PLAN_JSON'",
+          ]:
+              if needle not in prod:
+                  raise SystemExit(f'R3-10 scheduler implementation missing: {needle}')
+
+          for needle in [
+              'PREISSUE_OVERLOAD_PLAN_MISSING',
+              'PREISSUE_OVERLOAD_PLAN_STALE',
+              'PREISSUE_OVERLOAD_PLAN_BLOCKED',
+          ]:
+              if needle not in pre:
+                  raise SystemExit(f'R3-10 preissue scheduler gate missing: {needle}')
+          PY
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

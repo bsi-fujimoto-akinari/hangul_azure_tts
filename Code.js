@@ -2040,24 +2040,50 @@ function listeningPlanTextByRole_(
   role,
   section
 ) {
-  const matches =
-    plan.filter(
-      x => x.role === role
-    );
+  const replayCue =
+    '다시 한 번 들으세요.';
 
-  if (matches.length !== 1) {
+  const texts =
+    plan
+      .filter(
+        x => x.role === role
+      )
+      .map(
+        x => String(
+          x.text || ''
+        ).trim()
+      )
+      .filter(
+        text =>
+          Boolean(text) &&
+          text !== replayCue
+      );
+
+  const unique = [];
+
+  texts.forEach(
+    text => {
+      if (
+        unique.indexOf(text) < 0
+      ) {
+        unique.push(text);
+      }
+    }
+  );
+
+  if (unique.length !== 1) {
     throw new Error(
-      '5L script requires exactly one ' +
+      '5L script requires one semantic ' +
       role +
-      ' segment in ' +
+      ' surface in ' +
       section +
+      '; found ' +
+      unique.length +
       '.'
     );
   }
 
-  return String(
-    matches[0].text
-  ).trim();
+  return unique[0];
 }
 
 

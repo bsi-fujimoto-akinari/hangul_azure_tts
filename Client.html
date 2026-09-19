@@ -74,7 +74,6 @@
         setLoading(false);
         app.payload = payload;
 
-        document.getElementById('set-id').textContent = payload.set_id;
         renderQuestions(payload.questions);
         buildMobileProgress(payload.questions.length);
 
@@ -181,21 +180,73 @@
     title.textContent = label;
     wrap.appendChild(title);
 
-    var status = el('p', 'audio-status');
-    status.dataset.assetKey = assetKey;
-    status.textContent = '音声を準備中…';
-    wrap.appendChild(status);
+    var controls = el('div', 'custom-audio-controls');
+
+    var toggle = el('button', 'audio-toggle');
+    toggle.type = 'button';
+    toggle.dataset.assetKey = assetKey;
+    toggle.disabled = true;
+    toggle.textContent = '準備中…';
+    controls.appendChild(toggle);
+
+    var time = el('span', 'audio-time');
+    time.dataset.assetKey = assetKey;
+    time.textContent = '0:00 / --:--';
+    controls.appendChild(time);
+
+    wrap.appendChild(controls);
 
     var audio = document.createElement('audio');
-    audio.className = 'audio-player media-pending';
-    audio.controls = true;
+    audio.className = 'audio-engine';
     audio.preload = 'none';
     audio.dataset.assetKey = assetKey;
     audio.setAttribute('playsinline', '');
+
+    toggle.addEventListener('click', function () {
+      if (!audio.getAttribute('src')) return;
+
+      if (audio.paused) {
+        pauseOtherAudio(audio);
+        var promise = audio.play();
+        if (promise && typeof promise.catch === 'function') {
+          promise.catch(function () {
+            setAudioStatus(
+              assetKey,
+              '再生を開始できませんでした。Driveリンクを使用してください。',
+              true
+            );
+          });
+        }
+      } else {
+        audio.pause();
+      }
+    });
+
     audio.addEventListener('play', function () {
+      toggle.textContent = '❚❚ 一時停止';
       pauseOtherAudio(audio);
     });
+    audio.addEventListener('pause', function () {
+      if (!audio.ended) toggle.textContent = '▶ 再生';
+    });
+    audio.addEventListener('ended', function () {
+      toggle.textContent = '▶ 再生';
+      updateAudioTime(audio, time);
+    });
+    audio.addEventListener('loadedmetadata', function () {
+      updateAudioTime(audio, time);
+    });
+    audio.addEventListener('timeupdate', function () {
+      updateAudioTime(audio, time);
+    });
+
     wrap.appendChild(audio);
+
+    var status = el('p', 'audio-status');
+    status.dataset.assetKey = assetKey;
+    status.textContent = '';
+    status.classList.add('hidden');
+    wrap.appendChild(status);
 
     var fallback = document.createElement('a');
     fallback.className = 'media-fallback';
@@ -206,6 +257,21 @@
     wrap.appendChild(fallback);
 
     return wrap;
+  }
+
+  function updateAudioTime(audio, node) {
+    var current = isFinite(audio.currentTime) ? audio.currentTime : 0;
+    var duration = isFinite(audio.duration) ? audio.duration : null;
+    node.textContent =
+      formatAudioTime(current) + ' / ' +
+      (duration === null ? '--:--' : formatAudioTime(duration));
+  }
+
+  function formatAudioTime(seconds) {
+    var value = Math.max(0, Math.floor(Number(seconds) || 0));
+    var minutes = Math.floor(value / 60);
+    var remain = value % 60;
+    return minutes + ':' + (remain < 10 ? '0' : '') + remain;
   }
 
   function scheduleInitialAudioPrefetch() {
@@ -267,10 +333,18 @@
     );
 
     Array.prototype.forEach.call(nodes, function (audio) {
-      if (audio.getAttribute('src')) return;
-      audio.src = dataUri;
-      audio.classList.remove('media-pending');
-      audio.load();
+      if (!audio.getAttribute('src')) {
+        audio.src = dataUri;
+        audio.load();
+      }
+    });
+
+    var toggles = document.querySelectorAll(
+      '.audio-toggle[data-asset-key="' + assetKey + '"]'
+    );
+    Array.prototype.forEach.call(toggles, function (button) {
+      button.disabled = false;
+      button.textContent = '▶ 再生';
     });
   }
 

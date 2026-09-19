@@ -1151,14 +1151,16 @@ jobs:
               'function renderHome(payload)',
               'function loadReviewTxn(txnId)',
               'function renderPersistentReview(',
+              'function setReviewPage(',
               'function buildPersistentReviewCard(',
               'function appendReviewTranslations(',
               'function buildLearningBlock(',
-              "review.default_filter ||",
-              "'NEEDS_REVIEW'",
+              "'review-progress'",
+              "'review-progress-button'",
               "app.payload.txn_id || null",
               "'技術情報'",
-              "'復習一覧へ戻る'",
+              "'ホーム'",
+              "'再挑戦'",
           ]
           for needle in required_client:
               if needle not in client:
@@ -1481,24 +1483,50 @@ jobs:
           for needle in [
               'function loadReplayTxn(txnId)',
               "'REVIEW_REPLAY'",
-              "'この回答は学習成績・復習スケジュールには反映されません。'",
-              "'もう一度この5問を解く'",
+              'function setReviewPage(',
+              "'review-progress'",
+              "'review-progress-button'",
+              "'review-footer-actions'",
               "'再挑戦'",
-              'review.replay_comparison',
-              "'今回 '",
-              "'　元回答 '",
+              "'ホーム'",
           ]:
               if needle not in client:
                   raise SystemExit(f'R3-09E Client invariant missing: {needle}')
 
+          for forbidden in [
+              "'この回答は学習成績・復習スケジュールには反映されません。'",
+              "'もう一度この5問を解く'",
+              "'replay-notice'",
+              "'persistent-review-header'",
+              "'persistent-review-score'",
+              "'review-result-strip'",
+          ]:
+              if forbidden in client:
+                  raise SystemExit(
+                      f'R3-09E refined learner UI contains retired surface: {forbidden}'
+                  )
+
           for needle in [
-              '.replay-notice',
-              '.replay-comparison',
+              '.review-progress',
+              '.review-progress-button',
+              '.review-footer-actions',
               '.review-replay-button',
               '.review-history-actions',
           ]:
               if needle not in style:
                   raise SystemExit(f'R3-09E CSS invariant missing: {needle}')
+
+          for forbidden in [
+              '.replay-notice',
+              '.replay-comparison',
+              '.persistent-review-header',
+              '.persistent-review-score',
+              '.review-result-strip',
+          ]:
+              if forbidden in style:
+                  raise SystemExit(
+                      f'R3-09E retired CSS surface remains: {forbidden}'
+                  )
 
           for needle in [
               'Status: R3_09E_IMPLEMENTED_AWAITING_DEVICE_VALIDATION',
@@ -1545,6 +1573,105 @@ jobs:
             throw new Error('REVIEW_REPLAY boot contract mismatch.');
           }
           NODE
+
+      - name: Check R3-09E learner UI refinement
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          client = Path('Client.html').read_text(encoding='utf-8')
+          style = Path('Stylesheet.html').read_text(encoding='utf-8')
+          architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
+          operations = Path('OPERATIONS.md').read_text(encoding='utf-8')
+          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
+
+          review_start = client.index('function renderPersistentReview(')
+          review_end = client.index('function buildPersistentReviewCard(', review_start)
+          review = client[review_start:review_end]
+
+          for needle in [
+              "'review-progress'",
+              "'review-progress-button'",
+              'part.result',
+              'function setReviewPage(',
+              "'再挑戦'",
+              "'ホーム'",
+          ]:
+              if needle not in review:
+                  raise SystemExit(
+                      f'R3-09E refined Review invariant missing: {needle}'
+                  )
+
+          for forbidden in [
+              'persistent-review-score',
+              'review-counts',
+              'review-result-strip',
+              'review-filter-row',
+              'review.default_filter',
+              'replay_comparison',
+              '復習一覧へ戻る',
+              'もう一度この5問を解く',
+          ]:
+              if forbidden in review:
+                  raise SystemExit(
+                      f'R3-09E retired Review header/action remains: {forbidden}'
+                  )
+
+          questions_start = client.index('function renderQuestions(questions)')
+          questions_end = client.index('function buildAudioBlock(', questions_start)
+          questions = client[questions_start:questions_end]
+
+          if 'replay-notice' in questions:
+              raise SystemExit('R3-09E Replay intro block was not removed.')
+
+          home_start = client.index('function renderHome(payload)')
+          home_end = client.index('function formatHistoryDate(value)', home_start)
+          home = client[home_start:home_end]
+
+          for needle in [
+              "'home-title-row'",
+              "'home-current-strip'",
+              "'review-history-heading'",
+              "'review-history-score'",
+              "'復習'",
+              "'再挑戦'",
+          ]:
+              if needle not in home:
+                  raise SystemExit(
+                      f'R3-09E refined HOME invariant missing: {needle}'
+                  )
+
+          for needle in [
+              '.home-current-strip',
+              '.review-history-heading',
+              '.review-progress',
+              '.review-progress-button.current',
+              '.persistent-review-card.review-active',
+              '.review-footer-actions',
+          ]:
+              if needle not in style:
+                  raise SystemExit(
+                      f'R3-09E refined CSS invariant missing: {needle}'
+                  )
+
+          for needle in [
+              '## 19. R3-09E UI refinement',
+              'Q1 ×',
+              'exactly one Review card is visible at a time',
+              'The standalone `再挑戦` explanatory block above the questions is removed.',
+          ]:
+              if needle not in architecture:
+                  raise SystemExit(
+                      f'R3-09E UI contract evidence missing: {needle}'
+                  )
+
+          if '### R3-09E learner UI refinement' not in operations:
+              raise SystemExit('OPERATIONS does not record R3-09E UI refinement.')
+
+          if '### R3-09E refined learner surface' not in chat:
+              raise SystemExit('Web/Chat contract does not record R3-09E refined surface.')
+          PY
 
       - name: Check JavaScript syntax
         shell: bash

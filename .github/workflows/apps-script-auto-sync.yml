@@ -162,5 +162,6 @@ jobs:
             echo "- Apps Script-impacting change: `${{ steps.impact.outputs.changed || 'unknown' }}`"
             echo "- clasp credential ready: `${{ steps.auth.outputs.ready || 'not-needed' }}`"
             echo "- target script ID: `1p_e1jKICTZXHpCrQ7rwU9HilloZdkFBpHry_lCq5YgXpaiU4FNEQlDa-`"
-            echo "- manifest overwrite mode: audited CI only (`clasp push --force`)\n            echo "- versioned /exec deployment: not changed by this workflow"
+            echo '- manifest overwrite mode: audited CI only (clasp push --force)'
+            echo '- versioned /exec deployment: not changed by this workflow'
           } >> "$GITHUB_STEP_SUMMARY"

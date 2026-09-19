@@ -694,4 +694,224 @@
     line-height: 1.8;
   }
 
+
+  .home {
+    display: grid;
+    gap: 12px;
+  }
+  .home-hero,
+  .home-card,
+  .persistent-review-header,
+  .persistent-review-card,
+  .review-technical {
+    background: #fff;
+    border: 1px solid #d8d8d8;
+    border-radius: 12px;
+  }
+  .home-hero,
+  .home-card,
+  .persistent-review-header {
+    padding: 14px;
+  }
+  .home-hero h2,
+  .home-card h3,
+  .persistent-review-header p {
+    margin-top: 0;
+  }
+  .home-hero p,
+  .home-card p {
+    margin-bottom: 0;
+  }
+  .home-action {
+    width: 100%;
+    margin-top: 10px;
+  }
+  .home-card-head {
+    display: grid;
+    gap: 10px;
+  }
+  .home-card-head h3 {
+    margin-bottom: 0;
+  }
+  .review-history-filters,
+  .review-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .review-filter-button {
+    border: 1px solid #aaa;
+    border-radius: 999px;
+    background: #fff;
+    padding: 7px 11px;
+    font-weight: 700;
+  }
+  .review-filter-button.active {
+    border-color: #222;
+    background: #222;
+    color: #fff;
+  }
+  .review-history-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .review-history-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    border-top: 1px solid #e2e2e2;
+    padding-top: 10px;
+  }
+  .review-history-item:first-child {
+    border-top: 0;
+    padding-top: 0;
+  }
+  .review-history-meta h4,
+  .review-history-meta p {
+    margin: 0;
+  }
+  .review-history-meta p {
+    margin-top: 3px;
+    font-size: 13px;
+  }
+  .review-open-button {
+    min-width: 92px;
+  }
+
+  .persistent-review-header {
+    margin-bottom: 12px;
+  }
+  .review-eyebrow {
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .persistent-review-score {
+    margin: 3px 0;
+    font-size: 26px;
+    font-weight: 800;
+  }
+  .review-counts {
+    margin: 0 0 10px;
+    font-size: 14px;
+  }
+  .review-result-strip {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 5px;
+    margin-bottom: 10px;
+  }
+  .review-result-chip {
+    text-align: center;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 6px 3px;
+    font-weight: 700;
+    font-size: 13px;
+  }
+  .persistent-review-cards {
+    display: grid;
+    gap: 12px;
+  }
+  .persistent-review-card {
+    padding: 14px;
+  }
+  .review-answer-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 8px 0 10px;
+  }
+  .review-answer-row p {
+    margin: 0;
+    font-weight: 700;
+  }
+  .review-block-title {
+    margin: 12px 0 6px;
+    font-size: 14px;
+  }
+  .review-translation {
+    margin-top: 8px;
+    padding: 9px 10px;
+    border-left: 3px solid #bbb;
+    background: #fafafa;
+  }
+  .review-translation p {
+    margin: 4px 0;
+  }
+  .review-explanation {
+    margin-top: 10px;
+    border-top: 1px solid #ddd;
+    padding-top: 10px;
+  }
+  .review-explanation > summary,
+  .review-technical > summary {
+    cursor: pointer;
+    font-weight: 800;
+  }
+  .review-explanation-body {
+    margin-top: 9px;
+  }
+  .review-reason {
+    margin-top: 0;
+  }
+  .review-learning-block {
+    padding: 8px 0;
+    border-top: 1px solid #eee;
+  }
+  .review-learning-block:first-child {
+    border-top: 0;
+  }
+  .review-learning-block h5,
+  .review-learning-block p {
+    margin: 4px 0;
+  }
+  .review-learning-block h5 {
+    font-size: 15px;
+  }
+  .review-technical {
+    margin-top: 12px;
+    padding: 12px;
+  }
+  .review-technical-ids {
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+  }
+  .review-back-button {
+    width: 100%;
+    margin-top: 12px;
+  }
+  .review-k1-image {
+    margin-top: 8px;
+  }
+
+  @media (max-width: 619px) {
+    .home-hero,
+    .home-card,
+    .persistent-review-header,
+    .persistent-review-card {
+      padding: 11px;
+      border-radius: 10px;
+    }
+    .review-history-item {
+      grid-template-columns: 1fr;
+    }
+    .review-open-button {
+      width: 100%;
+    }
+    .persistent-review-score {
+      font-size: 23px;
+    }
+    .review-answer-row {
+      grid-template-columns: 1fr;
+      gap: 3px;
+    }
+    .review-result-chip {
+      font-size: 12px;
+      padding: 5px 2px;
+    }
+  }
+
 </style>

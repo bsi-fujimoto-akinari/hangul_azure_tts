@@ -973,7 +973,7 @@ jobs:
           chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
 
           required_architecture = [
-              'H3-R3-09B-REVIEW-ARCHITECTURE-20260919-V1',
+              'H3-R3-09B-REVIEW-ARCHITECTURE-20260919-V2',
               'Status: FROZEN_TARGET_NOT_ACTIVE',
               'listening_explanation_payload_v1',
               'listening_review_binding_v1',
@@ -982,6 +982,10 @@ jobs:
               'LEGACY_POSTCOMMIT_BACKFILL',
               'R3-09C = REVIEW_PERSISTENCE_IMPLEMENTATION',
               'R3-10  = FULL_E2E_AUDIT including persistent review',
+              'POSTGRADE_DEFAULT_VIEW=REVIEW',
+              'DEFAULT_FILTER=NEEDS_REVIEW',
+              'IMMEDIATE_REVIEW_BUILDER=PERSISTENT_REVIEW_BUILDER',
+              'RECEIPT_UI=TECHNICAL_DETAILS_COLLAPSED',
           ]
           for needle in required_architecture:
               if needle not in architecture:
@@ -1008,6 +1012,9 @@ jobs:
 
           if 'sending the receipt to Chat is optional' not in architecture:
               raise SystemExit('R3-09B receipt ownership transition is missing.')
+
+          if 'R3-09B V2 UI freeze' not in operations:
+              raise SystemExit('OPERATIONS does not record R3-09B V2 UI freeze.')
 
           if 'R3-09B changes documentation/architecture only' not in operations:
               raise SystemExit('R3-09B active-runtime boundary is missing.')

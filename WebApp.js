@@ -18,6 +18,16 @@ function include_(filename) {
 }
 
 function getListeningWebSet(request) {
+  if (request && request.mode === 'HOME') {
+    return buildReviewHomePayload_();
+  }
+
+  if (request && request.mode === 'REVIEW') {
+    return getPersistentReviewPayload_(
+      request
+    );
+  }
+
   if (request && request.mode === 'LISTENING') {
     return buildProductionRenderPayload_(request);
   }
@@ -29,6 +39,12 @@ function getListeningWebSet(request) {
 }
 
 function getListeningWebMedia(request) {
+  if (request && request.mode === 'REVIEW') {
+    return getPersistentReviewMediaPayload_(
+      request
+    );
+  }
+
   if (request && request.mode === 'LISTENING') {
     return getProductionMediaPayload_(request);
   }
@@ -38,44 +54,77 @@ function getListeningWebMedia(request) {
 
 function submitListeningWebAnswers(request) {
   if (request && request.mode === 'LISTENING') {
-    var review = buildProductionReviewPayload_(
-      request.set_id
+    var result =
+      h3ProdSubmit_(request);
+
+    h3ReviewEnsureBindingForCommittedTxn_(
+      result.txn_id
     );
-    var result = h3ProdSubmit_(request);
-    result.after_sync = review;
+
+    result.after_sync =
+      buildPersistentReviewPayload_(
+        result.txn_id
+      );
+
     return result;
+  }
+
+  if (
+    request &&
+    (
+      request.mode === 'REVIEW' ||
+      request.mode === 'HOME'
+    )
+  ) {
+    throw new Error(
+      'READ_ONLY_MODE_SUBMIT_FORBIDDEN'
+    );
   }
 
   return gradeSystemTestSubmission_(request);
 }
 
 function h3WebBootRequest_(e) {
-  var mode = 'SYSTEM_TEST';
-  var setId = H3_WEB_SYSTEM_TEST_R3_06_SET_ID;
+  var mode = 'HOME';
+  var setId = null;
+  var txnId = null;
 
   if (e && e.parameter) {
     if (
+      e.parameter.mode === 'REVIEW' &&
+      e.parameter.txn_id
+    ) {
+      mode = 'REVIEW';
+      txnId = String(
+        e.parameter.txn_id
+      );
+    } else if (
       e.parameter.mode === 'LISTENING' &&
       e.parameter.set_id
     ) {
       mode = 'LISTENING';
-      setId = String(e.parameter.set_id);
-    } else {
+      setId = String(
+        e.parameter.set_id
+      );
+    } else if (
+      e.parameter.mode === 'SYSTEM_TEST' &&
+      h3SystemTestSetIdAllowed_(
+        e.parameter.set_id
+      )
+    ) {
       mode = 'SYSTEM_TEST';
-      if (
-        h3SystemTestSetIdAllowed_(
-          e.parameter.set_id
-        )
-      ) {
-        setId = String(e.parameter.set_id);
-      }
+      setId = String(
+        e.parameter.set_id
+      );
     }
   }
 
   return {
-    schema: 'H3_WEB_RENDER_REQUEST_V1',
+    schema:
+      'H3_WEB_RENDER_REQUEST_V1',
     mode: mode,
-    set_id: setId
+    set_id: setId,
+    txn_id: txnId
   };
 }
 

@@ -1,0 +1,292 @@
+<script>
+(function () {
+  'use strict';
+
+  var circled = ['①', '②', '③', '④'];
+  var app = {
+    payload: null,
+    answers: {},
+    uncertain: {},
+    locked: false,
+    submitting: false
+  };
+
+  document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('reset').addEventListener('click', resetAll);
+    document.getElementById('submit').addEventListener('click', submitAnswers);
+    loadSet();
+  });
+
+  function loadSet() {
+    setLoading(true);
+    google.script.run
+      .withSuccessHandler(function (payload) {
+        setLoading(false);
+        app.payload = payload;
+        document.getElementById('set-id').textContent = payload.set_id;
+        renderQuestions(payload.questions);
+        document.getElementById('questions').classList.remove('hidden');
+        document.getElementById('controls').classList.remove('hidden');
+        updateLiveSummary();
+      })
+      .withFailureHandler(function (err) {
+        setLoading(false);
+        showError(errorText(err));
+      })
+      .getListeningWebSet(window.H3_BOOT);
+  }
+
+  function renderQuestions(questions) {
+    var root = document.getElementById('questions');
+    root.textContent = '';
+
+    questions.forEach(function (q, index) {
+      var qNo = index + 1;
+      var card = el('section', 'question-card');
+      card.dataset.section = q.section;
+
+      var head = el('div', 'question-head');
+      var title = el('h2', 'question-title');
+      title.textContent = 'Q' + qNo + ' ' + q.display;
+      var uncertain = el('button', 'uncertain');
+      uncertain.type = 'button';
+      uncertain.textContent = '?';
+      uncertain.setAttribute('aria-label', 'Q' + qNo + ' 不確か');
+      uncertain.setAttribute('aria-pressed', 'false');
+      uncertain.addEventListener('click', function () {
+        if (app.locked) return;
+        app.uncertain[q.section] = !app.uncertain[q.section];
+        uncertain.classList.toggle('active', !!app.uncertain[q.section]);
+        uncertain.setAttribute('aria-pressed', String(!!app.uncertain[q.section]));
+        updateLiveSummary();
+      });
+      head.appendChild(title);
+      head.appendChild(uncertain);
+      card.appendChild(head);
+
+      var audio = document.createElement('a');
+      audio.className = 'audio-link';
+      audio.href = q.audio_url;
+      audio.target = '_blank';
+      audio.rel = 'noopener';
+      audio.textContent = '音声：開く';
+      card.appendChild(audio);
+
+      if (q.section === 'K1') {
+        var img = document.createElement('img');
+        img.className = 'k1-image';
+        img.src = q.image_data_uri;
+        img.alt = 'K1 問題画像';
+        card.appendChild(img);
+      }
+
+      var choices = el('div', 'choices' + (q.visible_choices ? '' : ' textless'));
+      q.choice_ids.forEach(function (choiceId, choiceIndex) {
+        var b = el('button', 'choice');
+        b.type = 'button';
+        b.dataset.answer = String(choiceId);
+        b.textContent = circled[choiceIndex] + (q.visible_choices ? ' ' + q.visible_choices[choiceIndex] : '');
+        b.addEventListener('click', function () {
+          if (app.locked) return;
+          app.answers[q.section] = choiceId;
+          Array.prototype.forEach.call(choices.querySelectorAll('.choice'), function (node) {
+            node.classList.toggle('selected', node === b);
+          });
+          updateLiveSummary();
+        });
+        choices.appendChild(b);
+      });
+      card.appendChild(choices);
+      root.appendChild(card);
+    });
+  }
+
+  function updateLiveSummary() {
+    var parts = ['K1', 'K2', 'K3', 'K4', 'K5'].map(function (section, i) {
+      var answer = app.answers[section];
+      return 'Q' + (i + 1) + ' ' + (answer ? String(answer) + (app.uncertain[section] ? '?' : '') : '—');
+    });
+    document.getElementById('live-summary').textContent = parts.join(' / ');
+    document.getElementById('submit').disabled = app.locked || app.submitting || !allAnswered();
+    document.getElementById('reset').disabled = app.locked || app.submitting;
+  }
+
+  function allAnswered() {
+    return ['K1', 'K2', 'K3', 'K4', 'K5'].every(function (s) {
+      return typeof app.answers[s] === 'number';
+    });
+  }
+
+  function resetAll() {
+    if (app.locked || app.submitting) return;
+    app.answers = {};
+    app.uncertain = {};
+    Array.prototype.forEach.call(document.querySelectorAll('.choice'), function (node) {
+      node.classList.remove('selected');
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.uncertain'), function (node) {
+      node.classList.remove('active');
+      node.setAttribute('aria-pressed', 'false');
+    });
+    updateLiveSummary();
+  }
+
+  function submitAnswers() {
+    if (!allAnswered() || app.locked || app.submitting) return;
+    app.submitting = true;
+    setInteractiveDisabled(true);
+    updateLiveSummary();
+
+    var request = {
+      schema: 'H3_WEB_SUBMIT_V1',
+      mode: 'SYSTEM_TEST',
+      set_id: app.payload.set_id,
+      answers: ['K1', 'K2', 'K3', 'K4', 'K5'].map(function (section) {
+        return {
+          section: section,
+          answer: app.answers[section],
+          uncertain: !!app.uncertain[section]
+        };
+      })
+    };
+
+    google.script.run
+      .withSuccessHandler(function (result) {
+        app.submitting = false;
+        app.locked = true;
+        setInteractiveDisabled(true);
+        renderResult(result);
+        updateLiveSummary();
+      })
+      .withFailureHandler(function (err) {
+        app.submitting = false;
+        app.locked = false;
+        setInteractiveDisabled(false);
+        showError('採点に失敗しました。回答は保持されています。\n' + errorText(err));
+        updateLiveSummary();
+      })
+      .submitListeningWebAnswers(request);
+  }
+
+  function setInteractiveDisabled(disabled) {
+    Array.prototype.forEach.call(document.querySelectorAll('.choice, .uncertain'), function (node) {
+      node.disabled = disabled;
+    });
+    document.getElementById('reset').disabled = disabled;
+    document.getElementById('submit').disabled = disabled;
+  }
+
+  function renderResult(result) {
+    var root = document.getElementById('result');
+    root.textContent = '';
+    root.classList.remove('hidden');
+
+    var score = el('p', 'score');
+    score.textContent = result.score + ' / ' + result.total;
+    root.appendChild(score);
+
+    var table = document.createElement('table');
+    var thead = document.createElement('thead');
+    var hr = document.createElement('tr');
+    ['問題', '回答', '正答', '正誤'].forEach(function (label) {
+      var th = document.createElement('th');
+      th.textContent = label;
+      hr.appendChild(th);
+    });
+    thead.appendChild(hr);
+    table.appendChild(thead);
+    var tbody = document.createElement('tbody');
+    result.summary.forEach(function (row, i) {
+      var tr = document.createElement('tr');
+      ['Q' + (i + 1), row.answer, String(row.correct_answer), row.result].forEach(function (value) {
+        var td = document.createElement('td');
+        td.textContent = value;
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    root.appendChild(table);
+
+    var note = el('p', 'poc-note');
+    note.textContent = 'R3-01 POCではreceiptは非永続です。学習runtime/historyにはWRITEしていません。R3-02でtransaction journalによる検証可能なreceiptへ進みます。';
+    root.appendChild(note);
+
+    var pre = document.createElement('pre');
+    pre.id = 'receipt';
+    pre.textContent = result.receipt;
+    root.appendChild(pre);
+
+    var copy = el('button', 'copy-button');
+    copy.type = 'button';
+    copy.textContent = '回答結果をコピー';
+    copy.addEventListener('click', function () { copyReceipt(result.receipt, copy); });
+    root.appendChild(copy);
+
+    var links = el('div', 'asset-links');
+    links.appendChild(assetLink(result.after_sync.combined_audio_url, '合体音声：開く'));
+    links.appendChild(assetLink(result.after_sync.review_script_url, '復習スクリプトTXT：開く'));
+    root.appendChild(links);
+  }
+
+  function copyReceipt(text, button) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        button.textContent = 'コピー済み';
+      }).catch(function () {
+        legacyCopy(text, button);
+      });
+      return;
+    }
+    legacyCopy(text, button);
+  }
+
+  function legacyCopy(text, button) {
+    var area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.select();
+    try {
+      document.execCommand('copy');
+      button.textContent = 'コピー済み';
+    } catch (e) {
+      button.textContent = '上のreceiptを選択してください';
+    }
+    document.body.removeChild(area);
+  }
+
+  function assetLink(url, label) {
+    var a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = label;
+    return a;
+  }
+
+  function el(tag, className) {
+    var node = document.createElement(tag);
+    node.className = className;
+    return node;
+  }
+
+  function setLoading(on) {
+    document.getElementById('loading').classList.toggle('hidden', !on);
+  }
+
+  function showError(message) {
+    var node = document.getElementById('error');
+    node.textContent = message;
+    node.classList.remove('hidden');
+  }
+
+  function errorText(err) {
+    if (!err) return 'UNKNOWN_ERROR';
+    if (typeof err === 'string') return err;
+    return err.message || String(err);
+  }
+})();
+</script>

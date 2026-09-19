@@ -25,11 +25,16 @@ function h3ProdParseItem_(raw, section) {
     'PRODUCTION_ITEM_JSON_INVALID:' + section
   );
 
+  var skillId = String(item && item.skill_id || '');
+  var skillPrefix = 'H3-' + section + '-SK';
+  var skillSuffix = skillId.slice(skillPrefix.length);
+
   if (
     !item ||
     item.section !== section ||
-    !new RegExp(
-      '^H3-' + section + '-SK\\\\d{3}
+    skillId.indexOf(skillPrefix) !== 0 ||
+    !/^\d{3}$/.test(skillSuffix)
+  ) {
     throw new Error(
       'PRODUCTION_ITEM_IDENTITY_MISMATCH:' +
       section

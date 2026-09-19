@@ -1292,20 +1292,24 @@ jobs:
           if 'Utilities.Charset.UTF_8' not in code or 'function hash_(text)' not in code:
               raise SystemExit('Canonical UTF-8 hash_ helper missing from Code.js.')
 
-          expected_review = """function h3ReviewHash_(value) {
-  return hash_(
-    h3ReviewCanonicalJson_(value)
-  );
-}"""
+          expected_review = (
+              "function h3ReviewHash_(value) {\n"
+              "  return hash_(\n"
+              "    h3ReviewCanonicalJson_(value)\n"
+              "  );\n"
+              "}"
+          )
           if expected_review not in review:
               raise SystemExit('Review semantic hashing is not routed through explicit UTF-8 hash_.')
 
-          expected_preissue = """var calculatedItemHash =
-    hash_(
-      h3PreissueCanonicalJson_(
-        hashObject
-      )
-    );"""
+          expected_preissue = (
+              "var calculatedItemHash =\n"
+              "    hash_(\n"
+              "      h3PreissueCanonicalJson_(\n"
+              "        hashObject\n"
+              "      )\n"
+              "    );"
+          )
           if expected_preissue not in preissue:
               raise SystemExit('Preissue item hash is not routed through explicit UTF-8 hash_.')
 

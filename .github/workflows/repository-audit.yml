@@ -902,6 +902,63 @@ jobs:
                   )
           PY
 
+      - name: Check R3-08 production txn-id provenance binder
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          prod = Path('WebAppProduction.js').read_text(encoding='utf-8')
+
+          required = [
+              'function h3ProdApplyTxnId_(plan, txnId)',
+              "'PRODUCTION_TXN_ID_APPLY_INVALID'",
+              "'PRODUCTION_TXN_ID_PROVENANCE_MISSING'",
+              'item.provenance.txn_id = String(txnId);',
+              'h3ProdApplyTxnId_(plan, txnId);',
+          ]
+          for needle in required:
+              if needle not in prod:
+                  raise SystemExit(
+                      f'R3-08 txn-id binder invariant missing: {needle}'
+                  )
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const source = fs.readFileSync('WebAppProduction.js', 'utf8');
+          const context = vm.createContext({ console });
+          vm.runInContext(source, context, { filename: 'WebAppProduction.js' });
+
+          context.__plan = {
+            logWrites: [
+              { provenance: { txn_id: null } },
+              { provenance: { txn_id: null } }
+            ]
+          };
+
+          vm.runInContext(
+            "h3ProdApplyTxnId_(__plan, 'H3TX-20260919-000777')",
+            context
+          );
+
+          const values = context.__plan.logWrites.map(
+            x => x.provenance.txn_id
+          );
+
+          if (
+            JSON.stringify(values) !==
+            JSON.stringify([
+              'H3TX-20260919-000777',
+              'H3TX-20260919-000777'
+            ])
+          ) {
+            throw new Error('R3-08 txn-id binder did not update provenance.');
+          }
+          NODE
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

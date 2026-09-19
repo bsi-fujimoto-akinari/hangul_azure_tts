@@ -39,6 +39,7 @@ jobs:
               'WebAppProduction.js',
               'WebAppProductionRender.js',
               'WebAppReceipt.js',
+              'MaintenanceR305.js',
               'H3_WEB_CHAT_CONTRACT.md',
               'Index.html',
               'Stylesheet.html',
@@ -635,6 +636,49 @@ jobs:
           if (JSON.stringify(result).includes('answer_key'))
             throw new Error('Answer key leaked to render payload.');
           NODE
+      - name: Check R3-05 Drive canonical finalizer isolation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          text = Path('MaintenanceR305.js').read_text(encoding='utf-8')
+
+          required = [
+              'function r305FinalizeCanonicalDrive()',
+              "'16iG5UOvw1nbX7oxbyza3BXVxt5GKQ8v8'",
+              "'15N6ehVwMhoC3F-xd8ziv0UhYwys8rr7i'",
+              "'1mFT97QOUeJCvAdr6TzMFVg-gJvOpUj4V'",
+              "'1mVvKCqMdjKB8l6akShRsI8WR8Quhufjp'",
+              "'1Z6DrPRfLz1pNfF2mrCILWqAjfoTnLLHI'",
+              "'H3-LISTENING-RENDER-RULES-20260919-V17'",
+              "'H3-SOURCE-MANIFEST-20260919-V30'",
+              "'H3-SOURCE-SET-20260919-R30'",
+              "'e084a28358a1c4d8dffb2d955202ad132e3796dfbe3b79a5ce13f7bb6f2ba37c'",
+              "'hangul_source_manifest_v1__20260919R30.txt'",
+              'R305_RENDER_CANONICAL_PREFLIGHT_FAILED',
+              'R305_MANIFEST_READBACK_FAILED',
+              'R305_CURRENT_READBACK_FAILED',
+          ]
+          for needle in required:
+              if needle not in text:
+                  raise SystemExit(f'R3-05 maintenance invariant missing: {needle}')
+
+          forbidden = [
+              'SpreadsheetApp',
+              'listening_log_v1',
+              'listening_state_v1',
+              'listening_policy_v1',
+              'listening_k1_ready_v1',
+              'listening_set_payload_v1',
+          ]
+          for needle in forbidden:
+              if needle in text:
+                  raise SystemExit(f'Learner runtime access forbidden in R3-05 maintenance: {needle}')
+
+          if text.count('setContent(') != 2:
+              raise SystemExit('R3-05 maintenance must have exactly two canonical setContent writes.')
+          PY
       - name: Check JavaScript syntax
         shell: bash
         run: |
@@ -644,6 +688,7 @@ jobs:
           node --check WebAppProduction.js
           node --check WebAppProductionRender.js
           node --check WebAppReceipt.js
+          node --check MaintenanceR305.js
           python3 - <<'PY'
           from pathlib import Path
           text = Path('Client.html').read_text(encoding='utf-8').strip()

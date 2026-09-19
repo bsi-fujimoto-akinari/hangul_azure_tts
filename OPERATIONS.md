@@ -941,3 +941,27 @@ Expected post-activation learner state remains:
 `PRODUCTION_PREP_MODE=NORMAL_LIVE` means future generated sets may use the canonical preissue/issue/submit path. It does not itself create a set.
 
 R3-11 exits PASS only after the live Sheet gate readback matches the synced Apps Script code.
+
+### R3-11 close
+
+R3-11 is `PASS_NORMAL_LIVE_ACTIVE`.
+
+Final activation sequence:
+1. generalized production/preissue code passed repository audit;
+2. exact main commit synced successfully to Apps Script HEAD;
+3. live policy/state gates were switched to `NORMAL_LIVE_ACTIVE`;
+4. live readback confirmed no learner issue or history mutation.
+
+Final runtime:
+- policy ID `H3-LISTEN-POLICY-20260920-V7`;
+- `PRODUCTION_GATE=NORMAL_LIVE_ACTIVE` in policy and state;
+- `PRODUCTION_PREP_MODE=NORMAL_LIVE`;
+- `LISTENING_ISSUE_NO=2`;
+- `NEXT_LISTENING_SET_NO=3`;
+- `LAST_LISTENING_SET_ID=H3-20260919-L03`;
+- scheduler plan remains `H3_LISTENING_OVERLOAD_PLAN_V2` for set no.3 with K4 retest;
+- retired R3-07/R3-08 target fields are blank.
+
+No set no.3 payload, learner-log rows, production transaction, score, counter, pointer, or Review binding was created by activation.
+
+R3 production infrastructure is now normal-live. Future learner `5L` requests use the standard prepare -> preissue -> issue -> answer -> COMMITTED -> persistent Review flow.

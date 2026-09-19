@@ -744,6 +744,7 @@ function h3ProdBuildPlan_(context, answers, nowText) {
   });
 
   return {
+    answeredAt: nowText,
     score: score,
     total: 5,
     graded: graded,
@@ -754,73 +755,365 @@ function h3ProdBuildPlan_(context, answers, nowText) {
   };
 }
 
-function h3ProdSnapshot_(context) {
+function h3ProdRuntimeSnapshot_(context) {
   var lm = context.logTable.map;
 
   var log = context.logRows.map(function (record) {
-    var row = record.row;
+    var values = context.logSheet
+      .getRange(
+        record.rowNumber,
+        lm.USER_RESULT + 1,
+        1,
+        lm.PROVENANCE_JSON -
+          lm.USER_RESULT +
+          1
+      )
+      .getDisplayValues()[0];
+
     return {
       rowNumber: record.rowNumber,
-      values: row.slice(
-        lm.USER_RESULT,
-        lm.PROVENANCE_JSON + 1
-      )
+      values: values
     };
   });
 
   var state = context.stateTable.rows.map(
     function (row, i) {
+      var rowNumber = i + 2;
       return {
-        rowNumber: i + 2,
+        rowNumber: rowNumber,
         key: String(
           row[context.stateTable.map.STATE_KEY] || ''
         ),
-        value: String(
-          row[context.stateTable.map.VALUE] || ''
-        )
+        value: context.stateSheet
+          .getRange(rowNumber, 2)
+          .getDisplayValue()
       };
     }
   );
 
-  var json = JSON.stringify({
-    schema: 'H3_PROD_PRESTATE_V1',
+  var object = {
+    schema: 'H3_PROD_RUNTIME_SNAPSHOT_V1',
     set_id: context.setId,
     log: log,
     state: state
-  });
+  };
+  var json = JSON.stringify(object);
 
   return {
+    object: object,
     json: json,
     sha256: h3Sha256Hex_(json)
   };
 }
 
-function h3ProdApplyTxnId_(plan, txnId) {
+function h3ProdExpectedSnapshot_(
+  context,
+  prestate,
+  plan
+) {
+  var object = JSON.parse(prestate.json);
+
   plan.logWrites.forEach(function (item) {
-    item.provenance.txn_id = txnId;
-  });
-}
+    var target = object.log.filter(function (x) {
+      return x.rowNumber === item.rowNumber;
+    })[0];
 
-function h3ProdExpectedPoststate_(context, plan) {
-  var json = JSON.stringify({
-    schema: 'H3_PROD_POSTSTATE_V1',
-    set_id: context.setId,
-    log: plan.logWrites.map(function (x) {
-      return {
-        rowNumber: x.rowNumber,
-        result: x.result,
-        queue_update_status:
-          x.queue_update_status,
-        provenance: x.provenance
-      };
-    }),
-    state: plan.stateValues
+    if (!target) {
+      throw new Error(
+        'EXPECTED_POSTSTATE_LOG_ROW_MISSING'
+      );
+    }
+
+    var lm = context.logTable.map;
+    target.values[
+      lm.USER_RESULT - lm.USER_RESULT
+    ] = item.result;
+    target.values[
+      lm.ANSWERED_AT - lm.USER_RESULT
+    ] = plan.answeredAt;
+    target.values[
+      lm.QUEUE_UPDATE_STATUS -
+        lm.USER_RESULT
+    ] = item.queue_update_status;
+    target.values[
+      lm.PROVENANCE_JSON -
+        lm.USER_RESULT
+    ] = JSON.stringify(item.provenance);
   });
 
+  object.state.forEach(function (item) {
+    if (
+      Object.prototype.hasOwnProperty.call(
+        plan.stateValues,
+        item.key
+      )
+    ) {
+      item.value = String(
+        plan.stateValues[item.key]
+      );
+    }
+  });
+
+  var json = JSON.stringify(object);
   return {
+    object: object,
     json: json,
     sha256: h3Sha256Hex_(json)
   };
+}
+
+function h3ProdSnapshotFromTemplate_(
+  spreadsheet,
+  templateObject
+) {
+  var logSheet =
+    spreadsheet.getSheetByName('listening_log_v1');
+  var stateSheet =
+    spreadsheet.getSheetByName('listening_state_v1');
+
+  if (!logSheet || !stateSheet) {
+    throw new Error(
+      'PRODUCTION_RECOVERY_SOURCE_SHEET_MISSING'
+    );
+  }
+
+  var object = JSON.parse(
+    JSON.stringify(templateObject)
+  );
+
+  object.log.forEach(function (item) {
+    item.values = logSheet
+      .getRange(
+        item.rowNumber,
+        12,
+        1,
+        9
+      )
+      .getDisplayValues()[0];
+  });
+
+  object.state.forEach(function (item) {
+    item.value = stateSheet
+      .getRange(item.rowNumber, 2)
+      .getDisplayValue();
+  });
+
+  var json = JSON.stringify(object);
+  return {
+    object: object,
+    json: json,
+    sha256: h3Sha256Hex_(json)
+  };
+}
+
+function h3ProdRestoreSnapshot_(
+  spreadsheet,
+  snapshotObject
+) {
+  var logSheet =
+    spreadsheet.getSheetByName('listening_log_v1');
+  var stateSheet =
+    spreadsheet.getSheetByName('listening_state_v1');
+
+  if (!logSheet || !stateSheet) {
+    throw new Error(
+      'PRODUCTION_ROLLBACK_SOURCE_SHEET_MISSING'
+    );
+  }
+
+  var logRows = snapshotObject.log
+    .slice()
+    .sort(function (a, b) {
+      return a.rowNumber - b.rowNumber;
+    });
+
+  for (var i = 1; i < logRows.length; i += 1) {
+    if (
+      logRows[i].rowNumber !==
+      logRows[0].rowNumber + i
+    ) {
+      throw new Error(
+        'PRODUCTION_LOG_ROWS_NOT_CONTIGUOUS'
+      );
+    }
+  }
+
+  logSheet
+    .getRange(
+      logRows[0].rowNumber,
+      12,
+      logRows.length,
+      9
+    )
+    .setValues(
+      logRows.map(function (x) {
+        return x.values;
+      })
+    );
+
+  var stateRows = snapshotObject.state
+    .slice()
+    .sort(function (a, b) {
+      return a.rowNumber - b.rowNumber;
+    });
+
+  var minRow = stateRows[0].rowNumber;
+  var maxRow =
+    stateRows[stateRows.length - 1].rowNumber;
+  var valueMap = {};
+  stateRows.forEach(function (x) {
+    valueMap[x.rowNumber] = x.value;
+  });
+
+  var stateValues = [];
+  for (var rowNo = minRow; rowNo <= maxRow; rowNo += 1) {
+    stateValues.push([
+      Object.prototype.hasOwnProperty.call(
+        valueMap,
+        rowNo
+      )
+        ? valueMap[rowNo]
+        : stateSheet
+            .getRange(rowNo, 2)
+            .getDisplayValue()
+    ]);
+  }
+
+  stateSheet
+    .getRange(
+      minRow,
+      2,
+      stateValues.length,
+      1
+    )
+    .setValues(stateValues);
+
+  SpreadsheetApp.flush();
+}
+
+function h3ProdApplyPlan_(context, plan) {
+  var lm = context.logTable.map;
+  var records = context.logRows
+    .slice()
+    .sort(function (a, b) {
+      return a.rowNumber - b.rowNumber;
+    });
+
+  for (var i = 1; i < records.length; i += 1) {
+    if (
+      records[i].rowNumber !==
+      records[0].rowNumber + i
+    ) {
+      throw new Error(
+        'PRODUCTION_LOG_ROWS_NOT_CONTIGUOUS'
+      );
+    }
+  }
+
+  var blocks = records.map(function (record) {
+    return context.logSheet
+      .getRange(
+        record.rowNumber,
+        lm.USER_RESULT + 1,
+        1,
+        lm.PROVENANCE_JSON -
+          lm.USER_RESULT +
+          1
+      )
+      .getDisplayValues()[0];
+  });
+
+  plan.logWrites.forEach(function (item) {
+    var index = item.rowNumber - records[0].rowNumber;
+    var block = blocks[index];
+
+    block[0] = item.result;
+    block[
+      lm.ANSWERED_AT - lm.USER_RESULT
+    ] = plan.answeredAt;
+    block[
+      lm.QUEUE_UPDATE_STATUS -
+        lm.USER_RESULT
+    ] = item.queue_update_status;
+    block[
+      lm.PROVENANCE_JSON -
+        lm.USER_RESULT
+    ] = JSON.stringify(item.provenance);
+  });
+
+  context.logSheet
+    .getRange(
+      records[0].rowNumber,
+      lm.USER_RESULT + 1,
+      records.length,
+      blocks[0].length
+    )
+    .setValues(blocks);
+
+  var affected = Object.keys(plan.stateValues)
+    .map(function (key) {
+      var record = context.stateMap[key];
+      return record
+        ? {
+            key: key,
+            rowNumber: record.rowNumber,
+            value: plan.stateValues[key]
+          }
+        : null;
+    })
+    .filter(Boolean)
+    .sort(function (a, b) {
+      return a.rowNumber - b.rowNumber;
+    });
+
+  if (!affected.length) {
+    throw new Error(
+      'PRODUCTION_STATE_WRITE_EMPTY'
+    );
+  }
+
+  var minRow = affected[0].rowNumber;
+  var maxRow =
+    affected[affected.length - 1].rowNumber;
+  var replacements = {};
+  affected.forEach(function (x) {
+    replacements[x.rowNumber] =
+      String(x.value);
+  });
+
+  var existing = context.stateSheet
+    .getRange(
+      minRow,
+      2,
+      maxRow - minRow + 1,
+      1
+    )
+    .getDisplayValues();
+
+  var writeValues = existing.map(
+    function (row, i) {
+      var rowNo = minRow + i;
+      return [
+        Object.prototype.hasOwnProperty.call(
+          replacements,
+          rowNo
+        )
+          ? replacements[rowNo]
+          : row[0]
+      ];
+    }
+  );
+
+  context.stateSheet
+    .getRange(
+      minRow,
+      2,
+      writeValues.length,
+      1
+    )
+    .setValues(writeValues);
+
+  SpreadsheetApp.flush();
 }
 
 function h3ProdRequireJournal_(spreadsheet) {
@@ -881,23 +1174,24 @@ function h3ProdSubmit_(request) {
   }
 
   var answers = h3ProdNormalizeAnswers_(request);
+  var fingerprint = h3ProdFingerprint_(
+    request.set_id,
+    answers
+  );
+
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
 
+  var spreadsheet = null;
+  var journal = null;
+  var txnRow = null;
+  var prestate = null;
+
   try {
-    var spreadsheet = SpreadsheetApp.openById(
+    spreadsheet = SpreadsheetApp.openById(
       H3_WEB_RUNTIME_SPREADSHEET_ID
     );
-    var journal = h3ProdRequireJournal_(spreadsheet);
-    var context = h3ProdReadContext_(
-      spreadsheet,
-      request.set_id
-    );
-
-    var fingerprint = h3ProdFingerprint_(
-      context.setId,
-      answers
-    );
+    journal = h3ProdRequireJournal_(spreadsheet);
 
     var journalValues =
       journal.getDataRange().getDisplayValues();
@@ -907,12 +1201,14 @@ function h3ProdSubmit_(request) {
     for (var i = 0; i < rows.length; i += 1) {
       var row = rows[i];
       var status = String(row[7] || '');
+
       if (status === 'RECOVERY_REQUIRED') {
         unresolvedRecovery = true;
       }
 
       if (
-        String(row[1] || '') !== context.setId
+        String(row[1] || '') !==
+        String(request.set_id)
       ) {
         continue;
       }
@@ -934,8 +1230,77 @@ function h3ProdSubmit_(request) {
       }
 
       if (status === 'PREPARED') {
+        var storedPre = h3ProdParseJson_(
+          row[10],
+          'PRODUCTION_PRESTATE_INVALID'
+        );
+        var current =
+          h3ProdSnapshotFromTemplate_(
+            spreadsheet,
+            storedPre
+          );
+        var preHash = String(row[11] || '');
+        var postHash = String(row[12] || '');
+
+        if (current.sha256 === postHash) {
+          var storedResult = h3ProdParseJson_(
+            row[8],
+            'PRODUCTION_PREPARED_RESULT_INVALID'
+          );
+          journal
+            .getRange(i + 2, 8)
+            .setValue('COMMITTED');
+          journal
+            .getRange(i + 2, 14)
+            .setValue(h3NowTokyo_());
+          SpreadsheetApp.flush();
+
+          var promoted = journal
+            .getRange(
+              i + 2,
+              1,
+              1,
+              H3_WEB_PROD_TXN_HEADERS.length
+            )
+            .getDisplayValues()[0];
+
+          if (
+            promoted[0] !== String(row[0] || '') ||
+            promoted[7] !== 'COMMITTED'
+          ) {
+            throw new Error(
+              'PRODUCTION_RECOVERY_PROMOTE_FAILED'
+            );
+          }
+
+          return storedResult;
+        }
+
+        if (current.sha256 === preHash) {
+          journal
+            .getRange(i + 2, 8)
+            .setValue('ROLLED_BACK');
+          journal
+            .getRange(i + 2, 15)
+            .setValue(
+              'STRANDED_PREPARED_FOUND_AT_PRESTATE'
+            );
+          SpreadsheetApp.flush();
+          continue;
+        }
+
+        journal
+          .getRange(i + 2, 8)
+          .setValue('RECOVERY_REQUIRED');
+        journal
+          .getRange(i + 2, 15)
+          .setValue(
+            'STRANDED_PREPARED_RUNTIME_MIXED'
+          );
+        SpreadsheetApp.flush();
+
         throw new Error(
-          'PRODUCTION_PREPARED_RECOVERY_REQUIRED'
+          'PRODUCTION_RECOVERY_REQUIRED'
         );
       }
     }
@@ -946,6 +1311,10 @@ function h3ProdSubmit_(request) {
       );
     }
 
+    var context = h3ProdReadContext_(
+      spreadsheet,
+      request.set_id
+    );
     var nowText = h3NowTokyo_();
     var plan = h3ProdBuildPlan_(
       context,
@@ -956,9 +1325,19 @@ function h3ProdSubmit_(request) {
     var txnId = h3NextTestTxnId_(rows);
     h3ProdApplyTxnId_(plan, txnId);
 
-    var prestate = h3ProdSnapshot_(context);
-    var poststate =
-      h3ProdExpectedPoststate_(context, plan);
+    prestate = h3ProdRuntimeSnapshot_(context);
+    var expectedPost =
+      h3ProdExpectedSnapshot_(
+        context,
+        prestate,
+        plan
+      );
+
+    var result = h3ProdBuildResult_(
+      plan,
+      context,
+      txnId
+    );
 
     journal.appendRow([
       txnId,
@@ -969,15 +1348,15 @@ function h3ProdSubmit_(request) {
       fingerprint,
       nowText,
       'PREPARED',
-      '',
-      '',
+      JSON.stringify(result),
+      plan.score,
       prestate.json,
       prestate.sha256,
-      poststate.sha256,
+      expectedPost.sha256,
       '',
       ''
     ]);
-    var txnRow = journal.getLastRow();
+    txnRow = journal.getLastRow();
     SpreadsheetApp.flush();
 
     var prepared = journal
@@ -991,76 +1370,134 @@ function h3ProdSubmit_(request) {
 
     if (
       prepared[0] !== txnId ||
-      prepared[7] !== 'PREPARED'
+      prepared[7] !== 'PREPARED' ||
+      prepared[5] !== fingerprint ||
+      prepared[11] !== prestate.sha256 ||
+      prepared[12] !== expectedPost.sha256
     ) {
       throw new Error(
         'PRODUCTION_PREPARED_READBACK_FAILED'
       );
     }
 
-    var lm = context.logTable.map;
-    plan.logWrites.forEach(function (item) {
-      var record = context.logRows.filter(
-        function (x) {
-          return x.rowNumber === item.rowNumber;
-        }
-      )[0];
-      var row = record.row;
+    h3ProdApplyPlan_(context, plan);
 
-      var block = row.slice(
-        lm.USER_RESULT,
-        lm.PROVENANCE_JSON + 1
+    var actualPost =
+      h3ProdRuntimeSnapshot_(context);
+
+    if (
+      actualPost.sha256 !==
+      expectedPost.sha256
+    ) {
+      throw new Error(
+        'PRODUCTION_POSTSTATE_HASH_MISMATCH'
       );
+    }
 
-      block[0] = item.result;
-      block[1] = nowText;
-      block[
-        lm.QUEUE_UPDATE_STATUS -
-          lm.USER_RESULT
-      ] = item.queue_update_status;
-      block[
-        lm.PROVENANCE_JSON -
-          lm.USER_RESULT
-      ] = JSON.stringify(item.provenance);
-
-      context.logSheet
-        .getRange(
-          item.rowNumber,
-          lm.USER_RESULT + 1,
-          1,
-          block.length
-        )
-        .setValues([block]);
-    });
-
-    Object.keys(plan.stateValues).forEach(
-      function (key) {
-        var stateRecord = context.stateMap[key];
-        if (!stateRecord) return;
-
-        context.stateSheet
-          .getRange(stateRecord.rowNumber, 2)
-          .setValue(plan.stateValues[key]);
-      }
-    );
-
+    journal
+      .getRange(txnRow, 8)
+      .setValue('COMMITTED');
+    journal
+      .getRange(txnRow, 14)
+      .setValue(h3NowTokyo_());
     SpreadsheetApp.flush();
 
-    var verifyContext = h3ProdReadContext_(
-      spreadsheet,
-      context.setId
-    );
+    var committed = journal
+      .getRange(
+        txnRow,
+        1,
+        1,
+        H3_WEB_PROD_TXN_HEADERS.length
+      )
+      .getDisplayValues()[0];
 
-    // h3ProdReadContext_ intentionally rejects answered rows.
-    // Re-read exact poststate directly for verification instead.
-    void verifyContext;
+    if (
+      committed[0] !== txnId ||
+      committed[7] !== 'COMMITTED' ||
+      committed[5] !== fingerprint ||
+      committed[12] !== expectedPost.sha256
+    ) {
+      throw new Error(
+        'PRODUCTION_COMMITTED_READBACK_FAILED'
+      );
+    }
+
+    return result;
   } catch (err) {
+    if (
+      spreadsheet &&
+      journal &&
+      txnRow &&
+      prestate
+    ) {
+      try {
+        h3ProdRestoreSnapshot_(
+          spreadsheet,
+          prestate.object
+        );
+
+        var rollbackRead =
+          h3ProdSnapshotFromTemplate_(
+            spreadsheet,
+            prestate.object
+          );
+
+        if (
+          rollbackRead.sha256 ===
+          prestate.sha256
+        ) {
+          journal
+            .getRange(txnRow, 8)
+            .setValue('ROLLED_BACK');
+          journal
+            .getRange(txnRow, 15)
+            .setValue(
+              String(
+                err && err.message
+                  ? err.message
+                  : err
+              )
+            );
+          SpreadsheetApp.flush();
+        } else {
+          journal
+            .getRange(txnRow, 8)
+            .setValue('RECOVERY_REQUIRED');
+          journal
+            .getRange(txnRow, 15)
+            .setValue(
+              'ROLLBACK_READBACK_FAILED:' +
+                String(
+                  err && err.message
+                    ? err.message
+                    : err
+                )
+            );
+          SpreadsheetApp.flush();
+        }
+      } catch (rollbackErr) {
+        try {
+          journal
+            .getRange(txnRow, 8)
+            .setValue('RECOVERY_REQUIRED');
+          journal
+            .getRange(txnRow, 15)
+            .setValue(
+              'ROLLBACK_EXCEPTION:' +
+                String(
+                  rollbackErr &&
+                    rollbackErr.message
+                    ? rollbackErr.message
+                    : rollbackErr
+                )
+            );
+          SpreadsheetApp.flush();
+        } catch (ignored) {}
+      }
+    }
+
     throw err;
   } finally {
     lock.releaseLock();
   }
-
-  throw new Error(
-    'R3_03_PRODUCTION_POSTWRITE_VERIFIER_NOT_ACTIVATED'
-  );
 }

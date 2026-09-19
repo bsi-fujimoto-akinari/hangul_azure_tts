@@ -248,3 +248,15 @@ It may be launched from Review history or an opened persistent Review. The learn
 Replay grading produces no receipt and no canonical learner transaction. After grading, the Web App returns to the exact persistent Review and may show a transient `今回 / 元回答` score comparison.
 
 Until iPhone zero-mutation validation passes, R3-09E remains staged. Normal-live production activation remains gated.
+
+### R3-09E refined learner surface
+
+The learner-facing Review surface is now page-based rather than a vertically stacked multi-question Review.
+
+- one Q card at a time;
+- five top Q buttons include `○/△/×`;
+- no aggregate Review score/count/filter header;
+- Review footer: `再挑戦` / `ホーム`;
+- REVIEW_REPLAY starts directly with the question surface and has no separate intro block.
+
+No Chat ownership or backend-write rule changes.

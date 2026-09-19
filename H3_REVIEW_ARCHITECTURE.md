@@ -825,3 +825,29 @@ NEXT=R3-10 FULL_E2E_AUDIT
 ```
 
 R3-09E does not activate normal live production. R3-10 must still perform the full cross-layer E2E audit, including PC validation, before R3-11 normal-live activation.
+
+## 21. R3-10 audit status
+
+R3-10 has completed the current cross-layer read-only audit but has not passed.
+
+```text
+RESULT=BLOCKED_2
+R3-10-B1=Listening overload/retest plan remains stale after the committed L03 score
+R3-10-B2=PC persistent Review/Replay validation is still pending
+NORMAL_LIVE_ACTIVATION=BLOCKED
+```
+
+All of the following are currently PASS:
+- production transaction uniqueness / COMMITTED state;
+- learner history cardinality;
+- counters and valid-count updates;
+- per-section retest provenance;
+- artifact existence and source-lock binding;
+- persistent Review reopening on iPhone;
+- REVIEW_REPLAY zero-mutation behavior;
+- same-fingerprint idempotency and different-fingerprint conflict code paths;
+- no unresolved production recovery row.
+
+The scheduler blocker is not a learner-history corruption. It is a post-score planning synchronization gap: `NEXT_LISTENING_SET_NO` advanced to 3 while the stored `OVERLOAD_PLAN_JSON` remains a set-2 plan.
+
+R3-10 may close only after the scheduler plan is safely regenerated/persisted and the current persistent Review/Replay surface passes PC validation.

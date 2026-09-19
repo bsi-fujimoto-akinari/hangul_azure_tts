@@ -1,0 +1,155 @@
+name: Apps Script auto-sync
+
+on:
+  workflow_run:
+    workflows: ["Repository audit"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apps-script-auto-sync-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Resolve source SHA
+        id: source
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=main" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout audited main source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+          fetch-depth: 2
+
+      - name: Verify checked-out source is main lineage
+        shell: bash
+        run: |
+          git fetch origin main --depth=2
+          if ! git merge-base --is-ancestor HEAD origin/main &&              ! git merge-base --is-ancestor origin/main HEAD; then
+            echo "::error::Checked-out source is not on main lineage."
+            exit 1
+          fi
+
+      - name: Detect Apps Script-impacting change
+        id: impact
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed=false
+          while IFS= read -r path; do
+            case "$path" in
+              *.js|*.gs|*.html|appsscript.json)
+                changed=true
+                ;;
+            esac
+          done < <(git diff-tree --no-commit-id --name-only -r HEAD)
+
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+      - name: Check clasp credential availability
+        if: steps.impact.outputs.changed == 'true'
+        id: auth
+        shell: bash
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CLASPRC_JSON is not configured. Apps Script sync is skipped safely."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node
+        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Materialize clasp credentials
+        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
+        shell: bash
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          value = os.environ.get('CLASPRC_JSON', '')
+          if not value.strip():
+              raise SystemExit('CLASPRC_JSON is empty')
+
+          path = Path.home() / '.clasprc.json'
+          path.write_text(value, encoding='utf-8')
+          path.chmod(0o600)
+          PY
+
+      - name: Verify exact Apps Script target
+        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          expected = '1p_e1jKICTZXHpCrQ7rwU9HilloZdkFBpHry_lCq5YgXpaiU4FNEQlDa-'
+          data = json.loads(Path('.clasp.json').read_text(encoding='utf-8'))
+          actual = data.get('scriptId')
+          if actual != expected:
+              raise SystemExit(f'Apps Script target mismatch: {actual!r}')
+          PY
+
+      - name: Show Apps Script file status
+        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
+        shell: bash
+        run: npx -y @google/clasp@3.4.0 show-file-status --json
+
+      - name: Push audited main to Apps Script HEAD
+        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
+        shell: bash
+        run: npx -y @google/clasp@3.4.0 push
+
+      - name: Read deployment inventory
+        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
+        shell: bash
+        run: npx -y @google/clasp@3.4.0 list-deployments
+
+      - name: Write run summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Apps Script auto-sync"
+            echo ""
+            echo "- source: `$(git rev-parse HEAD 2>/dev/null || echo unavailable)`"
+            echo "- Apps Script-impacting change: `${{ steps.impact.outputs.changed || 'unknown' }}`"
+            echo "- clasp credential ready: `${{ steps.auth.outputs.ready || 'not-needed' }}`"
+            echo "- target script ID: `1p_e1jKICTZXHpCrQ7rwU9HilloZdkFBpHry_lCq5YgXpaiU4FNEQlDa-`"
+            echo "- versioned /exec deployment: not changed by this workflow"
+          } >> "$GITHUB_STEP_SUMMARY"

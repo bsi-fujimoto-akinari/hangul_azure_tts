@@ -43,6 +43,7 @@ jobs:
               'OPERATIONS.md',
               'RECOVERY.md',
               '.github/workflows/repository-audit.yml',
+              '.github/workflows/apps-script-auto-sync.yml',
           }
           tracked = set(
               subprocess.check_output(

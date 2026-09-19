@@ -281,3 +281,17 @@ Canonical close state for the R3 validation set:
 - learner state remains issue 2 / next set 3 / last set L03.
 
 Next stage is R3-10 full E2E audit. Normal-live activation remains outside this contract until R3-11.
+
+## 14. R3-10 device release policy
+
+Default learner-device validation for Listening Web App releases is mobile-first.
+
+- iPhone-class mobile validation is the required learner-facing device gate.
+- PC validation is optional and nonblocking by default.
+- Require PC validation only when the user explicitly requests it or the change is PC-specific.
+- Absence of a PC check by itself must not block R3-10/R3-11 progression.
+- This policy does not relax runtime, source-lock, transaction, scheduler, idempotency, audio, or Review integrity gates.
+
+Canonical Listening render source: `H3-LISTENING-RENDER-RULES-20260920-V19`.
+
+R3-10 exited with `BLOCKING=0`; R3-11 remains the separate normal-live activation stage.

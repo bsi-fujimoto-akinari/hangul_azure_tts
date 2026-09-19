@@ -1074,15 +1074,15 @@ function h3ProdValidatePreissueSet_(
       ''
     ) !== 'IDLE' ||
     String(
-      stateMap.R3_07_PREP_TARGET_SET_ID &&
-      stateMap.R3_07_PREP_TARGET_SET_ID.value ||
-      ''
-    ) !== String(setId) ||
-    String(
       stateMap.STATUS &&
       stateMap.STATUS.value ||
       ''
-    ) !== 'R3_07_PRODUCTION_PREP'
+    ) !== 'N5_AUDIO_TIMING_STAGED' ||
+    String(
+      stateMap.PRODUCTION_GATE &&
+      stateMap.PRODUCTION_GATE.value ||
+      ''
+    ) !== H3_R3_PRODUCTION_GATE_MODE
   ) {
     throw new Error(
       'PREISSUE_STATE_BINDING_INVALID'
@@ -1093,34 +1093,15 @@ function h3ProdValidatePreissueSet_(
     String(
       policyMap.PRODUCTION_PREP_MODE ||
       ''
-    ) !==
-      'R3_07_L03_UNISSUED' ||
-    String(
-      policyMap.PREP_TARGET_SET_ID ||
-      ''
-    ) !== String(setId) ||
-    String(
-      policyMap.R3_07_PREP_TARGET_SET_ID ||
-      ''
-    ) !== String(setId) ||
+    ) !== 'NORMAL_LIVE' ||
     String(
       policyMap.STATUS || ''
     ) !== 'N5_AUDIO_TIMING_STAGED' ||
     String(
       policyMap.PRODUCTION_GATE ||
       ''
-    ) === 'ACTIVE' ||
-    (
-      H3_R3_PRODUCTION_COMMIT_ENABLED !== false &&
-      (
-        H3_R3_PRODUCTION_COMMIT_SET_ID !==
-          String(setId) ||
-        String(
-          policyMap.PRODUCTION_GATE ||
-          ''
-        ) !== 'N5_E2E_ARMED_ONE_SET'
-      )
-    )
+    ) !== H3_R3_PRODUCTION_GATE_MODE ||
+    H3_R3_PRODUCTION_COMMIT_ENABLED !== true
   ) {
     throw new Error(
       'PREISSUE_POLICY_GATE_INVALID'

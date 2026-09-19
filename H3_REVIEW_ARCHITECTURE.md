@@ -851,3 +851,31 @@ All of the following are currently PASS:
 The scheduler blocker is not a learner-history corruption. It is a post-score planning synchronization gap: `NEXT_LISTENING_SET_NO` advanced to 3 while the stored `OVERLOAD_PLAN_JSON` remains a set-2 plan.
 
 R3-10 may close only after the scheduler plan is safely regenerated/persisted and the current persistent Review/Replay surface passes PC validation.
+
+## 22. R3-10 close
+
+The R3-10 interim blockers are closed.
+
+```text
+RESULT=PASS
+BLOCKING=0
+SCHEDULER_PLAN=H3_LISTENING_OVERLOAD_PLAN_V2
+NEXT_SET_NO=3
+NEXT_RETEST=K4
+PC_VALIDATION=OPTIONAL_NONBLOCKING_BY_DEFAULT
+NEXT=R3-11 NORMAL_LIVE_ACTIVATION
+```
+
+Scheduler close evidence:
+- the production transaction now recomputes and persists the next Listening retest plan after every scored 5L;
+- preissue rejects missing/stale/blocked scheduler plans;
+- the existing L03 state was backfilled from canonical history only;
+- learner answer/history/score/counter/pointer values were not rewritten;
+- the post-L03 plan is feasible with normal slots `3:K4,4:K1,5:K3,6:K2,7:K5` and no supplemental/overflow.
+
+Device policy after R3-10:
+- mobile/iPhone remains the primary learner-device validation surface;
+- PC validation is not a default blocker;
+- require PC only on explicit request or for a PC-specific change.
+
+Normal-live activation remains outside R3-10 and requires R3-11.

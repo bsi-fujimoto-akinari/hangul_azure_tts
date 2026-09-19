@@ -161,9 +161,11 @@
             app.payload &&
             index < app.payload.questions.length - 1
           ) {
-            window.setTimeout(function () {
-              setActiveIndex(index + 1);
-            }, 80);
+            var nextIndex = index + 1;
+            var nextSection = sections[nextIndex];
+
+            setActiveIndex(nextIndex);
+            playAudioAssetNow(nextSection);
           }
         });
 
@@ -401,6 +403,32 @@
         node.classList.toggle('hidden', !isError);
       }
     });
+  }
+
+  function playAudioAssetNow(assetKey) {
+    if (!assetKey) return false;
+
+    var audio = document.querySelector(
+      'audio[data-asset-key="' + assetKey + '"]'
+    );
+
+    if (!audio || !audio.getAttribute('src')) {
+      return false;
+    }
+
+    prepareAudioStart(audio);
+    pauseOtherAudio(audio);
+
+    var promise = audio.play();
+    if (promise && typeof promise.catch === 'function') {
+      promise.catch(function () {
+        // iOS may still reject playback if the media was not fully ready
+        // within the same user gesture. In that case the visible play
+        // button remains the fallback.
+      });
+    }
+
+    return true;
   }
 
   function pauseOtherAudio(current) {

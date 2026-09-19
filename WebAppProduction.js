@@ -708,26 +708,47 @@ function h3ProdBuildPlan_(context, answers, nowText) {
   Object.keys(context.stateMap).forEach(function (key) {
     state[key] = context.stateMap[key].value;
   });
+  var stateUpdates = {};
 
-  state.LISTENING_ISSUE_NO =
-    String(context.setNo);
-  state.PHASE =
+  function setState_(key, value) {
+    var text = String(value);
+    state[key] = text;
+    stateUpdates[key] = text;
+  }
+
+  setState_(
+    'LISTENING_ISSUE_NO',
+    context.setNo
+  );
+  setState_(
+    'PHASE',
     h3ProdPhaseAfterSet_(
       context.setNo,
       context.policyMap
-    );
-  state.ACTIVE_WRONG_COUNT =
-    String(activeWrongCount);
-  state.OVERLOAD_STATUS =
-    overload ? 'LISTENING_OVERLOAD_REVIEW' : '';
-  state.LAST_UPDATED_AT = nowText;
-  state.NEXT_SET_COMPOSITION =
-    'K1,K2,K3,K4,K5';
-  state.NEXT_LISTENING_SET_NO =
-    String(context.setNo + 1);
-  state.LAST_LISTENING_SET_ID =
-    context.setId;
-  state.ANSWER_SYNC_PHASE = 'IDLE';
+    )
+  );
+  setState_(
+    'ACTIVE_WRONG_COUNT',
+    activeWrongCount
+  );
+  setState_(
+    'OVERLOAD_STATUS',
+    overload ? 'LISTENING_OVERLOAD_REVIEW' : ''
+  );
+  setState_('LAST_UPDATED_AT', nowText);
+  setState_(
+    'NEXT_SET_COMPOSITION',
+    'K1,K2,K3,K4,K5'
+  );
+  setState_(
+    'NEXT_LISTENING_SET_NO',
+    context.setNo + 1
+  );
+  setState_(
+    'LAST_LISTENING_SET_ID',
+    context.setId
+  );
+  setState_('ANSWER_SYNC_PHASE', 'IDLE');
 
   H3_WEB_PROD_SECTIONS.forEach(function (section) {
     var role = slotRoles[section].role;
@@ -735,12 +756,13 @@ function h3ProdBuildPlan_(context, answers, nowText) {
     var lastKey = 'LAST_' + section + '_ISSUE';
 
     if (role === 'PRIMARY') {
-      state[countKey] = String(
+      setState_(
+        countKey,
         Number(state[countKey] || 0) + 1
       );
     }
 
-    state[lastKey] = String(context.setNo);
+    setState_(lastKey, context.setNo);
   });
 
   return {
@@ -750,6 +772,7 @@ function h3ProdBuildPlan_(context, answers, nowText) {
     graded: graded,
     logWrites: logWrites,
     stateValues: state,
+    stateUpdates: stateUpdates,
     activeWrongCount: activeWrongCount,
     overload: overload
   };
@@ -844,12 +867,12 @@ function h3ProdExpectedSnapshot_(
   object.state.forEach(function (item) {
     if (
       Object.prototype.hasOwnProperty.call(
-        plan.stateValues,
+        plan.stateUpdates,
         item.key
       )
     ) {
       item.value = String(
-        plan.stateValues[item.key]
+        plan.stateUpdates[item.key]
       );
     }
   });
@@ -1050,14 +1073,14 @@ function h3ProdApplyPlan_(context, plan) {
     )
     .setValues(blocks);
 
-  var affected = Object.keys(plan.stateValues)
+  var affected = Object.keys(plan.stateUpdates)
     .map(function (key) {
       var record = context.stateMap[key];
       return record
         ? {
             key: key,
             rowNumber: record.rowNumber,
-            value: plan.stateValues[key]
+            value: plan.stateUpdates[key]
           }
         : null;
     })

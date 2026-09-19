@@ -38,6 +38,7 @@ jobs:
               'WebAppFixture.js',
               'WebAppProduction.js',
               'WebAppProductionRender.js',
+              'WebAppPreissue.js',
               'WebAppReceipt.js',
               'MaintenanceR305.js',
               'H3_WEB_CHAT_CONTRACT.md',
@@ -58,7 +59,7 @@ jobs:
           unexpected = sorted(tracked - allowed)
           missing = sorted({
               '.clasp.json', '.gitignore', 'Code.js',
-              'WebApp.js', 'WebAppFixture.js', 'WebAppProduction.js', 'WebAppProductionRender.js', 'WebAppReceipt.js', 'Index.html',
+              'WebApp.js', 'WebAppFixture.js', 'WebAppProduction.js', 'WebAppProductionRender.js', 'WebAppPreissue.js', 'WebAppReceipt.js', 'Index.html',
               'Stylesheet.html', 'Client.html', 'appsscript.json'
           } - tracked)
 
@@ -781,6 +782,56 @@ jobs:
             throw new Error('R3-06 SYSTEM_TEST allowlist behavior mismatch.');
           }
           NODE
+      - name: Check R3-07 production preissue gate
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          gate = Path('WebAppPreissue.js').read_text(encoding='utf-8')
+          prod = Path('WebAppProduction.js').read_text(encoding='utf-8')
+
+          required = [
+              'H3_PRODUCTION_PREISSUE_GATE_V1',
+              'function h3ProdValidatePreissueSet_(',
+              'function validateProductionPreissueSet(',
+              "'AUDIO_BOUND'",
+              "'READY'",
+              'PREISSUE_ITEM_PAYLOAD_SHA_MISMATCH',
+              'PREISSUE_AUDIO_BINDING_MISMATCH',
+              'PREISSUE_SCRIPT_TXT_MISMATCH',
+              'PREISSUE_LEARNER_LOG_ALREADY_EXISTS',
+              'PREISSUE_PRODUCTION_TXN_ALREADY_EXISTS',
+              'PREISSUE_RECOVERY_REQUIRED_EXISTS',
+              'PREISSUE_RETEST_PLAN_MISMATCH',
+              'issue_performed: false',
+          ]
+          for needle in required:
+              if needle not in gate:
+                  raise SystemExit(f'R3-07 preissue invariant missing: {needle}')
+
+          forbidden_writes = [
+              '.setValue(',
+              '.setValues(',
+              '.appendRow(',
+              '.clearContent(',
+              '.deleteRow(',
+              '.insertRow',
+              '.createFile(',
+              '.setName(',
+              '.setDescription(',
+          ]
+          for needle in forbidden_writes:
+              if needle in gate:
+                  raise SystemExit(f'R3-07 preissue gate must remain read-only: {needle}')
+
+          if 'H3_R3_PRODUCTION_COMMIT_ENABLED = false' not in prod:
+              raise SystemExit('R3-07 must keep production answer commit disabled.')
+
+          if 'h3ProdValidatePreissueSet_(' in Path('WebApp.js').read_text(encoding='utf-8'):
+              raise SystemExit('R3-07 preissue gate must not be exposed as a learner Web GET route.')
+          PY
+
       - name: Check JavaScript syntax
         shell: bash
         run: |
@@ -789,6 +840,7 @@ jobs:
           node --check WebAppFixture.js
           node --check WebAppProduction.js
           node --check WebAppProductionRender.js
+          node --check WebAppPreissue.js
           node --check WebAppReceipt.js
           node --check MaintenanceR305.js
           python3 - <<'PY'

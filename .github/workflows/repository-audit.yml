@@ -289,9 +289,8 @@ jobs:
           prod = Path('WebAppProduction.js').read_text(encoding='utf-8')
           required = [
               'var H3_R3_PRODUCTION_COMMIT_ENABLED = true;',
-              "var H3_R3_PRODUCTION_COMMIT_SET_ID =\n  'H3-20260919-L03';",
-              "'R3_08_PRODUCTION_SET_NOT_ARMED'",
-              "'R3_08_CONTROLLED_E2E_GATE_MISMATCH'",
+              "var H3_R3_PRODUCTION_GATE_MODE =\n  'NORMAL_LIVE_ACTIVE';",
+              "'NORMAL_LIVE_PRODUCTION_GATE_MISMATCH'",
               "var H3_WEB_PROD_TXN_SHEET = 'listening_web_txn_v1';",
               'function h3ProdSubmit_(request)',
               'LockService.getScriptLock()',
@@ -308,8 +307,8 @@ jobs:
               if needle not in prod:
                   raise SystemExit(f'R3-03 invariant missing: {needle}')
 
-          if "var H3_R3_PRODUCTION_COMMIT_SET_ID =\n  'H3-20260919-L03';" not in prod:
-              raise SystemExit('R3-08 controlled production target is not L03.')
+          if 'H3_R3_PRODUCTION_COMMIT_SET_ID' in prod or 'R3_08_PRODUCTION_SET_NOT_ARMED' in prod:
+              raise SystemExit('Retired exact-one-set production arm remains in current production code.')
 
           web = Path('WebApp.js').read_text(encoding='utf-8')
           fixture = Path('WebAppFixture.js').read_text(encoding='utf-8')
@@ -568,7 +567,7 @@ jobs:
           prod = Path('WebAppProduction.js').read_text(encoding='utf-8')
 
           required = [
-              "H3-LISTENING-RENDER-RULES-20260919-V18",
+              "H3-LISTENING-RENDER-RULES-20260920-V19",
               "H3-L5E2E-R3-WEB-SURFACE-CONTRACT-20260919-V1",
               'function buildProductionRenderPayload_(',
               'function getProductionMediaPayload_(',
@@ -588,8 +587,8 @@ jobs:
               if needle not in web:
                   raise SystemExit(f'R3-05 WebApp route invariant missing: {needle}')
 
-          if 'H3_R3_PRODUCTION_COMMIT_ENABLED = true' not in prod or "'H3-20260919-L03'" not in prod:
-              raise SystemExit('R3-08 exact-one-set production arm missing.')
+          if 'H3_R3_PRODUCTION_COMMIT_ENABLED = true' not in prod or "'NORMAL_LIVE_ACTIVE'" not in prod:
+              raise SystemExit('R3-11 normal-live production gate missing.')
 
           start = code.index('function processListeningAudioSet_(')
           end = code.index('function readListeningJob_(', start)
@@ -653,7 +652,7 @@ jobs:
           ctx.__req = {schema:'H3_WEB_RENDER_REQUEST_V1',mode:'LISTENING',set_id:'H3-20260919-L03'};
           const result = vm.runInContext('buildProductionRenderPayload_(__req)',ctx);
 
-          if (result.canonical_render_version !== 'H3-LISTENING-RENDER-RULES-20260919-V18')
+          if (result.canonical_render_version !== 'H3-LISTENING-RENDER-RULES-20260920-V19')
             throw new Error('Render version mismatch.');
           if (result.questions[1].visible_choices !== null || result.questions[2].visible_choices !== null)
             throw new Error('K2/K3 pregrade text leak.');
@@ -777,8 +776,8 @@ jobs:
           if 'buildSystemTestRenderPayload_(\n    request.set_id\n  )' not in web:
               raise SystemExit('SYSTEM_TEST render payload is not bound to the requested allowlisted set ID.')
 
-          if 'H3_R3_PRODUCTION_COMMIT_ENABLED = true' not in prod or "'R3_08_PRODUCTION_SET_NOT_ARMED'" not in prod:
-              raise SystemExit('R3-08 controlled production commit arm missing.')
+          if 'H3_R3_PRODUCTION_COMMIT_ENABLED = true' not in prod or "'NORMAL_LIVE_ACTIVE'" not in prod:
+              raise SystemExit('R3-11 normal-live production gate missing.')
 
           code = Path('Code.js').read_text(encoding='utf-8')
           for needle in [
@@ -852,14 +851,14 @@ jobs:
               if needle in gate:
                   raise SystemExit(f'R3-07 preissue gate must remain read-only: {needle}')
 
-          if 'H3_R3_PRODUCTION_COMMIT_ENABLED = true' not in prod or "'H3-20260919-L03'" not in prod:
-              raise SystemExit('R3-08 controlled L03 production arm missing.')
+          if 'H3_R3_PRODUCTION_COMMIT_ENABLED = true' not in prod or "'NORMAL_LIVE_ACTIVE'" not in prod:
+              raise SystemExit('R3-11 normal-live production gate missing.')
 
           if 'h3ProdValidatePreissueSet_(' in Path('WebApp.js').read_text(encoding='utf-8'):
               raise SystemExit('R3-07 preissue gate must not be exposed as a learner Web GET route.')
           PY
 
-      - name: Check R3-08 controlled L03 live issue arm
+      - name: Check R3-11 normal live production arm
         shell: bash
         run: |
           python3 - <<'PY'
@@ -869,24 +868,47 @@ jobs:
           render = Path('WebAppProductionRender.js').read_text(encoding='utf-8')
           gate = Path('WebAppPreissue.js').read_text(encoding='utf-8')
 
-          required_prod = [
+          for needle in [
               'var H3_R3_PRODUCTION_COMMIT_ENABLED = true;',
-              "var H3_R3_PRODUCTION_COMMIT_SET_ID =\n  'H3-20260919-L03';",
-              "'R3_08_PRODUCTION_SET_NOT_ARMED'",
-              "'R3_08_CONTROLLED_E2E_GATE_MISMATCH'",
-              "policyMap.E2E_TARGET_SET_ID",
-              "policyMap.E2E_TARGET_K1_READY_ID",
-              "'N5_E2E_ARMED_ONE_SET'",
-          ]
-          for needle in required_prod:
+              "var H3_R3_PRODUCTION_GATE_MODE =\n  'NORMAL_LIVE_ACTIVE';",
+              "'NORMAL_LIVE_PRODUCTION_GATE_MISMATCH'",
+              'STATE_NEXT_SET_NO_MISMATCH',
+          ]:
               if needle not in prod:
-                  raise SystemExit(f'R3-08 controlled-arm invariant missing: {needle}')
+                  raise SystemExit(f'R3-11 production invariant missing: {needle}')
 
-          if "H3-LISTENING-RENDER-RULES-20260919-V18" not in render:
-              raise SystemExit('R3-08 production render is not aligned to V18.')
+          for retired in [
+              'H3_R3_PRODUCTION_COMMIT_SET_ID',
+              'R3_08_PRODUCTION_SET_NOT_ARMED',
+              'R3_08_CONTROLLED_E2E_GATE_MISMATCH',
+              'policyMap.E2E_TARGET_SET_ID',
+              'policyMap.E2E_TARGET_K1_READY_ID',
+              "'N5_E2E_ARMED_ONE_SET'",
+          ]:
+              if retired in prod:
+                  raise SystemExit(f'Retired exact-one-set production invariant remains: {retired}')
 
-          if "H3_R3_PRODUCTION_COMMIT_SET_ID !==\n          String(setId)" not in gate:
-              raise SystemExit('R3-08 preissue gate does not permit only the exact armed set.')
+          for needle in [
+              "policyMap.PRODUCTION_PREP_MODE ||",
+              "'NORMAL_LIVE'",
+              'H3_R3_PRODUCTION_GATE_MODE',
+              'PREISSUE_OVERLOAD_PLAN_STALE',
+              'PREISSUE_RECOVERY_REQUIRED_EXISTS',
+          ]:
+              if needle not in gate:
+                  raise SystemExit(f'R3-11 preissue invariant missing: {needle}')
+
+          for retired in [
+              'H3_R3_PRODUCTION_COMMIT_SET_ID',
+              "'R3_07_L03_UNISSUED'",
+              "'R3_07_PRODUCTION_PREP'",
+              "'N5_E2E_ARMED_ONE_SET'",
+          ]:
+              if retired in gate:
+                  raise SystemExit(f'Retired preissue one-set invariant remains: {retired}')
+
+          if "H3-LISTENING-RENDER-RULES-20260920-V19" not in render:
+              raise SystemExit('R3-11 production render is not aligned to canonical V19.')
           PY
 
       - name: Check R3-08 production client mode routing
@@ -1880,6 +1902,53 @@ jobs:
           ]:
               if needle not in pre:
                   raise SystemExit(f'R3-10 preissue scheduler gate missing: {needle}')
+          PY
+
+      - name: Check R3-11 activation contract
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          prod = Path('WebAppProduction.js').read_text(encoding='utf-8')
+          pre = Path('WebAppPreissue.js').read_text(encoding='utf-8')
+          render = Path('WebAppProductionRender.js').read_text(encoding='utf-8')
+          ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
+          arch = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
+          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
+
+          for needle in [
+              "var H3_R3_PRODUCTION_GATE_MODE =\n  'NORMAL_LIVE_ACTIVE';",
+              "'NORMAL_LIVE_PRODUCTION_GATE_MISMATCH'",
+              'STATE_NEXT_SET_NO_MISMATCH',
+          ]:
+              if needle not in prod:
+                  raise SystemExit(f'R3-11 production contract missing: {needle}')
+
+          if 'H3_R3_PRODUCTION_COMMIT_SET_ID' in prod:
+              raise SystemExit('R3-11 still contains fixed production SET_ID arm.')
+
+          for needle in [
+              "'NORMAL_LIVE'",
+              'H3_R3_PRODUCTION_GATE_MODE',
+              'PREISSUE_OVERLOAD_PLAN_MISSING',
+              'PREISSUE_OVERLOAD_PLAN_STALE',
+              'PREISSUE_OVERLOAD_PLAN_BLOCKED',
+              'PREISSUE_RECOVERY_REQUIRED_EXISTS',
+          ]:
+              if needle not in pre:
+                  raise SystemExit(f'R3-11 preissue contract missing: {needle}')
+
+          if 'H3-LISTENING-RENDER-RULES-20260920-V19' not in render:
+              raise SystemExit('R3-11 render version mismatch.')
+
+          for doc, needle in [
+              (ops, '## 21. R3-11 NORMAL_LIVE_ACTIVATION'),
+              (arch, '## 23. R3-11 normal-live activation'),
+              (chat, '## 15. R3-11 normal-live ownership'),
+          ]:
+              if needle not in doc:
+                  raise SystemExit(f'R3-11 documentation missing: {needle}')
           PY
 
       - name: Check JavaScript syntax

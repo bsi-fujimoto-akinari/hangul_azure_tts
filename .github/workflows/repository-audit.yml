@@ -37,6 +37,7 @@ jobs:
               'WebApp.js',
               'WebAppFixture.js',
               'WebAppProduction.js',
+              'WebAppProductionRender.js',
               'WebAppReceipt.js',
               'H3_WEB_CHAT_CONTRACT.md',
               'Index.html',
@@ -56,7 +57,7 @@ jobs:
           unexpected = sorted(tracked - allowed)
           missing = sorted({
               '.clasp.json', '.gitignore', 'Code.js',
-              'WebApp.js', 'WebAppFixture.js', 'WebAppProduction.js', 'WebAppReceipt.js', 'Index.html',
+              'WebApp.js', 'WebAppFixture.js', 'WebAppProduction.js', 'WebAppProductionRender.js', 'WebAppReceipt.js', 'Index.html',
               'Stylesheet.html', 'Client.html', 'appsscript.json'
           } - tracked)
 
@@ -306,9 +307,10 @@ jobs:
           web = Path('WebApp.js').read_text(encoding='utf-8')
           fixture = Path('WebAppFixture.js').read_text(encoding='utf-8')
           client = Path('Client.html').read_text(encoding='utf-8')
-          for surface in [web, fixture, client]:
-              if 'h3ProdSubmit_(' in surface:
-                  raise SystemExit('Production submit is exposed before R3 activation.')
+          if 'h3ProdSubmit_(' in fixture or 'h3ProdSubmit_(' in client:
+              raise SystemExit('Production submit leaked into fixture/client surface.')
+          if "request.mode === 'LISTENING'" not in web:
+              raise SystemExit('R3-05 production route is missing.')
           PY
 
           node <<'NODE'
@@ -532,6 +534,107 @@ jobs:
             throw new Error('Malformed receipt was accepted.');
           }
           NODE
+      - name: Check R3-05 canonical production Web App patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          code = Path('Code.js').read_text(encoding='utf-8')
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+          render = Path('WebAppProductionRender.js').read_text(encoding='utf-8')
+          prod = Path('WebAppProduction.js').read_text(encoding='utf-8')
+
+          required = [
+              "H3-LISTENING-RENDER-RULES-20260919-V17",
+              "H3-L5E2E-R3-WEB-SURFACE-CONTRACT-20260919-V1",
+              'function buildProductionRenderPayload_(',
+              'function getProductionMediaPayload_(',
+              'function buildProductionReviewPayload_(',
+              "POSTGRADE_INLINE_SPLIT_AUDIO_SCRIPT",
+          ]
+          for needle in required:
+              if needle not in render:
+                  raise SystemExit(f'R3-05 render invariant missing: {needle}')
+
+          for needle in [
+              "request.mode === 'LISTENING'",
+              'buildProductionRenderPayload_(request)',
+              'getProductionMediaPayload_(request)',
+              'h3ProdSubmit_(request)',
+          ]:
+              if needle not in web:
+                  raise SystemExit(f'R3-05 WebApp route invariant missing: {needle}')
+
+          if 'H3_R3_PRODUCTION_COMMIT_ENABLED = false' not in prod:
+              raise SystemExit('R3-05 must keep production commit gate OFF.')
+
+          start = code.index('function processListeningAudioSet_(')
+          end = code.index('function listeningSetAudioSheet_(', start)
+          process_set = code[start:end]
+          if 'publishListeningSetAudio_(' in process_set:
+              raise SystemExit('New 5L still generates combined audio.')
+          if "audio_mode:\n      'INDIVIDUAL_K1_K5_ONLY'" not in process_set:
+              raise SystemExit('New 5L completion does not declare split-audio mode.')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const source = fs.readFileSync('WebAppProductionRender.js','utf8');
+          const ctx = vm.createContext({console});
+
+          ctx.H3_WEB_RUNTIME_SPREADSHEET_ID = 'S';
+          ctx.H3_WEB_PROD_SECTIONS = ['K1','K2','K3','K4','K5'];
+          ctx.h3ProdParseJson_ = (text) => JSON.parse(String(text));
+          ctx.h3ProdRequireColumns_ = () => {};
+          ctx.h3DriveDataUri_ = () => ({data_uri:'data:image/jpeg;base64,AA==',size_bytes:1});
+          ctx.SpreadsheetApp = {openById: () => ({})};
+
+          const payloadMap = {
+            K2_ITEM_JSON:5, K3_ITEM_JSON:6, K4_ITEM_JSON:7, K5_ITEM_JSON:8
+          };
+          const k1Map = {
+            IMAGE_FILE_ID:3, IMAGE_URL:4, IMAGE_SHA256:5, FINAL_CHOICES_JSON:6
+          };
+          const row = [];
+          row[5] = JSON.stringify({section:'K2',skill_id:'H3-K2-SK017',visibility:'audio_only',prompt:'p2',choices:['a','b','c','d']});
+          row[6] = JSON.stringify({section:'K3',skill_id:'H3-K3-SK021',visibility:'audio_only',prompt:'p3',choices:['a','b','c','d']});
+          row[7] = JSON.stringify({section:'K4',skill_id:'H3-K4-SK009',visibility:'visible_Japanese_choices',passage:'p4',choices_ja:['j1','j2','j3','j4']});
+          row[8] = JSON.stringify({section:'K5',skill_id:'H3-K5-SK004',visibility:'visible_Korean_choices',passage:'p5',choices_ko:['k1','k2','k3','k4']});
+          const kr = [];
+          kr[3] = 'IMG'; kr[4] = 'URL'; kr[5] = 'SHA';
+          kr[6] = JSON.stringify(['c1','c2','c3','c4']);
+          const audio = {};
+          for (const section of ctx.H3_WEB_PROD_SECTIONS) {
+            audio[section] = {
+              listen_gen_id:'G-'+section, payload_hash:'H-'+section,
+              audio_file_id:'F-'+section, audio_url:'U-'+section
+            };
+          }
+          ctx.__context = {
+            setId:'H3-20260919-L03', setNo:2,
+            payloadRecord:{row}, payloadTable:{map:payloadMap},
+            k1Record:{row:kr}, k1Table:{map:k1Map},
+            audioBinding:{individual:audio}
+          };
+          ctx.h3ProdReadContext_ = () => ctx.__context;
+
+          vm.runInContext(source, ctx, {filename:'WebAppProductionRender.js'});
+          ctx.__req = {schema:'H3_WEB_RENDER_REQUEST_V1',mode:'LISTENING',set_id:'H3-20260919-L03'};
+          const result = vm.runInContext('buildProductionRenderPayload_(__req)',ctx);
+
+          if (result.canonical_render_version !== 'H3-LISTENING-RENDER-RULES-20260919-V17')
+            throw new Error('Render version mismatch.');
+          if (result.questions[1].visible_choices !== null || result.questions[2].visible_choices !== null)
+            throw new Error('K2/K3 pregrade text leak.');
+          if (result.questions[3].visible_choices.length !== 4 || result.questions[4].visible_choices.length !== 4)
+            throw new Error('K4/K5 visible choice contract mismatch.');
+          if (!String(result.questions[0].image_data_uri).startsWith('data:image/jpeg'))
+            throw new Error('K1 exact inline image missing.');
+          if (JSON.stringify(result).includes('answer_key'))
+            throw new Error('Answer key leaked to render payload.');
+          NODE
       - name: Check JavaScript syntax
         shell: bash
         run: |
@@ -539,6 +642,7 @@ jobs:
           node --check WebApp.js
           node --check WebAppFixture.js
           node --check WebAppProduction.js
+          node --check WebAppProductionRender.js
           node --check WebAppReceipt.js
           python3 - <<'PY'
           from pathlib import Path

@@ -213,9 +213,9 @@ K1_READY persist
   -> fresh prebind gate
   -> BOUND_LISTENING_SET_ID bind
   -> audio queue
-  -> individual audio
-  -> combined audio
-  -> learner-facing issue
+  -> individual K1-K5 audio
+  -> exact individual audio binding
+  -> learner-facing Web App issue
   -> issue success
   -> consume
 ```
@@ -234,7 +234,7 @@ If any prebind condition fails, do not bind, do not write the Listening audio qu
 
 Before `processListeningAudioSet_()` reaches any `runListeningJob_()` call, `assertBoundK1ReadyForSet_()` must re-read the persistent bound record and verify that the bound SET_ID matches the set being processed, `STATUS=READY`, `CONSUMED_AT` remains blank, and the queue-side K1 audio payload exactly matches the persistent K1_READY payload. Any mismatch stops processing before audio work starts.
 
-`consumeK1ReadyAfterIssue_()` is an explicit post-issue operation only. It may run only after confirmed learner-facing 5L issue success and may update only `STATUS=CONSUMED` and `CONSUMED_AT=<timestamp>`; `BOUND_LISTENING_SET_ID` remains unchanged. Individual-audio completion, combined-audio completion, preissue state, or a failed issue must never consume K1_READY.
+`consumeK1ReadyAfterIssue_()` is an explicit post-issue operation only. It may run only after confirmed learner-facing 5L issue success and may update only `STATUS=CONSUMED` and `CONSUMED_AT=<timestamp>`; `BOUND_LISTENING_SET_ID` remains unchanged. Individual-audio completion, AUDIO_BOUND preissue state, or a failed issue must never consume K1_READY. New R3 sets do not require combined set audio.
 
 For recovery, do not reconstruct a READY record by inference and do not move an existing `BOUND_LISTENING_SET_ID` to another set. Ambiguous, missing, or mismatched persistent state is a STOP condition requiring audit. Persistent K1_READY recovery is independent of learner history, counters, and valid-count state.
 
@@ -395,3 +395,15 @@ STATUS=COMMITTED
 Chat treats this as a pointer to canonical backend state, not as sufficient proof by itself. Chat must read back the authoritative journal/state, verify the committed transaction, and only then generate post-answer learner-facing output. Chat never duplicates the backend answer/history mutation.
 
 The full frozen R3-04 contract is `H3_WEB_CHAT_CONTRACT.md`.
+
+
+### R3-05 Drive canonical finalizer
+
+`MaintenanceR305.js` contains the guarded, idempotent manual function `r305FinalizeCanonicalDrive()` used only to finalize the R3-05 canonical Drive sources after repository audit and Apps Script synchronization.
+
+It may update only:
+- `hangul_source_manifest_v1.txt`
+- archive release `hangul_source_manifest_v1__20260919R30.txt`
+- `HANGUL_INFRA_STATUS_CURRENT.txt`
+
+It validates the exact V17 render canonical/release SHA256 before any write and never accesses learner Sheets/runtime/history. Unexpected version, hash, duplicate release, or readback state is a STOP condition.

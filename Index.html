@@ -2,20 +2,22 @@
 <html>
   <head>
     <base target="_top">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <?!= include_('Stylesheet'); ?>
   </head>
   <body>
     <main class="shell">
       <header class="page-header">
-        <p class="eyebrow">H3 R3-01 / NONLEARNING SYSTEM TEST</p>
+        <p class="eyebrow">H3 R3-01B / NONLEARNING SYSTEM TEST</p>
         <h1>5L SYSTEM TEST</h1>
         <p id="set-id" class="set-id"></p>
       </header>
 
       <section id="notice" class="notice">
-        この画面はR3-01 POCです。学習履歴・カウンタ・retest・overload・L02/L03は変更しません。
+        学習履歴・カウンタ・retest・overload・L02/L03は変更しないSYSTEM_TESTです。
       </section>
+
+      <nav id="mobile-progress" class="mobile-progress hidden" aria-label="問題進捗"></nav>
 
       <section id="loading" class="panel status">読み込み中…</section>
       <section id="error" class="panel error hidden" role="alert"></section>
@@ -30,6 +32,12 @@
       </section>
 
       <section id="result" class="panel result hidden" aria-live="polite"></section>
+
+      <nav id="mobile-nav" class="mobile-nav hidden" aria-label="問題移動">
+        <button id="mobile-prev" type="button" class="secondary">‹ 前へ</button>
+        <span id="mobile-position" class="mobile-position">Q1 / 5</span>
+        <button id="mobile-next" type="button" class="primary">次へ ›</button>
+      </nav>
     </main>
 
     <script>

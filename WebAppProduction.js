@@ -578,6 +578,7 @@ function h3ProdHistoryRows_(context, prospective) {
     }
 
     history.push({
+      section: String(row[lm.SECTION_KEY] || ''),
       skill_id: String(row[lm.SKILL_ID] || ''),
       set_no: Number(row[lm.LISTENING_ISSUE_NO]),
       surface_hash: String(row[lm.SURFACE_HASH] || ''),
@@ -588,6 +589,11 @@ function h3ProdHistoryRows_(context, prospective) {
   prospective.forEach(function (x, i) {
     var row = context.logRows[i].row;
     history.push({
+      section: String(
+        x.section ||
+        row[lm.SECTION_KEY] ||
+        ''
+      ),
       skill_id: String(row[lm.SKILL_ID] || ''),
       set_no: context.setNo,
       surface_hash: String(row[lm.SURFACE_HASH] || ''),
@@ -598,8 +604,53 @@ function h3ProdHistoryRows_(context, prospective) {
   return history;
 }
 
-function h3ProdActiveSkillCount_(history) {
+function h3ProdRetestGap_(result) {
+  if (result === '×') {
+    return {
+      min: 1,
+      max: 3
+    };
+  }
+
+  if (result === '△') {
+    return {
+      min: 2,
+      max: 5
+    };
+  }
+
+  return null;
+}
+
+function h3ProdSpacedCorrectCount_(
+  rows,
+  latestNonCorrect
+) {
+  var seenSet = {};
+  var seenSurface = {};
+  var correctCount = 0;
+
+  for (
+    var i = latestNonCorrect + 1;
+    i < rows.length;
+    i += 1
+  ) {
+    var row = rows[i];
+    if (row.result !== '○') continue;
+    if (seenSet[row.set_no]) continue;
+    if (seenSurface[row.surface_hash]) continue;
+
+    seenSet[row.set_no] = true;
+    seenSurface[row.surface_hash] = true;
+    correctCount += 1;
+  }
+
+  return correctCount;
+}
+
+function h3ProdRetestObligations_(history) {
   var bySkill = {};
+  var obligations = [];
 
   history.forEach(function (item) {
     if (!item.skill_id) return;
@@ -609,12 +660,19 @@ function h3ProdActiveSkillCount_(history) {
     bySkill[item.skill_id].push(item);
   });
 
-  var active = 0;
-
   Object.keys(bySkill).forEach(function (skillId) {
-    var rows = bySkill[skillId].slice().sort(function (a, b) {
-      return a.set_no - b.set_no;
-    });
+    var rows = bySkill[skillId].slice().sort(
+      function (a, b) {
+        if (a.set_no !== b.set_no) {
+          return a.set_no - b.set_no;
+        }
+
+        return (
+          H3_WEB_PROD_SECTIONS.indexOf(a.section) -
+          H3_WEB_PROD_SECTIONS.indexOf(b.section)
+        );
+      }
+    );
 
     var latestNonCorrect = -1;
     rows.forEach(function (row, i) {
@@ -625,31 +683,153 @@ function h3ProdActiveSkillCount_(history) {
 
     if (latestNonCorrect < 0) return;
 
-    var seenSet = {};
-    var seenSurface = {};
-    var correctCount = 0;
+    var correctCount =
+      h3ProdSpacedCorrectCount_(
+        rows,
+        latestNonCorrect
+      );
 
-    for (
-      var i = latestNonCorrect + 1;
-      i < rows.length;
-      i += 1
-    ) {
-      var row = rows[i];
-      if (row.result !== '○') continue;
-      if (seenSet[row.set_no]) continue;
-      if (seenSurface[row.surface_hash]) continue;
+    if (correctCount >= 2) return;
 
-      seenSet[row.set_no] = true;
-      seenSurface[row.surface_hash] = true;
-      correctCount += 1;
+    var origin = rows[latestNonCorrect];
+    var gap = h3ProdRetestGap_(origin.result);
+
+    if (!gap) {
+      throw new Error(
+        'RETEST_GAP_NOT_DERIVABLE:' + skillId
+      );
     }
 
-    if (correctCount < 2) {
-      active += 1;
-    }
+    obligations.push({
+      section: origin.section,
+      skill_id: skillId,
+      latest_result: origin.result,
+      origin_set_no: origin.set_no,
+      due_min_set_no:
+        origin.set_no + gap.min,
+      due_max_set_no:
+        origin.set_no + gap.max,
+      correct_spaced_count:
+        correctCount
+    });
   });
 
-  return active;
+  obligations.sort(function (a, b) {
+    if (a.due_max_set_no !== b.due_max_set_no) {
+      return a.due_max_set_no - b.due_max_set_no;
+    }
+    if (a.due_min_set_no !== b.due_min_set_no) {
+      return a.due_min_set_no - b.due_min_set_no;
+    }
+    if (a.origin_set_no !== b.origin_set_no) {
+      return a.origin_set_no - b.origin_set_no;
+    }
+    return (
+      H3_WEB_PROD_SECTIONS.indexOf(a.section) -
+      H3_WEB_PROD_SECTIONS.indexOf(b.section)
+    );
+  });
+
+  return obligations;
+}
+
+function h3ProdActiveSkillCount_(history) {
+  return h3ProdRetestObligations_(history).length;
+}
+
+function h3ProdBuildOverloadPlan_(
+  history,
+  nextSetNo,
+  policyMap
+) {
+  var obligations =
+    h3ProdRetestObligations_(history);
+  var occupied = {};
+  var normalRetests = [];
+  var overflow = [];
+
+  obligations.forEach(function (item) {
+    var firstSet = Math.max(
+      Number(nextSetNo),
+      Number(item.due_min_set_no)
+    );
+    var assignedSet = null;
+
+    for (
+      var setNo = firstSet;
+      setNo <= item.due_max_set_no;
+      setNo += 1
+    ) {
+      if (!occupied[setNo]) {
+        occupied[setNo] = true;
+        assignedSet = setNo;
+        break;
+      }
+    }
+
+    if (assignedSet === null) {
+      overflow.push(item);
+      return;
+    }
+
+    normalRetests.push({
+      set_no: assignedSet,
+      section: item.section,
+      skill_id: item.skill_id,
+      origin_set_no: item.origin_set_no,
+      due_min_set_no: item.due_min_set_no,
+      due_max_set_no: item.due_max_set_no
+    });
+  });
+
+  var supplementalMax = Number(
+    policyMap.SUPPLEMENTAL_MAX || 1
+  );
+  var supplemental = null;
+
+  if (overflow.length && supplementalMax > 0) {
+    var firstOverflow = overflow.shift();
+    supplemental = {
+      section: firstOverflow.section,
+      skill_id: firstOverflow.skill_id,
+      origin_set_no:
+        firstOverflow.origin_set_no,
+      due_min_set_no:
+        firstOverflow.due_min_set_no,
+      due_max_set_no:
+        firstOverflow.due_max_set_no,
+      status: 'RESERVED_NOT_ISSUED',
+      counter_advance: false,
+      primary_coverage_advance: false
+    };
+  }
+
+  return {
+    schema:
+      'H3_LISTENING_OVERLOAD_PLAN_V2',
+    evaluated_after_set_no:
+      Number(nextSetNo) - 1,
+    next_set_no:
+      Number(nextSetNo),
+    active_wrong_count:
+      obligations.length,
+    ordered_due:
+      obligations.map(function (item) {
+        return item.section;
+      }),
+    active_obligations:
+      obligations,
+    normal_retests:
+      normalRetests,
+    supplemental:
+      supplemental,
+    blocking_overflow:
+      overflow,
+    planner:
+      'due_max_asc>due_min_asc>origin_set_no_asc>section_order_K1_K5',
+    reevaluate_after_each_scored_learning_surface:
+      true
+  };
 }
 
 function h3ProdPhaseAfterSet_(setNo, policyMap) {
@@ -683,6 +863,14 @@ function h3ProdBuildPlan_(context, answers, nowText) {
   );
   var overload =
     activeWrongCount > activeWrongCap;
+  var schedulerPlan =
+    h3ProdBuildOverloadPlan_(
+      history,
+      context.setNo + 1,
+      context.policyMap
+    );
+  var schedulerBlocked =
+    schedulerPlan.blocking_overflow.length > 0;
 
   var logWrites = graded.map(function (item, i) {
     var row = context.logRows[i].row;
@@ -757,7 +945,17 @@ function h3ProdBuildPlan_(context, answers, nowText) {
   );
   setState_(
     'OVERLOAD_STATUS',
-    overload ? 'LISTENING_OVERLOAD_REVIEW' : ''
+    overload
+      ? (
+          schedulerBlocked
+            ? 'LISTENING_OVERLOAD_REVIEW'
+            : 'LISTENING_OVERLOAD_PLAN_READY'
+        )
+      : ''
+  );
+  setState_(
+    'OVERLOAD_PLAN_JSON',
+    JSON.stringify(schedulerPlan)
   );
   setState_('LAST_UPDATED_AT', nowText);
   setState_(
@@ -798,7 +996,9 @@ function h3ProdBuildPlan_(context, answers, nowText) {
     stateValues: state,
     stateUpdates: stateUpdates,
     activeWrongCount: activeWrongCount,
-    overload: overload
+    overload: overload,
+    schedulerPlan: schedulerPlan,
+    schedulerBlocked: schedulerBlocked
   };
 }
 

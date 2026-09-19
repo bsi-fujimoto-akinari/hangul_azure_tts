@@ -412,8 +412,23 @@ jobs:
           assert(plan.score === 1, 'Synthetic L02 score must be 1/5.');
           assert(plan.activeWrongCount === 4, 'Synthetic L02 active wrong count must be 4.');
           assert(plan.overload === true, 'Synthetic L02 must enter overload.');
-          assert(plan.stateValues.OVERLOAD_STATUS === 'LISTENING_OVERLOAD_REVIEW',
+          assert(plan.stateValues.OVERLOAD_STATUS === 'LISTENING_OVERLOAD_PLAN_READY',
                  'Synthetic L02 overload status mismatch.');
+          const syntheticSchedulerPlan = JSON.parse(
+            plan.stateValues.OVERLOAD_PLAN_JSON
+          );
+          assert(
+            syntheticSchedulerPlan.schema === 'H3_LISTENING_OVERLOAD_PLAN_V2',
+            'Synthetic L02 scheduler schema mismatch.'
+          );
+          assert(
+            syntheticSchedulerPlan.next_set_no === 2,
+            'Synthetic L02 scheduler next set mismatch.'
+          );
+          assert(
+            syntheticSchedulerPlan.blocking_overflow.length === 0,
+            'Synthetic L02 scheduler should be feasible.'
+          );
           assert(plan.stateValues.NEXT_LISTENING_SET_NO === '2',
                  'Synthetic L02 next set must be 2.');
           assert(plan.stateValues.PHASE === 'BASELINE_1',
@@ -1719,6 +1734,95 @@ jobs:
                       f'R3-09E close Web/Chat evidence missing: {needle}'
                   )
           PY
+
+      - name: Check R3-10B scheduler refresh
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const source = fs.readFileSync(
+            'WebAppProduction.js',
+            'utf8'
+          );
+          const context = {};
+          vm.createContext(context);
+          vm.runInContext(source, context);
+
+          const history = [
+            {section:'K1',skill_id:'H3-K1-SK001',set_no:1,surface_hash:'k1a',result:'○'},
+            {section:'K2',skill_id:'H3-K2-SK001',set_no:1,surface_hash:'k2a',result:'×'},
+            {section:'K3',skill_id:'H3-K3-SK001',set_no:1,surface_hash:'k3a',result:'×'},
+            {section:'K4',skill_id:'H3-K4-SK001',set_no:1,surface_hash:'k4a',result:'×'},
+            {section:'K5',skill_id:'H3-K5-SK001',set_no:1,surface_hash:'k5a',result:'×'},
+            {section:'K1',skill_id:'H3-K1-SK001',set_no:2,surface_hash:'k1b',result:'×'},
+            {section:'K2',skill_id:'H3-K2-SK001',set_no:2,surface_hash:'k2b',result:'△'},
+            {section:'K3',skill_id:'H3-K3-SK001',set_no:2,surface_hash:'k3b',result:'×'},
+            {section:'K4',skill_id:'H3-K4-SK001',set_no:2,surface_hash:'k4b',result:'○'},
+            {section:'K5',skill_id:'H3-K5-SK001',set_no:2,surface_hash:'k5b',result:'△'}
+          ];
+
+          const plan = context.h3ProdBuildOverloadPlan_(
+            history,
+            3,
+            {SUPPLEMENTAL_MAX:'1'}
+          );
+
+          const expectedOrder = 'K4,K1,K3,K2,K5';
+          if (plan.schema !== 'H3_LISTENING_OVERLOAD_PLAN_V2') {
+            throw new Error('R3-10B planner schema mismatch');
+          }
+          if (plan.next_set_no !== 3) {
+            throw new Error('R3-10B next_set_no mismatch');
+          }
+          if (plan.active_wrong_count !== 5) {
+            throw new Error('R3-10B active count mismatch');
+          }
+          if (plan.ordered_due.join(',') !== expectedOrder) {
+            throw new Error(
+              'R3-10B EDF order mismatch: ' +
+              plan.ordered_due.join(',')
+            );
+          }
+
+          const scheduled = plan.normal_retests
+            .map(x => x.set_no + ':' + x.section)
+            .join(',');
+          if (
+            scheduled !==
+            '3:K4,4:K1,5:K3,6:K2,7:K5'
+          ) {
+            throw new Error(
+              'R3-10B normal schedule mismatch: ' +
+              scheduled
+            );
+          }
+          if (plan.supplemental !== null) {
+            throw new Error('R3-10B unexpected supplemental');
+          }
+          if (plan.blocking_overflow.length !== 0) {
+            throw new Error('R3-10B unexpected blocking overflow');
+          }
+
+          const preissue = fs.readFileSync(
+            'WebAppPreissue.js',
+            'utf8'
+          );
+          for (const needle of [
+            'H3_LISTENING_OVERLOAD_PLAN_V2',
+            'PREISSUE_OVERLOAD_PLAN_MISSING',
+            'PREISSUE_OVERLOAD_PLAN_STALE',
+            'PREISSUE_OVERLOAD_PLAN_BLOCKED'
+          ]) {
+            if (!preissue.includes(needle)) {
+              throw new Error(
+                'R3-10B preissue invariant missing: ' +
+                needle
+              );
+            }
+          }
+          NODE
 
       - name: Check JavaScript syntax
         shell: bash

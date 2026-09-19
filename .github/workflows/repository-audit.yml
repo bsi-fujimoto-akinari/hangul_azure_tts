@@ -1233,6 +1233,52 @@ jobs:
           }
           NODE
 
+      - name: Check R3-09D Review history index fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+
+          start = source.index('function h3ReviewHistoryEntries_(')
+          end = source.index('function h3ReviewCurrentLearning_(', start)
+          history = source[start:end]
+
+          required = [
+              "'LOCKED'",
+              "'COMMITTED'",
+              "'FULL_SOURCE_LOCK_ON_OPEN'",
+              "rawInput.mode !==\n          'LISTENING'",
+              "result.summary.length !== 5",
+          ]
+          for needle in required:
+              if needle not in history:
+                  raise SystemExit(
+                      f'R3-09D history-index fix invariant missing: {needle}'
+                  )
+
+          forbidden = [
+              'RESULT_SHA256',
+              'REVIEW_BINDING_SHA256',
+              'h3ReviewHash_(',
+              'buildPersistentReviewPayload_(',
+          ]
+          for needle in forbidden:
+              if needle in history:
+                  raise SystemExit(
+                      f'R3-09D HOME history must not perform deep source-lock validation: {needle}'
+                  )
+
+          if 'function getPersistentReviewPayload_(' not in source:
+              raise SystemExit('Persistent Review open route missing.')
+
+          if 'return buildPersistentReviewPayload_(' not in source:
+              raise SystemExit(
+                  'Review open route no longer performs full persistent source-lock validation.'
+              )
+          PY
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

@@ -90,7 +90,7 @@ Automatic synchronization performs these gates before `clasp push`:
 7. run non-force `clasp push`;
 8. read the deployment inventory for traceability.
 
-The automatic workflow does **not** run `clasp pull`, does not use `clasp push --force`, and does not modify Script Properties, Google Sheets runtime data, Drive assets, Azure configuration, or GitHub secrets.
+The automatic workflow does **not** run `clasp pull` and does not modify Script Properties, Google Sheets runtime data, Drive assets, Azure configuration, or GitHub secrets. Because clasp 3.x refuses manifest overwrite in non-interactive CI unless explicitly authorized, this single audited workflow may use `clasp push --force` only after post-merge audit PASS and exact Script ID verification. This exception applies only to clasp's manifest-overwrite confirmation; it does not permit force-pushing Git history or bypassing repository review.
 
 For the R3 migration, this workflow synchronizes Apps Script HEAD only. It does not automatically change a versioned `/exec` deployment. The development `/dev` Web App is used for R3-01/R3-02 device verification. Versioned Web App deployment automation, including a fixed deployment ID and production promotion gate, requires the later R3 production activation step.
 
@@ -275,7 +275,7 @@ For each repository change, verify as applicable:
 
 ### After Apps Script synchronization, when required
 
-- Non-force `clasp push` completes successfully.
+- Audited CI `clasp push --force` completes and reports an actual push; `Skipping push.` is a failure.
 - The GitHub source commit is identifiable in the workflow summary/log.
 - Change-specific Web App or runtime verification passes.
 - No unrelated Sheet, queue, audio, or runtime state is changed unintentionally.

@@ -6,44 +6,375 @@
     background: #f5f5f5;
   }
   * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
   body { margin: 0; background: #f5f5f5; }
-  button, input { font: inherit; }
-  .shell { width: min(760px, 100%); margin: 0 auto; padding: 20px 14px 48px; }
+  button, input, audio { font: inherit; }
+
+  .shell {
+    width: min(760px, 100%);
+    margin: 0 auto;
+    padding: 20px 14px 48px;
+  }
   .page-header { margin-bottom: 14px; }
-  .eyebrow { margin: 0 0 4px; font-size: 12px; font-weight: 700; letter-spacing: .06em; }
+  .eyebrow {
+    margin: 0 0 4px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .06em;
+  }
   h1 { margin: 0; font-size: 24px; }
-  .set-id { margin: 5px 0 0; font-size: 12px; overflow-wrap: anywhere; }
-  .notice, .panel, .question-card { background: #fff; border: 1px solid #d8d8d8; border-radius: 12px; }
-  .notice { padding: 10px 12px; margin-bottom: 12px; font-size: 13px; }
+  .set-id {
+    margin: 5px 0 0;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+
+  .notice, .panel, .question-card, .review-panel {
+    background: #fff;
+    border: 1px solid #d8d8d8;
+    border-radius: 12px;
+  }
+  .notice {
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
   .panel { padding: 14px; margin-top: 12px; }
   .questions { display: grid; gap: 12px; }
   .question-card { padding: 14px; }
-  .question-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .question-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
   .question-title { margin: 0; font-size: 17px; }
-  .audio-link { display: inline-block; margin-bottom: 10px; font-weight: 700; }
-  .k1-image { display: block; width: 100%; height: auto; max-height: 420px; object-fit: contain; border: 1px solid #ddd; border-radius: 8px; margin: 4px 0 12px; }
-  .choices { display: grid; grid-template-columns: 1fr; gap: 8px; }
-  .choice { width: 100%; text-align: left; border: 1px solid #b9b9b9; border-radius: 10px; background: #fff; padding: 11px 12px; cursor: pointer; }
-  .choice.selected { border-width: 2px; font-weight: 700; }
-  .choice:disabled, .uncertain:disabled, .secondary:disabled, .primary:disabled { cursor: default; opacity: .55; }
-  .uncertain { min-width: 44px; border: 1px solid #b9b9b9; border-radius: 10px; background: #fff; padding: 7px 11px; font-weight: 700; }
-  .uncertain.active { border-width: 2px; }
-  .control-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
-  .secondary, .primary, .copy-button { border-radius: 10px; padding: 11px 12px; font-weight: 700; }
+
+  .audio-wrap { margin-bottom: 10px; }
+  .audio-label {
+    margin: 0 0 5px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .audio-player { width: 100%; display: block; }
+  .media-fallback {
+    display: inline-block;
+    margin-top: 5px;
+    font-size: 12px;
+  }
+
+  .k1-image {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 420px;
+    object-fit: contain;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    margin: 4px 0 12px;
+  }
+
+  .choices {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .choice {
+    width: 100%;
+    min-height: 46px;
+    text-align: left;
+    border: 1px solid #b9b9b9;
+    border-radius: 10px;
+    background: #fff;
+    padding: 11px 12px;
+    cursor: pointer;
+  }
+  .choice.selected {
+    border: 2px solid #171717;
+    font-weight: 700;
+  }
+  .choice:disabled,
+  .uncertain:disabled,
+  .secondary:disabled,
+  .primary:disabled {
+    cursor: default;
+    opacity: .55;
+  }
+
+  .uncertain {
+    min-width: 44px;
+    border: 1px solid #b9b9b9;
+    border-radius: 10px;
+    background: #fff;
+    padding: 7px 11px;
+    font-weight: 700;
+  }
+  .uncertain.active {
+    border: 2px solid #171717;
+    background: #f2f2f2;
+  }
+
+  .control-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .secondary, .primary, .copy-button {
+    border-radius: 10px;
+    padding: 11px 12px;
+    font-weight: 700;
+  }
   .secondary { border: 1px solid #aaa; background: #fff; }
   .primary { border: 1px solid #222; background: #222; color: #fff; }
-  .copy-button { border: 1px solid #aaa; background: #fff; margin-top: 8px; }
-  .live-summary { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-  .score { font-size: 20px; font-weight: 800; margin: 0 0 10px; }
+  .copy-button {
+    border: 1px solid #aaa;
+    background: #fff;
+    margin-top: 8px;
+  }
+
+  .live-summary {
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+  .score {
+    font-size: 20px;
+    font-weight: 800;
+    margin: 0 0 10px;
+  }
+
   table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-  th, td { border-bottom: 1px solid #ddd; padding: 8px 5px; text-align: left; }
-  pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #f2f2f2; padding: 10px; border-radius: 8px; user-select: text; }
-  .asset-links { display: grid; gap: 8px; margin-top: 14px; }
+  th, td {
+    border-bottom: 1px solid #ddd;
+    padding: 8px 5px;
+    text-align: left;
+  }
+  pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    background: #f2f2f2;
+    padding: 10px;
+    border-radius: 8px;
+    user-select: text;
+  }
   .poc-note { font-size: 13px; margin: 10px 0 0; }
   .error { border-color: #a33; }
+
+  .review-panel {
+    margin-top: 16px;
+    overflow: clip;
+  }
+  .review-head {
+    padding: 12px 14px 0;
+  }
+  .review-head h2 {
+    margin: 0 0 3px;
+    font-size: 18px;
+  }
+  .review-head p {
+    margin: 0;
+    font-size: 13px;
+  }
+  .review-player-sticky {
+    position: sticky;
+    bottom: 0;
+    z-index: 8;
+    margin-top: 10px;
+    padding: 10px 14px 12px;
+    background: rgba(255,255,255,.96);
+    border-top: 1px solid #ddd;
+    border-bottom: 1px solid #ddd;
+    backdrop-filter: blur(8px);
+  }
+  .review-script {
+    margin: 0;
+    border-radius: 0;
+    background: #fff;
+    padding: 14px;
+    font-size: 16px;
+    line-height: 1.75;
+  }
+
+  .mobile-progress,
+  .mobile-nav {
+    display: none;
+  }
+  .progress-button {
+    border: 1px solid #bbb;
+    border-radius: 10px;
+    background: #fff;
+    min-height: 40px;
+    font-weight: 700;
+  }
+  .progress-button.current {
+    border: 2px solid #171717;
+  }
+  .progress-button.answered::after {
+    content: " ✓";
+  }
+  .progress-button.uncertain-mark::after {
+    content: " ?";
+  }
+
   .hidden { display: none !important; }
+
   @media (min-width: 620px) {
-    .choices.textless { grid-template-columns: repeat(4, 1fr); }
-    .choices.textless .choice { text-align: center; }
+    .choices.textless {
+      grid-template-columns: repeat(4, 1fr);
+    }
+    .choices.textless .choice {
+      text-align: center;
+    }
+  }
+
+  @media (max-width: 619px) {
+    .shell {
+      width: 100%;
+      padding-top: 10px;
+      padding-left: max(10px, env(safe-area-inset-left));
+      padding-right: max(10px, env(safe-area-inset-right));
+      padding-bottom: calc(86px + env(safe-area-inset-bottom));
+    }
+
+    .page-header { margin-bottom: 8px; }
+    .eyebrow { font-size: 10px; margin-bottom: 2px; }
+    h1 { font-size: 20px; line-height: 1.2; }
+    .set-id { display: none; }
+
+    .notice {
+      padding: 7px 9px;
+      margin-bottom: 8px;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .mobile-progress {
+      position: sticky;
+      top: 0;
+      z-index: 9;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 5px;
+      padding: 7px 0;
+      margin-bottom: 8px;
+      background: rgba(245,245,245,.96);
+      backdrop-filter: blur(8px);
+    }
+    .progress-button {
+      min-height: 38px;
+      padding: 6px 3px;
+      font-size: 13px;
+    }
+
+    .questions { display: block; }
+    .question-card {
+      display: none;
+      padding: 12px;
+      border-radius: 10px;
+    }
+    .question-card.mobile-active {
+      display: block;
+    }
+    .question-head { margin-bottom: 8px; }
+    .question-title { font-size: 17px; }
+
+    .audio-wrap { margin-bottom: 8px; }
+    .audio-label { font-size: 12px; }
+    .audio-player {
+      min-height: 44px;
+      max-width: 100%;
+    }
+
+    .k1-image {
+      max-height: 330px;
+      margin-bottom: 10px;
+    }
+
+    .choices.textless {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    .choices.textless .choice {
+      text-align: center;
+      min-height: 54px;
+      font-size: 18px;
+    }
+    .choices:not(.textless) .choice {
+      min-height: 52px;
+      padding: 10px;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    .uncertain {
+      min-width: 48px;
+      min-height: 42px;
+      font-size: 17px;
+    }
+
+    .controls {
+      margin-top: 8px;
+      padding: 10px;
+    }
+    .live-summary {
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .control-row { margin-top: 8px; }
+    .secondary, .primary, .copy-button {
+      min-height: 44px;
+      padding: 9px 10px;
+    }
+
+    .mobile-nav {
+      position: sticky;
+      bottom: max(0px, env(safe-area-inset-bottom));
+      z-index: 12;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      padding: 8px;
+      background: rgba(255,255,255,.97);
+      border: 1px solid #d8d8d8;
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+    }
+    .mobile-position {
+      min-width: 58px;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    body.graded .mobile-nav,
+    body.graded .mobile-progress {
+      display: none !important;
+    }
+
+    .result {
+      padding: 11px;
+    }
+    .score { font-size: 19px; }
+    table { font-size: 14px; }
+    th, td { padding: 7px 4px; }
+
+    .review-panel {
+      margin-top: 12px;
+    }
+    .review-head {
+      padding: 11px 11px 0;
+    }
+    .review-player-sticky {
+      bottom: max(0px, env(safe-area-inset-bottom));
+      padding: 9px 11px 10px;
+    }
+    .review-script {
+      padding: 12px;
+      font-size: 16px;
+      line-height: 1.8;
+    }
   }
 </style>

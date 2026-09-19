@@ -42,6 +42,7 @@ jobs:
               'WebAppReceipt.js',
               'MaintenanceR305.js',
               'H3_WEB_CHAT_CONTRACT.md',
+              'H3_REVIEW_ARCHITECTURE.md',
               'Index.html',
               'Stylesheet.html',
               'Client.html',
@@ -958,6 +959,59 @@ jobs:
             throw new Error('R3-08 txn-id binder did not update provenance.');
           }
           NODE
+
+      - name: Check R3-09B review architecture freeze
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(
+              encoding='utf-8'
+          )
+          operations = Path('OPERATIONS.md').read_text(encoding='utf-8')
+          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
+
+          required_architecture = [
+              'H3-R3-09B-REVIEW-ARCHITECTURE-20260919-V1',
+              'Status: FROZEN_TARGET_NOT_ACTIVE',
+              'listening_explanation_payload_v1',
+              'listening_review_binding_v1',
+              'mode=REVIEW&txn_id={TXN_ID}',
+              'REVIEW_REPLAY',
+              'LEGACY_POSTCOMMIT_BACKFILL',
+              'R3-09C = REVIEW_PERSISTENCE_IMPLEMENTATION',
+              'R3-10  = FULL_E2E_AUDIT including persistent review',
+          ]
+          for needle in required_architecture:
+              if needle not in architecture:
+                  raise SystemExit(
+                      f'R3-09B architecture invariant missing: {needle}'
+                  )
+
+          forbidden_architecture = [
+              'production journal write = allowed',
+              'scheduler/retest write = allowed',
+              'counter/pointer advance = allowed',
+          ]
+          for needle in forbidden_architecture:
+              if needle in architecture:
+                  raise SystemExit(
+                      f'R3-09B unsafe review invariant present: {needle}'
+                  )
+
+          if '## 16. R3-09B persistent review architecture freeze' not in operations:
+              raise SystemExit('OPERATIONS does not reference R3-09B.')
+
+          if '## 10. R3-09B frozen review target' not in chat:
+              raise SystemExit('Web/Chat contract does not record R3-09B target.')
+
+          if 'sending the receipt to Chat is optional' not in architecture:
+              raise SystemExit('R3-09B receipt ownership transition is missing.')
+
+          if 'R3-09B changes documentation/architecture only' not in operations:
+              raise SystemExit('R3-09B active-runtime boundary is missing.')
+          PY
 
       - name: Check JavaScript syntax
         shell: bash

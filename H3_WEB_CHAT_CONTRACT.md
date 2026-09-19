@@ -193,3 +193,20 @@ Script TXT artifacts are noncanonical learner conveniences and must be stored be
 - SYSTEM_TEST: `03_AUDIO/90_ARCHIVE/01_SYSTEM_TEST/{SET_ID}_script.txt`.
 
 The canonical learner/history authority remains Google Sheets. TXT relocation or regeneration must not rewrite scores, history, pointers, or counters.
+
+## 10. R3-09B frozen review target
+
+The active R3-04 receipt grammar remains unchanged.
+
+R3-09B freezes a future ownership transition defined normatively by `H3_REVIEW_ARCHITECTURE.md`. It is not active until the R3-09C/R3-09D implementation and verification steps pass.
+
+After that activation:
+- the Web App renders the full explanation immediately after a COMMITTED 5L transaction;
+- persistent review can be reopened from canonical backend state after the page/browser is closed;
+- the learner is not required to paste the receipt into Chat to obtain the explanation;
+- the receipt remains an optional audit/coordination pointer;
+- a later `5L` request resolves current backend state directly and does not require the previous receipt to have been pasted;
+- Chat may still verify a receipt on request and must never duplicate backend learner writes.
+
+The exact persistent-review and REVIEW_REPLAY boundaries are frozen in `H3_REVIEW_ARCHITECTURE.md`.
+

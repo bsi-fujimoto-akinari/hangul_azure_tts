@@ -3,6 +3,22 @@
  * Source: H3_L5E2E_R2_05_SYSTEM_TEST_FIXTURE_v1.txt
  */
 
+var H3_WEB_SYSTEM_TEST_R3_06_SET_ID =
+  'SYSTEM_TEST-H3-L5E2E-R3-06-20260919-01';
+
+var H3_WEB_SYSTEM_TEST_SET_IDS = [
+  'SYSTEM_TEST-H3-L5E2E-R2-20260919-01',
+  H3_WEB_SYSTEM_TEST_R3_06_SET_ID
+];
+
+function h3SystemTestSetIdAllowed_(setId) {
+  return (
+    H3_WEB_SYSTEM_TEST_SET_IDS.indexOf(
+      String(setId || '')
+    ) >= 0
+  );
+}
+
 var H3_WEB_SYSTEM_TEST_FIXTURE = {
   set_id: 'SYSTEM_TEST-H3-L5E2E-R2-20260919-01',
   source_set_reference: 'H3-20260919-L02',
@@ -79,12 +95,12 @@ function validateSystemTestRenderRequest_(request) {
   if (request.mode !== 'SYSTEM_TEST') {
     throw new Error('R3_02_SYSTEM_TEST_ONLY');
   }
-  if (request.set_id !== H3_WEB_SYSTEM_TEST_FIXTURE.set_id) {
+  if (!h3SystemTestSetIdAllowed_(request.set_id)) {
     throw new Error('SYSTEM_TEST_SET_NOT_ALLOWLISTED');
   }
 }
 
-function buildSystemTestRenderPayload_() {
+function buildSystemTestRenderPayload_(setId) {
   var f = H3_WEB_SYSTEM_TEST_FIXTURE;
   var k1 = f.questions[0];
   var image = h3DriveDataUri_(k1.image_file_id, 'image/jpeg', k1.image_sha256, 1024 * 1024);
@@ -109,7 +125,7 @@ function buildSystemTestRenderPayload_() {
     mode: 'SYSTEM_TEST',
     nonlearning: true,
     persisted: false,
-    set_id: f.set_id,
+    set_id: String(setId || f.set_id),
     source_set_reference: f.source_set_reference,
     canonical_render_version: f.canonical_render_version,
     surface_contract_id: f.surface_contract_id,
@@ -129,7 +145,7 @@ function getSystemTestMediaPayload_(request) {
   if (request.mode !== 'SYSTEM_TEST') {
     throw new Error('R3_02_SYSTEM_TEST_ONLY');
   }
-  if (request.set_id !== H3_WEB_SYSTEM_TEST_FIXTURE.set_id) {
+  if (!h3SystemTestSetIdAllowed_(request.set_id)) {
     throw new Error('SYSTEM_TEST_SET_NOT_ALLOWLISTED');
   }
 
@@ -156,7 +172,7 @@ function getSystemTestMediaPayload_(request) {
   var media = h3DriveDataUri_(fileId, 'audio/mpeg', null, 8 * 1024 * 1024);
   return {
     schema: 'H3_WEB_MEDIA_V1',
-    set_id: H3_WEB_SYSTEM_TEST_FIXTURE.set_id,
+    set_id: String(request.set_id),
     asset_key: assetKey,
     data_uri: media.data_uri,
     mime_type: media.mime_type,
@@ -246,7 +262,7 @@ function gradeSystemTestSubmission_(request) {
   if (request.mode !== 'SYSTEM_TEST') {
     throw new Error('R3_02_SYSTEM_TEST_ONLY');
   }
-  if (request.set_id !== H3_WEB_SYSTEM_TEST_FIXTURE.set_id) {
+  if (!h3SystemTestSetIdAllowed_(request.set_id)) {
     throw new Error('SYSTEM_TEST_SET_NOT_ALLOWLISTED');
   }
   if (!Array.isArray(request.answers) || request.answers.length !== 5) {
@@ -278,7 +294,7 @@ function gradeSystemTestSubmission_(request) {
   });
 
   var resultCore = {
-    set_id: H3_WEB_SYSTEM_TEST_FIXTURE.set_id,
+    set_id: String(request.set_id),
     score: score,
     total: 5,
     summary: summary

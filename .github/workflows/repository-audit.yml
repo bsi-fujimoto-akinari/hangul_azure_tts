@@ -719,6 +719,51 @@ jobs:
                   raise SystemExit(f'Legacy combined-audio code remains: {needle}')
           PY
 
+      - name: Check R3-06 fresh SYSTEM_TEST E2E fixture
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          fixture = Path('WebAppFixture.js').read_text(encoding='utf-8')
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+          prod = Path('WebAppProduction.js').read_text(encoding='utf-8')
+
+          required_fixture = [
+              "SYSTEM_TEST-H3-L5E2E-R3-06-20260919-01",
+              "SYSTEM_TEST-H3-L5E2E-R2-20260919-01",
+              'function h3SystemTestSetIdAllowed_(',
+              'H3_WEB_SYSTEM_TEST_SET_IDS',
+              'set_id: String(request.set_id)',
+          ]
+          for needle in required_fixture:
+              if needle not in fixture:
+                  raise SystemExit(f'R3-06 fixture invariant missing: {needle}')
+
+          if 'var setId = H3_WEB_SYSTEM_TEST_R3_06_SET_ID;' not in web:
+              raise SystemExit('Web App does not default to the fresh R3-06 SYSTEM_TEST set.')
+
+          if 'buildSystemTestRenderPayload_(\n    request.set_id\n  )' not in web:
+              raise SystemExit('SYSTEM_TEST render payload is not bound to the requested allowlisted set ID.')
+
+          if 'H3_R3_PRODUCTION_COMMIT_ENABLED = false' not in prod:
+              raise SystemExit('R3-06 must keep production learning commit disabled.')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const source = fs.readFileSync('WebAppFixture.js','utf8');
+          const ctx = vm.createContext({console});
+          vm.runInContext(source, ctx, {filename:'WebAppFixture.js'});
+
+          const fresh = vm.runInContext("h3SystemTestSetIdAllowed_('SYSTEM_TEST-H3-L5E2E-R3-06-20260919-01')",ctx);
+          const legacy = vm.runInContext("h3SystemTestSetIdAllowed_('SYSTEM_TEST-H3-L5E2E-R2-20260919-01')",ctx);
+          const invalid = vm.runInContext("h3SystemTestSetIdAllowed_('SYSTEM_TEST-NOT-ALLOWED')",ctx);
+          if (!fresh || !legacy || invalid) {
+            throw new Error('R3-06 SYSTEM_TEST allowlist behavior mismatch.');
+          }
+          NODE
       - name: Check JavaScript syntax
         shell: bash
         run: |

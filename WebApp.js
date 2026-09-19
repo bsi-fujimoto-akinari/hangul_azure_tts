@@ -23,7 +23,9 @@ function getListeningWebSet(request) {
   }
 
   validateSystemTestRenderRequest_(request);
-  return buildSystemTestRenderPayload_();
+  return buildSystemTestRenderPayload_(
+    request.set_id
+  );
 }
 
 function getListeningWebMedia(request) {
@@ -48,9 +50,8 @@ function submitListeningWebAnswers(request) {
 }
 
 function h3WebBootRequest_(e) {
-  var expected = H3_WEB_SYSTEM_TEST_FIXTURE.set_id;
   var mode = 'SYSTEM_TEST';
-  var setId = expected;
+  var setId = H3_WEB_SYSTEM_TEST_R3_06_SET_ID;
 
   if (e && e.parameter) {
     if (
@@ -61,8 +62,12 @@ function h3WebBootRequest_(e) {
       setId = String(e.parameter.set_id);
     } else {
       mode = 'SYSTEM_TEST';
-      if (e.parameter.set_id === expected) {
-        setId = expected;
+      if (
+        h3SystemTestSetIdAllowed_(
+          e.parameter.set_id
+        )
+      ) {
+        setId = String(e.parameter.set_id);
       }
     }
   }

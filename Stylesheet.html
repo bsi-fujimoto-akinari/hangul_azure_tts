@@ -49,7 +49,20 @@
     gap: 7px;
     margin-bottom: 10px;
   }
-  .question-title { margin: 0; font-size: 17px; }
+  .question-title {
+    margin: 0;
+    font-size: 17px;
+    align-self: center;
+  }
+  .question-head > .compact-audio-wrap,
+  .review-section-head > .compact-audio-wrap {
+    align-self: center;
+    display: flex;
+    align-items: center;
+  }
+  .question-head > .uncertain {
+    align-self: center;
+  }
 
   .audio-wrap { margin-bottom: 10px; }
   .audio-label {
@@ -91,6 +104,8 @@
   .compact-audio-wrap .custom-audio-controls {
     width: auto;
     gap: 4px;
+    align-items: center;
+    min-height: 44px;
   }
   .compact-audio-wrap .audio-toggle {
     min-width: 42px;
@@ -99,11 +114,17 @@
     padding: 4px 8px;
     font-size: 15px;
     line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
   }
   .compact-audio-wrap .audio-time {
     min-width: 68px;
     font-size: 11px;
     white-space: nowrap;
+    line-height: 1;
+    align-self: center;
   }
   .compact-audio-wrap .audio-status {
     margin-top: 4px;

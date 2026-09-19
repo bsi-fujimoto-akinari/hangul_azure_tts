@@ -1,7 +1,7 @@
 # H3 Review Architecture
 
 Version: H3-R3-09B-REVIEW-ARCHITECTURE-20260919-V2  
-Status: R3_09E_IMPLEMENTED_AWAITING_DEVICE_VALIDATION
+Status: R3_09E_PASS_DEVICE_VALIDATED_ZERO_MUTATION
 
 ## 1. Purpose
 
@@ -788,3 +788,40 @@ The standalone `再挑戦` explanatory block above the questions is removed.
 Replay begins directly with the same Q1-Q5 question navigation used by normal issue/replay surfaces. The nonlearning/write-zero contract is unchanged.
 
 R3-09E remains `IMPLEMENTED_AWAITING_DEVICE_VALIDATION` until this refined UI is revalidated on iPhone.
+
+## 20. R3-09E close
+
+R3-09E is closed after the learner replay/library path and the refined learner surface were accepted on iPhone, followed by an independent canonical zero-mutation readback.
+
+Canonical close readback for L03 / `H3TX-20260919-000005`:
+- `listening_web_txn_v1`: exactly one L03 transaction, still `COMMITTED`;
+- transaction ID remains `H3TX-20260919-000005`;
+- `listening_log_v1`: exactly five L03 learner rows, K1-K5 only;
+- `listening_state_v1`: `LISTENING_ISSUE_NO=2`, `NEXT_LISTENING_SET_NO=3`, `LAST_LISTENING_SET_ID=H3-20260919-L03`;
+- `listening_review_binding_v1`: exact L03 binding remains `LOCKED`;
+- `listening_set_payload_v1`: L03 remains `ISSUED`;
+- `listening_k1_ready_v1`: `H3-K1R-20260919-002` remains `CONSUMED`;
+- no replay transaction, learner-log row, counter, pointer, scheduler, retest, K1_READY, payload, or Review-binding mutation was created by HOME / REVIEW / REVIEW_REPLAY access.
+
+The replay attempt itself remains intentionally nonpersistent, so zero-mutation is verified from the absence of any additional canonical write surface rather than by a replay-history record.
+
+Device / UI evidence boundary:
+- the iPhone path for HOME, persistent Review, and REVIEW_REPLAY was observed during R3-09D/R3-09E validation;
+- the refined UI was merged and audited after learner feedback;
+- the user then authorized continuation of R3-09E;
+- canonical backend zero-mutation was independently re-read after that continuation.
+
+R3-09E exit:
+
+```text
+RESULT=PASS_DEVICE_VALIDATED_ZERO_MUTATION
+L03_PRODUCTION_TXN_COUNT=1
+L03_LEARNER_LOG_ROWS=5
+REVIEW_BINDING=LOCKED
+LISTENING_ISSUE_NO=2
+NEXT_LISTENING_SET_NO=3
+LAST_LISTENING_SET_ID=H3-20260919-L03
+NEXT=R3-10 FULL_E2E_AUDIT
+```
+
+R3-09E does not activate normal live production. R3-10 must still perform the full cross-layer E2E audit, including PC validation, before R3-11 normal-live activation.

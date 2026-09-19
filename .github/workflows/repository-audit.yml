@@ -1673,6 +1673,53 @@ jobs:
               raise SystemExit('Web/Chat contract does not record R3-09E refined surface.')
           PY
 
+      - name: Check R3-09E close
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
+          operations = Path('OPERATIONS.md').read_text(encoding='utf-8')
+          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
+
+          for needle in [
+              'Status: R3_09E_PASS_DEVICE_VALIDATED_ZERO_MUTATION',
+              '## 20. R3-09E close',
+              'RESULT=PASS_DEVICE_VALIDATED_ZERO_MUTATION',
+              'L03_PRODUCTION_TXN_COUNT=1',
+              'L03_LEARNER_LOG_ROWS=5',
+              'REVIEW_BINDING=LOCKED',
+              'NEXT=R3-10 FULL_E2E_AUDIT',
+          ]:
+              if needle not in architecture:
+                  raise SystemExit(
+                      f'R3-09E close architecture evidence missing: {needle}'
+                  )
+
+          for needle in [
+              '### R3-09E close',
+              'R3-09E is `PASS_DEVICE_VALIDATED_ZERO_MUTATION`',
+              '`NEXT=R3-10 FULL_E2E_AUDIT`',
+              'Normal-live production remains blocked until R3-10 passes',
+          ]:
+              if needle not in operations:
+                  raise SystemExit(
+                      f'R3-09E close operations evidence missing: {needle}'
+                  )
+
+          for needle in [
+              '### R3-09E close',
+              'one COMMITTED production transaction only',
+              'five learner log rows only',
+              'Next stage is R3-10 full E2E audit',
+          ]:
+              if needle not in chat:
+                  raise SystemExit(
+                      f'R3-09E close Web/Chat evidence missing: {needle}'
+                  )
+          PY
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

@@ -1015,7 +1015,7 @@ jobs:
 
           required_architecture = [
               'H3-R3-09B-REVIEW-ARCHITECTURE-20260919-V2',
-              'Status: R3_11_NORMAL_LIVE_ACTIVE',
+              'Status: R3_CLOSED_NORMAL_LIVE',
               'listening_explanation_payload_v1',
               'listening_review_binding_v1',
               'mode=REVIEW&txn_id={TXN_ID}',
@@ -1221,7 +1221,7 @@ jobs:
           if '## 18. R3-09D review Web UI and route implementation' not in operations:
               raise SystemExit('OPERATIONS does not record R3-09D.')
 
-          if 'Status: R3_11_NORMAL_LIVE_ACTIVE' not in architecture:
+          if 'Status: R3_CLOSED_NORMAL_LIVE' not in architecture:
               raise SystemExit('Review architecture staged status is not R3-09D.')
 
           if '## 11. R3-09D persistent Review implementation' not in chat:
@@ -1397,7 +1397,7 @@ jobs:
           client = Path('Client.html').read_text(encoding='utf-8')
 
           required_arch = [
-              'Status: R3_11_NORMAL_LIVE_ACTIVE',
+              'Status: R3_CLOSED_NORMAL_LIVE',
               '## 17. R3-09D device validation',
               'RESULT=PASS_DEVICE_VALIDATED',
               'persistent history shows 5L #2',
@@ -1566,7 +1566,7 @@ jobs:
                   )
 
           for needle in [
-              'Status: R3_11_NORMAL_LIVE_ACTIVE',
+              'Status: R3_CLOSED_NORMAL_LIVE',
               '## 18. R3-09E REVIEW_REPLAY implementation',
               'RESULT=IMPLEMENTED_AWAITING_DEVICE_VALIDATION',
           ]:
@@ -1721,7 +1721,7 @@ jobs:
           chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
 
           for needle in [
-              'Status: R3_11_NORMAL_LIVE_ACTIVE',
+              'Status: R3_CLOSED_NORMAL_LIVE',
               '## 20. R3-09E close',
               'RESULT=PASS_DEVICE_VALIDATED_ZERO_MUTATION',
               'L03_PRODUCTION_TXN_COUNT=1',
@@ -1962,7 +1962,7 @@ jobs:
           chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
 
           for needle in [
-              'Status: R3_11_NORMAL_LIVE_ACTIVE',
+              'Status: R3_CLOSED_NORMAL_LIVE',
               '## 24. R3-11 close',
               'PRODUCTION_GATE=NORMAL_LIVE_ACTIVE',
               'PRODUCTION_PREP_MODE=NORMAL_LIVE',
@@ -1990,6 +1990,45 @@ jobs:
           ]:
               if needle not in chat:
                   raise SystemExit(f'R3-11 close Web/Chat evidence missing: {needle}')
+          PY
+
+      - name: Check R3-12 infra close
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          arch = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
+          ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
+          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
+
+          for needle in [
+              'Status: R3_CLOSED_NORMAL_LIVE',
+              '## 25. R3-12 infrastructure close',
+              'R3_STATUS=R3_CLOSED_NORMAL_LIVE',
+              'PRODUCTION_GATE=NORMAL_LIVE_ACTIVE',
+              'NEXT_LISTENING_SET_NO=3',
+          ]:
+              if needle not in arch:
+                  raise SystemExit(f'R3-12 architecture close evidence missing: {needle}')
+
+          for needle in [
+              '## 22. R3-12 INFRA_CLOSE',
+              'Drive source-manifest maintenance',
+              'immutable release copy of the current Listening render canonical',
+              'archival must preserve file IDs/URLs',
+              'no learner runtime/history/scheduler drift',
+          ]:
+              if needle not in ops:
+                  raise SystemExit(f'R3-12 operations close evidence missing: {needle}')
+
+          for needle in [
+              '## 16. R3 close',
+              '`5L`: normal-live Listening Web App flow',
+              'The next `5L` request prepares set no.3',
+          ]:
+              if needle not in chat:
+                  raise SystemExit(f'R3-12 Web/Chat close evidence missing: {needle}')
           PY
 
       - name: Check JavaScript syntax

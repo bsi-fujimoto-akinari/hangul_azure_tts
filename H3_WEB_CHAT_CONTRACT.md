@@ -330,3 +330,15 @@ Current learner trigger behavior:
 - postgrade persistent Review and REVIEW_REPLAY behavior are unchanged.
 
 R3-11 activation itself created no new learner set or learner history.
+
+## 16. R3 close
+
+R3 is closed after R3-12 infrastructure finalization.
+
+Learner-facing ownership remains:
+- `K1`: prepare persistent K1_READY only;
+- `5L`: normal-live Listening Web App flow;
+- `5W`: written five-question flow;
+- `5Q`: deprecated for new learner requests only.
+
+R3 close does not change normal-live learner semantics. The next `5L` request prepares set no.3 using the persisted scheduler plan, with K4 as the currently scheduled retest slot.

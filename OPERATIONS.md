@@ -965,3 +965,44 @@ Final runtime:
 No set no.3 payload, learner-log rows, production transaction, score, counter, pointer, or Review binding was created by activation.
 
 R3 production infrastructure is now normal-live. Future learner `5L` requests use the standard prepare -> preissue -> issue -> answer -> COMMITTED -> persistent Review flow.
+
+## 22. R3-12 INFRA_CLOSE
+
+R3-12 closes the R3 Web App migration after R3-11 normal-live activation.
+
+Allowed changes:
+- Drive CURRENT/status snapshot maintenance;
+- Drive source-manifest maintenance;
+- immutable release copy of the current Listening render canonical;
+- non-destructive archival of superseded diagnostic learner surfaces;
+- repository documentation/audit close markers.
+
+Forbidden changes:
+- learner answer/history rewrite;
+- score/counter/valid-count/pointer changes;
+- scheduler/retest changes;
+- set issuance;
+- K1_READY consumption or payload mutation;
+- production transaction creation;
+- deleting historical audit evidence;
+- moving current canonical files or CURRENT away from their stable IDs.
+
+Drive release contract:
+- current canonical `hangul_listening_render_rules_v1.txt` remains at its stable canonical file ID;
+- V19 receives an immutable dated release copy;
+- source manifest remains at its stable canonical file ID and advances one manifest revision;
+- CURRENT remains at its stable file ID and receives a dated immutable status snapshot;
+- Project Sources continue to point only to current canonical/current-status files.
+
+Deprecated surface cleanup:
+- the old Chat-attached R2 iOS HTML diagnostic is not a production target;
+- its related device-verification handoff may be archived with it;
+- archival must preserve file IDs/URLs and must not delete the historical R2 SYSTEM_TEST fixture or status snapshots.
+
+R3 closes only after:
+1. repository audit PASS;
+2. Drive release copy readback PASS;
+3. deprecated-surface archive move readback PASS;
+4. CURRENT final readback PASS;
+5. manifest final readback PASS;
+6. no learner runtime/history/scheduler drift.

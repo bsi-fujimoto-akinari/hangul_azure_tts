@@ -558,7 +558,7 @@ jobs:
               'function buildProductionRenderPayload_(',
               'function getProductionMediaPayload_(',
               'function buildProductionReviewPayload_(',
-              "POSTGRADE_INLINE_SPLIT_AUDIO_SCRIPT",
+              "PERSISTENT_REVIEW_V1",
           ]
           for needle in required:
               if needle not in render:

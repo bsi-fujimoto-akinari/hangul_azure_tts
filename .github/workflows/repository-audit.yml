@@ -869,6 +869,39 @@ jobs:
               raise SystemExit('R3-08 preissue gate does not permit only the exact armed set.')
           PY
 
+      - name: Check R3-08 production client mode routing
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          client = Path('Client.html').read_text(encoding='utf-8')
+
+          required = [
+              "mode: app.payload.mode,",
+              ".getListeningWebMedia({",
+              "schema: 'H3_WEB_MEDIA_REQUEST_V1'",
+              "schema: 'H3_WEB_SUBMIT_V1'",
+          ]
+          for needle in required:
+              if needle not in client:
+                  raise SystemExit(f'R3-08 client routing invariant missing: {needle}')
+
+          if client.count("mode: app.payload.mode,") < 2:
+              raise SystemExit(
+                  'R3-08 client must route both media and submit using payload mode.'
+              )
+
+          for forbidden in [
+              "schema: 'H3_WEB_MEDIA_REQUEST_V1',\n        mode: 'SYSTEM_TEST'",
+              "schema: 'H3_WEB_SUBMIT_V1',\n      mode: 'SYSTEM_TEST'",
+          ]:
+              if forbidden in client:
+                  raise SystemExit(
+                      'R3-08 production client still hardcodes SYSTEM_TEST mode.'
+                  )
+          PY
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

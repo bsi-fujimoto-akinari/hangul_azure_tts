@@ -1365,12 +1365,156 @@ function validateQueueSetup() {
  * =======================================================*/
 
 /**
- * 既存1分トリガーの入口。
+ * 既存1分トリガーのfallback入口。\n * 通常のR3運用ではSET_ID指定のprocessPendingAudioForSet()を優先する。
  *
  * 上から最初の
  * pending / processing
  * を1件だけ処理する。
  */
+/**
+ * R3 targeted immediate audio dispatcher.
+ *
+ * mode:
+ * - 5W = written 5-question set
+ * - 5L = Listening K1-K5 set
+ *
+ * The existing 1-minute processLatestPendingAudioJob trigger remains a
+ * fallback only. This function never selects another SET_ID.
+ */
+function processPendingAudioForSet(
+  mode,
+  setId
+) {
+  const normalizedMode =
+    String(mode || '').trim();
+  const targetSetId =
+    String(setId || '').trim();
+
+  if (
+    normalizedMode !== '5W' &&
+    normalizedMode !== '5L'
+  ) {
+    throw new Error(
+      'mode must be 5W or 5L.'
+    );
+  }
+
+  if (!targetSetId) {
+    throw new Error(
+      'setId is required.'
+    );
+  }
+
+  const lock =
+    LockService.getScriptLock();
+
+  if (!lock.tryLock(30000)) {
+    return {
+      status: 'busy',
+      mode: normalizedMode,
+      set_id: targetSetId
+    };
+  }
+
+  try {
+    const c = config_();
+
+    if (normalizedMode === '5W') {
+      const sheet = queueSheet_(c);
+      const row = locate_(
+        sheet,
+        targetSetId
+      );
+      const status = sheet
+        .getRange(row, 2)
+        .getDisplayValue();
+
+      if (status === 'done') {
+        return {
+          status: 'done',
+          mode: '5W',
+          set_id: targetSetId,
+          audio_file_id: sheet
+            .getRange(row, 14)
+            .getDisplayValue(),
+          audio_url: sheet
+            .getRange(row, 15)
+            .getDisplayValue()
+        };
+      }
+
+      if (
+        status !== 'pending' &&
+        status !== 'processing'
+      ) {
+        throw new Error(
+          '5W target row is not runnable: ' +
+          status
+        );
+      }
+
+      return runJob_(
+        sheet,
+        readJob_(sheet, row),
+        c
+      );
+    }
+
+    const sheet =
+      listeningAudioSheet_(
+        c,
+        false
+      );
+
+    if (!sheet) {
+      throw new Error(
+        'listening_audio_queue_v1 is missing.'
+      );
+    }
+
+    const members =
+      collectListeningSetRows_(
+        sheet,
+        targetSetId
+      );
+
+    if (
+      members.length !==
+      HQ_LISTENING_SET_SIZE
+    ) {
+      throw new Error(
+        '5L target must contain exactly five K1-K5 rows.'
+      );
+    }
+
+    const runnable =
+      members.find(
+        x =>
+          x.values[1] === 'pending' ||
+          x.values[1] === 'processing'
+      );
+
+    const seed = runnable
+      ? readListeningJob_(
+          sheet,
+          runnable.row
+        )
+      : {
+          parentSetId:
+            targetSetId
+        };
+
+    return processListeningAudioSet_(
+      sheet,
+      seed,
+      c
+    );
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
 function processLatestPendingAudioJob() {
   const lock =
     LockService.getScriptLock();

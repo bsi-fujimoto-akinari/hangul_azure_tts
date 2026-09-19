@@ -879,3 +879,25 @@ Device policy after R3-10:
 - require PC only on explicit request or for a PC-specific change.
 
 Normal-live activation remains outside R3-10 and requires R3-11.
+
+## 23. R3-11 normal-live activation
+
+R3-11 activates the persistent Review architecture for ordinary future Listening production sets, not only the controlled L03 E2E set.
+
+```text
+PRODUCTION_GATE=NORMAL_LIVE_ACTIVE
+PRODUCTION_PREP_MODE=NORMAL_LIVE
+FIXED_SET_ARM=NONE
+NEXT_LISTENING_SET_NO=3
+CURRENT_LAST_SET=H3-20260919-L03
+```
+
+For every future normal-live set:
+- production issue/submit remains source-locked;
+- successful COMMITTED grading creates/locks the persistent Review binding;
+- postgrade and later reopen use the same Review builder;
+- REVIEW_REPLAY remains read-only/nonpersistent;
+- scheduler state is recomputed after each scored 5L;
+- normal live does not relax K1 image/audio/hash/recovery/idempotency gates.
+
+R3-11 activation itself performs no learner issue, grading, counter advancement, or Review creation.

@@ -34,6 +34,11 @@ jobs:
               '.clasp.json',
               '.gitignore',
               'Code.js',
+              'WebApp.js',
+              'WebAppFixture.js',
+              'Index.html',
+              'Stylesheet.html',
+              'Client.html',
               'appsscript.json',
               'OPERATIONS.md',
               'RECOVERY.md',
@@ -45,7 +50,11 @@ jobs:
               ).splitlines()
           )
           unexpected = sorted(tracked - allowed)
-          missing = sorted({'.clasp.json', '.gitignore', 'Code.js', 'appsscript.json'} - tracked)
+          missing = sorted({
+              '.clasp.json', '.gitignore', 'Code.js',
+              'WebApp.js', 'WebAppFixture.js', 'Index.html',
+              'Stylesheet.html', 'Client.html', 'appsscript.json'
+          } - tracked)
 
           if unexpected:
               print('Unexpected tracked files:')
@@ -199,7 +208,20 @@ jobs:
 
       - name: Check JavaScript syntax
         shell: bash
-        run: node --check Code.js
+        run: |
+          node --check Code.js
+          node --check WebApp.js
+          node --check WebAppFixture.js
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('Client.html').read_text(encoding='utf-8').strip()
+          if not (text.startswith('<script>') and text.endswith('</script>')):
+              raise SystemExit('Client.html must contain exactly one outer <script> wrapper')
+          Path('/tmp/Client.js').write_text(
+              text[len('<script>'):-len('</script>')], encoding='utf-8'
+          )
+          PY
+          node --check /tmp/Client.js
 
       - name: Verify audio semantic invariants
         shell: bash

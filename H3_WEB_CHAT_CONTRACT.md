@@ -316,3 +316,17 @@ Web responsibilities:
 - keep HOME/REVIEW/REVIEW_REPLAY behavior unchanged.
 
 R3-11 activation alone does not issue set no.3. The next 5L is prepared only on a subsequent learner request.
+
+### R3-11 close
+
+Normal-live Listening ownership is active.
+
+Current learner trigger behavior:
+- `5L` may now prepare the canonical next Listening set under the normal-live gate;
+- the next set number is 3;
+- the scheduler requires K4 as the set-3 retest slot;
+- issue remains blocked until canonical preissue PASS;
+- Web App grading remains the only production transaction path;
+- postgrade persistent Review and REVIEW_REPLAY behavior are unchanged.
+
+R3-11 activation itself created no new learner set or learner history.

@@ -1082,7 +1082,17 @@ function h3ProdValidatePreissueSet_(
       policyMap.PRODUCTION_GATE ||
       ''
     ) === 'ACTIVE' ||
-    H3_R3_PRODUCTION_COMMIT_ENABLED !== false
+    (
+      H3_R3_PRODUCTION_COMMIT_ENABLED !== false &&
+      (
+        H3_R3_PRODUCTION_COMMIT_SET_ID !==
+          String(setId) ||
+        String(
+          policyMap.PRODUCTION_GATE ||
+          ''
+        ) !== 'N5_E2E_ARMED_ONE_SET'
+      )
+    )
   ) {
     throw new Error(
       'PREISSUE_POLICY_GATE_INVALID'

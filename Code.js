@@ -1967,14 +1967,6 @@ function processListeningAudioSet_(
     };
   }
 
-  const combined =
-    publishListeningSetAudio_(
-      sheet,
-      seed.parentSetId,
-      setNos[0],
-      c
-    );
-
   return {
     status: 'done',
     queue: 'listening_set',
@@ -1982,10 +1974,8 @@ function processListeningAudioSet_(
       seed.parentSetId,
     listening_set_no:
       setNos[0],
-    combined_file_id:
-      combined.file_id,
-    combined_audio_url:
-      combined.audio_url
+    audio_mode:
+      'INDIVIDUAL_K1_K5_ONLY'
   };
 }
 

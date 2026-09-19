@@ -23,13 +23,6 @@
 
     document.getElementById('reset').addEventListener('click', resetAll);
     document.getElementById('submit').addEventListener('click', submitAnswers);
-    document.getElementById('mobile-prev').addEventListener('click', function () {
-      setActiveIndex(app.activeIndex - 1);
-    });
-    document.getElementById('mobile-next').addEventListener('click', function () {
-      setActiveIndex(app.activeIndex + 1);
-    });
-
     if (mobileQuery.addEventListener) {
       mobileQuery.addEventListener('change', syncResponsiveState);
     } else if (mobileQuery.addListener) {
@@ -483,14 +476,6 @@
       );
     });
 
-    document.getElementById('mobile-position').textContent =
-      'Q' + (app.activeIndex + 1) + ' / ' + sections.length;
-
-    document.getElementById('mobile-prev').disabled =
-      app.activeIndex === 0 || app.locked;
-
-    document.getElementById('mobile-next').disabled =
-      app.activeIndex === sections.length - 1 || app.locked;
   }
 
   function updateLiveSummary() {

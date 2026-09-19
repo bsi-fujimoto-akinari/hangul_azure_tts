@@ -411,25 +411,38 @@ It validates the exact V17 render canonical/release SHA256 before any write and 
 
 ## 12. Drive slim-down and audio storage
 
+H3 Drive root numbering is ordered by role:
+
+- `00_SOURCE` = canonical rules/manifests/releases.
+- `01_OFFICIAL_MEDIA` = official screenshots/media inputs.
+- `02_TOWMI` = 합격トウミ source collection/extraction/canonicalization workspace.
+- `03_AUDIO` = generated 5W/5L audio and audio archives.
+- `04_LEARNER_ARTIFACTS` = learner-facing TXT and derived artifacts.
+- `05_STATUS` = current/dated operational status.
+- `06_AUDIT` = snapshots, reports, rollback evidence.
+
+Google Sheets and the Apps Script project remain unnumbered at the root because they are active canonical applications, not storage folders.
+
+
 Canonical audio storage is split under the H3 Drive audio root:
 
-- `04_AUDIO/01_5W`
+- `03_AUDIO/01_5W`
   - active/new written 5W audio.
-- `04_AUDIO/02_5L`
+- `03_AUDIO/02_5L`
   - active/new Listening 5L individual K1-K5 audio.
-- `04_AUDIO/90_ARCHIVE/01_SYSTEM_TEST`
+- `03_AUDIO/90_ARCHIVE/01_SYSTEM_TEST`
   - nonlearning SYSTEM_TEST audio only.
-- `04_AUDIO/90_ARCHIVE/02_PRE_R3_5L`
+- `03_AUDIO/90_ARCHIVE/02_PRE_R3_5L`
   - pre-R3 Listening audio retained for audit/history.
-- `04_AUDIO/90_ARCHIVE/03_LEGACY_COMBINED`
+- `03_AUDIO/90_ARCHIVE/03_LEGACY_COMBINED`
   - historical combined 5L audio only; no new combined audio is generated.
-- `04_AUDIO/90_ARCHIVE/04_STALE_REPLACED`
+- `03_AUDIO/90_ARCHIVE/04_STALE_REPLACED`
   - replaced/stale audio retained only when useful for audit.
 
-The `VOICE_FOLDER_ID` Script Property continues to point to the `04_AUDIO` root only for compatibility with persisted legacy checkpoints. New audio jobs must use the dedicated subfolder selected by `audioTargetFolderId_()`.
+The `VOICE_FOLDER_ID` Script Property continues to point to the `03_AUDIO` root only for compatibility with persisted legacy checkpoints. New audio jobs must use the dedicated subfolder selected by `audioTargetFolderId_()`.
 
 Rules:
-- never create new audio directly under `04_AUDIO`;
+- never create new audio directly under `03_AUDIO`;
 - never move a file by re-uploading when the existing Drive file ID can be preserved;
 - historical file IDs/URLs remain authoritative even when the parent folder changes;
 - new 5L uses split K1-K5 audio only; `listening_set_audio_v1` and combined-audio generation are retired;
@@ -442,6 +455,6 @@ High-frequency canonical sources should contain current operational state, not a
 - Keep append-only learner/history tables when history itself is canonical.
 - Move superseded maps, migration trials, audit scratch tabs, and retired transport surfaces out of the active workbook after a full pre-change snapshot exists.
 - Do not remove a tab that is still referenced by current runtime/state.
-- Preserve legacy evidence in `03_AUDIT/01_SHEET_SNAPSHOTS` or source releases rather than in high-frequency canonical tabs.
+- Preserve legacy evidence in `06_AUDIT/01_SHEET_SNAPSHOTS` or source releases rather than in high-frequency canonical tabs.
 - Source manifest files must use compact text storage. Blank-line expansion or other storage-format bloat is prohibited.
 - Semantic history must not be rewritten merely to rename `5Q` to `5W`.

@@ -10,12 +10,10 @@ var H3_WEB_SYSTEM_TEST_FIXTURE = {
   surface_contract_id: 'H3-L5E2E-R2-SURFACE-CONTRACT-20260919-V1',
   expected_vector: ['3', '2?', '3', '2', '3'],
   expected_results: ['○', '△', '×', '×', '○'],
-
   combined_audio_file_id: '18yA11jUMjSOmwJiO_p4Imt5v8xYnC93p',
   combined_audio_url: 'https://drive.google.com/file/d/18yA11jUMjSOmwJiO_p4Imt5v8xYnC93p/view?usp=drivesdk',
   review_script_file_id: '11MuPzLBqUWywjIZj-EOQhvKpLbBB7ePL',
   review_script_url: 'https://drive.google.com/file/d/11MuPzLBqUWywjIZj-EOQhvKpLbBB7ePL/view?usp=drivesdk',
-
   questions: [
     {
       section: 'K1',
@@ -87,29 +85,23 @@ function validateSystemTestRenderRequest_(request) {
 
 function buildSystemTestRenderPayload_() {
   var f = H3_WEB_SYSTEM_TEST_FIXTURE;
+  var k1 = f.questions[0];
+  var image = h3DriveDataUri_(k1.image_file_id, 'image/jpeg', k1.image_sha256, 1024 * 1024);
 
   var questions = f.questions.map(function (q) {
-    var audio = h3DriveMediaDescriptor_(q.audio_file_id, 'audio/mpeg');
-    var out = {
+    return {
       section: q.section,
       display: q.display,
-      audio_stream_url: audio.download_url,
+      audio_asset_key: q.section,
       audio_fallback_url: q.audio_url,
-      audio_size_bytes: audio.size_bytes,
       choice_ids: [1, 2, 3, 4],
       visible_choices: q.visible_choices
     };
-
-    if (q.section === 'K1') {
-      var image = h3DriveMediaDescriptor_(q.image_file_id, 'image/jpeg', q.image_sha256);
-      out.image_stream_url = image.download_url;
-      out.image_fallback_url = q.image_url;
-      out.image_sha256 = q.image_sha256;
-      out.image_size_bytes = image.size_bytes;
-    }
-
-    return out;
   });
+
+  questions[0].image_data_uri = image.data_uri;
+  questions[0].image_sha256 = k1.image_sha256;
+  questions[0].image_size_bytes = image.size_bytes;
 
   return {
     schema: 'H3_WEB_SET_V1',
@@ -121,24 +113,63 @@ function buildSystemTestRenderPayload_() {
     canonical_render_version: f.canonical_render_version,
     surface_contract_id: f.surface_contract_id,
     transport: {
-      audio: 'DRIVE_BROWSER_STREAM_PRELOAD_NONE',
-      image: 'EXACT_DRIVE_BROWSER_STREAM_SHA256_VERIFIED',
-      review: 'POSTGRADE_INLINE'
+      audio: 'APPS_SCRIPT_LAZY_DATA_URI',
+      image: 'APPS_SCRIPT_INLINE_EXACT_SHA256_VERIFIED',
+      review: 'POSTGRADE_INLINE_SCRIPT_LAZY_AUDIO'
     },
     questions: questions
   };
 }
 
-function buildSystemTestReviewPayload_() {
-  var f = H3_WEB_SYSTEM_TEST_FIXTURE;
-  var combined = h3DriveMediaDescriptor_(f.combined_audio_file_id, 'audio/mpeg');
+function getSystemTestMediaPayload_(request) {
+  if (!request || request.schema !== 'H3_WEB_MEDIA_REQUEST_V1') {
+    throw new Error('INVALID_MEDIA_SCHEMA');
+  }
+  if (request.mode !== 'SYSTEM_TEST') {
+    throw new Error('R3_01_SYSTEM_TEST_ONLY');
+  }
+  if (request.set_id !== H3_WEB_SYSTEM_TEST_FIXTURE.set_id) {
+    throw new Error('SYSTEM_TEST_SET_NOT_ALLOWLISTED');
+  }
 
+  var assetKey = String(request.asset_key || '');
+  var fileId = null;
+  var fallbackUrl = null;
+
+  if (assetKey === 'COMBINED') {
+    fileId = H3_WEB_SYSTEM_TEST_FIXTURE.combined_audio_file_id;
+    fallbackUrl = H3_WEB_SYSTEM_TEST_FIXTURE.combined_audio_url;
+  } else {
+    H3_WEB_SYSTEM_TEST_FIXTURE.questions.forEach(function (q) {
+      if (q.section === assetKey) {
+        fileId = q.audio_file_id;
+        fallbackUrl = q.audio_url;
+      }
+    });
+  }
+
+  if (!fileId) {
+    throw new Error('MEDIA_ASSET_NOT_ALLOWLISTED');
+  }
+
+  var media = h3DriveDataUri_(fileId, 'audio/mpeg', null, 8 * 1024 * 1024);
   return {
-    combined_audio_stream_url: combined.download_url,
-    combined_audio_fallback_url: f.combined_audio_url,
-    combined_audio_size_bytes: combined.size_bytes,
-    review_script_text: h3DriveUtf8Text_(f.review_script_file_id, 100000),
-    review_script_fallback_url: f.review_script_url
+    schema: 'H3_WEB_MEDIA_V1',
+    set_id: H3_WEB_SYSTEM_TEST_FIXTURE.set_id,
+    asset_key: assetKey,
+    data_uri: media.data_uri,
+    mime_type: media.mime_type,
+    size_bytes: media.size_bytes,
+    fallback_url: fallbackUrl
+  };
+}
+
+function buildSystemTestReviewPayload_() {
+  return {
+    combined_audio_asset_key: 'COMBINED',
+    combined_audio_fallback_url: H3_WEB_SYSTEM_TEST_FIXTURE.combined_audio_url,
+    review_script_text: h3DriveUtf8Text_(H3_WEB_SYSTEM_TEST_FIXTURE.review_script_file_id, 100000),
+    review_script_fallback_url: H3_WEB_SYSTEM_TEST_FIXTURE.review_script_url
   };
 }
 

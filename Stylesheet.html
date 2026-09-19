@@ -377,4 +377,204 @@
       line-height: 1.8;
     }
   }
+
+  .audio-status {
+    margin: 0 0 6px;
+    font-size: 12px;
+    color: #555;
+  }
+  .audio-status.media-error {
+    color: #8a1f1f;
+  }
+  .audio-player.media-pending {
+    display: none;
+  }
+  .review-script-fallback {
+    display: inline-block;
+    margin: 0 14px 14px;
+  }
+
+  body.mobile-device.mobile-viewport-emulated {
+    width: var(--h3-mobile-target-width);
+    zoom: var(--h3-mobile-zoom);
+  }
+
+  body.mobile-device .shell {
+    width: 100%;
+    max-width: none;
+    padding-top: 10px;
+    padding-left: max(10px, env(safe-area-inset-left));
+    padding-right: max(10px, env(safe-area-inset-right));
+    padding-bottom: calc(86px + env(safe-area-inset-bottom));
+  }
+  body.mobile-device .page-header {
+    margin-bottom: 8px;
+  }
+  body.mobile-device .eyebrow {
+    font-size: 10px;
+    margin-bottom: 2px;
+  }
+  body.mobile-device h1 {
+    font-size: 20px;
+    line-height: 1.2;
+  }
+  body.mobile-device .set-id {
+    display: none;
+  }
+  body.mobile-device .notice {
+    padding: 7px 9px;
+    margin-bottom: 8px;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  body.mobile-device .mobile-progress {
+    position: sticky;
+    top: 0;
+    z-index: 9;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 5px;
+    padding: 7px 0;
+    margin-bottom: 8px;
+    background: rgba(245,245,245,.96);
+    backdrop-filter: blur(8px);
+  }
+  body.mobile-device .progress-button {
+    min-height: 38px;
+    padding: 6px 3px;
+    font-size: 13px;
+  }
+
+  body.mobile-device .questions {
+    display: block;
+  }
+  body.mobile-device .question-card {
+    display: none;
+    padding: 12px;
+    border-radius: 10px;
+  }
+  body.mobile-device .question-card.mobile-active {
+    display: block;
+  }
+  body.mobile-device .question-head {
+    margin-bottom: 8px;
+  }
+  body.mobile-device .question-title {
+    font-size: 17px;
+  }
+
+  body.mobile-device .audio-wrap {
+    margin-bottom: 8px;
+  }
+  body.mobile-device .audio-label {
+    font-size: 12px;
+  }
+  body.mobile-device .audio-player {
+    min-height: 44px;
+    max-width: 100%;
+  }
+
+  body.mobile-device .k1-image {
+    max-height: 330px;
+    margin-bottom: 10px;
+  }
+
+  body.mobile-device .choices.textless {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  body.mobile-device .choices.textless .choice {
+    text-align: center;
+    min-height: 54px;
+    font-size: 18px;
+  }
+  body.mobile-device .choices:not(.textless) .choice {
+    min-height: 52px;
+    padding: 10px;
+    font-size: 15px;
+    line-height: 1.45;
+  }
+
+  body.mobile-device .uncertain {
+    min-width: 48px;
+    min-height: 42px;
+    font-size: 17px;
+  }
+
+  body.mobile-device .controls {
+    margin-top: 8px;
+    padding: 10px;
+  }
+  body.mobile-device .live-summary {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  body.mobile-device .control-row {
+    margin-top: 8px;
+  }
+  body.mobile-device .secondary,
+  body.mobile-device .primary,
+  body.mobile-device .copy-button {
+    min-height: 44px;
+    padding: 9px 10px;
+  }
+
+  body.mobile-device .mobile-nav {
+    position: sticky;
+    bottom: max(0px, env(safe-area-inset-bottom));
+    z-index: 12;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 8px;
+    background: rgba(255,255,255,.97);
+    border: 1px solid #d8d8d8;
+    border-radius: 12px;
+    backdrop-filter: blur(8px);
+  }
+  body.mobile-device .mobile-position {
+    min-width: 58px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  body.mobile-device.graded .mobile-nav,
+  body.mobile-device.graded .mobile-progress {
+    display: none !important;
+  }
+
+  body.mobile-device .result {
+    padding: 11px;
+  }
+  body.mobile-device .score {
+    font-size: 19px;
+  }
+  body.mobile-device table {
+    font-size: 14px;
+  }
+  body.mobile-device th,
+  body.mobile-device td {
+    padding: 7px 4px;
+  }
+
+  body.mobile-device .review-panel {
+    margin-top: 12px;
+  }
+  body.mobile-device .review-head {
+    padding: 11px 11px 0;
+  }
+  body.mobile-device .review-player-sticky {
+    top: 0;
+    padding: 9px 11px 10px;
+  }
+  body.mobile-device .review-script {
+    padding: 12px;
+    font-size: 16px;
+    line-height: 1.8;
+  }
+
 </style>

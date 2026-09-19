@@ -571,12 +571,19 @@ jobs:
               raise SystemExit('R3-05 must keep production commit gate OFF.')
 
           start = code.index('function processListeningAudioSet_(')
-          end = code.index('function listeningSetAudioSheet_(', start)
+          end = code.index('function readListeningJob_(', start)
           process_set = code[start:end]
-          if 'publishListeningSetAudio_(' in process_set:
-              raise SystemExit('New 5L still generates combined audio.')
           if "audio_mode:\n      'INDIVIDUAL_K1_K5_ONLY'" not in process_set:
               raise SystemExit('New 5L completion does not declare split-audio mode.')
+          for legacy in [
+              'function listeningSetAudioSheet_(',
+              'function combinedListeningSetSpec_(',
+              'function locateListeningSetAudioRow_(',
+              'function publishListeningSetAudio_(',
+              'HQ_LISTENING_SET_AUDIO_VERSION',
+          ]:
+              if legacy in code:
+                  raise SystemExit(f'Legacy combined-audio code still present: {legacy}')
           PY
 
           node <<'NODE'
@@ -679,6 +686,39 @@ jobs:
           if text.count('setContent(') != 2:
               raise SystemExit('R3-05 maintenance must have exactly two canonical setContent writes.')
           PY
+      - name: Check audio storage slim-down invariants
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          code = Path('Code.js').read_text(encoding='utf-8')
+
+          required = [
+              'HQ_AUDIO_WRITTEN_FOLDER_ID',
+              'HQ_AUDIO_LISTENING_FOLDER_ID',
+              'HQ_AUDIO_SYSTEM_TEST_FOLDER_ID',
+              'function audioTargetFolderId_(',
+              'function assertAudioFolderState_(',
+          ]
+          for needle in required:
+              if needle not in code:
+                  raise SystemExit(f'Audio storage split invariant missing: {needle}')
+
+          forbidden = [
+              'HQ_LISTENING_SET_AUDIO_TAB',
+              'HQ_LISTENING_SET_AUDIO_HEADERS',
+              'HQ_LISTENING_SET_STORAGE_MODE',
+              'HQ_LISTENING_SET_AUDIO_VERSION',
+              'function listeningSetAudioSheet_(',
+              'function combinedListeningSetSpec_(',
+              'function locateListeningSetAudioRow_(',
+              'function publishListeningSetAudio_(',
+          ]
+          for needle in forbidden:
+              if needle in code:
+                  raise SystemExit(f'Legacy combined-audio code remains: {needle}')
+          PY
+
       - name: Check JavaScript syntax
         shell: bash
         run: |
@@ -814,9 +854,7 @@ jobs:
               run('HQ_AUDIO_VERSION_V4_LEADING5S'),
               run('HQ_AUDIO_VERSION'),
               run('HQ_LISTENING_AUDIO_VERSION_LEADING5S'),
-              run('HQ_LISTENING_AUDIO_VERSION'),
-              run('HQ_LISTENING_SET_AUDIO_VERSION_LEADING5S'),
-              run('HQ_LISTENING_SET_AUDIO_VERSION')
+              run('HQ_LISTENING_AUDIO_VERSION')
             ],
             [
               'azure-v2-24k160k-1.2s-0.65s-100ms',
@@ -824,9 +862,7 @@ jobs:
               'azure-v4-24k160k-leading5s-q3dual-final2.1s-1.2s-0.65s-100ms',
               'azure-v5-24k160k-no-leading-q3dual-final2.1s-1.2s-0.65s-100ms',
               'azure-listening-v1-24k160k-leading5s-segments',
-              'azure-listening-v2-24k160k-no-leading-segments',
-              'azure-listening-set-v1-24k160k-source-locked',
-              'azure-listening-set-v2-24k160k-no-leading-source-locked'
+              'azure-listening-v2-24k160k-no-leading-segments'
             ],
             'Audio version constants changed unexpectedly.'
           );
@@ -1074,15 +1110,6 @@ jobs:
             'Current/legacy written fingerprints must remain distinct.'
           );
 
-          const combinedBuilderSource = source.slice(
-            source.indexOf('function combinedListeningSetSpec_'),
-            source.indexOf('function locateListeningSetAudioRow_')
-          );
-          assert(
-            !combinedBuilderSource.includes('HQ_LEADING_SILENCE_MS_LEGACY'),
-            'Current combined 5L builder still injects the retired lead-in.'
-          );
-
           const legacySpec = run(
             'audioSpec_(' +
             JSON.stringify(writtenJob) + ',' +
@@ -1096,6 +1123,36 @@ jobs:
           assert(
             !legacySpec.ssml.includes('5000ms'),
             'Legacy written audio unexpectedly gained v4 leading silence.'
+          );
+
+          same(
+            [
+              run('HQ_AUDIO_WRITTEN_FOLDER_ID'),
+              run('HQ_AUDIO_LISTENING_FOLDER_ID'),
+              run('HQ_AUDIO_SYSTEM_TEST_FOLDER_ID')
+            ],
+            [
+              '1dLf1KhHic8SU-4XOGueZSM55vznS024C',
+              '1xeDF4AYNhykK1YPTh5rckyTmsGHvihaF',
+              '1YF7bkvAwYBv0JD6bimtki5vsVH4VWYiK'
+            ],
+            'Audio storage folder IDs changed unexpectedly.'
+          );
+
+          assert(
+            run("audioTargetFolderId_({VOICE_FOLDER_ID:'legacy'},'5W','H3-20260919-01')") ===
+              '1dLf1KhHic8SU-4XOGueZSM55vznS024C',
+            '5W target folder routing mismatch.'
+          );
+          assert(
+            run("audioTargetFolderId_({VOICE_FOLDER_ID:'legacy'},'5L','H3-20260919-L03')") ===
+              '1xeDF4AYNhykK1YPTh5rckyTmsGHvihaF',
+            '5L target folder routing mismatch.'
+          );
+          assert(
+            run("audioTargetFolderId_({VOICE_FOLDER_ID:'legacy'},'5L','SYSTEM_TEST-X')") ===
+              '1YF7bkvAwYBv0JD6bimtki5vsVH4VWYiK',
+            'SYSTEM_TEST target folder routing mismatch.'
           );
 
           console.log('Audio semantic regression checks passed.');

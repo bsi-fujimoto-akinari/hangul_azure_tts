@@ -1071,6 +1071,8 @@ jobs:
           const context = vm.createContext({
             console,
             h3Sha256Hex_: value =>
+              crypto.createHash('sha256').update(String(value), 'utf8').digest('hex'),
+            hash_: value =>
               crypto.createHash('sha256').update(String(value), 'utf8').digest('hex')
           });
           vm.runInContext(source, context, { filename: 'WebAppReviewPersistence.js' });

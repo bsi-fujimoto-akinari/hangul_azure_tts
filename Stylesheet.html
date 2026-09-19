@@ -43,10 +43,10 @@
   .questions { display: grid; gap: 12px; }
   .question-card { padding: 14px; }
   .question-head {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
-    justify-content: space-between;
-    gap: 10px;
+    gap: 7px;
     margin-bottom: 10px;
   }
   .question-title { margin: 0; font-size: 17px; }
@@ -83,6 +83,37 @@
     font-variant-numeric: tabular-nums;
     font-size: 13px;
   }
+
+  .compact-audio-wrap {
+    margin: 0;
+    min-width: 0;
+  }
+  .compact-audio-wrap .custom-audio-controls {
+    width: auto;
+    gap: 4px;
+  }
+  .compact-audio-wrap .audio-toggle {
+    min-width: 42px;
+    min-height: 36px;
+    border-radius: 8px;
+    padding: 4px 8px;
+    font-size: 15px;
+    line-height: 1;
+  }
+  .compact-audio-wrap .audio-time {
+    min-width: 68px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  .compact-audio-wrap .audio-status {
+    margin-top: 4px;
+    font-size: 10px;
+  }
+  .compact-audio-wrap .media-fallback {
+    margin-top: 3px;
+    font-size: 10px;
+  }
+
   .media-fallback {
     display: inline-block;
     margin-top: 5px;
@@ -505,7 +536,21 @@
     margin-bottom: 8px;
   }
   body.mobile-device .question-title {
-    font-size: 17px;
+    font-size: 16px;
+    line-height: 1.25;
+  }
+  body.mobile-device .question-head {
+    gap: 5px;
+  }
+  body.mobile-device .compact-audio-wrap .audio-toggle {
+    min-width: 40px;
+    min-height: 34px;
+    padding: 3px 7px;
+    font-size: 14px;
+  }
+  body.mobile-device .compact-audio-wrap .audio-time {
+    min-width: 62px;
+    font-size: 10px;
   }
 
   body.mobile-device .audio-wrap {

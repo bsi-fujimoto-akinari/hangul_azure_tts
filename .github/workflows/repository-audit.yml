@@ -753,8 +753,11 @@ jobs:
               if needle not in fixture:
                   raise SystemExit(f'R3-06 fixture invariant missing: {needle}')
 
-          if 'var setId = H3_WEB_SYSTEM_TEST_R3_06_SET_ID;' not in web:
-              raise SystemExit('Web App does not default to the fresh R3-06 SYSTEM_TEST set.')
+          if "var mode = 'HOME';" not in web or 'var setId = null;' not in web or 'var txnId = null;' not in web:
+              raise SystemExit('R3-09D parameterless Web App HOME default is missing.')
+
+          if "e.parameter.mode === 'SYSTEM_TEST'" not in web:
+              raise SystemExit('Explicit SYSTEM_TEST route was lost during R3-09D HOME migration.')
 
           if 'buildSystemTestRenderPayload_(\n    request.set_id\n  )' not in web:
               raise SystemExit('SYSTEM_TEST render payload is not bound to the requested allowlisted set ID.')
@@ -975,7 +978,7 @@ jobs:
 
           required_architecture = [
               'H3-R3-09B-REVIEW-ARCHITECTURE-20260919-V2',
-              'Status: FROZEN_TARGET_NOT_ACTIVE',
+              'Status: IMPLEMENTED_R3_09D_AWAITING_DEVICE_VALIDATION',
               'listening_explanation_payload_v1',
               'listening_review_binding_v1',
               'mode=REVIEW&txn_id={TXN_ID}',
@@ -1090,6 +1093,143 @@ jobs:
             .digest('hex');
           if (hash !== expectedHash) {
             throw new Error('R3-09C canonical hash mismatch.');
+          }
+          NODE
+
+      - name: Check R3-09D persistent Review Web UI
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+          persistence = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          client = Path('Client.html').read_text(encoding='utf-8')
+          index = Path('Index.html').read_text(encoding='utf-8')
+          style = Path('Stylesheet.html').read_text(encoding='utf-8')
+          render = Path('WebAppProductionRender.js').read_text(encoding='utf-8')
+          operations = Path('OPERATIONS.md').read_text(encoding='utf-8')
+          architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
+          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
+
+          required_web = [
+              "var mode = 'HOME';",
+              "e.parameter.mode === 'REVIEW'",
+              "txnId = String(",
+              "request && request.mode === 'HOME'",
+              "request && request.mode === 'REVIEW'",
+              "getPersistentReviewPayload_(",
+              "getPersistentReviewMediaPayload_(",
+              "h3ReviewEnsureBindingForCommittedTxn_(",
+              "buildPersistentReviewPayload_(",
+              "'READ_ONLY_MODE_SUBMIT_FORBIDDEN'",
+          ]
+          for needle in required_web:
+              if needle not in web:
+                  raise SystemExit(f'R3-09D Web route invariant missing: {needle}')
+
+          if 'buildProductionReviewPayload_(' in web:
+              raise SystemExit('R3-09D learner submit still uses transient Review builder.')
+
+          required_persistence = [
+              'function getPersistentReviewPayload_(',
+              'function getPersistentReviewMediaPayload_(',
+              'function h3ReviewHistoryEntries_(',
+              'function h3ReviewCurrentLearning_(',
+              'function buildReviewHomePayload_(',
+              "'H3_WEB_HOME_V1'",
+              "'REVIEW_MEDIA_SET_MISMATCH'",
+              'image_data_uri:',
+          ]
+          for needle in required_persistence:
+              if needle not in persistence:
+                  raise SystemExit(f'R3-09D persistence route invariant missing: {needle}')
+
+          required_client = [
+              'function renderHome(payload)',
+              'function loadReviewTxn(txnId)',
+              'function renderPersistentReview(',
+              'function buildPersistentReviewCard(',
+              'function appendReviewTranslations(',
+              'function buildLearningBlock(',
+              "review.default_filter ||",
+              "'NEEDS_REVIEW'",
+              "app.payload.txn_id || null",
+              "'技術情報'",
+              "'復習一覧へ戻る'",
+          ]
+          for needle in required_client:
+              if needle not in client:
+                  raise SystemExit(f'R3-09D Client Review invariant missing: {needle}')
+
+          if '<section id="home" class="home hidden"></section>' not in index:
+              raise SystemExit('R3-09D HOME root is missing from Index.html.')
+
+          for needle in [
+              '.persistent-review-card',
+              '.review-filter-button',
+              '.review-history-item',
+              '.review-technical',
+          ]:
+              if needle not in style:
+                  raise SystemExit(f'R3-09D Review CSS invariant missing: {needle}')
+
+          if "'PERSISTENT_REVIEW_V1'" not in render:
+              raise SystemExit('Production render transport does not advertise persistent Review.')
+
+          if '## 18. R3-09D review Web UI and route implementation' not in operations:
+              raise SystemExit('OPERATIONS does not record R3-09D.')
+
+          if 'Status: IMPLEMENTED_R3_09D_AWAITING_DEVICE_VALIDATION' not in architecture:
+              raise SystemExit('Review architecture staged status is not R3-09D.')
+
+          if '## 11. R3-09D persistent Review implementation' not in chat:
+              raise SystemExit('Web/Chat contract does not record R3-09D.')
+
+          if 'REVIEW_REPLAY' in client:
+              raise SystemExit('R3-09D must not activate REVIEW_REPLAY.')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const source = fs.readFileSync('WebApp.js', 'utf8');
+          const ctx = vm.createContext({
+            console,
+            H3_WEB_SYSTEM_TEST_R3_06_SET_ID: 'SYSTEM_TEST-H3-L5E2E-R3-06-20260919-01',
+            h3SystemTestSetIdAllowed_: value =>
+              value === 'SYSTEM_TEST-H3-L5E2E-R3-06-20260919-01'
+          });
+          vm.runInContext(source, ctx, {filename: 'WebApp.js'});
+
+          const boot = expression =>
+            vm.runInContext(expression, ctx);
+
+          const home = boot('h3WebBootRequest_({parameter:{}})');
+          if (home.mode !== 'HOME' || home.set_id !== null || home.txn_id !== null) {
+            throw new Error('Parameterless boot is not HOME.');
+          }
+
+          const review = boot(
+            "h3WebBootRequest_({parameter:{mode:'REVIEW',txn_id:'H3TX-20260919-000005'}})"
+          );
+          if (review.mode !== 'REVIEW' || review.txn_id !== 'H3TX-20260919-000005') {
+            throw new Error('REVIEW boot contract mismatch.');
+          }
+
+          const listening = boot(
+            "h3WebBootRequest_({parameter:{mode:'LISTENING',set_id:'H3-20260919-L03'}})"
+          );
+          if (listening.mode !== 'LISTENING' || listening.set_id !== 'H3-20260919-L03') {
+            throw new Error('LISTENING boot contract mismatch.');
+          }
+
+          const system = boot(
+            "h3WebBootRequest_({parameter:{mode:'SYSTEM_TEST',set_id:'SYSTEM_TEST-H3-L5E2E-R3-06-20260919-01'}})"
+          );
+          if (system.mode !== 'SYSTEM_TEST') {
+            throw new Error('Explicit SYSTEM_TEST boot contract mismatch.');
           }
           NODE
 

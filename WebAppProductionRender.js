@@ -440,6 +440,37 @@ function h3ProdReviewScript_(section, parts) {
   );
 }
 
+function h3ProdReviewScriptUrl_(setId) {
+  var folder =
+    DriveApp.getFolderById(
+      HQ_AUDIO_LISTENING_FOLDER_ID
+    );
+
+  var iterator =
+    folder.getFilesByName(
+      String(setId) + '.txt'
+    );
+
+  var matches = [];
+
+  while (iterator.hasNext()) {
+    matches.push(
+      iterator.next()
+    );
+  }
+
+  if (matches.length > 1) {
+    throw new Error(
+      'MULTIPLE_5L_SCRIPT_TXT'
+    );
+  }
+
+  return matches.length === 1
+    ? matches[0].getUrl()
+    : null;
+}
+
+
 function buildProductionReviewPayload_(setId) {
   var spreadsheet = SpreadsheetApp.openById(
     H3_WEB_RUNTIME_SPREADSHEET_ID
@@ -468,6 +499,7 @@ function buildProductionReviewPayload_(setId) {
         };
       }
     ),
-    review_script_fallback_url: null
+    review_script_fallback_url:
+      h3ProdReviewScriptUrl_(setId)
   };
 }

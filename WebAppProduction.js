@@ -1214,12 +1214,7 @@ function h3ProdBuildResult_(plan, context, txnId) {
         result: x.result
       };
     }),
-    receipt: [
-      '[H3_WEB_SYNC]',
-      'SET_ID=' + context.setId,
-      'TXN_ID=' + txnId,
-      'STATUS=COMMITTED'
-    ].join('\n')
+    receipt: h3BuildWebReceipt_(context.setId, txnId)
   };
 }
 

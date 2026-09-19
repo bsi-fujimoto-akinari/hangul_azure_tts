@@ -187,27 +187,17 @@ const HQ_LISTENING_MAX_TOTAL_CHARS = 12000;
  * but live 5L rows now share one set-level sequence number across K1-K5.
  */
 const HQ_LISTENING_SET_SIZE = 5;
-const HQ_LISTENING_SET_AUDIO_TAB =
-  'listening_set_audio_v1';
-const HQ_LISTENING_SET_AUDIO_HEADERS = [
-  'PARENT_SET_ID',
-  'STATUS',
-  'CREATED_AT',
-  'LISTENING_SET_NO',
-  'PAYLOAD_HASH',
-  'AUDIO_FILE_ID',
-  'AUDIO_URL',
-  'ERROR',
-  'PROCESSED_AT',
-  'STORAGE_MODE'
-];
-const HQ_LISTENING_SET_STORAGE_MODE =
-  'listening_set_audio_v1';
-const HQ_LISTENING_SET_AUDIO_VERSION_LEADING5S =
-  'azure-listening-set-v1-24k160k-source-locked';
 
-const HQ_LISTENING_SET_AUDIO_VERSION =
-  'azure-listening-set-v2-24k160k-no-leading-source-locked';
+/**
+ * Drive audio storage split introduced by the 2026-09-19 slim-down.
+ * VOICE_FOLDER_ID remains the legacy root for checkpoint recovery only.
+ */
+const HQ_AUDIO_WRITTEN_FOLDER_ID =
+  '1dLf1KhHic8SU-4XOGueZSM55vznS024C';
+const HQ_AUDIO_LISTENING_FOLDER_ID =
+  '1xeDF4AYNhykK1YPTh5rckyTmsGHvihaF';
+const HQ_AUDIO_SYSTEM_TEST_FOLDER_ID =
+  '1YF7bkvAwYBv0JD6bimtki5vsVH4VWYiK';
 
 const HQ_K1_READY_TAB =
   'listening_k1_ready_v1';
@@ -277,6 +267,60 @@ function config_() {
   }
 
   return c;
+}
+
+
+function audioTargetFolderId_(
+  c,
+  mode,
+  setId
+) {
+  const normalizedMode =
+    String(mode || '').trim();
+  const id =
+    String(setId || '').trim();
+
+  if (!id) {
+    throw new Error(
+      'Audio target SET_ID is required.'
+    );
+  }
+
+  if (
+    id.indexOf('SYSTEM_TEST-') === 0
+  ) {
+    return HQ_AUDIO_SYSTEM_TEST_FOLDER_ID;
+  }
+
+  if (normalizedMode === '5W') {
+    return HQ_AUDIO_WRITTEN_FOLDER_ID;
+  }
+
+  if (normalizedMode === '5L') {
+    return HQ_AUDIO_LISTENING_FOLDER_ID;
+  }
+
+  throw new Error(
+    'Audio target mode must be 5W or 5L.'
+  );
+}
+
+
+function assertAudioFolderState_(
+  c,
+  expectedFolderId,
+  persistedFolderId
+) {
+  if (
+    persistedFolderId !==
+      expectedFolderId &&
+    persistedFolderId !==
+      c.VOICE_FOLDER_ID
+  ) {
+    throw new Error(
+      'Persisted audio folder is not the current target or legacy root.'
+    );
+  }
 }
 
 
@@ -1293,12 +1337,12 @@ function validateListeningAudioSetup() {
 
   const folder =
     DriveApp.getFolderById(
-      c.VOICE_FOLDER_ID
+      HQ_AUDIO_LISTENING_FOLDER_ID
     );
 
   if (folder.isTrashed()) {
     throw new Error(
-      'Voice folder is trashed.'
+      '5L audio folder is trashed.'
     );
   }
 
@@ -1332,12 +1376,12 @@ function validateQueueSetup() {
 
   const folder =
     DriveApp.getFolderById(
-      c.VOICE_FOLDER_ID
+      HQ_AUDIO_WRITTEN_FOLDER_ID
     );
 
   if (folder.isTrashed()) {
     throw new Error(
-      'Voice folder is trashed.'
+      '5W audio folder is trashed.'
     );
   }
 
@@ -1980,492 +2024,6 @@ function processListeningAudioSet_(
 }
 
 
-function listeningSetAudioSheet_(
-  c
-) {
-  const ss =
-    SpreadsheetApp
-      .openById(
-        c.QUEUE_SHEET_ID
-      );
-
-  let sheet =
-    ss.getSheetByName(
-      HQ_LISTENING_SET_AUDIO_TAB
-    );
-
-  if (!sheet) {
-    sheet =
-      ss.insertSheet(
-        HQ_LISTENING_SET_AUDIO_TAB
-      );
-
-    sheet
-      .getRange(
-        1,
-        1,
-        1,
-        HQ_LISTENING_SET_AUDIO_HEADERS.length
-      )
-      .setValues([
-        HQ_LISTENING_SET_AUDIO_HEADERS
-      ]);
-
-    sheet.setFrozenRows(1);
-  }
-
-  const actual =
-    sheet
-      .getRange(
-        1,
-        1,
-        1,
-        HQ_LISTENING_SET_AUDIO_HEADERS.length
-      )
-      .getDisplayValues()[0];
-
-  if (
-    JSON.stringify(actual) !==
-    JSON.stringify(
-      HQ_LISTENING_SET_AUDIO_HEADERS
-    )
-  ) {
-    throw new Error(
-      'listening_set_audio_v1 header mismatch.'
-    );
-  }
-
-  return sheet;
-}
-
-
-function parseListeningVoice_(
-  assignment
-) {
-  const m =
-    /^VOICE=([^;]+)(?:;NUMBER_VOICE=([^;]+))?$/
-      .exec(
-        String(assignment)
-      );
-
-  if (!m) {
-    throw new Error(
-      'Invalid persisted Listening ASSIGNMENT.'
-    );
-  }
-
-  const voice =
-    HQ_VOICES.find(
-      v => v.label === m[1]
-    );
-
-  if (!voice) {
-    throw new Error(
-      'Unknown Listening voice in ASSIGNMENT.'
-    );
-  }
-
-  if (
-    m[2] &&
-    m[2] !==
-      HQ_K1_NUMBER_VOICE.label
-  ) {
-    throw new Error(
-      'Unexpected Listening number voice in ASSIGNMENT.'
-    );
-  }
-
-  return voice;
-}
-
-
-function combinedListeningSetSpec_(
-  members
-) {
-  let body = '';
-  let first = true;
-  const fingerprintInput = [];
-
-  members.forEach(
-    m => {
-      const values = m.values;
-      const section = values[5];
-      const plan =
-        validateListeningAudioPlan_(
-          values[7],
-          section
-        );
-      const normalVoice =
-        parseListeningVoice_(
-          values[9]
-        );
-
-      fingerprintInput.push([
-        values[0],
-        section,
-        values[8],
-        values[9],
-        values[7]
-      ]);
-
-      plan.forEach(
-        segment => {
-          const segmentVoice =
-            Object.prototype
-              .hasOwnProperty.call(
-                HQ_K1_NUMBER_TEXTS,
-                segment.role
-              )
-              ? HQ_K1_NUMBER_VOICE
-              : normalVoice;
-
-          for (
-            let n = 0;
-            n < segment.repeat;
-            n++
-          ) {
-            const isBetweenRepeats =
-              n <
-              segment.repeat - 1;
-
-            const pauseMs =
-              isBetweenRepeats
-                ? Math.max(
-                    650,
-                    segment.pause_ms_after
-                  )
-                : segment.pause_ms_after;
-
-            body +=
-              azureVoiceBlock_(
-                segmentVoice,
-                segment.text,
-                pauseMs + 'ms',
-                null
-              );
-
-            first = false;
-          }
-        }
-      );
-    }
-  );
-
-  const ssml =
-    '<speak version="1.0" ' +
-    'xmlns="http://www.w3.org/2001/10/synthesis" ' +
-    'xmlns:mstts="http://www.w3.org/2001/mstts" ' +
-    'xml:lang="ko-KR">' +
-    body +
-    '</speak>';
-
-  const payloadHash =
-    hash_(
-      JSON.stringify(
-        fingerprintInput
-      )
-    );
-
-  const fingerprint =
-    hash_(
-      HQ_LISTENING_SET_AUDIO_VERSION +
-      ssml
-    );
-
-  return {
-    ssml: ssml,
-    payloadHash: payloadHash,
-    fingerprint: fingerprint
-  };
-}
-
-
-function locateListeningSetAudioRow_(
-  sheet,
-  parentSetId
-) {
-  const last =
-    sheet.getLastRow();
-
-  if (last < 2) {
-    return null;
-  }
-
-  const ids =
-    sheet
-      .getRange(
-        2,
-        1,
-        last - 1,
-        1
-      )
-      .getDisplayValues()
-      .map(r => r[0]);
-
-  const matches = [];
-
-  ids.forEach(
-    (id, i) => {
-      if (id === parentSetId) {
-        matches.push(i + 2);
-      }
-    }
-  );
-
-  if (matches.length > 1) {
-    throw new Error(
-      'PARENT_SET_ID must occur at most once in listening_set_audio_v1.'
-    );
-  }
-
-  return matches.length
-    ? matches[0]
-    : null;
-}
-
-
-function publishListeningSetAudio_(
-  listeningSheet,
-  parentSetId,
-  setNo,
-  c
-) {
-  const members =
-    collectListeningSetRows_(
-      listeningSheet,
-      parentSetId
-    )
-      .sort(
-        (a, b) => {
-          const order = {
-            K1:1,K2:2,K3:3,K4:4,K5:5
-          };
-          return (
-            order[a.values[5]] -
-            order[b.values[5]]
-          );
-        }
-      );
-
-  if (
-    members.length !==
-      HQ_LISTENING_SET_SIZE ||
-    members.some(
-      x => x.values[1] !== 'done'
-    )
-  ) {
-    throw new Error(
-      'Combined 5L audio requires five done K1-K5 rows.'
-    );
-  }
-
-  const spec =
-    combinedListeningSetSpec_(
-      members
-    );
-
-  const setSheet =
-    listeningSetAudioSheet_(
-      c
-    );
-
-  let row =
-    locateListeningSetAudioRow_(
-      setSheet,
-      parentSetId
-    );
-
-  if (!row) {
-    row =
-      setSheet.getLastRow() + 1;
-
-    setSheet
-      .getRange(
-        row,
-        1,
-        1,
-        HQ_LISTENING_SET_AUDIO_HEADERS.length
-      )
-      .setValues([[
-        parentSetId,
-        'processing',
-        new Date().toISOString(),
-        setNo,
-        spec.payloadHash,
-        '',
-        '',
-        '',
-        '',
-        HQ_LISTENING_SET_STORAGE_MODE
-      ]]);
-
-    SpreadsheetApp.flush();
-  } else {
-    const values =
-      setSheet
-        .getRange(
-          row,
-          1,
-          1,
-          HQ_LISTENING_SET_AUDIO_HEADERS.length
-        )
-        .getDisplayValues()[0];
-
-    if (
-      Number(values[3]) !== setNo ||
-      values[4] !== spec.payloadHash ||
-      values[9] !==
-        HQ_LISTENING_SET_STORAGE_MODE
-    ) {
-      throw new Error(
-        'Existing combined 5L row conflicts with the source-locked set.'
-      );
-    }
-
-    if (
-      values[1] === 'done' &&
-      values[5] &&
-      values[6]
-    ) {
-      return {
-        file_id: values[5],
-        audio_url: values[6],
-        payload_hash: values[4]
-      };
-    }
-
-    setSheet
-      .getRange(
-        row,
-        2
-      )
-      .setValue('processing');
-
-    setSheet
-      .getRange(
-        row,
-        8
-      )
-      .clearContent();
-
-    SpreadsheetApp.flush();
-  }
-
-  try {
-    const folder =
-      DriveApp.getFolderById(
-        c.VOICE_FOLDER_ID
-      );
-
-    const id =
-      parentSetId +
-      '.combined';
-
-    const fileSpec = {
-      tempName:
-        id +
-        '.' +
-        spec.fingerprint +
-        '.mp3',
-      description:
-        'HANGUL_LISTENING_SET_AUDIO_V1:' +
-        spec.fingerprint
-    };
-
-    let audio =
-      findAudio_(
-        folder,
-        id,
-        fileSpec,
-        {}
-      );
-
-    if (!audio) {
-      const blob =
-        synthesize_(
-          spec.ssml,
-          c
-        );
-
-      blob.setName(
-        fileSpec.tempName
-      );
-
-      audio =
-        folder.createFile(
-          blob
-        );
-    }
-
-    audio.setDescription(
-      fileSpec.description
-    );
-
-    audio.setName(
-      id + '.mp3'
-    );
-
-    const completed =
-      new Date().toISOString();
-
-    setSheet
-      .getRange(
-        row,
-        1,
-        1,
-        HQ_LISTENING_SET_AUDIO_HEADERS.length
-      )
-      .setValues([[
-        parentSetId,
-        'done',
-        setSheet
-          .getRange(row, 3)
-          .getDisplayValue() ||
-          completed,
-        setNo,
-        spec.payloadHash,
-        audio.getId(),
-        audio.getUrl(),
-        '',
-        completed,
-        HQ_LISTENING_SET_STORAGE_MODE
-      ]]);
-
-    SpreadsheetApp.flush();
-
-    return {
-      file_id:
-        audio.getId(),
-      audio_url:
-        audio.getUrl(),
-      payload_hash:
-        spec.payloadHash
-    };
-
-  } catch (e) {
-    setSheet
-      .getRange(
-        row,
-        2
-      )
-      .setValue('error');
-
-    setSheet
-      .getRange(
-        row,
-        8
-      )
-      .setValue(
-        safeError_(e, c)
-      );
-
-    SpreadsheetApp.flush();
-
-    throw e;
-  }
-}
-
-
 function readListeningJob_(
   sheet,
   row
@@ -3001,7 +2559,11 @@ function runListeningJob_(
         id: j.id,
         hash: j.hash,
         folderId:
-          c.VOICE_FOLDER_ID,
+          audioTargetFolderId_(
+            c,
+            '5W',
+            j.id
+          ),
         voice:
           voice.label,
         audioVersion:
@@ -3011,14 +2573,15 @@ function runListeningJob_(
       };
     }
 
-    if (
-      state.folderId !==
-      c.VOICE_FOLDER_ID
-    ) {
-      throw new Error(
-        'VOICE_FOLDER_ID changed. Restore the original property before resuming this Listening job.'
-      );
-    }
+    assertAudioFolderState_(
+      c,
+      audioTargetFolderId_(
+        c,
+        '5L',
+        j.parentSetId
+      ),
+      state.folderId
+    );
 
     if (
       state.audioVersion !==
@@ -3847,7 +3410,11 @@ function runJob_(
         id: j.id,
         hash: j.hash,
         folderId:
-          c.VOICE_FOLDER_ID,
+          audioTargetFolderId_(
+            c,
+            '5L',
+            j.parentSetId
+          ),
         voices:
           q.concat(d),
 
@@ -3867,14 +3434,15 @@ function runJob_(
       };
     }
 
-    if (
-      state.folderId !==
-      c.VOICE_FOLDER_ID
-    ) {
-      throw new Error(
-        'VOICE_FOLDER_ID changed. Restore the original property before resuming this SET.'
-      );
-    }
+    assertAudioFolderState_(
+      c,
+      audioTargetFolderId_(
+        c,
+        '5W',
+        j.id
+      ),
+      state.folderId
+    );
 
     /**
      * 手動でerror→pendingに戻した場合、

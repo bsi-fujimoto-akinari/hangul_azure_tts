@@ -1218,6 +1218,27 @@ function h3ProdNextTxnId_(spreadsheet) {
   return prefix + next;
 }
 
+function h3ProdApplyTxnId_(plan, txnId) {
+  if (
+    !plan ||
+    !Array.isArray(plan.logWrites) ||
+    !txnId
+  ) {
+    throw new Error(
+      'PRODUCTION_TXN_ID_APPLY_INVALID'
+    );
+  }
+
+  plan.logWrites.forEach(function (item) {
+    if (!item || !item.provenance) {
+      throw new Error(
+        'PRODUCTION_TXN_ID_PROVENANCE_MISSING'
+      );
+    }
+    item.provenance.txn_id = String(txnId);
+  });
+}
+
 function h3ProdBuildResult_(plan, context, txnId) {
   return {
     schema: 'H3_WEB_SUBMIT_RESULT_V1',

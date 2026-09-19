@@ -14,6 +14,7 @@
     submitting: false,
     activeIndex: 0,
     mediaCache: {},
+    mediaTrimMs: {},
     mediaLoading: {}
   };
 
@@ -124,12 +125,11 @@
       });
 
       head.appendChild(title);
+      head.appendChild(
+        buildAudioBlock(q.audio_asset_key, q.audio_fallback_url, '', true)
+      );
       head.appendChild(uncertain);
       card.appendChild(head);
-
-      card.appendChild(
-        buildAudioBlock(q.audio_asset_key, q.audio_fallback_url, '問題音声')
-      );
 
       if (q.section === 'K1') {
         var img = document.createElement('img');
@@ -173,12 +173,14 @@
     });
   }
 
-  function buildAudioBlock(assetKey, fallbackUrl, label) {
-    var wrap = el('div', 'audio-wrap');
+  function buildAudioBlock(assetKey, fallbackUrl, label, compact) {
+    var wrap = el('div', 'audio-wrap' + (compact ? ' compact-audio-wrap' : ''));
 
-    var title = el('p', 'audio-label');
-    title.textContent = label;
-    wrap.appendChild(title);
+    if (label) {
+      var title = el('p', 'audio-label');
+      title.textContent = label;
+      wrap.appendChild(title);
+    }
 
     var controls = el('div', 'custom-audio-controls');
 
@@ -186,7 +188,7 @@
     toggle.type = 'button';
     toggle.dataset.assetKey = assetKey;
     toggle.disabled = true;
-    toggle.textContent = '準備中…';
+    toggle.textContent = compact ? '…' : '準備中…';
     controls.appendChild(toggle);
 
     var time = el('span', 'audio-time');
@@ -206,6 +208,7 @@
       if (!audio.getAttribute('src')) return;
 
       if (audio.paused) {
+        prepareAudioStart(audio);
         pauseOtherAudio(audio);
         var promise = audio.play();
         if (promise && typeof promise.catch === 'function') {
@@ -223,17 +226,18 @@
     });
 
     audio.addEventListener('play', function () {
-      toggle.textContent = '❚❚ 一時停止';
+      toggle.textContent = compact ? 'Ⅱ' : '❚❚ 一時停止';
       pauseOtherAudio(audio);
     });
     audio.addEventListener('pause', function () {
-      if (!audio.ended) toggle.textContent = '▶ 再生';
+      if (!audio.ended) toggle.textContent = compact ? '▶' : '▶ 再生';
     });
     audio.addEventListener('ended', function () {
-      toggle.textContent = '▶ 再生';
+      toggle.textContent = compact ? '▶' : '▶ 再生';
       updateAudioTime(audio, time);
     });
     audio.addEventListener('loadedmetadata', function () {
+      prepareAudioStart(audio);
       updateAudioTime(audio, time);
     });
     audio.addEventListener('timeupdate', function () {
@@ -249,7 +253,8 @@
     wrap.appendChild(status);
 
     var fallback = document.createElement('a');
-    fallback.className = 'media-fallback';
+    fallback.className = 'media-fallback' + (compact ? ' hidden' : '');
+    fallback.dataset.assetKey = assetKey;
     fallback.href = fallbackUrl;
     fallback.target = '_blank';
     fallback.rel = 'noopener';
@@ -259,9 +264,29 @@
     return wrap;
   }
 
+  function getAudioSkipSeconds(audio) {
+    return Math.max(0, Number(audio.dataset.skipMs || 0) / 1000);
+  }
+
+  function prepareAudioStart(audio) {
+    var skip = getAudioSkipSeconds(audio);
+    if (!isFinite(audio.duration)) return;
+    if (audio.ended || audio.currentTime < skip - 0.05) {
+      try {
+        audio.currentTime = Math.min(skip, Math.max(0, audio.duration - 0.05));
+      } catch (e) {
+        // Metadata may not be fully seekable yet; timeupdate will correct display.
+      }
+    }
+  }
+
   function updateAudioTime(audio, node) {
-    var current = isFinite(audio.currentTime) ? audio.currentTime : 0;
-    var duration = isFinite(audio.duration) ? audio.duration : null;
+    var skip = getAudioSkipSeconds(audio);
+    var rawCurrent = isFinite(audio.currentTime) ? audio.currentTime : skip;
+    var rawDuration = isFinite(audio.duration) ? audio.duration : null;
+    var current = Math.max(0, rawCurrent - skip);
+    var duration = rawDuration === null ? null : Math.max(0, rawDuration - skip);
+
     node.textContent =
       formatAudioTime(current) + ' / ' +
       (duration === null ? '--:--' : formatAudioTime(duration));
@@ -294,7 +319,11 @@
     if (!assetKey) return;
 
     if (app.mediaCache[assetKey]) {
-      attachAudioData(assetKey, app.mediaCache[assetKey]);
+      attachAudioData(
+        assetKey,
+        app.mediaCache[assetKey],
+        app.mediaTrimMs[assetKey] || 0
+      );
       return;
     }
 
@@ -307,7 +336,8 @@
       .withSuccessHandler(function (media) {
         app.mediaLoading[assetKey] = false;
         app.mediaCache[assetKey] = media.data_uri;
-        attachAudioData(assetKey, media.data_uri);
+        app.mediaTrimMs[assetKey] = Number(media.trim_start_ms || 0);
+        attachAudioData(assetKey, media.data_uri, app.mediaTrimMs[assetKey]);
         setAudioStatus(assetKey, '', false);
       })
       .withFailureHandler(function (err) {
@@ -327,12 +357,13 @@
       });
   }
 
-  function attachAudioData(assetKey, dataUri) {
+  function attachAudioData(assetKey, dataUri, trimStartMs) {
     var nodes = document.querySelectorAll(
       'audio[data-asset-key="' + assetKey + '"]'
     );
 
     Array.prototype.forEach.call(nodes, function (audio) {
+      audio.dataset.skipMs = String(Math.max(0, Number(trimStartMs || 0)));
       if (!audio.getAttribute('src')) {
         audio.src = dataUri;
         audio.load();
@@ -344,7 +375,8 @@
     );
     Array.prototype.forEach.call(toggles, function (button) {
       button.disabled = false;
-      button.textContent = '▶ 再生';
+      button.textContent =
+        button.closest('.compact-audio-wrap') ? '▶' : '▶ 再生';
     });
   }
 
@@ -357,6 +389,15 @@
       node.textContent = message;
       node.classList.toggle('media-error', !!isError);
       node.classList.toggle('hidden', !message);
+    });
+
+    var fallbacks = document.querySelectorAll(
+      '.media-fallback[data-asset-key="' + assetKey + '"]'
+    );
+    Array.prototype.forEach.call(fallbacks, function (node) {
+      if (node.closest('.compact-audio-wrap')) {
+        node.classList.toggle('hidden', !isError);
+      }
     });
   }
 
@@ -641,7 +682,8 @@
     var playerBlock = buildAudioBlock(
       review.combined_audio_asset_key,
       review.combined_audio_fallback_url,
-      '結合音声'
+      '結合音声',
+      false
     );
 
     playerWrap.appendChild(playerBlock);

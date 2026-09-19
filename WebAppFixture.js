@@ -10,6 +10,7 @@ var H3_WEB_SYSTEM_TEST_FIXTURE = {
   surface_contract_id: 'H3-L5E2E-R2-SURFACE-CONTRACT-20260919-V1',
   expected_vector: ['3', '2?', '3', '2', '3'],
   expected_results: ['○', '△', '×', '×', '○'],
+  web_audio_skip_start_ms: 5000,
   combined_audio_file_id: '18yA11jUMjSOmwJiO_p4Imt5v8xYnC93p',
   combined_audio_url: 'https://drive.google.com/file/d/18yA11jUMjSOmwJiO_p4Imt5v8xYnC93p/view?usp=drivesdk',
   review_script_file_id: '11MuPzLBqUWywjIZj-EOQhvKpLbBB7ePL',
@@ -160,6 +161,7 @@ function getSystemTestMediaPayload_(request) {
     data_uri: media.data_uri,
     mime_type: media.mime_type,
     size_bytes: media.size_bytes,
+    trim_start_ms: H3_WEB_SYSTEM_TEST_FIXTURE.web_audio_skip_start_ms,
     fallback_url: fallbackUrl
   };
 }

@@ -1006,7 +1006,7 @@ jobs:
           if '## 10. R3-09B frozen review target' not in chat:
               raise SystemExit('Web/Chat contract does not record R3-09B target.')
 
-          if 'sending it to Chat becomes optional' not in architecture:
+          if 'sending the receipt to Chat is optional' not in architecture:
               raise SystemExit('R3-09B receipt ownership transition is missing.')
 
           if 'R3-09B changes documentation/architecture only' not in operations:

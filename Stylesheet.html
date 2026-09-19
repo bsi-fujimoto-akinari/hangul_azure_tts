@@ -914,4 +914,53 @@
     }
   }
 
+
+  .review-history-actions {
+    display: grid;
+    gap: 6px;
+    min-width: 96px;
+  }
+  .review-history-actions button {
+    width: 100%;
+  }
+  .review-replay-button {
+    width: 100%;
+    margin-top: 12px;
+  }
+  .replay-notice {
+    margin-bottom: 10px;
+    padding: 11px 12px;
+    background: #fff;
+    border: 1px solid #d8d8d8;
+    border-radius: 10px;
+  }
+  .replay-notice h2,
+  .replay-notice p {
+    margin: 0;
+  }
+  .replay-notice p {
+    margin-top: 5px;
+    font-size: 13px;
+  }
+  .replay-comparison {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border: 1px solid #d8d8d8;
+    border-radius: 10px;
+    background: #fff;
+    font-weight: 800;
+    text-align: center;
+  }
+
+  @media (max-width: 619px) {
+    .review-history-actions {
+      grid-template-columns: 1fr 1fr;
+      min-width: 0;
+      width: 100%;
+    }
+    .replay-comparison {
+      font-size: 14px;
+    }
+  }
+
 </style>

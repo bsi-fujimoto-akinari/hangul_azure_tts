@@ -1755,3 +1755,359 @@ function buildReviewHomePayload_() {
   };
 }
 
+function h3ReviewReplayValidateTxnId_(request, schemaName) {
+  if (
+    !request ||
+    request.schema !== schemaName ||
+    request.mode !== 'REVIEW_REPLAY' ||
+    !request.txn_id
+  ) {
+    throw new Error(
+      'INVALID_REVIEW_REPLAY_REQUEST'
+    );
+  }
+
+  var txnId = String(
+    request.txn_id
+  );
+
+  if (
+    txnId.length > 128 ||
+    /[\x00-\x1F]/.test(txnId)
+  ) {
+    throw new Error(
+      'INVALID_REVIEW_REPLAY_TXN_ID'
+    );
+  }
+
+  return txnId;
+}
+
+function buildReviewReplayPayload_(
+  txnId
+) {
+  var review =
+    buildPersistentReviewPayload_(
+      txnId
+    );
+
+  var questions =
+    review.sections.map(
+      function (part) {
+        var visibleChoices = null;
+        var surface =
+          part.question_surface || {};
+
+        if (
+          part.section === 'K4' &&
+          Array.isArray(
+            surface.choices_ja
+          )
+        ) {
+          visibleChoices =
+            surface.choices_ja.slice();
+        } else if (
+          part.section === 'K5' &&
+          Array.isArray(
+            surface.choices_ko
+          )
+        ) {
+          visibleChoices =
+            surface.choices_ko.slice();
+        }
+
+        var question = {
+          section:
+            part.section,
+          display:
+            part.display,
+          audio_asset_key:
+            part.audio_asset_key,
+          audio_fallback_url:
+            part.audio_fallback_url,
+          choice_ids:
+            [1, 2, 3, 4],
+          visible_choices:
+            visibleChoices
+        };
+
+        if (
+          part.section === 'K1'
+        ) {
+          question.image_data_uri =
+            surface.image_data_uri;
+          question.image_sha256 =
+            surface.image_sha256;
+          question.image_size_bytes =
+            surface.image_size_bytes;
+        }
+
+        return question;
+      }
+    );
+
+  return {
+    schema:
+      'H3_REVIEW_REPLAY_SET_V1',
+    mode:
+      'REVIEW_REPLAY',
+    nonlearning: true,
+    persisted: false,
+    read_only_source: true,
+    txn_id:
+      review.txn_id,
+    set_id:
+      review.set_id,
+    listening_set_no:
+      review.listening_set_no,
+    source_review_binding_sha256:
+      review.review_binding_sha256,
+    canonical_render_version:
+      H3_R3_LISTENING_RENDER_VERSION,
+    surface_contract_id:
+      H3_R3_WEB_SURFACE_CONTRACT_ID,
+    replay_contract_id:
+      'H3-REVIEW-REPLAY-20260920-V1',
+    questions:
+      questions
+  };
+}
+
+function getReviewReplayPayload_(
+  request
+) {
+  var txnId =
+    h3ReviewReplayValidateTxnId_(
+      request,
+      'H3_WEB_RENDER_REQUEST_V1'
+    );
+
+  return buildReviewReplayPayload_(
+    txnId
+  );
+}
+
+function getReviewReplayMediaPayload_(
+  request
+) {
+  var txnId =
+    h3ReviewReplayValidateTxnId_(
+      request,
+      'H3_WEB_MEDIA_REQUEST_V1'
+    );
+
+  var media =
+    getPersistentReviewMediaPayload_({
+      schema:
+        'H3_WEB_MEDIA_REQUEST_V1',
+      mode:
+        'REVIEW',
+      txn_id:
+        txnId,
+      set_id:
+        request.set_id || null,
+      asset_key:
+        request.asset_key
+    });
+
+  media.mode =
+    'REVIEW_REPLAY';
+  media.nonlearning =
+    true;
+  media.persisted =
+    false;
+
+  return media;
+}
+
+function h3ReviewReplayNormalizeAnswers_(
+  request
+) {
+  if (
+    !request ||
+    request.schema !==
+      'H3_WEB_SUBMIT_V1' ||
+    request.mode !==
+      'REVIEW_REPLAY' ||
+    !request.txn_id ||
+    !request.set_id ||
+    !Array.isArray(
+      request.answers
+    ) ||
+    request.answers.length !== 5
+  ) {
+    throw new Error(
+      'INVALID_REVIEW_REPLAY_SUBMIT'
+    );
+  }
+
+  var bySection = {};
+
+  request.answers.forEach(
+    function (item) {
+      var section =
+        String(
+          item &&
+          item.section ||
+          ''
+        );
+      var answer =
+        Number(
+          item &&
+          item.answer
+        );
+
+      if (
+        H3_WEB_PROD_SECTIONS
+          .indexOf(section) < 0 ||
+        bySection[section] ||
+        !Number.isInteger(
+          answer
+        ) ||
+        answer < 1 ||
+        answer > 4
+      ) {
+        throw new Error(
+          'REVIEW_REPLAY_ANSWER_INVALID'
+        );
+      }
+
+      bySection[section] = {
+        section:
+          section,
+        answer:
+          answer,
+        uncertain:
+          !!item.uncertain
+      };
+    }
+  );
+
+  return H3_WEB_PROD_SECTIONS.map(
+    function (section) {
+      if (!bySection[section]) {
+        throw new Error(
+          'REVIEW_REPLAY_SECTION_MISSING:' +
+            section
+        );
+      }
+
+      return bySection[section];
+    }
+  );
+}
+
+function gradeReviewReplay_(
+  request
+) {
+  var txnId =
+    String(
+      request &&
+      request.txn_id ||
+      ''
+    );
+
+  if (
+    txnId.length > 128 ||
+    /[\x00-\x1F]/.test(txnId)
+  ) {
+    throw new Error(
+      'INVALID_REVIEW_REPLAY_TXN_ID'
+    );
+  }
+
+  var answers =
+    h3ReviewReplayNormalizeAnswers_(
+      request
+    );
+  var review =
+    buildPersistentReviewPayload_(
+      txnId
+    );
+
+  if (
+    String(request.set_id) !==
+      review.set_id
+  ) {
+    throw new Error(
+      'REVIEW_REPLAY_SET_MISMATCH'
+    );
+  }
+
+  var correctBySection = {};
+  review.sections.forEach(
+    function (part) {
+      correctBySection[
+        part.section
+      ] =
+        Number(
+          part.correct_answer
+        );
+    }
+  );
+
+  var score = 0;
+  var summary =
+    answers.map(
+      function (item) {
+        var correct =
+          correctBySection[
+            item.section
+          ];
+
+        var isCorrect =
+          item.answer === correct;
+
+        if (isCorrect) {
+          score += 1;
+        }
+
+        return {
+          section:
+            item.section,
+          answer:
+            item.answer,
+          uncertain:
+            item.uncertain,
+          correct_answer:
+            correct,
+          result:
+            isCorrect
+              ? (
+                  item.uncertain
+                    ? '△'
+                    : '○'
+                )
+              : '×'
+        };
+      }
+    );
+
+  return {
+    schema:
+      'H3_REVIEW_REPLAY_RESULT_V1',
+    mode:
+      'REVIEW_REPLAY',
+    nonlearning: true,
+    persisted: false,
+    runtime_write_count: 0,
+    txn_id:
+      review.txn_id,
+    set_id:
+      review.set_id,
+    listening_set_no:
+      review.listening_set_no,
+    score:
+      score,
+    total: 5,
+    original_score:
+      Number(
+        review.score
+      ),
+    summary:
+      summary,
+    after_replay:
+      review
+  };
+}
+

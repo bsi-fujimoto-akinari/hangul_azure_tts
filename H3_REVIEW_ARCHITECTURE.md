@@ -1,7 +1,7 @@
 # H3 Review Architecture
 
 Version: H3-R3-09B-REVIEW-ARCHITECTURE-20260919-V2  
-Status: R3_09D_DEVICE_VALIDATED
+Status: R3_09E_IMPLEMENTED_AWAITING_DEVICE_VALIDATION
 
 ## 1. Purpose
 
@@ -679,3 +679,64 @@ NEXT=R3-09E REVIEW_REPLAY_LIBRARY_DEVICE_VALIDATION
 ```
 
 R3-09D does not claim PC validation, REVIEW_REPLAY validation, or normal-live activation. Those remain later gates.
+
+## 18. R3-09E REVIEW_REPLAY implementation
+
+R3-09E implements the optional nonlearning replay surface defined in section 10.
+
+Replay entry points:
+- persistent Review -> `もう一度この5問を解く`;
+- HOME review-history entry -> `再挑戦`;
+- diagnostic deep route -> `mode=REVIEW_REPLAY&txn_id=<TXN_ID>`.
+
+Server contract:
+
+```text
+TXN_ID
+-> exact COMMITTED transaction
+-> exact LOCKED review binding
+-> full persistent source-lock validation
+-> replay issue payload
+```
+
+The replay issue payload contains only what is required to re-answer the original surface:
+- exact K1 source-bound image;
+- exact K1-K5 bound audio;
+- four choice IDs;
+- K4 Japanese visible choices;
+- K5 Korean visible choices.
+
+Before replay grading it does NOT expose:
+- prior learner answers;
+- correct answers;
+- explanations;
+- K2/K3 scripts.
+
+Replay grading is server-side but read-only:
+- validates all five answers;
+- reads the exact persisted Review source;
+- computes local `○/△/×` and score;
+- writes no production transaction;
+- writes no learner history;
+- writes no Listening state;
+- writes no scheduler/retest data;
+- advances no counter/pointer.
+
+After local grading, the response returns the same canonical persistent Review payload and a transient comparison:
+
+```text
+今回 {replay_score}/5
+元回答 {original_score}/5
+```
+
+The replay result itself is not persisted and must never be interpreted as a formal retest.
+
+R3-09E implementation state:
+
+```text
+RESULT=IMPLEMENTED_AWAITING_DEVICE_VALIDATION
+VALIDATION_TARGET=L03 / H3TX-20260919-000005
+NEXT=R3-09E iPhone replay + zero-mutation validation
+```
+
+PC validation and the final full E2E audit remain R3-10 scope.

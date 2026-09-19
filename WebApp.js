@@ -22,6 +22,12 @@ function getListeningWebSet(request) {
     return buildReviewHomePayload_();
   }
 
+  if (request && request.mode === 'REVIEW_REPLAY') {
+    return getReviewReplayPayload_(
+      request
+    );
+  }
+
   if (request && request.mode === 'REVIEW') {
     return getPersistentReviewPayload_(
       request
@@ -39,6 +45,12 @@ function getListeningWebSet(request) {
 }
 
 function getListeningWebMedia(request) {
+  if (request && request.mode === 'REVIEW_REPLAY') {
+    return getReviewReplayMediaPayload_(
+      request
+    );
+  }
+
   if (request && request.mode === 'REVIEW') {
     return getPersistentReviewMediaPayload_(
       request
@@ -71,6 +83,15 @@ function submitListeningWebAnswers(request) {
 
   if (
     request &&
+    request.mode === 'REVIEW_REPLAY'
+  ) {
+    return gradeReviewReplay_(
+      request
+    );
+  }
+
+  if (
+    request &&
     (
       request.mode === 'REVIEW' ||
       request.mode === 'HOME'
@@ -91,6 +112,14 @@ function h3WebBootRequest_(e) {
 
   if (e && e.parameter) {
     if (
+      e.parameter.mode === 'REVIEW_REPLAY' &&
+      e.parameter.txn_id
+    ) {
+      mode = 'REVIEW_REPLAY';
+      txnId = String(
+        e.parameter.txn_id
+      );
+    } else if (
       e.parameter.mode === 'REVIEW' &&
       e.parameter.txn_id
     ) {

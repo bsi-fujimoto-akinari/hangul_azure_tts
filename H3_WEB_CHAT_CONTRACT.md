@@ -238,3 +238,13 @@ The persistent Review learner surface has passed iPhone in-app-browser validatio
 R3-09D is therefore `PASS_DEVICE_VALIDATED`.
 
 Receipt-to-Chat remains available as the operational fallback until R3-09E completes the REVIEW_REPLAY/library device-validation scope. Normal-live production remains gated.
+
+## 12. R3-09E REVIEW_REPLAY staged implementation
+
+REVIEW_REPLAY is implemented as a nonlearning Web-only practice path.
+
+It may be launched from Review history or an opened persistent Review. The learner re-answers the same exact source-bound 5L surface without exposing prior answers, correct answers, explanations, or K2/K3 scripts before local replay grading.
+
+Replay grading produces no receipt and no canonical learner transaction. After grading, the Web App returns to the exact persistent Review and may show a transient `今回 / 元回答` score comparison.
+
+Until iPhone zero-mutation validation passes, R3-09E remains staged. Normal-live production activation remains gated.

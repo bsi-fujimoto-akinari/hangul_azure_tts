@@ -180,6 +180,18 @@
     });
   }
 
+  function loadReplayTxn(txnId) {
+    loadSet({
+      schema:
+        'H3_WEB_RENDER_REQUEST_V1',
+      mode:
+        'REVIEW_REPLAY',
+      set_id: null,
+      txn_id:
+        String(txnId)
+    });
+  }
+
   function loadLearningSet(setId) {
     loadSet({
       schema:
@@ -429,6 +441,12 @@
 
           item.appendChild(meta);
 
+          var actions =
+            el(
+              'div',
+              'review-history-actions'
+            );
+
           var open =
             el(
               'button',
@@ -445,7 +463,29 @@
               );
             }
           );
-          item.appendChild(open);
+          actions.appendChild(open);
+
+          var replay =
+            el(
+              'button',
+              'secondary review-replay-open-button'
+            );
+          replay.type = 'button';
+          replay.textContent =
+            '再挑戦';
+          replay.addEventListener(
+            'click',
+            function () {
+              loadReplayTxn(
+                entry.txn_id
+              );
+            }
+          );
+          actions.appendChild(replay);
+
+          item.appendChild(
+            actions
+          );
 
           history.appendChild(
             item
@@ -474,6 +514,37 @@
   function renderQuestions(questions) {
     var root = document.getElementById('questions');
     root.textContent = '';
+
+    if (
+      app.payload &&
+      app.payload.mode ===
+        'REVIEW_REPLAY'
+    ) {
+      var replayNotice =
+        el(
+          'section',
+          'replay-notice'
+        );
+      var replayTitle =
+        document.createElement('h2');
+      replayTitle.textContent =
+        '再挑戦';
+      replayNotice.appendChild(
+        replayTitle
+      );
+
+      var replayText =
+        document.createElement('p');
+      replayText.textContent =
+        'この回答は学習成績・復習スケジュールには反映されません。';
+      replayNotice.appendChild(
+        replayText
+      );
+
+      root.appendChild(
+        replayNotice
+      );
+    }
 
     questions.forEach(function (q, index) {
       var qNo = index + 1;
@@ -937,6 +1008,8 @@
       schema: 'H3_WEB_SUBMIT_V1',
       mode: app.payload.mode,
       set_id: app.payload.set_id,
+      txn_id:
+        app.payload.txn_id || null,
       answers: sections.map(function (section) {
         return {
           section: section,
@@ -992,6 +1065,35 @@
   }
 
   function renderResult(result) {
+    if (
+      result.mode ===
+        'REVIEW_REPLAY' &&
+      result.after_replay &&
+      result.after_replay.schema ===
+        'H3_PERSISTENT_REVIEW_PAYLOAD_V1'
+    ) {
+      result.after_replay
+        .replay_comparison = {
+          replay_score:
+            Number(
+              result.score
+            ),
+          original_score:
+            Number(
+              result.original_score
+            ),
+          total:
+            Number(
+              result.total
+            )
+        };
+
+      renderPersistentReview(
+        result.after_replay
+      );
+      return;
+    }
+
     if (
       result.mode === 'LISTENING' &&
       result.after_sync &&
@@ -1284,6 +1386,32 @@
 
     root.appendChild(header);
 
+    if (
+      review.replay_comparison
+    ) {
+      var comparison =
+        el(
+          'section',
+          'replay-comparison'
+        );
+      comparison.textContent =
+        '今回 ' +
+        review.replay_comparison
+          .replay_score +
+        ' / ' +
+        review.replay_comparison
+          .total +
+        '　元回答 ' +
+        review.replay_comparison
+          .original_score +
+        ' / ' +
+        review.replay_comparison
+          .total;
+      root.appendChild(
+        comparison
+      );
+    }
+
     var cards =
       el(
         'div',
@@ -1366,6 +1494,26 @@
 
     root.appendChild(
       technical
+    );
+
+    var replay =
+      el(
+        'button',
+        'primary review-replay-button'
+      );
+    replay.type = 'button';
+    replay.textContent =
+      'もう一度この5問を解く';
+    replay.addEventListener(
+      'click',
+      function () {
+        loadReplayTxn(
+          review.txn_id
+        );
+      }
+    );
+    root.appendChild(
+      replay
     );
 
     var back =

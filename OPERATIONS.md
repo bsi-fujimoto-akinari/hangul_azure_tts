@@ -678,3 +678,31 @@ Affected canonical paths:
 - persistent Review item/explanation/result/audio/binding SHA recomputation.
 
 The stored L03 hashes were independently rederived from current canonical Sheet data and all matched exactly; no Review or learner data rewrite is required.
+
+## 19. R3-09E REVIEW_REPLAY implementation
+
+R3-09E adds a read-only nonlearning replay path for already committed persistent Reviews.
+
+Implemented:
+- `mode=REVIEW_REPLAY&txn_id=<TXN_ID>`;
+- replay launch from HOME history and persistent Review;
+- exact original K1 image and K1-K5 audio reuse;
+- original question visibility contract;
+- K2/K3 scripts remain hidden before replay grading;
+- prior answers/correct answers/explanations are omitted from the replay issue payload;
+- read-only server grading;
+- transient `今回 / 元回答` comparison after grading;
+- return to the exact persistent Review after grading.
+
+Hard write boundary:
+- production journal WRITE = 0;
+- `listening_log_v1` WRITE = 0;
+- `listening_state_v1` WRITE = 0;
+- scheduler/retest WRITE = 0;
+- counter/pointer advance = 0;
+- K1_READY mutation = 0;
+- audio/image generation = 0.
+
+Replay attempts are intentionally not persisted in v1.
+
+R3-09E currently exits implementation at `IMPLEMENTED_AWAITING_DEVICE_VALIDATION`. The iPhone validation must confirm both learner UX and zero runtime mutation before R3-09E closes.

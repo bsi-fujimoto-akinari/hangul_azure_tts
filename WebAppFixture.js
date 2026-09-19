@@ -166,12 +166,76 @@ function getSystemTestMediaPayload_(request) {
   };
 }
 
+function parseSystemTestReviewSections_(text) {
+  var normalized = String(text || '')
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n?/g, '\n')
+    .trim();
+
+  var markerRegex = /^\[聞([1-5])\/([^\]]+)\]\s*$/gm;
+  var markers = [];
+  var match;
+
+  while ((match = markerRegex.exec(normalized)) !== null) {
+    markers.push({
+      number: Number(match[1]),
+      label: match[0].trim(),
+      index: match.index,
+      content_start: markerRegex.lastIndex
+    });
+  }
+
+  if (markers.length !== 5) {
+    throw new Error('REVIEW_SCRIPT_SECTION_COUNT_MISMATCH');
+  }
+
+  return markers.map(function (marker, i) {
+    if (marker.number !== i + 1) {
+      throw new Error('REVIEW_SCRIPT_SECTION_ORDER_MISMATCH');
+    }
+
+    var nextIndex =
+      i + 1 < markers.length
+        ? markers[i + 1].index
+        : normalized.length;
+
+    var scriptText = normalized
+      .slice(marker.content_start, nextIndex)
+      .trim();
+
+    if (!scriptText) {
+      throw new Error('REVIEW_SCRIPT_SECTION_EMPTY:K' + marker.number);
+    }
+
+    return {
+      section: 'K' + marker.number,
+      display: marker.label,
+      script_text: scriptText
+    };
+  });
+}
+
 function buildSystemTestReviewPayload_() {
+  var f = H3_WEB_SYSTEM_TEST_FIXTURE;
+  var scriptText = h3DriveUtf8Text_(f.review_script_file_id, 100000);
+  var parsed = parseSystemTestReviewSections_(scriptText);
+
   return {
-    combined_audio_asset_key: 'COMBINED',
-    combined_audio_fallback_url: H3_WEB_SYSTEM_TEST_FIXTURE.combined_audio_url,
-    review_script_text: h3DriveUtf8Text_(H3_WEB_SYSTEM_TEST_FIXTURE.review_script_file_id, 100000),
-    review_script_fallback_url: H3_WEB_SYSTEM_TEST_FIXTURE.review_script_url
+    sections: parsed.map(function (part, i) {
+      var q = f.questions[i];
+      if (part.section !== q.section) {
+        throw new Error('REVIEW_SCRIPT_FIXTURE_SECTION_MISMATCH');
+      }
+
+      return {
+        section: part.section,
+        display: part.display,
+        audio_asset_key: q.section,
+        audio_fallback_url: q.audio_url,
+        script_text: part.script_text
+      };
+    }),
+    review_script_fallback_url: f.review_script_url
   };
 }
 

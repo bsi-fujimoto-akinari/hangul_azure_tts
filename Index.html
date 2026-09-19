@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <?!= include_('Stylesheet'); ?>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="page-header">
+        <p class="eyebrow">H3 R3-01 / NONLEARNING SYSTEM TEST</p>
+        <h1>5L SYSTEM TEST</h1>
+        <p id="set-id" class="set-id"></p>
+      </header>
+
+      <section id="notice" class="notice">
+        この画面はR3-01 POCです。学習履歴・カウンタ・retest・overload・L02/L03は変更しません。
+      </section>
+
+      <section id="loading" class="panel status">読み込み中…</section>
+      <section id="error" class="panel error hidden" role="alert"></section>
+      <section id="questions" class="questions hidden"></section>
+
+      <section id="controls" class="panel controls hidden">
+        <div id="live-summary" class="live-summary">Q1–Q5をすべて選択してください。</div>
+        <div class="control-row">
+          <button id="reset" type="button" class="secondary">リセット</button>
+          <button id="submit" type="button" class="primary" disabled>採点</button>
+        </div>
+      </section>
+
+      <section id="result" class="panel result hidden" aria-live="polite"></section>
+    </main>
+
+    <script>
+      window.H3_BOOT = <?!= bootJson ?>;
+    </script>
+    <?!= include_('Client'); ?>
+  </body>
+</html>

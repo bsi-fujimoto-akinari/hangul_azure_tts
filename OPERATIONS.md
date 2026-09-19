@@ -458,3 +458,23 @@ High-frequency canonical sources should contain current operational state, not a
 - Preserve legacy evidence in `06_AUDIT/01_SHEET_SNAPSHOTS` or source releases rather than in high-frequency canonical tabs.
 - Source manifest files must use compact text storage. Blank-line expansion or other storage-format bloat is prohibited.
 - Semantic history must not be rewritten merely to rename `5Q` to `5W`.
+
+
+## 14. Fixed Web launcher and script TXT co-location
+
+Learner-facing Chat links use the parameterless Apps Script Web App URL whenever the current stage provides an internal/default authorized target. Query-string URLs are not preferred for ordinary learner navigation.
+
+GET routing:
+- parameterless `/dev` or `/exec` -> H3 Web App launcher;
+- `mode=SYSTEM_TEST` and `mode=LISTENING` remain authorized explicit Web App routes for diagnostics/internal use;
+- `ping=1` remains the health-check JSON route;
+- all other HTTP job routes remain disabled.
+
+Script TXT storage is co-located with audio:
+- 5W daily TXT: `03_AUDIO/01_5W/H3-YYYYMMDD.txt`;
+- 5L set TXT: `03_AUDIO/02_5L/{LISTENING_SET_ID}.txt`;
+- SYSTEM_TEST script TXT: `03_AUDIO/90_ARCHIVE/01_SYSTEM_TEST/{SET_ID}_script.txt`.
+
+5L script TXT is generated automatically after all five source-locked K1-K5 audio rows are done. Its content is reconstructed from the same AUDIO_PLAN_JSON surface, with repetitions/cues collapsed to one semantic script surface. Existing same-name TXT must match exactly; conflicting content is a hard stop.
+
+Until the R3-W written Web App migration, 5W DAILY_TXT remains Chat-owned after verified answer sync, but Drive storage is `03_AUDIO/01_5W`, not `04_LEARNER_ARTIFACTS`.

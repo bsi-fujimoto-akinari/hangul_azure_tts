@@ -643,7 +643,24 @@ R3-09D boundaries:
 - normal-live production activation remains outside R3-09D;
 - receipt-to-Chat ownership transition remains pending device validation in R3-09E.
 
-R3-09D exits at `IMPLEMENTED_AWAITING_DEVICE_VALIDATION`.
+R3-09D initially exited implementation at `IMPLEMENTED_AWAITING_DEVICE_VALIDATION`.
+
+### R3-09D device validation close
+
+Device validation is now PASS on iPhone / ChatGPT in-app browser.
+
+Validated:
+- parameterless HOME reopened after the prior page was closed;
+- persistent history lists `5L #2`;
+- `復習する` reopens L03 from the persisted transaction/binding;
+- summary/result strip/filter UI matches the committed L03 result;
+- Q1 exact K1 image and inline audio UI render;
+- learner answer `④ ?` and correct answer `③` render from persisted data;
+- UTF-8 semantic SHA validation passes without rewriting stored Review data;
+- HOME/REVIEW access causes zero learner-runtime mutation.
+
+`RESULT=PASS_DEVICE_VALIDATED`
+
 Next stage: R3-09E `REVIEW_REPLAY_LIBRARY_DEVICE_VALIDATION`.
 
 ### R3-09D UTF-8 hash correction

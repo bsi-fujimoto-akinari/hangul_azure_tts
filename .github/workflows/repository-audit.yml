@@ -978,7 +978,7 @@ jobs:
 
           required_architecture = [
               'H3-R3-09B-REVIEW-ARCHITECTURE-20260919-V2',
-              'Status: IMPLEMENTED_R3_09D_AWAITING_DEVICE_VALIDATION',
+              'Status: R3_09D_DEVICE_VALIDATED',
               'listening_explanation_payload_v1',
               'listening_review_binding_v1',
               'mode=REVIEW&txn_id={TXN_ID}',
@@ -1182,7 +1182,7 @@ jobs:
           if '## 18. R3-09D review Web UI and route implementation' not in operations:
               raise SystemExit('OPERATIONS does not record R3-09D.')
 
-          if 'Status: IMPLEMENTED_R3_09D_AWAITING_DEVICE_VALIDATION' not in architecture:
+          if 'Status: R3_09D_DEVICE_VALIDATED' not in architecture:
               raise SystemExit('Review architecture staged status is not R3-09D.')
 
           if '## 11. R3-09D persistent Review implementation' not in chat:
@@ -1344,6 +1344,61 @@ jobs:
 
           if len(actual) != 64:
               raise SystemExit('UTF-8 SHA-256 regression fixture failed.')
+          PY
+
+      - name: Check R3-09D device validation close
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
+          operations = Path('OPERATIONS.md').read_text(encoding='utf-8')
+          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
+          client = Path('Client.html').read_text(encoding='utf-8')
+
+          required_arch = [
+              'Status: R3_09D_DEVICE_VALIDATED',
+              '## 17. R3-09D device validation',
+              'RESULT=PASS_DEVICE_VALIDATED',
+              'persistent history shows 5L #2',
+              'Q1 renders exact source-bound K1 image',
+              'Q1 renders inline audio control',
+              'Q1 shows learner answer `④ ?` and correct answer `③`',
+              'NEXT=R3-09E REVIEW_REPLAY_LIBRARY_DEVICE_VALIDATION',
+          ]
+          for needle in required_arch:
+              if needle not in architecture:
+                  raise SystemExit(
+                      f'R3-09D device-validation architecture evidence missing: {needle}'
+                  )
+
+          required_ops = [
+              '### R3-09D device validation close',
+              '`RESULT=PASS_DEVICE_VALIDATED`',
+              'HOME/REVIEW access causes zero learner-runtime mutation',
+              'Next stage: R3-09E `REVIEW_REPLAY_LIBRARY_DEVICE_VALIDATION`',
+          ]
+          for needle in required_ops:
+              if needle not in operations:
+                  raise SystemExit(
+                      f'R3-09D device-validation operations evidence missing: {needle}'
+                  )
+
+          if '### R3-09D device validation' not in chat:
+              raise SystemExit('Web/Chat contract does not record R3-09D device validation.')
+
+          if 'REVIEW_REPLAY' in client:
+              raise SystemExit('R3-09D close must not activate REVIEW_REPLAY.')
+
+          forbidden = [
+              'R3-09D does not claim PC validation, REVIEW_REPLAY validation, or normal-live activation. Those remain later gates.',
+          ]
+          for needle in forbidden:
+              if needle not in architecture:
+                  raise SystemExit(
+                      'R3-09D scope boundary statement missing.'
+                  )
           PY
 
       - name: Check JavaScript syntax

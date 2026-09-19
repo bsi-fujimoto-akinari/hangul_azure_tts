@@ -223,3 +223,18 @@ Implemented:
 - receipt hidden under technical details.
 
 Until R3-09E device validation passes, the existing Chat receipt workflow remains the operational fallback for the R3 test sequence. R3-09D implementation alone does not activate normal-live production or REVIEW_REPLAY.
+
+### R3-09D device validation
+
+The persistent Review learner surface has passed iPhone in-app-browser validation for L03:
+- parameterless HOME;
+- persistent Review history;
+- reopen after page/browser closure;
+- exact K1 image;
+- inline audio UI;
+- persisted answer/correct-answer rendering;
+- full read-only Review route.
+
+R3-09D is therefore `PASS_DEVICE_VALIDATED`.
+
+Receipt-to-Chat remains available as the operational fallback until R3-09E completes the REVIEW_REPLAY/library device-validation scope. Normal-live production remains gated.

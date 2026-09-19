@@ -1,7 +1,7 @@
 # H3 Review Architecture
 
 Version: H3-R3-09B-REVIEW-ARCHITECTURE-20260919-V2  
-Status: IMPLEMENTED_R3_09D_AWAITING_DEVICE_VALIDATION
+Status: R3_09D_DEVICE_VALIDATED
 
 ## 1. Purpose
 
@@ -641,3 +641,41 @@ R3-09B is PASS when:
 - no Apps Script learner behavior is changed by the freeze;
 - no learner Sheet/runtime/history write is performed;
 - next stage is R3-09C, not R3-10.
+
+## 17. R3-09D device validation
+
+R3-09D persistent Review was validated on iPhone in the ChatGPT in-app browser.
+
+Validated learner path:
+
+```text
+close previous Web App page
+-> open parameterless HOME
+-> persistent history shows 5L #2
+-> tap 復習する
+-> persistent L03 Review reopens from TXN_ID
+```
+
+Observed Review surface:
+- summary shows `3 / 5`;
+- result strip shows `Q1 × / Q2 △ / Q3 × / Q4 ○ / Q5 △`;
+- default filter is `要復習`, with `全問` available;
+- Q1 renders exact source-bound K1 image;
+- Q1 renders inline audio control;
+- Q1 shows learner answer `④ ?` and correct answer `③`;
+- persistent Review renders after browser/page closure and reopen;
+- prior `REVIEW_ITEM_PAYLOAD_SHA_MISMATCH` was eliminated by explicit UTF-8 semantic hashing.
+
+Canonical runtime readback after validation:
+- `listening_review_binding_v1` for `H3TX-20260919-000005` remains `LOCKED`;
+- learner answer/history/state/counters/pointers were not mutated by HOME or REVIEW access;
+- Review remains read-only.
+
+R3-09D exit:
+
+```text
+RESULT=PASS_DEVICE_VALIDATED
+NEXT=R3-09E REVIEW_REPLAY_LIBRARY_DEVICE_VALIDATION
+```
+
+R3-09D does not claim PC validation, REVIEW_REPLAY validation, or normal-live activation. Those remain later gates.

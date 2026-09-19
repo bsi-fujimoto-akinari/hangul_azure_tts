@@ -831,3 +831,61 @@ NEXT=R3-10B scheduler repair + PC validation
 ```
 
 R3-11 MUST NOT start until both blockers are closed and R3-10 is re-read as `blocking=0`.
+
+### R3-10B repair / R3-10 close
+
+The earlier `R3-10 interim result = BLOCKED_2` is superseded by this close readback.
+
+#### B1 scheduler repair — PASS
+
+R3-10B changed the production scheduler bridge so every scored 5L now:
+- derives active retest obligations from canonical valid Listening history;
+- applies the existing × = 1–3 set and △ = 2–5 set windows;
+- uses deterministic EDF ordering `due_max > due_min > origin_set_no > section_order`;
+- writes `OVERLOAD_PLAN_JSON` in the same production state transaction;
+- rejects a missing, stale, or blocking plan at preissue.
+
+The L03 legacy post-commit state was backfilled once without changing learner answers, score, history, counters, valid counts, or pointers.
+
+Live readback after backfill:
+- `LISTENING_ISSUE_NO=2`;
+- `NEXT_LISTENING_SET_NO=3`;
+- `LAST_LISTENING_SET_ID=H3-20260919-L03`;
+- `ACTIVE_WRONG_COUNT=5`;
+- `OVERLOAD_STATUS=LISTENING_OVERLOAD_PLAN_READY`;
+- plan schema = `H3_LISTENING_OVERLOAD_PLAN_V2`;
+- `next_set_no=3`;
+- EDF order = `K4,K1,K3,K2,K5`;
+- normal retests = `3:K4,4:K1,5:K3,6:K2,7:K5`;
+- supplemental = none;
+- blocking overflow = none.
+
+Repository regression coverage reproduces this exact L02/L03 history and schedule.
+
+#### B2 PC validation — PASS by release-policy change
+
+PC device validation is no longer a default release gate.
+
+Current device policy:
+- iPhone 13 mini / iPhone-class mobile Web App validation remains the primary learner-device gate;
+- PC validation is optional and nonblocking by default;
+- PC validation becomes required only when explicitly requested or when a PC-specific code/rendering change is under review.
+
+The canonical Listening render source is released as `H3-LISTENING-RENDER-RULES-20260920-V19` with this policy.
+
+#### R3-10 exit
+
+```text
+RESULT=PASS
+BLOCKING=0
+B1_SCHEDULER_REFRESH=PASS
+B2_PC_GATE=PASS_POLICY_NONBLOCKING
+LISTENING_ISSUE_NO=2
+NEXT_LISTENING_SET_NO=3
+OVERLOAD_STATUS=LISTENING_OVERLOAD_PLAN_READY
+OVERLOAD_PLAN_SCHEMA=H3_LISTENING_OVERLOAD_PLAN_V2
+NORMAL_LIVE_ACTIVATION=BLOCKED_UNTIL_R3_11
+NEXT=R3-11 NORMAL_LIVE_ACTIVATION
+```
+
+R3-10 is closed. R3-11 remains a separate explicit activation step and is not performed by this close.

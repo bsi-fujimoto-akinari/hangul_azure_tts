@@ -77,7 +77,7 @@ function validateSystemTestRenderRequest_(request) {
     throw new Error('INVALID_RENDER_SCHEMA');
   }
   if (request.mode !== 'SYSTEM_TEST') {
-    throw new Error('R3_01_SYSTEM_TEST_ONLY');
+    throw new Error('R3_02_SYSTEM_TEST_ONLY');
   }
   if (request.set_id !== H3_WEB_SYSTEM_TEST_FIXTURE.set_id) {
     throw new Error('SYSTEM_TEST_SET_NOT_ALLOWLISTED');
@@ -127,7 +127,7 @@ function getSystemTestMediaPayload_(request) {
     throw new Error('INVALID_MEDIA_SCHEMA');
   }
   if (request.mode !== 'SYSTEM_TEST') {
-    throw new Error('R3_01_SYSTEM_TEST_ONLY');
+    throw new Error('R3_02_SYSTEM_TEST_ONLY');
   }
   if (request.set_id !== H3_WEB_SYSTEM_TEST_FIXTURE.set_id) {
     throw new Error('SYSTEM_TEST_SET_NOT_ALLOWLISTED');
@@ -244,7 +244,7 @@ function gradeSystemTestSubmission_(request) {
     throw new Error('INVALID_SUBMIT_SCHEMA');
   }
   if (request.mode !== 'SYSTEM_TEST') {
-    throw new Error('R3_01_SYSTEM_TEST_ONLY');
+    throw new Error('R3_02_SYSTEM_TEST_ONLY');
   }
   if (request.set_id !== H3_WEB_SYSTEM_TEST_FIXTURE.set_id) {
     throw new Error('SYSTEM_TEST_SET_NOT_ALLOWLISTED');
@@ -277,30 +277,21 @@ function gradeSystemTestSubmission_(request) {
     };
   });
 
-  var fingerprintInput = H3_WEB_SYSTEM_TEST_FIXTURE.set_id + '|' + summary.map(function (x) {
-    return x.answer;
-  }).join(',');
-  var txnId = 'R3-01-POC-' + h3Sha256Hex_(fingerprintInput).slice(0, 16).toUpperCase();
-  var receipt = [
-    '[H3_WEB_SYNC]',
-    'SET_ID=' + H3_WEB_SYSTEM_TEST_FIXTURE.set_id,
-    'TXN_ID=' + txnId,
-    'STATUS=COMMITTED'
-  ].join('\n');
-
-  return {
-    schema: 'H3_WEB_SUBMIT_RESULT_V1',
-    mode: 'SYSTEM_TEST',
-    nonlearning: true,
-    persisted: false,
-    commit_scope: 'R3_01_POC_MEMORY_ONLY',
+  var resultCore = {
     set_id: H3_WEB_SYSTEM_TEST_FIXTURE.set_id,
-    txn_id: txnId,
-    status: 'COMMITTED',
     score: score,
     total: 5,
-    summary: summary,
-    receipt: receipt,
-    after_sync: buildSystemTestReviewPayload_()
+    summary: summary
   };
+
+  var committed = h3CommitSystemTestTransaction_(
+    request,
+    normalized,
+    resultCore
+  );
+
+  committed.after_sync =
+    buildSystemTestReviewPayload_();
+
+  return committed;
 }

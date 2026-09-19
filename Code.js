@@ -1487,6 +1487,35 @@ function processPendingAudioForSet(
       );
     }
 
+    const sections =
+      members
+        .map(x => x.values[5])
+        .sort();
+
+    if (
+      JSON.stringify(sections) !==
+      JSON.stringify([
+        'K1','K2','K3','K4','K5'
+      ])
+    ) {
+      throw new Error(
+        '5L target must contain exactly one K1-K5 row.'
+      );
+    }
+
+    if (
+      members.every(
+        x => x.values[1] === 'done'
+      )
+    ) {
+      return {
+        status: 'done',
+        mode: '5L',
+        set_id: targetSetId,
+        sections: sections
+      };
+    }
+
     const runnable =
       members.find(
         x =>
@@ -1494,19 +1523,18 @@ function processPendingAudioForSet(
           x.values[1] === 'processing'
       );
 
-    const seed = runnable
-      ? readListeningJob_(
-          sheet,
-          runnable.row
-        )
-      : {
-          parentSetId:
-            targetSetId
-        };
+    if (!runnable) {
+      throw new Error(
+        '5L target contains a non-runnable member.'
+      );
+    }
 
     return processListeningAudioSet_(
       sheet,
-      seed,
+      readListeningJob_(
+        sheet,
+        runnable.row
+      ),
       c
     );
   } finally {

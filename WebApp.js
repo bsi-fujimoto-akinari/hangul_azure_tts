@@ -1,6 +1,7 @@
 /**
- * H3 R3-01 SYSTEM_TEST Web App POC.
- * Non-learning only. No Sheet/runtime/history mutation is authorized here.\n * CI sync marker: R3-01 route fix verified after audited manifest push.
+ * H3 R3-01B SYSTEM_TEST Web App.
+ * Non-learning only. No Sheet/runtime/history mutation is authorized here.
+ * Media transport is optimized for mobile: exact Drive files stream on demand.
  */
 
 function h3WebDoGet_(e) {
@@ -50,14 +51,45 @@ function h3Sha256Hex_(value) {
   }).join('');
 }
 
-function h3ExactDriveImageDataUri_(fileId, expectedSha256) {
+function h3DriveMediaDescriptor_(fileId, expectedMimeType, expectedSha256) {
   var file = DriveApp.getFileById(fileId);
-  var blob = file.getBlob();
-  var bytes = blob.getBytes();
-  var actualSha256 = h3Sha256Hex_(bytes);
-  if (actualSha256 !== expectedSha256) {
-    throw new Error('K1_IMAGE_SHA256_MISMATCH');
+  var mimeType = file.getMimeType();
+
+  if (expectedMimeType && mimeType !== expectedMimeType) {
+    throw new Error('MEDIA_MIME_MISMATCH:' + fileId);
   }
-  var mime = blob.getContentType() || 'image/png';
-  return 'data:' + mime + ';base64,' + Utilities.base64Encode(bytes);
+
+  if (expectedSha256) {
+    var bytes = file.getBlob().getBytes();
+    var actualSha256 = h3Sha256Hex_(bytes);
+    if (actualSha256 !== expectedSha256) {
+      throw new Error('MEDIA_SHA256_MISMATCH:' + fileId);
+    }
+  }
+
+  var downloadUrl = file.getDownloadUrl();
+  if (!downloadUrl) {
+    throw new Error('MEDIA_DOWNLOAD_URL_UNAVAILABLE:' + fileId);
+  }
+
+  return {
+    download_url: downloadUrl,
+    view_url: file.getUrl(),
+    mime_type: mimeType,
+    size_bytes: file.getSize()
+  };
+}
+
+function h3DriveUtf8Text_(fileId, maxBytes) {
+  var file = DriveApp.getFileById(fileId);
+  var size = file.getSize();
+  if (size > maxBytes) {
+    throw new Error('TEXT_FILE_TOO_LARGE:' + fileId);
+  }
+
+  var text = file.getBlob().getDataAsString('UTF-8');
+  if (text && text.charCodeAt(0) === 0xFEFF) {
+    text = text.slice(1);
+  }
+  return text;
 }

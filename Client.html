@@ -2,18 +2,35 @@
 (function () {
   'use strict';
 
+  var sections = ['K1', 'K2', 'K3', 'K4', 'K5'];
   var circled = ['①', '②', '③', '④'];
+  var mobileQuery = window.matchMedia('(max-width: 619px)');
+
   var app = {
     payload: null,
     answers: {},
     uncertain: {},
     locked: false,
-    submitting: false
+    submitting: false,
+    activeIndex: 0
   };
 
   document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('reset').addEventListener('click', resetAll);
     document.getElementById('submit').addEventListener('click', submitAnswers);
+    document.getElementById('mobile-prev').addEventListener('click', function () {
+      setActiveIndex(app.activeIndex - 1);
+    });
+    document.getElementById('mobile-next').addEventListener('click', function () {
+      setActiveIndex(app.activeIndex + 1);
+    });
+
+    if (mobileQuery.addEventListener) {
+      mobileQuery.addEventListener('change', syncResponsiveState);
+    } else if (mobileQuery.addListener) {
+      mobileQuery.addListener(syncResponsiveState);
+    }
+
     loadSet();
   });
 
@@ -25,8 +42,12 @@
         app.payload = payload;
         document.getElementById('set-id').textContent = payload.set_id;
         renderQuestions(payload.questions);
+        buildMobileProgress(payload.questions.length);
         document.getElementById('questions').classList.remove('hidden');
         document.getElementById('controls').classList.remove('hidden');
+        document.getElementById('mobile-progress').classList.remove('hidden');
+        document.getElementById('mobile-nav').classList.remove('hidden');
+        syncResponsiveState();
         updateLiveSummary();
       })
       .withFailureHandler(function (err) {
@@ -44,10 +65,13 @@
       var qNo = index + 1;
       var card = el('section', 'question-card');
       card.dataset.section = q.section;
+      card.dataset.index = String(index);
+      if (index === 0) card.classList.add('mobile-active');
 
       var head = el('div', 'question-head');
       var title = el('h2', 'question-title');
       title.textContent = 'Q' + qNo + ' ' + q.display;
+
       var uncertain = el('button', 'uncertain');
       uncertain.type = 'button';
       uncertain.textContent = '?';
@@ -60,23 +84,19 @@
         uncertain.setAttribute('aria-pressed', String(!!app.uncertain[q.section]));
         updateLiveSummary();
       });
+
       head.appendChild(title);
       head.appendChild(uncertain);
       card.appendChild(head);
-
-      var audio = document.createElement('a');
-      audio.className = 'audio-link';
-      audio.href = q.audio_url;
-      audio.target = '_blank';
-      audio.rel = 'noopener';
-      audio.textContent = '音声：開く';
-      card.appendChild(audio);
+      card.appendChild(buildAudioBlock(q.audio_stream_url, q.audio_fallback_url, '問題音声'));
 
       if (q.section === 'K1') {
         var img = document.createElement('img');
         img.className = 'k1-image';
-        img.src = q.image_data_uri;
+        img.src = q.image_stream_url;
         img.alt = 'K1 問題画像';
+        img.decoding = 'async';
+        img.loading = 'eager';
         card.appendChild(img);
       }
 
@@ -96,31 +116,130 @@
         });
         choices.appendChild(b);
       });
+
       card.appendChild(choices);
       root.appendChild(card);
     });
   }
 
+  function buildAudioBlock(streamUrl, fallbackUrl, label) {
+    var wrap = el('div', 'audio-wrap');
+
+    var title = el('p', 'audio-label');
+    title.textContent = label;
+    wrap.appendChild(title);
+
+    var audio = document.createElement('audio');
+    audio.className = 'audio-player';
+    audio.controls = true;
+    audio.preload = 'none';
+    audio.src = streamUrl;
+    audio.setAttribute('playsinline', '');
+    audio.addEventListener('play', function () {
+      pauseOtherAudio(audio);
+    });
+    wrap.appendChild(audio);
+
+    var fallback = document.createElement('a');
+    fallback.className = 'media-fallback';
+    fallback.href = fallbackUrl;
+    fallback.target = '_blank';
+    fallback.rel = 'noopener';
+    fallback.textContent = '再生できない場合はDriveで開く';
+    wrap.appendChild(fallback);
+
+    return wrap;
+  }
+
+  function pauseOtherAudio(current) {
+    Array.prototype.forEach.call(document.querySelectorAll('audio'), function (audio) {
+      if (audio !== current && !audio.paused) audio.pause();
+    });
+  }
+
+  function buildMobileProgress(count) {
+    var root = document.getElementById('mobile-progress');
+    root.textContent = '';
+
+    for (var i = 0; i < count; i += 1) {
+      (function (index) {
+        var button = el('button', 'progress-button');
+        button.type = 'button';
+        button.textContent = 'Q' + (index + 1);
+        button.dataset.index = String(index);
+        button.addEventListener('click', function () {
+          setActiveIndex(index);
+        });
+        root.appendChild(button);
+      })(i);
+    }
+  }
+
+  function setActiveIndex(index) {
+    if (!app.payload || app.locked) return;
+    var max = app.payload.questions.length - 1;
+    app.activeIndex = Math.max(0, Math.min(max, index));
+    updateMobilePager();
+
+    if (mobileQuery.matches) {
+      var progress = document.getElementById('mobile-progress');
+      if (progress && progress.scrollIntoView) {
+        progress.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
+    }
+  }
+
+  function syncResponsiveState() {
+    if (!app.payload) return;
+    updateMobilePager();
+  }
+
+  function updateMobilePager() {
+    var cards = document.querySelectorAll('.question-card');
+    Array.prototype.forEach.call(cards, function (card, index) {
+      card.classList.toggle('mobile-active', index === app.activeIndex);
+    });
+
+    var buttons = document.querySelectorAll('.progress-button');
+    Array.prototype.forEach.call(buttons, function (button, index) {
+      var section = sections[index];
+      button.classList.toggle('current', index === app.activeIndex);
+      button.classList.toggle('answered', typeof app.answers[section] === 'number' && !app.uncertain[section]);
+      button.classList.toggle('uncertain-mark', typeof app.answers[section] === 'number' && !!app.uncertain[section]);
+      button.setAttribute('aria-current', index === app.activeIndex ? 'step' : 'false');
+    });
+
+    document.getElementById('mobile-position').textContent =
+      'Q' + (app.activeIndex + 1) + ' / ' + sections.length;
+    document.getElementById('mobile-prev').disabled = app.activeIndex === 0 || app.locked;
+    document.getElementById('mobile-next').disabled = app.activeIndex === sections.length - 1 || app.locked;
+  }
+
   function updateLiveSummary() {
-    var parts = ['K1', 'K2', 'K3', 'K4', 'K5'].map(function (section, i) {
+    var parts = sections.map(function (section, i) {
       var answer = app.answers[section];
       return 'Q' + (i + 1) + ' ' + (answer ? String(answer) + (app.uncertain[section] ? '?' : '') : '—');
     });
+
     document.getElementById('live-summary').textContent = parts.join(' / ');
     document.getElementById('submit').disabled = app.locked || app.submitting || !allAnswered();
     document.getElementById('reset').disabled = app.locked || app.submitting;
+    updateMobilePager();
   }
 
   function allAnswered() {
-    return ['K1', 'K2', 'K3', 'K4', 'K5'].every(function (s) {
-      return typeof app.answers[s] === 'number';
+    return sections.every(function (section) {
+      return typeof app.answers[section] === 'number';
     });
   }
 
   function resetAll() {
     if (app.locked || app.submitting) return;
+
     app.answers = {};
     app.uncertain = {};
+    app.activeIndex = 0;
+
     Array.prototype.forEach.call(document.querySelectorAll('.choice'), function (node) {
       node.classList.remove('selected');
     });
@@ -128,11 +247,13 @@
       node.classList.remove('active');
       node.setAttribute('aria-pressed', 'false');
     });
+
     updateLiveSummary();
   }
 
   function submitAnswers() {
     if (!allAnswered() || app.locked || app.submitting) return;
+
     app.submitting = true;
     setInteractiveDisabled(true);
     updateLiveSummary();
@@ -141,7 +262,7 @@
       schema: 'H3_WEB_SUBMIT_V1',
       mode: 'SYSTEM_TEST',
       set_id: app.payload.set_id,
-      answers: ['K1', 'K2', 'K3', 'K4', 'K5'].map(function (section) {
+      answers: sections.map(function (section) {
         return {
           section: section,
           answer: app.answers[section],
@@ -154,9 +275,14 @@
       .withSuccessHandler(function (result) {
         app.submitting = false;
         app.locked = true;
+        document.body.classList.add('graded');
         setInteractiveDisabled(true);
         renderResult(result);
         updateLiveSummary();
+
+        if (mobileQuery.matches) {
+          document.getElementById('result').scrollIntoView({ block: 'start', behavior: 'smooth' });
+        }
       })
       .withFailureHandler(function (err) {
         app.submitting = false;
@@ -169,9 +295,12 @@
   }
 
   function setInteractiveDisabled(disabled) {
-    Array.prototype.forEach.call(document.querySelectorAll('.choice, .uncertain'), function (node) {
-      node.disabled = disabled;
-    });
+    Array.prototype.forEach.call(
+      document.querySelectorAll('.choice, .uncertain'),
+      function (node) {
+        node.disabled = disabled;
+      }
+    );
     document.getElementById('reset').disabled = disabled;
     document.getElementById('submit').disabled = disabled;
   }
@@ -188,13 +317,16 @@
     var table = document.createElement('table');
     var thead = document.createElement('thead');
     var hr = document.createElement('tr');
+
     ['問題', '回答', '正答', '正誤'].forEach(function (label) {
       var th = document.createElement('th');
       th.textContent = label;
       hr.appendChild(th);
     });
+
     thead.appendChild(hr);
     table.appendChild(thead);
+
     var tbody = document.createElement('tbody');
     result.summary.forEach(function (row, i) {
       var tr = document.createElement('tr');
@@ -205,11 +337,13 @@
       });
       tbody.appendChild(tr);
     });
+
     table.appendChild(tbody);
     root.appendChild(table);
 
     var note = el('p', 'poc-note');
-    note.textContent = 'R3-01 POCではreceiptは非永続です。学習runtime/historyにはWRITEしていません。R3-02でtransaction journalによる検証可能なreceiptへ進みます。';
+    note.textContent =
+      'R3-01B SYSTEM_TESTのreceiptは非永続です。学習runtime/historyにはWRITEしていません。';
     root.appendChild(note);
 
     var pre = document.createElement('pre');
@@ -220,13 +354,66 @@
     var copy = el('button', 'copy-button');
     copy.type = 'button';
     copy.textContent = '回答結果をコピー';
-    copy.addEventListener('click', function () { copyReceipt(result.receipt, copy); });
+    copy.addEventListener('click', function () {
+      copyReceipt(result.receipt, copy);
+    });
     root.appendChild(copy);
 
-    var links = el('div', 'asset-links');
-    links.appendChild(assetLink(result.after_sync.combined_audio_url, '合体音声：開く'));
-    links.appendChild(assetLink(result.after_sync.review_script_url, '復習スクリプトTXT：開く'));
-    root.appendChild(links);
+    renderReviewMode(result.after_sync, root);
+  }
+
+  function renderReviewMode(review, root) {
+    var panel = el('section', 'review-panel');
+
+    var head = el('div', 'review-head');
+    var title = document.createElement('h2');
+    title.textContent = '復習モード';
+    var description = document.createElement('p');
+    description.textContent = '結合音声を再生しながら、同じ画面でスクリプトを確認できます。';
+    head.appendChild(title);
+    head.appendChild(description);
+    panel.appendChild(head);
+
+    var playerWrap = el('div', 'review-player-sticky');
+    var playerTitle = el('p', 'audio-label');
+    playerTitle.textContent = '結合音声';
+    playerWrap.appendChild(playerTitle);
+
+    var audio = document.createElement('audio');
+    audio.className = 'audio-player';
+    audio.controls = true;
+    audio.preload = 'none';
+    audio.src = review.combined_audio_stream_url;
+    audio.setAttribute('playsinline', '');
+    audio.addEventListener('play', function () {
+      pauseOtherAudio(audio);
+    });
+    playerWrap.appendChild(audio);
+
+    var fallback = document.createElement('a');
+    fallback.className = 'media-fallback';
+    fallback.href = review.combined_audio_fallback_url;
+    fallback.target = '_blank';
+    fallback.rel = 'noopener';
+    fallback.textContent = '再生できない場合はDriveで開く';
+    playerWrap.appendChild(fallback);
+
+    panel.appendChild(playerWrap);
+
+    var script = document.createElement('pre');
+    script.className = 'review-script';
+    script.textContent = review.review_script_text;
+    panel.appendChild(script);
+
+    var scriptFallback = document.createElement('a');
+    scriptFallback.className = 'media-fallback';
+    scriptFallback.href = review.review_script_fallback_url;
+    scriptFallback.target = '_blank';
+    scriptFallback.rel = 'noopener';
+    scriptFallback.textContent = '元の復習スクリプトTXTをDriveで開く';
+    panel.appendChild(scriptFallback);
+
+    root.appendChild(panel);
   }
 
   function copyReceipt(text, button) {
@@ -249,22 +436,15 @@
     area.style.opacity = '0';
     document.body.appendChild(area);
     area.select();
+
     try {
       document.execCommand('copy');
       button.textContent = 'コピー済み';
     } catch (e) {
       button.textContent = '上のreceiptを選択してください';
     }
-    document.body.removeChild(area);
-  }
 
-  function assetLink(url, label) {
-    var a = document.createElement('a');
-    a.href = url;
-    a.target = '_blank';
-    a.rel = 'noopener';
-    a.textContent = label;
-    return a;
+    document.body.removeChild(area);
   }
 
   function el(tag, className) {

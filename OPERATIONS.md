@@ -706,3 +706,14 @@ Hard write boundary:
 Replay attempts are intentionally not persisted in v1.
 
 R3-09E currently exits implementation at `IMPLEMENTED_AWAITING_DEVICE_VALIDATION`. The iPhone validation must confirm both learner UX and zero runtime mutation before R3-09E closes.
+
+### R3-09E learner UI refinement
+
+Current learner UI:
+- HOME is compact and card-based;
+- Review uses a five-button `Qn result` pager and displays one question at a time;
+- Review aggregate score/count/filter header is removed;
+- Review action labels are `再挑戦` and `ホーム`;
+- Replay has no introductory/explanatory block and opens directly on Q1.
+
+This is presentation-only. REVIEW/HOME/REVIEW_REPLAY runtime write boundaries remain unchanged.

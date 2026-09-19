@@ -1,6 +1,6 @@
 /**
- * H3 R3-01B SYSTEM_TEST Web App.
- * Non-learning only. No Sheet/runtime/history mutation is authorized here.
+ * H3 R3-02 SYSTEM_TEST Web App.
+ * Non-learning only. The only authorized write target is listening_web_test_txn_v1.
  * Media transport: exact Drive bytes are returned only through allowlisted Apps Script calls.
  */
 
@@ -96,4 +96,486 @@ function h3DriveUtf8Text_(fileId, maxBytes) {
     text = text.slice(1);
   }
   return text;
+}
+
+
+var H3_WEB_RUNTIME_SPREADSHEET_ID =
+  '18nxNQoHg3arFaEDOaqc4wuFHmBq43Q4g-I_uD6IDysM';
+
+var H3_WEB_TEST_TXN_SHEET =
+  'listening_web_test_txn_v1';
+
+var H3_WEB_TEST_TXN_HEADERS = [
+  'TXN_ID',
+  'SET_ID',
+  'LISTENING_SET_NO',
+  'MODE',
+  'RAW_INPUT_JSON',
+  'REQUEST_FINGERPRINT',
+  'CREATED_AT',
+  'STATUS',
+  'RESULT_JSON',
+  'SCORE',
+  'PRESTATE_JSON',
+  'PRESTATE_SHA256',
+  'POSTSTATE_SHA256',
+  'COMMITTED_AT',
+  'ERROR'
+];
+
+var H3_WEB_LEARNER_SENTINEL_RANGES = [
+  { sheet: 'listening_policy_v1', range: 'A1:D100' },
+  { sheet: 'listening_state_v1', range: 'A1:C100' },
+  { sheet: 'listening_log_v1', range: 'A1:U6' },
+  { sheet: 'listening_k1_ready_v1', range: 'A1:M2' },
+  { sheet: 'listening_set_payload_v1', range: 'A1:O2' }
+];
+
+function h3NowTokyo_() {
+  return (
+    Utilities.formatDate(
+      new Date(),
+      'Asia/Tokyo',
+      "yyyy-MM-dd'T'HH:mm:ss"
+    ) + '+09:00'
+  );
+}
+
+function h3CaptureLearnerRuntimeSentinel_(spreadsheet) {
+  var ranges = H3_WEB_LEARNER_SENTINEL_RANGES.map(function (spec) {
+    var sheet = spreadsheet.getSheetByName(spec.sheet);
+    if (!sheet) {
+      throw new Error(
+        'LEARNER_SENTINEL_SHEET_MISSING:' + spec.sheet
+      );
+    }
+
+    var values = sheet
+      .getRange(spec.range)
+      .getDisplayValues();
+
+    return {
+      sheet: spec.sheet,
+      range: spec.range,
+      sha256: h3Sha256Hex_(JSON.stringify(values))
+    };
+  });
+
+  var json = JSON.stringify({
+    schema: 'H3_WEB_LEARNER_SENTINEL_V1',
+    ranges: ranges
+  });
+
+  return {
+    json: json,
+    sha256: h3Sha256Hex_(json)
+  };
+}
+
+function h3RequireTestTxnSheet_(spreadsheet) {
+  var sheet = spreadsheet.getSheetByName(
+    H3_WEB_TEST_TXN_SHEET
+  );
+
+  if (!sheet) {
+    throw new Error('TEST_TXN_SHEET_MISSING');
+  }
+
+  var header = sheet
+    .getRange(1, 1, 1, H3_WEB_TEST_TXN_HEADERS.length)
+    .getDisplayValues()[0];
+
+  if (
+    JSON.stringify(header) !==
+    JSON.stringify(H3_WEB_TEST_TXN_HEADERS)
+  ) {
+    throw new Error('TEST_TXN_HEADER_MISMATCH');
+  }
+
+  return sheet;
+}
+
+function h3NextTestTxnId_(rows) {
+  var datePart = Utilities.formatDate(
+    new Date(),
+    'Asia/Tokyo',
+    'yyyyMMdd'
+  );
+  var prefix = 'H3TX-' + datePart + '-';
+  var max = 0;
+
+  rows.forEach(function (row) {
+    var value = String(row[0] || '');
+    if (value.indexOf(prefix) !== 0) return;
+
+    var suffix = value.slice(prefix.length);
+    if (!/^\d{6}$/.test(suffix)) return;
+
+    max = Math.max(max, Number(suffix));
+  });
+
+  var next = String(max + 1);
+  while (next.length < 6) next = '0' + next;
+
+  return prefix + next;
+}
+
+function h3BuildTestRequestFingerprint_(setId, answers) {
+  var body = answers.map(function (a) {
+    return [
+      a.section,
+      String(a.answer),
+      a.uncertain ? '1' : '0'
+    ].join(':');
+  }).join('|');
+
+  return h3Sha256Hex_(setId + '|' + body);
+}
+
+function h3BuildCommittedTestResult_(core, txnId) {
+  var receipt = [
+    '[H3_WEB_SYNC]',
+    'SET_ID=' + core.set_id,
+    'TXN_ID=' + txnId,
+    'STATUS=COMMITTED'
+  ].join('\n');
+
+  return {
+    schema: 'H3_WEB_SUBMIT_RESULT_V1',
+    mode: 'SYSTEM_TEST',
+    nonlearning: true,
+    persisted: true,
+    commit_scope: 'R3_02_SYSTEM_TEST_JOURNAL',
+    set_id: core.set_id,
+    txn_id: txnId,
+    status: 'COMMITTED',
+    score: core.score,
+    total: core.total,
+    summary: core.summary,
+    receipt: receipt
+  };
+}
+
+function h3CommitSystemTestTransaction_(
+  request,
+  normalizedAnswers,
+  resultCore
+) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  var spreadsheet = null;
+  var sheet = null;
+  var preparedRow = null;
+
+  try {
+    spreadsheet = SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+    sheet = h3RequireTestTxnSheet_(spreadsheet);
+
+    var lastRow = sheet.getLastRow();
+    var rows =
+      lastRow > 1
+        ? sheet
+            .getRange(
+              2,
+              1,
+              lastRow - 1,
+              H3_WEB_TEST_TXN_HEADERS.length
+            )
+            .getDisplayValues()
+        : [];
+
+    var rawInputJson = JSON.stringify({
+      schema: 'H3_WEB_SUBMIT_V1',
+      mode: 'SYSTEM_TEST',
+      set_id: request.set_id,
+      answers: normalizedAnswers
+    });
+
+    var fingerprint =
+      h3BuildTestRequestFingerprint_(
+        request.set_id,
+        normalizedAnswers
+      );
+
+    var matching = [];
+    var unresolvedRecovery = false;
+
+    rows.forEach(function (row, i) {
+      var status = String(row[7] || '');
+      if (status === 'RECOVERY_REQUIRED') {
+        unresolvedRecovery = true;
+      }
+
+      if (String(row[1] || '') === request.set_id) {
+        matching.push({
+          rowNumber: i + 2,
+          values: row
+        });
+      }
+    });
+
+    for (var i = 0; i < matching.length; i += 1) {
+      var record = matching[i];
+      var row = record.values;
+      var status = String(row[7] || '');
+      var rowFingerprint = String(row[5] || '');
+
+      if (
+        status === 'COMMITTED' &&
+        rowFingerprint === fingerprint
+      ) {
+        var stored = JSON.parse(String(row[8] || '{}'));
+        if (
+          stored.txn_id !== String(row[0] || '') ||
+          stored.status !== 'COMMITTED'
+        ) {
+          throw new Error(
+            'TEST_TXN_COMMITTED_ROW_RESULT_MISMATCH'
+          );
+        }
+        return stored;
+      }
+
+      if (
+        status === 'PREPARED' &&
+        rowFingerprint === fingerprint
+      ) {
+        var currentSentinel =
+          h3CaptureLearnerRuntimeSentinel_(spreadsheet);
+        var preparedPreHash = String(row[11] || '');
+
+        if (
+          currentSentinel.sha256 !== preparedPreHash
+        ) {
+          sheet
+            .getRange(record.rowNumber, 8, 1, 8)
+            .setValues([[
+              'RECOVERY_REQUIRED',
+              '',
+              '',
+              String(row[10] || ''),
+              preparedPreHash,
+              currentSentinel.sha256,
+              '',
+              'LEARNER_RUNTIME_SENTINEL_CHANGED_DURING_PREPARED_RECOVERY'
+            ]]);
+          SpreadsheetApp.flush();
+          throw new Error(
+            'TEST_TXN_RECOVERY_REQUIRED'
+          );
+        }
+
+        var recoveredResult =
+          h3BuildCommittedTestResult_(
+            resultCore,
+            String(row[0] || '')
+          );
+        var recoveredAt = h3NowTokyo_();
+
+        sheet
+          .getRange(record.rowNumber, 8, 1, 8)
+          .setValues([[
+            'COMMITTED',
+            JSON.stringify(recoveredResult),
+            recoveredResult.score,
+            String(row[10] || ''),
+            preparedPreHash,
+            currentSentinel.sha256,
+            recoveredAt,
+            ''
+          ]]);
+        SpreadsheetApp.flush();
+
+        var recoveredReadback = sheet
+          .getRange(
+            record.rowNumber,
+            1,
+            1,
+            H3_WEB_TEST_TXN_HEADERS.length
+          )
+          .getDisplayValues()[0];
+
+        if (
+          recoveredReadback[0] !== recoveredResult.txn_id ||
+          recoveredReadback[7] !== 'COMMITTED'
+        ) {
+          throw new Error(
+            'TEST_TXN_RECOVERY_READBACK_FAILED'
+          );
+        }
+
+        return recoveredResult;
+      }
+
+      if (
+        status !== 'ROLLED_BACK' &&
+        rowFingerprint !== fingerprint
+      ) {
+        throw new Error(
+          'SYSTEM_TEST_TXN_CONFLICT'
+        );
+      }
+    }
+
+    if (unresolvedRecovery) {
+      throw new Error(
+        'TEST_TXN_RECOVERY_REQUIRED_BLOCK'
+      );
+    }
+
+    var prestate =
+      h3CaptureLearnerRuntimeSentinel_(spreadsheet);
+
+    var txnId = h3NextTestTxnId_(rows);
+    var createdAt = h3NowTokyo_();
+
+    sheet.appendRow([
+      txnId,
+      request.set_id,
+      '',
+      'SYSTEM_TEST',
+      rawInputJson,
+      fingerprint,
+      createdAt,
+      'PREPARED',
+      '',
+      '',
+      prestate.json,
+      prestate.sha256,
+      '',
+      '',
+      ''
+    ]);
+    preparedRow = sheet.getLastRow();
+    SpreadsheetApp.flush();
+
+    var preparedReadback = sheet
+      .getRange(
+        preparedRow,
+        1,
+        1,
+        H3_WEB_TEST_TXN_HEADERS.length
+      )
+      .getDisplayValues()[0];
+
+    if (
+      preparedReadback[0] !== txnId ||
+      preparedReadback[7] !== 'PREPARED' ||
+      preparedReadback[5] !== fingerprint
+    ) {
+      throw new Error(
+        'TEST_TXN_PREPARED_READBACK_FAILED'
+      );
+    }
+
+    var poststate =
+      h3CaptureLearnerRuntimeSentinel_(spreadsheet);
+
+    if (poststate.sha256 !== prestate.sha256) {
+      sheet
+        .getRange(preparedRow, 8, 1, 8)
+        .setValues([[
+          'RECOVERY_REQUIRED',
+          '',
+          '',
+          prestate.json,
+          prestate.sha256,
+          poststate.sha256,
+          '',
+          'LEARNER_RUNTIME_SENTINEL_CHANGED_DURING_SYSTEM_TEST'
+        ]]);
+      SpreadsheetApp.flush();
+      throw new Error(
+        'TEST_TXN_RECOVERY_REQUIRED'
+      );
+    }
+
+    var committed =
+      h3BuildCommittedTestResult_(
+        resultCore,
+        txnId
+      );
+    var committedAt = h3NowTokyo_();
+
+    sheet
+      .getRange(preparedRow, 8, 1, 8)
+      .setValues([[
+        'COMMITTED',
+        JSON.stringify(committed),
+        committed.score,
+        prestate.json,
+        prestate.sha256,
+        poststate.sha256,
+        committedAt,
+        ''
+      ]]);
+    SpreadsheetApp.flush();
+
+    var finalReadback = sheet
+      .getRange(
+        preparedRow,
+        1,
+        1,
+        H3_WEB_TEST_TXN_HEADERS.length
+      )
+      .getDisplayValues()[0];
+
+    if (
+      finalReadback[0] !== txnId ||
+      finalReadback[7] !== 'COMMITTED' ||
+      finalReadback[5] !== fingerprint ||
+      finalReadback[11] !== prestate.sha256 ||
+      finalReadback[12] !== poststate.sha256
+    ) {
+      throw new Error(
+        'TEST_TXN_COMMITTED_READBACK_FAILED'
+      );
+    }
+
+    return committed;
+  } catch (err) {
+    if (sheet && preparedRow) {
+      try {
+        var status = sheet
+          .getRange(preparedRow, 8)
+          .getDisplayValue();
+
+        if (
+          status !== 'COMMITTED' &&
+          status !== 'RECOVERY_REQUIRED'
+        ) {
+          sheet
+            .getRange(preparedRow, 8, 1, 8)
+            .setValues([[
+              'ROLLED_BACK',
+              '',
+              '',
+              sheet
+                .getRange(preparedRow, 11)
+                .getDisplayValue(),
+              sheet
+                .getRange(preparedRow, 12)
+                .getDisplayValue(),
+              '',
+              '',
+              String(
+                err && err.message
+                  ? err.message
+                  : err
+              )
+            ]]);
+          SpreadsheetApp.flush();
+        }
+      } catch (rollbackErr) {
+        // The original error remains authoritative.
+      }
+    }
+
+    throw err;
+  } finally {
+    lock.releaseLock();
+  }
 }

@@ -1362,7 +1362,7 @@ jobs:
               '## 17. R3-09D device validation',
               'RESULT=PASS_DEVICE_VALIDATED',
               'persistent history shows 5L #2',
-              'Q1 exact source-bound K1 image',
+              'Q1 renders exact source-bound K1 image',
               'Q1 renders inline audio control',
               'Q1 shows learner answer `④ ?` and correct answer `③`',
               'NEXT=R3-09E REVIEW_REPLAY_LIBRARY_DEVICE_VALIDATION',

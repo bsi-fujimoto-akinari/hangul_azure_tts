@@ -233,12 +233,7 @@ function h3BuildTestRequestFingerprint_(setId, answers) {
 }
 
 function h3BuildCommittedTestResult_(core, txnId) {
-  var receipt = [
-    '[H3_WEB_SYNC]',
-    'SET_ID=' + core.set_id,
-    'TXN_ID=' + txnId,
-    'STATUS=COMMITTED'
-  ].join('\n');
+  var receipt = h3BuildWebReceipt_(core.set_id, txnId);
 
   return {
     schema: 'H3_WEB_SUBMIT_RESULT_V1',

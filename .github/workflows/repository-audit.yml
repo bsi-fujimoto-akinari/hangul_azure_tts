@@ -37,6 +37,8 @@ jobs:
               'WebApp.js',
               'WebAppFixture.js',
               'WebAppProduction.js',
+              'WebAppReceipt.js',
+              'H3_WEB_CHAT_CONTRACT.md',
               'Index.html',
               'Stylesheet.html',
               'Client.html',
@@ -54,7 +56,7 @@ jobs:
           unexpected = sorted(tracked - allowed)
           missing = sorted({
               '.clasp.json', '.gitignore', 'Code.js',
-              'WebApp.js', 'WebAppFixture.js', 'WebAppProduction.js', 'Index.html',
+              'WebApp.js', 'WebAppFixture.js', 'WebAppProduction.js', 'WebAppReceipt.js', 'Index.html',
               'Stylesheet.html', 'Client.html', 'appsscript.json'
           } - tracked)
 
@@ -430,6 +432,106 @@ jobs:
           assert(k1.provenance.retest.required === false, 'K1 retest evidence mismatch.');
           NODE
 
+      - name: Check R3-04 chat receipt and trigger contract
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          code = Path('Code.js').read_text(encoding='utf-8')
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+          prod = Path('WebAppProduction.js').read_text(encoding='utf-8')
+          receipt = Path('WebAppReceipt.js').read_text(encoding='utf-8')
+          ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
+          contract = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
+
+          required_code = [
+              'function processPendingAudioForSet(',
+              "normalizedMode !== '5W'",
+              "normalizedMode !== '5L'",
+              'targetSetId',
+              'locate_(',
+              'collectListeningSetRows_(',
+          ]
+          for needle in required_code:
+              if needle not in code:
+                  raise SystemExit(f'R3-04 targeted dispatch invariant missing: {needle}')
+
+          if 'function processLatestPendingAudioJob()' not in code:
+              raise SystemExit('One-minute fallback entry point was removed.')
+
+          if 'h3BuildWebReceipt_(core.set_id, txnId)' not in web:
+              raise SystemExit('SYSTEM_TEST is not using the shared receipt formatter.')
+          if 'h3BuildWebReceipt_(context.setId, txnId)' not in prod:
+              raise SystemExit('Production is not using the shared receipt formatter.')
+
+          for needle in [
+              '[H3_WEB_SYNC]',
+              'STATUS=COMMITTED',
+              'H3TX-',
+              'function h3ParseWebReceipt_(',
+          ]:
+              if needle not in receipt:
+                  raise SystemExit(f'Receipt contract invariant missing: {needle}')
+
+          for needle in ['K1', '5L', '5W', '5Q', 'DEPRECATED']:
+              if needle not in contract:
+                  raise SystemExit(f'Trigger contract invariant missing: {needle}')
+
+          if 'processPendingAudioForSet(mode, setId)' not in ops:
+              raise SystemExit('Operations policy lacks targeted audio dispatch.')
+          if 'deprecated for new learner requests' not in ops:
+              raise SystemExit('Operations policy does not deprecate 5Q.')
+
+          if 'H3_R3_PRODUCTION_COMMIT_ENABLED = false' not in prod:
+              raise SystemExit('R3-04 must not activate production commits.')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const source = fs.readFileSync('WebAppReceipt.js', 'utf8');
+          const ctx = vm.createContext({});
+          vm.runInContext(source, ctx, {filename:'WebAppReceipt.js'});
+
+          const receipt = vm.runInContext(
+            "h3BuildWebReceipt_('H3-20260919-L03','H3TX-20260919-000123')",
+            ctx
+          );
+          const expected = [
+            '[H3_WEB_SYNC]',
+            'SET_ID=H3-20260919-L03',
+            'TXN_ID=H3TX-20260919-000123',
+            'STATUS=COMMITTED'
+          ].join('\n');
+
+          if (receipt !== expected) {
+            throw new Error('R3-04 receipt serialization mismatch.');
+          }
+
+          ctx.__receipt = receipt;
+          const parsed = vm.runInContext('h3ParseWebReceipt_(__receipt)', ctx);
+          if (
+            parsed.set_id !== 'H3-20260919-L03' ||
+            parsed.txn_id !== 'H3TX-20260919-000123' ||
+            parsed.status !== 'COMMITTED'
+          ) {
+            throw new Error('R3-04 receipt parser mismatch.');
+          }
+
+          let failed = false;
+          try {
+            vm.runInContext(
+              "h3ParseWebReceipt_('[H3_WEB_SYNC]\\nSET_ID=X\\nTXN_ID=bad\\nSTATUS=COMMITTED')",
+              ctx
+            );
+          } catch (_e) {
+            failed = true;
+          }
+          if (!failed) {
+            throw new Error('Malformed receipt was accepted.');
+          }
+          NODE
       - name: Check JavaScript syntax
         shell: bash
         run: |
@@ -437,6 +539,7 @@ jobs:
           node --check WebApp.js
           node --check WebAppFixture.js
           node --check WebAppProduction.js
+          node --check WebAppReceipt.js
           python3 - <<'PY'
           from pathlib import Path
           text = Path('Client.html').read_text(encoding='utf-8').strip()

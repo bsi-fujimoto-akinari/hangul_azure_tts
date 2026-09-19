@@ -167,3 +167,29 @@ Chat:
 - never duplicates a committed backend mutation
 
 This separation is mandatory for both 5L and future 5W.
+
+
+## 8. Learner-facing Web launcher URL
+
+The preferred learner-facing Chat link is the parameterless Apps Script Web App URL.
+
+Rules:
+
+1. Chat should not append SET_ID/mode query parameters to the ordinary learner-facing link when the backend has an authorized internal/default target.
+2. Parameterless `/dev` and `/exec` must enter the H3 Web App router.
+3. Query-string `mode=SYSTEM_TEST` / `mode=LISTENING` routes remain available for controlled diagnostics and internal verification.
+4. `ping=1` remains a health-check route.
+5. Other HTTP job execution remains disabled.
+6. The backend, not the visible URL, is responsible for resolving the current authorized set during normal production flow.
+
+This avoids unnecessary external-link safety interstitials observed for long query-string links while preserving backend authorization.
+
+## 9. Script TXT storage
+
+Script TXT artifacts are noncanonical learner conveniences and must be stored beside their audio:
+
+- 5W: `03_AUDIO/01_5W/H3-YYYYMMDD.txt`.
+- 5L: `03_AUDIO/02_5L/{LISTENING_SET_ID}.txt`.
+- SYSTEM_TEST: `03_AUDIO/90_ARCHIVE/01_SYSTEM_TEST/{SET_ID}_script.txt`.
+
+The canonical learner/history authority remains Google Sheets. TXT relocation or regeneration must not rewrite scores, history, pointers, or counters.

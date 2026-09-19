@@ -699,6 +699,9 @@ jobs:
               'HQ_AUDIO_SYSTEM_TEST_FOLDER_ID',
               'function audioTargetFolderId_(',
               'function assertAudioFolderState_(',
+              'function buildListeningSetScript_(',
+              'function persistListeningSetScript_(',
+              'HANGUL_5L_SCRIPT_V1',
           ]
           for needle in required:
               if needle not in code:
@@ -717,6 +720,10 @@ jobs:
           for needle in forbidden:
               if needle in code:
                   raise SystemExit(f'Legacy combined-audio code remains: {needle}')
+
+          if "'5W',\n            j.id" in code:
+              raise SystemExit('Listening checkpoint is incorrectly routed to the 5W folder.')
+
           PY
 
       - name: Check R3-06 fresh SYSTEM_TEST E2E fixture
@@ -748,6 +755,16 @@ jobs:
 
           if 'H3_R3_PRODUCTION_COMMIT_ENABLED = false' not in prod:
               raise SystemExit('R3-06 must keep production learning commit disabled.')
+
+          code = Path('Code.js').read_text(encoding='utf-8')
+          for needle in [
+              'keys.length === 0',
+              "params.mode ===\n      'SYSTEM_TEST'",
+              "params.mode ===\n      'LISTENING'",
+              "params.ping === '1'",
+          ]:
+              if needle not in code:
+                  raise SystemExit(f'R3-06 Web GET router invariant missing: {needle}')
           PY
 
           node <<'NODE'
@@ -1199,6 +1216,49 @@ jobs:
               '1YF7bkvAwYBv0JD6bimtki5vsVH4VWYiK',
             'SYSTEM_TEST target folder routing mismatch.'
           );
+
+          const scriptMembers = [
+            ['K1',[
+              {role:'choice_number1',text:'マルイチ',repeat:1,pause_ms_after:900},
+              {role:'choice1',text:'하나입니다.',repeat:2,pause_ms_after:3200},
+              {role:'choice_number2',text:'マルニ',repeat:1,pause_ms_after:900},
+              {role:'choice2',text:'둘입니다.',repeat:2,pause_ms_after:3200},
+              {role:'choice_number3',text:'マルサン',repeat:1,pause_ms_after:900},
+              {role:'choice3',text:'셋입니다.',repeat:2,pause_ms_after:3200},
+              {role:'choice_number4',text:'マルヨン',repeat:1,pause_ms_after:900},
+              {role:'choice4',text:'넷입니다.',repeat:2,pause_ms_after:3200}
+            ]],
+            ['K2',[
+              {role:'prompt',text:'질문입니다.',repeat:2,pause_ms_after:3200},
+              {role:'choice1',text:'선택 하나.',repeat:2,pause_ms_after:3200},
+              {role:'choice2',text:'선택 둘.',repeat:2,pause_ms_after:3200},
+              {role:'choice3',text:'선택 셋.',repeat:2,pause_ms_after:3200},
+              {role:'choice4',text:'선택 넷.',repeat:2,pause_ms_after:3200}
+            ]],
+            ['K3',[
+              {role:'prompt',text:'응답 질문입니다.',repeat:2,pause_ms_after:3200},
+              {role:'choice1',text:'응답 하나.',repeat:2,pause_ms_after:3200},
+              {role:'choice2',text:'응답 둘.',repeat:2,pause_ms_after:3200},
+              {role:'choice3',text:'응답 셋.',repeat:2,pause_ms_after:3200},
+              {role:'choice4',text:'응답 넷.',repeat:2,pause_ms_after:3200}
+            ]],
+            ['K4',[
+              {role:'passage',text:'네 번째 지문입니다.',repeat:2,pause_ms_after:3200}
+            ]],
+            ['K5',[
+              {role:'passage',text:'다섯 번째 지문입니다.',repeat:2,pause_ms_after:3200}
+            ]]
+          ].map(([section,plan],i)=>({
+            row:i+2,
+            values:['ID'+i,'done','', 'H3-TEST', '1', section, 'H3-'+section+'-SK001', JSON.stringify(plan)]
+          }));
+
+          context.__scriptMembers = scriptMembers;
+          const scriptText = run("buildListeningSetScript_('H3-TEST',__scriptMembers)");
+          assert(scriptText.includes('[聞1/絵]'), '5L script missing K1 label.');
+          assert(scriptText.includes('① 하나입니다.'), '5L script missing collapsed K1 choice.');
+          assert(!scriptText.includes('マルイチ'), '5L script leaked Japanese number cue.');
+          assert(scriptText.includes('[聞4/一致]\n네 번째 지문입니다.'), '5L script K4 passage mismatch.');
 
           console.log('Audio semantic regression checks passed.');
           NODE

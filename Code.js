@@ -2011,6 +2011,13 @@ function processListeningAudioSet_(
     };
   }
 
+  const script =
+    persistListeningSetScript_(
+      seed.parentSetId,
+      members,
+      c
+    );
+
   return {
     status: 'done',
     queue: 'listening_set',
@@ -2019,8 +2026,295 @@ function processListeningAudioSet_(
     listening_set_no:
       setNos[0],
     audio_mode:
-      'INDIVIDUAL_K1_K5_ONLY'
+      'INDIVIDUAL_K1_K5_ONLY',
+    script_file_id:
+      script.file_id,
+    script_url:
+      script.url
   };
+}
+
+
+function listeningPlanTextByRole_(
+  plan,
+  role,
+  section
+) {
+  const matches =
+    plan.filter(
+      x => x.role === role
+    );
+
+  if (matches.length !== 1) {
+    throw new Error(
+      '5L script requires exactly one ' +
+      role +
+      ' segment in ' +
+      section +
+      '.'
+    );
+  }
+
+  return String(
+    matches[0].text
+  ).trim();
+}
+
+
+function buildListeningSetScript_(
+  parentSetId,
+  members
+) {
+  const order = {
+    K1: 1,
+    K2: 2,
+    K3: 3,
+    K4: 4,
+    K5: 5
+  };
+
+  const sorted =
+    members
+      .slice()
+      .sort(
+        (a, b) =>
+          order[a.values[5]] -
+          order[b.values[5]]
+      );
+
+  if (
+    sorted.length !== 5 ||
+    sorted.some(
+      (x, i) =>
+        x.values[5] !==
+        'K' + String(i + 1)
+    )
+  ) {
+    throw new Error(
+      '5L script requires exactly one K1-K5 row.'
+    );
+  }
+
+  const labels = {
+    K1: '[聞1/絵]',
+    K2: '[聞2/一致]',
+    K3: '[聞3/応答]',
+    K4: '[聞4/一致]',
+    K5: '[聞5/一致]'
+  };
+
+  const numbers = [
+    '①','②','③','④'
+  ];
+
+  const blocks =
+    sorted.map(
+      record => {
+        const section =
+          record.values[5];
+
+        const plan =
+          validateListeningAudioPlan_(
+            record.values[7],
+            section
+          );
+
+        const lines = [
+          labels[section]
+        ];
+
+        if (
+          section === 'K1'
+        ) {
+          for (
+            let i = 1;
+            i <= 4;
+            i++
+          ) {
+            lines.push(
+              numbers[i - 1] +
+              ' ' +
+              listeningPlanTextByRole_(
+                plan,
+                'choice' + i,
+                section
+              )
+            );
+          }
+        } else if (
+          section === 'K2' ||
+          section === 'K3'
+        ) {
+          lines.push(
+            listeningPlanTextByRole_(
+              plan,
+              'prompt',
+              section
+            )
+          );
+
+          for (
+            let i = 1;
+            i <= 4;
+            i++
+          ) {
+            lines.push(
+              numbers[i - 1] +
+              ' ' +
+              listeningPlanTextByRole_(
+                plan,
+                'choice' + i,
+                section
+              )
+            );
+          }
+        } else {
+          lines.push(
+            listeningPlanTextByRole_(
+              plan,
+              'passage',
+              section
+            )
+          );
+        }
+
+        return lines.join('\n');
+      }
+    );
+
+  return (
+    blocks.join('\n\n') +
+    '\n'
+  );
+}
+
+
+function persistImmutableTextArtifact_(
+  folderId,
+  fileName,
+  content,
+  descriptionPrefix
+) {
+  const folder =
+    DriveApp.getFolderById(
+      folderId
+    );
+
+  if (folder.isTrashed()) {
+    throw new Error(
+      'TXT target folder is trashed.'
+    );
+  }
+
+  const iterator =
+    folder.getFilesByName(
+      fileName
+    );
+
+  const matches = [];
+
+  while (
+    iterator.hasNext()
+  ) {
+    matches.push(
+      iterator.next()
+    );
+  }
+
+  if (matches.length > 1) {
+    throw new Error(
+      'Multiple TXT files exist for ' +
+      fileName +
+      '.'
+    );
+  }
+
+  const expected =
+    normalized_(content);
+
+  if (matches.length === 1) {
+    const file =
+      matches[0];
+
+    const actual =
+      normalized_(
+        file
+          .getBlob()
+          .getDataAsString(
+            'UTF-8'
+          )
+      );
+
+    if (actual !== expected) {
+      throw new Error(
+        'Existing TXT content differs for ' +
+        fileName +
+        '.'
+      );
+    }
+
+    return {
+      file_id: file.getId(),
+      url: file.getUrl(),
+      reused: true
+    };
+  }
+
+  const file =
+    folder.createFile(
+      fileName,
+      content,
+      'text/plain'
+    );
+
+  file.setDescription(
+    descriptionPrefix +
+    ':' +
+    hash_(content)
+  );
+
+  return {
+    file_id: file.getId(),
+    url: file.getUrl(),
+    reused: false
+  };
+}
+
+
+function persistListeningSetScript_(
+  parentSetId,
+  members,
+  c
+) {
+  const content =
+    buildListeningSetScript_(
+      parentSetId,
+      members
+    );
+
+  const systemTest =
+    String(parentSetId)
+      .indexOf(
+        'SYSTEM_TEST-'
+      ) === 0;
+
+  const fileName =
+    systemTest
+      ? parentSetId +
+        '_script.txt'
+      : parentSetId +
+        '.txt';
+
+  return persistImmutableTextArtifact_(
+    audioTargetFolderId_(
+      c,
+      '5L',
+      parentSetId
+    ),
+    fileName,
+    content,
+    'HANGUL_5L_SCRIPT_V1'
+  );
 }
 
 
@@ -2561,8 +2855,8 @@ function runListeningJob_(
         folderId:
           audioTargetFolderId_(
             c,
-            '5W',
-            j.id
+            '5L',
+            j.parentSetId
           ),
         voice:
           voice.label,
@@ -4419,8 +4713,12 @@ function safeError_(
  * =======================================================*/
 
 /**
- * HTTP経由でjobは実行しない。
- * pingのみ。
+ * Web App GET router.
+ *
+ * - parameterless /dev or /exec = H3 Web App launcher
+ * - mode=SYSTEM_TEST or LISTENING = explicit H3 Web App route
+ * - ping=1 = health-check JSON
+ * - every other HTTP job route remains disabled
  */
 function doGet(e) {
   const params =
@@ -4429,30 +4727,45 @@ function doGet(e) {
       ? e.parameter
       : {};
 
-  if (params.mode === 'SYSTEM_TEST') {
+  const keys =
+    Object.keys(params);
+
+  if (params.ping === '1') {
+    return ContentService
+      .createTextOutput(
+        JSON.stringify({
+          ok: true,
+          service:
+            'hangul-azure-tts',
+          mode:
+            'sheet_only_v3',
+          version: 4
+        })
+      )
+      .setMimeType(
+        ContentService
+          .MimeType
+          .JSON
+      );
+  }
+
+  if (
+    keys.length === 0 ||
+    params.mode ===
+      'SYSTEM_TEST' ||
+    params.mode ===
+      'LISTENING'
+  ) {
     return h3WebDoGet_(e);
   }
 
-  const ping = params.ping === '1';
-
   return ContentService
     .createTextOutput(
-      JSON.stringify(
-        ping
-          ? {
-              ok: true,
-              service:
-                'hangul-azure-tts',
-              mode:
-                'sheet_only_v3',
-              version: 4
-            }
-          : {
-              ok: false,
-              error:
-                'Use the authorized Sheet queue. HTTP job execution is disabled.'
-            }
-      )
+      JSON.stringify({
+        ok: false,
+        error:
+          'Use the authorized Sheet queue. HTTP job execution is disabled.'
+      })
     )
     .setMimeType(
       ContentService

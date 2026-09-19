@@ -4664,10 +4664,17 @@ function safeError_(
  * pingのみ。
  */
 function doGet(e) {
-  const ping =
+  const params =
     e &&
-    e.parameter &&
-    e.parameter.ping === '1';
+    e.parameter
+      ? e.parameter
+      : {};
+
+  if (params.mode === 'SYSTEM_TEST') {
+    return h3WebDoGet_(e);
+  }
+
+  const ping = params.ping === '1';
 
   return ContentService
     .createTextOutput(

@@ -889,3 +889,55 @@ NEXT=R3-11 NORMAL_LIVE_ACTIVATION
 ```
 
 R3-10 is closed. R3-11 remains a separate explicit activation step and is not performed by this close.
+
+## 21. R3-11 NORMAL_LIVE_ACTIVATION
+
+R3-11 removes the R3-08 exact-one-set production arm and promotes Listening Web App production to the normal-live gate.
+
+### Code activation contract
+
+Current production behavior:
+- `H3_R3_PRODUCTION_COMMIT_ENABLED=true`;
+- `H3_R3_PRODUCTION_GATE_MODE=NORMAL_LIVE_ACTIVE`;
+- no hard-coded production `SET_ID`;
+- a production submission is eligible only when the issued payload's set number equals canonical `NEXT_LISTENING_SET_NO`;
+- policy and state must both expose `PRODUCTION_GATE=NORMAL_LIVE_ACTIVE`;
+- payload must already be `ISSUED`;
+- exactly five VALID, unanswered learner-log rows must exist for that set;
+- K1_READY must be exact-bound and `CONSUMED`;
+- unresolved recovery still blocks commit;
+- same-fingerprint idempotency and different-fingerprint conflict behavior are unchanged.
+
+Normal preissue behavior:
+- no R3-07/L03 target ID dependency;
+- policy `PRODUCTION_PREP_MODE=NORMAL_LIVE`;
+- state/policy gate must both be `NORMAL_LIVE_ACTIVE`;
+- `NEXT_LISTENING_SET_NO=set_no` and `LISTENING_ISSUE_NO=set_no-1`;
+- answer sync must be IDLE;
+- exact K1/source/audio/script/hash gates remain mandatory;
+- `H3_LISTENING_OVERLOAD_PLAN_V2.next_set_no=set_no`;
+- planned retest slot must match persisted provenance;
+- learner-log/production-txn duplication and any recovery row block issue.
+
+Canonical render version is `H3-LISTENING-RENDER-RULES-20260920-V19`.
+
+### Activation sequencing
+
+R3-11 intentionally uses this order:
+1. merge/audit the generalized production code;
+2. sync exact main to Apps Script HEAD;
+3. only then switch live policy/state gates from `N5_E2E_ARMED_ONE_SET` to `NORMAL_LIVE_ACTIVE`;
+4. read back runtime and verify no new set/history/transaction was issued.
+
+The activation itself does not generate or issue set no.3.
+
+Expected post-activation learner state remains:
+- `LISTENING_ISSUE_NO=2`;
+- `NEXT_LISTENING_SET_NO=3`;
+- `LAST_LISTENING_SET_ID=H3-20260919-L03`;
+- L03 production transaction count remains 1;
+- learner-log row count remains unchanged.
+
+`PRODUCTION_PREP_MODE=NORMAL_LIVE` means future generated sets may use the canonical preissue/issue/submit path. It does not itself create a set.
+
+R3-11 exits PASS only after the live Sheet gate readback matches the synced Apps Script code.

@@ -12,10 +12,14 @@
     uncertain: {},
     locked: false,
     submitting: false,
-    activeIndex: 0
+    activeIndex: 0,
+    mediaCache: {},
+    mediaLoading: {}
   };
 
   document.addEventListener('DOMContentLoaded', function () {
+    applyDeviceProfile();
+
     document.getElementById('reset').addEventListener('click', resetAll);
     document.getElementById('submit').addEventListener('click', submitAnswers);
     document.getElementById('mobile-prev').addEventListener('click', function () {
@@ -34,21 +38,54 @@
     loadSet();
   });
 
+  function applyDeviceProfile() {
+    var ua = navigator.userAgent || '';
+    var screenWidth = Math.min(
+      Number(window.screen && window.screen.width || 9999),
+      Number(window.screen && window.screen.height || 9999)
+    );
+    var touch = Number(navigator.maxTouchPoints || 0) > 0;
+    var iphoneLike =
+      /iPhone|iPod/i.test(ua) ||
+      (touch && screenWidth <= 500);
+
+    if (!iphoneLike) return;
+
+    document.body.classList.add('mobile-device');
+
+    var layoutWidth = Number(window.innerWidth || 0);
+    if (layoutWidth > 0 && screenWidth > 0 && layoutWidth > screenWidth * 1.35) {
+      var zoom = Math.min(layoutWidth / screenWidth, 3);
+      document.documentElement.style.setProperty('--h3-mobile-target-width', screenWidth + 'px');
+      document.documentElement.style.setProperty('--h3-mobile-zoom', String(zoom));
+      document.body.classList.add('mobile-viewport-emulated');
+    }
+  }
+
+  function isMobileMode() {
+    return document.body.classList.contains('mobile-device') || mobileQuery.matches;
+  }
+
   function loadSet() {
     setLoading(true);
+
     google.script.run
       .withSuccessHandler(function (payload) {
         setLoading(false);
         app.payload = payload;
+
         document.getElementById('set-id').textContent = payload.set_id;
         renderQuestions(payload.questions);
         buildMobileProgress(payload.questions.length);
+
         document.getElementById('questions').classList.remove('hidden');
         document.getElementById('controls').classList.remove('hidden');
         document.getElementById('mobile-progress').classList.remove('hidden');
         document.getElementById('mobile-nav').classList.remove('hidden');
+
         syncResponsiveState();
         updateLiveSummary();
+        scheduleInitialAudioPrefetch();
       })
       .withFailureHandler(function (err) {
         setLoading(false);
@@ -66,6 +103,7 @@
       var card = el('section', 'question-card');
       card.dataset.section = q.section;
       card.dataset.index = String(index);
+      card.dataset.audioKey = q.audio_asset_key;
       if (index === 0) card.classList.add('mobile-active');
 
       var head = el('div', 'question-head');
@@ -79,6 +117,7 @@
       uncertain.setAttribute('aria-pressed', 'false');
       uncertain.addEventListener('click', function () {
         if (app.locked) return;
+
         app.uncertain[q.section] = !app.uncertain[q.section];
         uncertain.classList.toggle('active', !!app.uncertain[q.section]);
         uncertain.setAttribute('aria-pressed', String(!!app.uncertain[q.section]));
@@ -88,12 +127,15 @@
       head.appendChild(title);
       head.appendChild(uncertain);
       card.appendChild(head);
-      card.appendChild(buildAudioBlock(q.audio_stream_url, q.audio_fallback_url, '問題音声'));
+
+      card.appendChild(
+        buildAudioBlock(q.audio_asset_key, q.audio_fallback_url, '問題音声')
+      );
 
       if (q.section === 'K1') {
         var img = document.createElement('img');
         img.className = 'k1-image';
-        img.src = q.image_stream_url;
+        img.src = q.image_data_uri;
         img.alt = 'K1 問題画像';
         img.decoding = 'async';
         img.loading = 'eager';
@@ -101,20 +143,30 @@
       }
 
       var choices = el('div', 'choices' + (q.visible_choices ? '' : ' textless'));
+
       q.choice_ids.forEach(function (choiceId, choiceIndex) {
-        var b = el('button', 'choice');
-        b.type = 'button';
-        b.dataset.answer = String(choiceId);
-        b.textContent = circled[choiceIndex] + (q.visible_choices ? ' ' + q.visible_choices[choiceIndex] : '');
-        b.addEventListener('click', function () {
+        var button = el('button', 'choice');
+        button.type = 'button';
+        button.dataset.answer = String(choiceId);
+        button.textContent =
+          circled[choiceIndex] +
+          (q.visible_choices ? ' ' + q.visible_choices[choiceIndex] : '');
+
+        button.addEventListener('click', function () {
           if (app.locked) return;
+
           app.answers[q.section] = choiceId;
-          Array.prototype.forEach.call(choices.querySelectorAll('.choice'), function (node) {
-            node.classList.toggle('selected', node === b);
-          });
+          Array.prototype.forEach.call(
+            choices.querySelectorAll('.choice'),
+            function (node) {
+              node.classList.toggle('selected', node === button);
+            }
+          );
+
           updateLiveSummary();
         });
-        choices.appendChild(b);
+
+        choices.appendChild(button);
       });
 
       card.appendChild(choices);
@@ -122,18 +174,23 @@
     });
   }
 
-  function buildAudioBlock(streamUrl, fallbackUrl, label) {
+  function buildAudioBlock(assetKey, fallbackUrl, label) {
     var wrap = el('div', 'audio-wrap');
 
     var title = el('p', 'audio-label');
     title.textContent = label;
     wrap.appendChild(title);
 
+    var status = el('p', 'audio-status');
+    status.dataset.assetKey = assetKey;
+    status.textContent = '音声を準備中…';
+    wrap.appendChild(status);
+
     var audio = document.createElement('audio');
-    audio.className = 'audio-player';
+    audio.className = 'audio-player media-pending';
     audio.controls = true;
     audio.preload = 'none';
-    audio.src = streamUrl;
+    audio.dataset.assetKey = assetKey;
     audio.setAttribute('playsinline', '');
     audio.addEventListener('play', function () {
       pauseOtherAudio(audio);
@@ -151,10 +208,93 @@
     return wrap;
   }
 
-  function pauseOtherAudio(current) {
-    Array.prototype.forEach.call(document.querySelectorAll('audio'), function (audio) {
-      if (audio !== current && !audio.paused) audio.pause();
+  function scheduleInitialAudioPrefetch() {
+    if (isMobileMode()) {
+      ensureAudioLoaded(sections[0]);
+      window.setTimeout(function () {
+        ensureAudioLoaded(sections[1]);
+      }, 500);
+      return;
+    }
+
+    sections.forEach(function (section, index) {
+      window.setTimeout(function () {
+        ensureAudioLoaded(section);
+      }, index * 350);
     });
+  }
+
+  function ensureAudioLoaded(assetKey) {
+    if (!assetKey) return;
+
+    if (app.mediaCache[assetKey]) {
+      attachAudioData(assetKey, app.mediaCache[assetKey]);
+      return;
+    }
+
+    if (app.mediaLoading[assetKey]) return;
+    app.mediaLoading[assetKey] = true;
+
+    setAudioStatus(assetKey, '音声を準備中…', false);
+
+    google.script.run
+      .withSuccessHandler(function (media) {
+        app.mediaLoading[assetKey] = false;
+        app.mediaCache[assetKey] = media.data_uri;
+        attachAudioData(assetKey, media.data_uri);
+        setAudioStatus(assetKey, '', false);
+      })
+      .withFailureHandler(function (err) {
+        app.mediaLoading[assetKey] = false;
+        setAudioStatus(
+          assetKey,
+          'ページ内音声を準備できませんでした。Driveリンクを使用してください。',
+          true
+        );
+        showError('音声準備エラー: ' + errorText(err));
+      })
+      .getListeningWebMedia({
+        schema: 'H3_WEB_MEDIA_REQUEST_V1',
+        mode: 'SYSTEM_TEST',
+        set_id: app.payload.set_id,
+        asset_key: assetKey
+      });
+  }
+
+  function attachAudioData(assetKey, dataUri) {
+    var nodes = document.querySelectorAll(
+      'audio[data-asset-key="' + assetKey + '"]'
+    );
+
+    Array.prototype.forEach.call(nodes, function (audio) {
+      if (audio.getAttribute('src')) return;
+      audio.src = dataUri;
+      audio.classList.remove('media-pending');
+      audio.load();
+    });
+  }
+
+  function setAudioStatus(assetKey, message, isError) {
+    var nodes = document.querySelectorAll(
+      '.audio-status[data-asset-key="' + assetKey + '"]'
+    );
+
+    Array.prototype.forEach.call(nodes, function (node) {
+      node.textContent = message;
+      node.classList.toggle('media-error', !!isError);
+      node.classList.toggle('hidden', !message);
+    });
+  }
+
+  function pauseOtherAudio(current) {
+    Array.prototype.forEach.call(
+      document.querySelectorAll('audio'),
+      function (audio) {
+        if (audio !== current && !audio.paused) {
+          audio.pause();
+        }
+      }
+    );
   }
 
   function buildMobileProgress(count) {
@@ -177,11 +317,19 @@
 
   function setActiveIndex(index) {
     if (!app.payload || app.locked) return;
+
     var max = app.payload.questions.length - 1;
     app.activeIndex = Math.max(0, Math.min(max, index));
     updateMobilePager();
 
-    if (mobileQuery.matches) {
+    ensureAudioLoaded(sections[app.activeIndex]);
+    if (app.activeIndex < max) {
+      window.setTimeout(function () {
+        ensureAudioLoaded(sections[app.activeIndex + 1]);
+      }, 350);
+    }
+
+    if (isMobileMode()) {
       var progress = document.getElementById('mobile-progress');
       if (progress && progress.scrollIntoView) {
         progress.scrollIntoView({ block: 'start', behavior: 'smooth' });
@@ -196,34 +344,53 @@
 
   function updateMobilePager() {
     var cards = document.querySelectorAll('.question-card');
+
     Array.prototype.forEach.call(cards, function (card, index) {
       card.classList.toggle('mobile-active', index === app.activeIndex);
     });
 
     var buttons = document.querySelectorAll('.progress-button');
+
     Array.prototype.forEach.call(buttons, function (button, index) {
       var section = sections[index];
       button.classList.toggle('current', index === app.activeIndex);
-      button.classList.toggle('answered', typeof app.answers[section] === 'number' && !app.uncertain[section]);
-      button.classList.toggle('uncertain-mark', typeof app.answers[section] === 'number' && !!app.uncertain[section]);
-      button.setAttribute('aria-current', index === app.activeIndex ? 'step' : 'false');
+      button.classList.toggle(
+        'answered',
+        typeof app.answers[section] === 'number' && !app.uncertain[section]
+      );
+      button.classList.toggle(
+        'uncertain-mark',
+        typeof app.answers[section] === 'number' && !!app.uncertain[section]
+      );
+      button.setAttribute(
+        'aria-current',
+        index === app.activeIndex ? 'step' : 'false'
+      );
     });
 
     document.getElementById('mobile-position').textContent =
       'Q' + (app.activeIndex + 1) + ' / ' + sections.length;
-    document.getElementById('mobile-prev').disabled = app.activeIndex === 0 || app.locked;
-    document.getElementById('mobile-next').disabled = app.activeIndex === sections.length - 1 || app.locked;
+
+    document.getElementById('mobile-prev').disabled =
+      app.activeIndex === 0 || app.locked;
+
+    document.getElementById('mobile-next').disabled =
+      app.activeIndex === sections.length - 1 || app.locked;
   }
 
   function updateLiveSummary() {
-    var parts = sections.map(function (section, i) {
+    var parts = sections.map(function (section, index) {
       var answer = app.answers[section];
-      return 'Q' + (i + 1) + ' ' + (answer ? String(answer) + (app.uncertain[section] ? '?' : '') : '—');
+      return 'Q' + (index + 1) + ' ' +
+        (answer ? String(answer) + (app.uncertain[section] ? '?' : '') : '—');
     });
 
     document.getElementById('live-summary').textContent = parts.join(' / ');
-    document.getElementById('submit').disabled = app.locked || app.submitting || !allAnswered();
-    document.getElementById('reset').disabled = app.locked || app.submitting;
+    document.getElementById('submit').disabled =
+      app.locked || app.submitting || !allAnswered();
+    document.getElementById('reset').disabled =
+      app.locked || app.submitting;
+
     updateMobilePager();
   }
 
@@ -240,13 +407,20 @@
     app.uncertain = {};
     app.activeIndex = 0;
 
-    Array.prototype.forEach.call(document.querySelectorAll('.choice'), function (node) {
-      node.classList.remove('selected');
-    });
-    Array.prototype.forEach.call(document.querySelectorAll('.uncertain'), function (node) {
-      node.classList.remove('active');
-      node.setAttribute('aria-pressed', 'false');
-    });
+    Array.prototype.forEach.call(
+      document.querySelectorAll('.choice'),
+      function (node) {
+        node.classList.remove('selected');
+      }
+    );
+
+    Array.prototype.forEach.call(
+      document.querySelectorAll('.uncertain'),
+      function (node) {
+        node.classList.remove('active');
+        node.setAttribute('aria-pressed', 'false');
+      }
+    );
 
     updateLiveSummary();
   }
@@ -275,20 +449,27 @@
       .withSuccessHandler(function (result) {
         app.submitting = false;
         app.locked = true;
+
         document.body.classList.add('graded');
         setInteractiveDisabled(true);
         renderResult(result);
         updateLiveSummary();
 
-        if (mobileQuery.matches) {
-          document.getElementById('result').scrollIntoView({ block: 'start', behavior: 'smooth' });
+        if (isMobileMode()) {
+          document.getElementById('result').scrollIntoView({
+            block: 'start',
+            behavior: 'smooth'
+          });
         }
       })
       .withFailureHandler(function (err) {
         app.submitting = false;
         app.locked = false;
         setInteractiveDisabled(false);
-        showError('採点に失敗しました。回答は保持されています。\n' + errorText(err));
+        showError(
+          '採点に失敗しました。回答は保持されています。\n' +
+          errorText(err)
+        );
         updateLiveSummary();
       })
       .submitListeningWebAnswers(request);
@@ -301,6 +482,7 @@
         node.disabled = disabled;
       }
     );
+
     document.getElementById('reset').disabled = disabled;
     document.getElementById('submit').disabled = disabled;
   }
@@ -328,13 +510,17 @@
     table.appendChild(thead);
 
     var tbody = document.createElement('tbody');
-    result.summary.forEach(function (row, i) {
+
+    result.summary.forEach(function (row, index) {
       var tr = document.createElement('tr');
-      ['Q' + (i + 1), row.answer, String(row.correct_answer), row.result].forEach(function (value) {
-        var td = document.createElement('td');
-        td.textContent = value;
-        tr.appendChild(td);
-      });
+
+      ['Q' + (index + 1), row.answer, String(row.correct_answer), row.result]
+        .forEach(function (value) {
+          var td = document.createElement('td');
+          td.textContent = value;
+          tr.appendChild(td);
+        });
+
       tbody.appendChild(tr);
     });
 
@@ -368,36 +554,23 @@
     var head = el('div', 'review-head');
     var title = document.createElement('h2');
     title.textContent = '復習モード';
+
     var description = document.createElement('p');
-    description.textContent = '結合音声を再生しながら、同じ画面でスクリプトを確認できます。';
+    description.textContent =
+      '結合音声を再生しながら、同じ画面でスクリプトを確認できます。';
+
     head.appendChild(title);
     head.appendChild(description);
     panel.appendChild(head);
 
     var playerWrap = el('div', 'review-player-sticky');
-    var playerTitle = el('p', 'audio-label');
-    playerTitle.textContent = '結合音声';
-    playerWrap.appendChild(playerTitle);
+    var playerBlock = buildAudioBlock(
+      review.combined_audio_asset_key,
+      review.combined_audio_fallback_url,
+      '結合音声'
+    );
 
-    var audio = document.createElement('audio');
-    audio.className = 'audio-player';
-    audio.controls = true;
-    audio.preload = 'none';
-    audio.src = review.combined_audio_stream_url;
-    audio.setAttribute('playsinline', '');
-    audio.addEventListener('play', function () {
-      pauseOtherAudio(audio);
-    });
-    playerWrap.appendChild(audio);
-
-    var fallback = document.createElement('a');
-    fallback.className = 'media-fallback';
-    fallback.href = review.combined_audio_fallback_url;
-    fallback.target = '_blank';
-    fallback.rel = 'noopener';
-    fallback.textContent = '再生できない場合はDriveで開く';
-    playerWrap.appendChild(fallback);
-
+    playerWrap.appendChild(playerBlock);
     panel.appendChild(playerWrap);
 
     var script = document.createElement('pre');
@@ -406,7 +579,7 @@
     panel.appendChild(script);
 
     var scriptFallback = document.createElement('a');
-    scriptFallback.className = 'media-fallback';
+    scriptFallback.className = 'media-fallback review-script-fallback';
     scriptFallback.href = review.review_script_fallback_url;
     scriptFallback.target = '_blank';
     scriptFallback.rel = 'noopener';
@@ -414,17 +587,24 @@
     panel.appendChild(scriptFallback);
 
     root.appendChild(panel);
+
+    window.setTimeout(function () {
+      ensureAudioLoaded(review.combined_audio_asset_key);
+    }, 150);
   }
 
   function copyReceipt(text, button) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(function () {
-        button.textContent = 'コピー済み';
-      }).catch(function () {
-        legacyCopy(text, button);
-      });
+      navigator.clipboard.writeText(text)
+        .then(function () {
+          button.textContent = 'コピー済み';
+        })
+        .catch(function () {
+          legacyCopy(text, button);
+        });
       return;
     }
+
     legacyCopy(text, button);
   }
 
@@ -434,6 +614,7 @@
     area.setAttribute('readonly', '');
     area.style.position = 'fixed';
     area.style.opacity = '0';
+
     document.body.appendChild(area);
     area.select();
 

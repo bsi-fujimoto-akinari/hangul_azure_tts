@@ -1015,7 +1015,7 @@ jobs:
 
           required_architecture = [
               'H3-R3-09B-REVIEW-ARCHITECTURE-20260919-V2',
-              'Status: R3_09E_PASS_DEVICE_VALIDATED_ZERO_MUTATION',
+              'Status: R3_11_NORMAL_LIVE_ACTIVE',
               'listening_explanation_payload_v1',
               'listening_review_binding_v1',
               'mode=REVIEW&txn_id={TXN_ID}',
@@ -1221,7 +1221,7 @@ jobs:
           if '## 18. R3-09D review Web UI and route implementation' not in operations:
               raise SystemExit('OPERATIONS does not record R3-09D.')
 
-          if 'Status: R3_09E_PASS_DEVICE_VALIDATED_ZERO_MUTATION' not in architecture:
+          if 'Status: R3_11_NORMAL_LIVE_ACTIVE' not in architecture:
               raise SystemExit('Review architecture staged status is not R3-09D.')
 
           if '## 11. R3-09D persistent Review implementation' not in chat:
@@ -1397,7 +1397,7 @@ jobs:
           client = Path('Client.html').read_text(encoding='utf-8')
 
           required_arch = [
-              'Status: R3_09E_PASS_DEVICE_VALIDATED_ZERO_MUTATION',
+              'Status: R3_11_NORMAL_LIVE_ACTIVE',
               '## 17. R3-09D device validation',
               'RESULT=PASS_DEVICE_VALIDATED',
               'persistent history shows 5L #2',
@@ -1566,7 +1566,7 @@ jobs:
                   )
 
           for needle in [
-              'Status: R3_09E_PASS_DEVICE_VALIDATED_ZERO_MUTATION',
+              'Status: R3_11_NORMAL_LIVE_ACTIVE',
               '## 18. R3-09E REVIEW_REPLAY implementation',
               'RESULT=IMPLEMENTED_AWAITING_DEVICE_VALIDATION',
           ]:
@@ -1721,7 +1721,7 @@ jobs:
           chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
 
           for needle in [
-              'Status: R3_09E_PASS_DEVICE_VALIDATED_ZERO_MUTATION',
+              'Status: R3_11_NORMAL_LIVE_ACTIVE',
               '## 20. R3-09E close',
               'RESULT=PASS_DEVICE_VALIDATED_ZERO_MUTATION',
               'L03_PRODUCTION_TXN_COUNT=1',

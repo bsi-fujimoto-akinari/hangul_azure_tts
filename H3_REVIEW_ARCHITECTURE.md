@@ -1,7 +1,7 @@
 # H3 Review Architecture
 
 Version: H3-R3-09B-REVIEW-ARCHITECTURE-20260919-V2  
-Status: R3_11_NORMAL_LIVE_ACTIVE
+Status: R3_CLOSED_NORMAL_LIVE
 
 ## 1. Purpose
 
@@ -936,3 +936,33 @@ Activation integrity:
 - learner counters, last-set pointer, scheduler plan and committed L03 history are unchanged.
 
 The system is now ready for the next ordinary `5L` learner request. That later request begins preparation of set no.3; R3-11 itself does not issue it.
+
+## 25. R3-12 infrastructure close
+
+R3 closes with normal-live Listening production active.
+
+```text
+R3_STATUS=R3_CLOSED_NORMAL_LIVE
+NORMAL_LIVE=ACTIVE
+PRODUCTION_GATE=NORMAL_LIVE_ACTIVE
+PRODUCTION_PREP_MODE=NORMAL_LIVE
+NEXT_LISTENING_SET_NO=3
+LAST_LISTENING_SET_ID=H3-20260919-L03
+R3_BLOCKING=0
+```
+
+R3-12 is infrastructure-only. It does not:
+- issue set no.3;
+- change learner answers/history;
+- change counters, valid-counts, pointer, scheduler, or retest obligations;
+- create Review/replay learning writes;
+- alter the production transaction path.
+
+R3-12 close duties:
+- snapshot the current V19 Listening render canonical as an immutable Drive release;
+- update the compact source manifest to the V19 release/current R3 close status;
+- snapshot the final CURRENT state;
+- archive superseded Chat-attached R2 HTML learner-surface diagnostics without changing their Drive IDs;
+- leave historical SYSTEM_TEST fixtures, status snapshots, learner history, and production artifacts intact.
+
+The next ordinary learner action is a `5L` request for set no.3 under the already-active normal-live path.

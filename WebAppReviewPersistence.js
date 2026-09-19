@@ -1442,7 +1442,12 @@ function h3ReviewHistoryEntries_(
 
       if (
         !txnRow ||
-        txnRow === 'DUPLICATE' ||
+        txnRow === 'DUPLICATE'
+      ) {
+        return;
+      }
+
+      if (
         String(
           txnRow[
             txnTable.map.MODE
@@ -1457,26 +1462,29 @@ function h3ReviewHistoryEntries_(
         return;
       }
 
+      var setId = String(
+        row[
+          map.LISTENING_SET_ID
+        ] || ''
+      );
+      var setNo = Number(
+        row[
+          map.LISTENING_SET_NO
+        ]
+      );
+
       if (
         String(
           txnRow[
             txnTable.map.SET_ID
           ] || ''
-        ) !== String(
-          row[
-            map.LISTENING_SET_ID
-          ] || ''
-        ) ||
+        ) !== setId ||
         Number(
           txnRow[
             txnTable.map
               .LISTENING_SET_NO
           ]
-        ) !== Number(
-          row[
-            map.LISTENING_SET_NO
-          ]
-        )
+        ) !== setNo
       ) {
         return;
       }
@@ -1505,6 +1513,7 @@ function h3ReviewHistoryEntries_(
       if (
         !result ||
         result.txn_id !== txnId ||
+        result.set_id !== setId ||
         result.status !==
           'COMMITTED' ||
         !Array.isArray(
@@ -1512,90 +1521,14 @@ function h3ReviewHistoryEntries_(
         ) ||
         result.summary.length !== 5 ||
         !rawInput ||
+        rawInput.mode !==
+          'LISTENING' ||
+        rawInput.set_id !==
+          setId ||
         !Array.isArray(
           rawInput.answers
         ) ||
         rawInput.answers.length !== 5
-      ) {
-        return;
-      }
-
-      var resultSha =
-        h3ReviewHash_(result);
-
-      if (
-        resultSha !== String(
-          row[
-            map.RESULT_SHA256
-          ] || ''
-        )
-      ) {
-        return;
-      }
-
-      var bindingHashObject = {
-        TXN_ID: txnId,
-        LISTENING_SET_ID:
-          String(
-            row[
-              map.LISTENING_SET_ID
-            ] || ''
-          ),
-        LISTENING_SET_NO:
-          Number(
-            row[
-              map.LISTENING_SET_NO
-            ]
-          ),
-        RESULT_SHA256:
-          String(
-            row[
-              map.RESULT_SHA256
-            ] || ''
-          ),
-        ITEM_PAYLOAD_SHA256:
-          String(
-            row[
-              map.ITEM_PAYLOAD_SHA256
-            ] || ''
-          ),
-        EXPLANATION_SET_SHA256:
-          String(
-            row[
-              map.EXPLANATION_SET_SHA256
-            ] || ''
-          ),
-        AUDIO_BINDING_SHA256:
-          String(
-            row[
-              map.AUDIO_BINDING_SHA256
-            ] || ''
-          ),
-        K1_IMAGE_SHA256:
-          String(
-            row[
-              map.K1_IMAGE_SHA256
-            ] || ''
-          ),
-        REVIEW_CONTRACT_ID:
-          String(
-            row[
-              map.REVIEW_CONTRACT_ID
-            ] || ''
-          )
-      };
-
-      if (
-        bindingHashObject
-          .REVIEW_CONTRACT_ID !==
-          H3_REVIEW_CONTRACT_ID ||
-        h3ReviewHash_(
-          bindingHashObject
-        ) !== String(
-          row[
-            map.REVIEW_BINDING_SHA256
-          ] || ''
-        )
       ) {
         return;
       }
@@ -1622,12 +1555,9 @@ function h3ReviewHistoryEntries_(
 
       entries.push({
         txn_id: txnId,
-        set_id:
-          bindingHashObject
-            .LISTENING_SET_ID,
+        set_id: setId,
         listening_set_no:
-          bindingHashObject
-            .LISTENING_SET_NO,
+          setNo,
         committed_at: String(
           txnRow[
             txnTable.map.COMMITTED_AT
@@ -1650,7 +1580,9 @@ function h3ReviewHistoryEntries_(
                 item.result !== '○'
               );
             }
-          )
+          ),
+        review_open_validation:
+          'FULL_SOURCE_LOCK_ON_OPEN'
       });
     }
   );

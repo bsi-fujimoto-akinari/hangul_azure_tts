@@ -506,8 +506,8 @@ jobs:
           if 'deprecated for new learner requests' not in ops:
               raise SystemExit('Operations policy does not deprecate 5Q.')
 
-          if 'H3_R3_PRODUCTION_COMMIT_ENABLED = true' not in prod or "'R3_08_PRODUCTION_SET_NOT_ARMED'" not in prod:
-              raise SystemExit('R3-08 controlled production commit arm is missing.')
+          if 'H3_R3_PRODUCTION_COMMIT_ENABLED = true' not in prod or "'NORMAL_LIVE_ACTIVE'" not in prod:
+              raise SystemExit('R3-11 normal-live production commit gate is missing.')
           PY
 
           node <<'NODE'

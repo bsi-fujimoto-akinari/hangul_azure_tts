@@ -1,6 +1,6 @@
 /**
  * H3 R3-01 SYSTEM_TEST Web App POC.
- * Non-learning only. No Sheet/runtime/history mutation is authorized here.
+ * Non-learning only. No Sheet/runtime/history mutation is authorized here.\n * CI sync marker: R3-01 route fix verified after audited manifest push.
  */
 
 function h3WebDoGet_(e) {

@@ -410,14 +410,9 @@ function h3CommitSystemTestTransaction_(
         return recoveredResult;
       }
 
-      if (
-        status !== 'ROLLED_BACK' &&
-        rowFingerprint !== fingerprint
-      ) {
-        throw new Error(
-          'SYSTEM_TEST_TXN_CONFLICT'
-        );
-      }
+      // SYSTEM_TEST may be rerun with a different answer fingerprint.
+      // Production set-level conflict semantics are implemented separately
+      // in R3-03 and are intentionally not relaxed here.
     }
 
     if (unresolvedRecovery) {

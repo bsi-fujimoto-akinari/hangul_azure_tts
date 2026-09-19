@@ -36,6 +36,7 @@ jobs:
               'Code.js',
               'WebApp.js',
               'WebAppFixture.js',
+              'WebAppProduction.js',
               'Index.html',
               'Stylesheet.html',
               'Client.html',
@@ -53,7 +54,7 @@ jobs:
           unexpected = sorted(tracked - allowed)
           missing = sorted({
               '.clasp.json', '.gitignore', 'Code.js',
-              'WebApp.js', 'WebAppFixture.js', 'Index.html',
+              'WebApp.js', 'WebAppFixture.js', 'WebAppProduction.js', 'Index.html',
               'Stylesheet.html', 'Client.html', 'appsscript.json'
           } - tracked)
 
@@ -272,12 +273,170 @@ jobs:
                   raise SystemExit(f'Forbidden direct learner-sheet access in transaction function: {forbidden}')
           PY
 
+      - name: Check R3-03 staged production transaction
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          prod = Path('WebAppProduction.js').read_text(encoding='utf-8')
+          required = [
+              'var H3_R3_PRODUCTION_COMMIT_ENABLED = false;',
+              "var H3_WEB_PROD_TXN_SHEET = 'listening_web_txn_v1';",
+              'function h3ProdSubmit_(request)',
+              'LockService.getScriptLock()',
+              "'PREPARED'",
+              "'COMMITTED'",
+              "'ROLLED_BACK'",
+              "'RECOVERY_REQUIRED'",
+              'function h3ProdRestoreSnapshot_(',
+              'function h3ProdApplyPlan_(',
+              'R3_SLOT_ROLE_NOT_PERSISTED',
+              'CONFLICT_ALREADY_COMMITTED',
+          ]
+          for needle in required:
+              if needle not in prod:
+                  raise SystemExit(f'R3-03 invariant missing: {needle}')
+
+          if 'H3_R3_PRODUCTION_COMMIT_ENABLED = true' in prod:
+              raise SystemExit('R3-03 production commit gate must remain OFF.')
+
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+          fixture = Path('WebAppFixture.js').read_text(encoding='utf-8')
+          client = Path('Client.html').read_text(encoding='utf-8')
+          for surface in [web, fixture, client]:
+              if 'h3ProdSubmit_(' in surface:
+                  raise SystemExit('Production submit is exposed before R3 activation.')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const source = fs.readFileSync('WebAppProduction.js', 'utf8');
+          const context = vm.createContext({ console });
+          vm.runInContext(source, context, { filename: 'WebAppProduction.js' });
+
+          const run = expression => vm.runInContext(expression, context);
+          const fail = message => { throw new Error(message); };
+          const assert = (cond, message) => { if (!cond) fail(message); };
+
+          const synthetic = {
+            setId: 'H3-SYNTH-L02',
+            setNo: 1,
+            answerKey: {K1:3,K2:2,K3:2,K4:3,K5:3},
+            itemPayloadSha256: 'payload',
+            sourceProvenance: {
+              K1:{slot_role:'PRIMARY'},
+              K2:{slot_role:'PRIMARY'},
+              K3:{slot_role:'PRIMARY'},
+              K4:{slot_role:'PRIMARY'},
+              K5:{slot_role:'PRIMARY'}
+            },
+            policyMap: {
+              ACTIVE_WRONG_CAP:'3',
+              BASELINE1_END:'2',
+              BASELINE2_END:'4'
+            },
+            stateMap: {},
+            logTable: {
+              map: {
+                SKILL_ID:0,
+                SOURCE_PROVENANCE:1,
+                SURFACE_HASH:2,
+                USER_RESULT:3,
+                STATUS:4,
+                LISTENING_ISSUE_NO:5
+              },
+              rows: []
+            },
+            logRows: []
+          };
+
+          ['K1','K2','K3','K4','K5'].forEach((section, i) => {
+            const row = [
+              'H3-' + section + '-SK001',
+              'SYNTH',
+              'surface-' + section,
+              '',
+              'VALID',
+              '1'
+            ];
+            synthetic.logTable.rows.push(row);
+            synthetic.logRows.push({rowNumber:i+2,row});
+            synthetic.stateMap[section + '_VALID_COUNT'] = {
+              rowNumber: 10+i,
+              value:'0'
+            };
+            synthetic.stateMap['LAST_' + section + '_ISSUE'] = {
+              rowNumber: 20+i,
+              value:'0'
+            };
+          });
+          [
+            ['LISTENING_ISSUE_NO','0'],
+            ['PHASE','BASELINE_1'],
+            ['ACTIVE_WRONG_COUNT','0'],
+            ['OVERLOAD_STATUS',''],
+            ['LAST_UPDATED_AT',''],
+            ['NEXT_SET_COMPOSITION','K1,K2,K3,K4,K5'],
+            ['NEXT_LISTENING_SET_NO','1'],
+            ['LAST_LISTENING_SET_ID',''],
+            ['ANSWER_SYNC_PHASE','IDLE']
+          ].forEach(([key,value], i) => {
+            synthetic.stateMap[key] = {rowNumber:30+i,value};
+          });
+
+          context.__ctx = synthetic;
+          context.__answers = [
+            {section:'K1',answer:3,uncertain:false},
+            {section:'K2',answer:1,uncertain:false},
+            {section:'K3',answer:3,uncertain:false},
+            {section:'K4',answer:2,uncertain:false},
+            {section:'K5',answer:2,uncertain:false}
+          ];
+
+          const plan = run("h3ProdBuildPlan_(__ctx,__answers,'2026-09-19T12:38:44+09:00')");
+
+          assert(plan.score === 1, 'Synthetic L02 score must be 1/5.');
+          assert(plan.activeWrongCount === 4, 'Synthetic L02 active wrong count must be 4.');
+          assert(plan.overload === true, 'Synthetic L02 must enter overload.');
+          assert(plan.stateValues.OVERLOAD_STATUS === 'LISTENING_OVERLOAD_REVIEW',
+                 'Synthetic L02 overload status mismatch.');
+          assert(plan.stateValues.NEXT_LISTENING_SET_NO === '2',
+                 'Synthetic L02 next set must be 2.');
+          assert(plan.stateValues.PHASE === 'BASELINE_1',
+                 'Synthetic L02 phase mismatch.');
+
+          for (const section of ['K1','K2','K3','K4','K5']) {
+            assert(plan.stateValues[section + '_VALID_COUNT'] === '1',
+                   section + ' primary count mismatch.');
+          }
+
+          for (const section of ['K2','K3','K4','K5']) {
+            const row = plan.logWrites.find(x => x.section === section);
+            assert(row.queue_update_status === 'OVERLOAD_REVIEW_REQUIRED',
+                   section + ' overload queue status mismatch.');
+            assert(row.provenance.retest.required === true,
+                   section + ' retest should be required.');
+            assert(row.provenance.retest.due_min_set_no === 2,
+                   section + ' due_min mismatch.');
+            assert(row.provenance.retest.due_max_set_no === 4,
+                   section + ' due_max mismatch.');
+          }
+
+          const k1 = plan.logWrites.find(x => x.section === 'K1');
+          assert(k1.queue_update_status === 'NO_RETEST', 'K1 should not require retest.');
+          assert(k1.provenance.retest.required === false, 'K1 retest evidence mismatch.');
+          NODE
+
       - name: Check JavaScript syntax
         shell: bash
         run: |
           node --check Code.js
           node --check WebApp.js
           node --check WebAppFixture.js
+          node --check WebAppProduction.js
           python3 - <<'PY'
           from pathlib import Path
           text = Path('Client.html').read_text(encoding='utf-8').strip()

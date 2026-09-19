@@ -604,3 +604,44 @@ R3-09C activation boundary:
 - normal-live production remains unchanged.
 
 Next stage is R3-09D `REVIEW_WEB_UI_AND_ROUTE_IMPLEMENTATION`.
+
+## 18. R3-09D review Web UI and route implementation
+
+R3-09D connects the R3-09C persistent Review source-lock layer to the learner Web App.
+
+Implemented routes:
+- parameterless Web App -> `HOME`;
+- `mode=REVIEW&txn_id=<TXN_ID>` -> exact persistent Review;
+- explicit `mode=LISTENING&set_id=<SET_ID>` remains the production question route;
+- explicit allowlisted `mode=SYSTEM_TEST&set_id=<SET_ID>` remains available for test fixtures.
+
+Learner HOME:
+- shows a current issued/uncommitted 5L only when the production render gate accepts it;
+- shows persistent Review history newest-first;
+- v1 history filters are `すべて` and `要復習あり`;
+- Review history is read-only.
+
+Persistent Review:
+- exact COMMITTED transaction and LOCKED review binding are required;
+- K1 image is reloaded from the exact SHA-bound Drive source;
+- K1-K5 audio uses the exact bound individual MP3 sources;
+- script, translation, user answer, correct answer and explanation are shown in one question card;
+- default filter is `NEEDS_REVIEW`;
+- ×/△ explanation is expanded, ○ explanation is collapsed;
+- receipt / SET_ID / TXN_ID are collapsed under technical details.
+
+Postgrade behavior:
+- production submit first commits through the existing production transaction;
+- the exact Review binding is then required/read back;
+- the returned learner surface is `buildPersistentReviewPayload_(TXN_ID)`;
+- the old transient `buildProductionReviewPayload_(SET_ID)` is no longer used by the learner submit route.
+
+R3-09D boundaries:
+- no REVIEW_REPLAY yet;
+- no learner Review delete/edit;
+- no scheduler/retest/history mutation from REVIEW or HOME routes;
+- normal-live production activation remains outside R3-09D;
+- receipt-to-Chat ownership transition remains pending device validation in R3-09E.
+
+R3-09D exits at `IMPLEMENTED_AWAITING_DEVICE_VALIDATION`.
+Next stage: R3-09E `REVIEW_REPLAY_LIBRARY_DEVICE_VALIDATION`.

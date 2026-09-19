@@ -1,7 +1,7 @@
 /**
  * H3 R3-01B SYSTEM_TEST Web App.
  * Non-learning only. No Sheet/runtime/history mutation is authorized here.
- * Media transport is optimized for mobile: exact Drive files stream on demand.
+ * Media transport: exact Drive bytes are returned only through allowlisted Apps Script calls.
  */
 
 function h3WebDoGet_(e) {
@@ -20,6 +20,10 @@ function include_(filename) {
 function getListeningWebSet(request) {
   validateSystemTestRenderRequest_(request);
   return buildSystemTestRenderPayload_();
+}
+
+function getListeningWebMedia(request) {
+  return getSystemTestMediaPayload_(request);
 }
 
 function submitListeningWebAnswers(request) {
@@ -51,32 +55,32 @@ function h3Sha256Hex_(value) {
   }).join('');
 }
 
-function h3DriveMediaDescriptor_(fileId, expectedMimeType, expectedSha256) {
+function h3DriveDataUri_(fileId, expectedMimeType, expectedSha256, maxBytes) {
   var file = DriveApp.getFileById(fileId);
   var mimeType = file.getMimeType();
+  var size = file.getSize();
 
   if (expectedMimeType && mimeType !== expectedMimeType) {
     throw new Error('MEDIA_MIME_MISMATCH:' + fileId);
   }
+  if (size > maxBytes) {
+    throw new Error('MEDIA_TOO_LARGE:' + fileId);
+  }
+
+  var blob = file.getBlob();
+  var bytes = blob.getBytes();
 
   if (expectedSha256) {
-    var bytes = file.getBlob().getBytes();
     var actualSha256 = h3Sha256Hex_(bytes);
     if (actualSha256 !== expectedSha256) {
       throw new Error('MEDIA_SHA256_MISMATCH:' + fileId);
     }
   }
 
-  var downloadUrl = file.getDownloadUrl();
-  if (!downloadUrl) {
-    throw new Error('MEDIA_DOWNLOAD_URL_UNAVAILABLE:' + fileId);
-  }
-
   return {
-    download_url: downloadUrl,
-    view_url: file.getUrl(),
+    data_uri: 'data:' + mimeType + ';base64,' + Utilities.base64Encode(bytes),
     mime_type: mimeType,
-    size_bytes: file.getSize()
+    size_bytes: size
   };
 }
 

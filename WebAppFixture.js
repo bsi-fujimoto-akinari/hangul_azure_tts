@@ -1,5 +1,5 @@
 /**
- * Frozen R3-01 non-learning fixture.
+ * Frozen R3-01B non-learning fixture.
  * Source: H3_L5E2E_R2_05_SYSTEM_TEST_FIXTURE_v1.txt
  */
 
@@ -10,15 +10,21 @@ var H3_WEB_SYSTEM_TEST_FIXTURE = {
   surface_contract_id: 'H3-L5E2E-R2-SURFACE-CONTRACT-20260919-V1',
   expected_vector: ['3', '2?', '3', '2', '3'],
   expected_results: ['○', '△', '×', '×', '○'],
+
+  combined_audio_file_id: '18yA11jUMjSOmwJiO_p4Imt5v8xYnC93p',
   combined_audio_url: 'https://drive.google.com/file/d/18yA11jUMjSOmwJiO_p4Imt5v8xYnC93p/view?usp=drivesdk',
+  review_script_file_id: '11MuPzLBqUWywjIZj-EOQhvKpLbBB7ePL',
   review_script_url: 'https://drive.google.com/file/d/11MuPzLBqUWywjIZj-EOQhvKpLbBB7ePL/view?usp=drivesdk',
+
   questions: [
     {
       section: 'K1',
       display: '[聞1/絵]',
       answer_key: 3,
+      audio_file_id: '1G0EPlkQGRHRJVA1r31OV4PIMFuB0vsiz',
       audio_url: 'https://drive.google.com/file/d/1G0EPlkQGRHRJVA1r31OV4PIMFuB0vsiz/view?usp=drivesdk',
       image_file_id: '1L0gr8SrxOKLtbnAxKfEwY-WsqQual782',
+      image_url: 'https://drive.google.com/file/d/1L0gr8SrxOKLtbnAxKfEwY-WsqQual782/view?usp=drivesdk',
       image_sha256: '61f2de44bc7bc11bac54cf6b03f14940c0349c4871544351168530f584fba347',
       visible_choices: null
     },
@@ -26,6 +32,7 @@ var H3_WEB_SYSTEM_TEST_FIXTURE = {
       section: 'K2',
       display: '[聞2/一致]',
       answer_key: 2,
+      audio_file_id: '1sA2hZzlKIKoJJXTNeuPwG0vLyvy9vTBh',
       audio_url: 'https://drive.google.com/file/d/1sA2hZzlKIKoJJXTNeuPwG0vLyvy9vTBh/view?usp=drivesdk',
       visible_choices: null
     },
@@ -33,6 +40,7 @@ var H3_WEB_SYSTEM_TEST_FIXTURE = {
       section: 'K3',
       display: '[聞3/応答]',
       answer_key: 2,
+      audio_file_id: '1s5snCIO9KyfJ7Yaq8J0qOgU5_GCZ3oDn',
       audio_url: 'https://drive.google.com/file/d/1s5snCIO9KyfJ7Yaq8J0qOgU5_GCZ3oDn/view?usp=drivesdk',
       visible_choices: null
     },
@@ -40,6 +48,7 @@ var H3_WEB_SYSTEM_TEST_FIXTURE = {
       section: 'K4',
       display: '[聞4/一致]',
       answer_key: 3,
+      audio_file_id: '1v2Ww3KionnpwZbopwb_YOJiwmqLzAnLI',
       audio_url: 'https://drive.google.com/file/d/1v2Ww3KionnpwZbopwb_YOJiwmqLzAnLI/view?usp=drivesdk',
       visible_choices: [
         'ミンスさんは今、会社まで歩いて10分です。',
@@ -52,6 +61,7 @@ var H3_WEB_SYSTEM_TEST_FIXTURE = {
       section: 'K5',
       display: '[聞5/一致]',
       answer_key: 3,
+      audio_file_id: '1YgYBBICtIvv19n-H-lodikiQacbbJZQA',
       audio_url: 'https://drive.google.com/file/d/1YgYBBICtIvv19n-H-lodikiQacbbJZQA/view?usp=drivesdk',
       visible_choices: [
         '행사는 금요일 오전 열 시에 시작합니다.',
@@ -77,18 +87,27 @@ function validateSystemTestRenderRequest_(request) {
 
 function buildSystemTestRenderPayload_() {
   var f = H3_WEB_SYSTEM_TEST_FIXTURE;
+
   var questions = f.questions.map(function (q) {
+    var audio = h3DriveMediaDescriptor_(q.audio_file_id, 'audio/mpeg');
     var out = {
       section: q.section,
       display: q.display,
-      audio_url: q.audio_url,
+      audio_stream_url: audio.download_url,
+      audio_fallback_url: q.audio_url,
+      audio_size_bytes: audio.size_bytes,
       choice_ids: [1, 2, 3, 4],
       visible_choices: q.visible_choices
     };
+
     if (q.section === 'K1') {
-      out.image_data_uri = h3ExactDriveImageDataUri_(q.image_file_id, q.image_sha256);
+      var image = h3DriveMediaDescriptor_(q.image_file_id, 'image/jpeg', q.image_sha256);
+      out.image_stream_url = image.download_url;
+      out.image_fallback_url = q.image_url;
       out.image_sha256 = q.image_sha256;
+      out.image_size_bytes = image.size_bytes;
     }
+
     return out;
   });
 
@@ -101,11 +120,25 @@ function buildSystemTestRenderPayload_() {
     source_set_reference: f.source_set_reference,
     canonical_render_version: f.canonical_render_version,
     surface_contract_id: f.surface_contract_id,
-    questions: questions,
-    after_sync: {
-      combined_audio_url: f.combined_audio_url,
-      review_script_url: f.review_script_url
-    }
+    transport: {
+      audio: 'DRIVE_BROWSER_STREAM_PRELOAD_NONE',
+      image: 'EXACT_DRIVE_BROWSER_STREAM_SHA256_VERIFIED',
+      review: 'POSTGRADE_INLINE'
+    },
+    questions: questions
+  };
+}
+
+function buildSystemTestReviewPayload_() {
+  var f = H3_WEB_SYSTEM_TEST_FIXTURE;
+  var combined = h3DriveMediaDescriptor_(f.combined_audio_file_id, 'audio/mpeg');
+
+  return {
+    combined_audio_stream_url: combined.download_url,
+    combined_audio_fallback_url: f.combined_audio_url,
+    combined_audio_size_bytes: combined.size_bytes,
+    review_script_text: h3DriveUtf8Text_(f.review_script_file_id, 100000),
+    review_script_fallback_url: f.review_script_url
   };
 }
 
@@ -171,9 +204,6 @@ function gradeSystemTestSubmission_(request) {
     total: 5,
     summary: summary,
     receipt: receipt,
-    after_sync: {
-      combined_audio_url: H3_WEB_SYSTEM_TEST_FIXTURE.combined_audio_url,
-      review_script_url: H3_WEB_SYSTEM_TEST_FIXTURE.review_script_url
-    }
+    after_sync: buildSystemTestReviewPayload_()
   };
 }

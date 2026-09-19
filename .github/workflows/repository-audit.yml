@@ -247,6 +247,17 @@ jobs:
           if "R3_01_POC_MEMORY_ONLY" in fixture or "receiptは非永続" in client:
               raise SystemExit('Non-persistent R3-01 receipt semantics still present.')
 
+          if "SYSTEM_TEST_TXN_CONFLICT" in web:
+              raise SystemExit('SYSTEM_TEST still blocks distinct retry fingerprints.')
+
+          index = Path('Index.html').read_text(encoding='utf-8')
+          for stale in ['id="reset"', 'id="submit"', 'id="controls"', 'id="live-summary"']:
+              if stale in index:
+                  raise SystemExit(f'Manual grading UI still present: {stale}')
+
+          if "window.setTimeout(function () {\n              submitAnswers();\n            }, 80);" not in client:
+              raise SystemExit('Q5 auto-submit path is missing.')
+
           commit_start = web.index('function h3CommitSystemTestTransaction_(')
           commit_src = web[commit_start:]
           for forbidden in [

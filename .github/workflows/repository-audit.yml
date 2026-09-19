@@ -978,7 +978,7 @@ jobs:
 
           required_architecture = [
               'H3-R3-09B-REVIEW-ARCHITECTURE-20260919-V2',
-              'Status: R3_09D_DEVICE_VALIDATED',
+              'Status: R3_09E_IMPLEMENTED_AWAITING_DEVICE_VALIDATION',
               'listening_explanation_payload_v1',
               'listening_review_binding_v1',
               'mode=REVIEW&txn_id={TXN_ID}',
@@ -1182,14 +1182,14 @@ jobs:
           if '## 18. R3-09D review Web UI and route implementation' not in operations:
               raise SystemExit('OPERATIONS does not record R3-09D.')
 
-          if 'Status: R3_09D_DEVICE_VALIDATED' not in architecture:
+          if 'Status: R3_09E_IMPLEMENTED_AWAITING_DEVICE_VALIDATION' not in architecture:
               raise SystemExit('Review architecture staged status is not R3-09D.')
 
           if '## 11. R3-09D persistent Review implementation' not in chat:
               raise SystemExit('Web/Chat contract does not record R3-09D.')
 
-          if 'REVIEW_REPLAY' in client:
-              raise SystemExit('R3-09D must not activate REVIEW_REPLAY.')
+          if 'function renderPersistentReview(' not in client:
+              raise SystemExit('R3-09D persistent Review renderer is missing.')
           PY
 
           node <<'NODE'
@@ -1358,7 +1358,7 @@ jobs:
           client = Path('Client.html').read_text(encoding='utf-8')
 
           required_arch = [
-              'Status: R3_09D_DEVICE_VALIDATED',
+              'Status: R3_09E_IMPLEMENTED_AWAITING_DEVICE_VALIDATION',
               '## 17. R3-09D device validation',
               'RESULT=PASS_DEVICE_VALIDATED',
               'persistent history shows 5L #2',
@@ -1388,8 +1388,8 @@ jobs:
           if '### R3-09D device validation' not in chat:
               raise SystemExit('Web/Chat contract does not record R3-09D device validation.')
 
-          if 'REVIEW_REPLAY' in client:
-              raise SystemExit('R3-09D close must not activate REVIEW_REPLAY.')
+          if '### R3-09D device validation' not in chat:
+              raise SystemExit('R3-09D device validation evidence missing.')
 
           forbidden = [
               'R3-09D does not claim PC validation, REVIEW_REPLAY validation, or normal-live activation. Those remain later gates.',
@@ -1400,6 +1400,151 @@ jobs:
                       'R3-09D scope boundary statement missing.'
                   )
           PY
+
+      - name: Check R3-09E REVIEW_REPLAY read-only contract
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+          persistence = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          client = Path('Client.html').read_text(encoding='utf-8')
+          style = Path('Stylesheet.html').read_text(encoding='utf-8')
+          architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
+          operations = Path('OPERATIONS.md').read_text(encoding='utf-8')
+          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
+
+          for needle in [
+              "request && request.mode === 'REVIEW_REPLAY'",
+              'getReviewReplayPayload_(',
+              'getReviewReplayMediaPayload_(',
+              'gradeReviewReplay_(',
+              "e.parameter.mode === 'REVIEW_REPLAY'",
+          ]:
+              if needle not in web:
+                  raise SystemExit(f'R3-09E Web route invariant missing: {needle}')
+
+          replay_start = persistence.index('function buildReviewReplayPayload_(')
+          replay_end = persistence.index('function getReviewReplayPayload_(', replay_start)
+          replay_builder = persistence[replay_start:replay_end]
+
+          for needle in [
+              "'H3_REVIEW_REPLAY_SET_V1'",
+              "mode:\n      'REVIEW_REPLAY'",
+              'nonlearning: true',
+              'persisted: false',
+              'source_review_binding_sha256:',
+              'questions:',
+          ]:
+              if needle not in replay_builder:
+                  raise SystemExit(f'R3-09E replay issue invariant missing: {needle}')
+
+          for forbidden in [
+              'user_answer:',
+              'correct_answer:',
+              'explanation:',
+              'script_text:',
+              'prior_answer',
+          ]:
+              if forbidden in replay_builder:
+                  raise SystemExit(
+                      f'R3-09E replay issue leaks hidden review content: {forbidden}'
+                  )
+
+          grade_start = persistence.index('function gradeReviewReplay_(')
+          grade_body = persistence[grade_start:]
+
+          for needle in [
+              "'H3_REVIEW_REPLAY_RESULT_V1'",
+              'runtime_write_count: 0',
+              'original_score:',
+              'after_replay:',
+              'buildPersistentReviewPayload_(',
+          ]:
+              if needle not in grade_body:
+                  raise SystemExit(f'R3-09E replay grade invariant missing: {needle}')
+
+          for forbidden in [
+              'h3ProdSubmit_(',
+              '.appendRow(',
+              '.setValue(',
+              '.setValues(',
+              'listening_log_v1',
+              'listening_state_v1',
+          ]:
+              if forbidden in grade_body:
+                  raise SystemExit(
+                      f'R3-09E replay grader contains forbidden learner WRITE surface: {forbidden}'
+                  )
+
+          for needle in [
+              'function loadReplayTxn(txnId)',
+              "'REVIEW_REPLAY'",
+              "'この回答は学習成績・復習スケジュールには反映されません。'",
+              "'もう一度この5問を解く'",
+              "'再挑戦'",
+              'review.replay_comparison',
+              "'今回 '",
+              "'　元回答 '",
+          ]:
+              if needle not in client:
+                  raise SystemExit(f'R3-09E Client invariant missing: {needle}')
+
+          for needle in [
+              '.replay-notice',
+              '.replay-comparison',
+              '.review-replay-button',
+              '.review-history-actions',
+          ]:
+              if needle not in style:
+                  raise SystemExit(f'R3-09E CSS invariant missing: {needle}')
+
+          for needle in [
+              'Status: R3_09E_IMPLEMENTED_AWAITING_DEVICE_VALIDATION',
+              '## 18. R3-09E REVIEW_REPLAY implementation',
+              'RESULT=IMPLEMENTED_AWAITING_DEVICE_VALIDATION',
+          ]:
+              if needle not in architecture:
+                  raise SystemExit(f'R3-09E architecture evidence missing: {needle}')
+
+          if '## 19. R3-09E REVIEW_REPLAY implementation' not in operations:
+              raise SystemExit('OPERATIONS does not record R3-09E implementation.')
+
+          if '## 12. R3-09E REVIEW_REPLAY staged implementation' not in chat:
+              raise SystemExit('Web/Chat contract does not record R3-09E.')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const source = fs.readFileSync('WebApp.js', 'utf8');
+          const ctx = vm.createContext({
+            console,
+            H3_WEB_SYSTEM_TEST_R3_06_SET_ID:
+              'SYSTEM_TEST-H3-L5E2E-R3-06-20260919-01',
+            h3SystemTestSetIdAllowed_: value =>
+              value ===
+              'SYSTEM_TEST-H3-L5E2E-R3-06-20260919-01'
+          });
+
+          vm.runInContext(source, ctx, {
+            filename: 'WebApp.js'
+          });
+
+          const replay = vm.runInContext(
+            "h3WebBootRequest_({parameter:{mode:'REVIEW_REPLAY',txn_id:'H3TX-20260919-000005'}})",
+            ctx
+          );
+
+          if (
+            replay.mode !== 'REVIEW_REPLAY' ||
+            replay.txn_id !== 'H3TX-20260919-000005'
+          ) {
+            throw new Error('REVIEW_REPLAY boot contract mismatch.');
+          }
+          NODE
 
       - name: Check JavaScript syntax
         shell: bash

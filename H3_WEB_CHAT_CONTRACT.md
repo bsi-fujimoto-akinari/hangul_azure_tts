@@ -295,3 +295,24 @@ Default learner-device validation for Listening Web App releases is mobile-first
 Canonical Listening render source: `H3-LISTENING-RENDER-RULES-20260920-V19`.
 
 R3-10 exited with `BLOCKING=0`; R3-11 remains the separate normal-live activation stage.
+
+## 15. R3-11 normal-live ownership
+
+After R3-11 activation, the Web App is the learner-facing authority for ordinary Listening 5L issue/answer/Review surfaces.
+
+Chat/coordination responsibilities:
+- generate/prepare the next canonical 5L when requested;
+- run the canonical preissue gate before issue;
+- verify source/audio/scheduler bindings;
+- never bypass `NORMAL_LIVE_ACTIVE` runtime gates;
+- never duplicate a committed production transaction;
+- never persist REVIEW_REPLAY as learner history.
+
+Web responsibilities:
+- render only an issued set matching canonical next-set state;
+- commit one idempotent production transaction;
+- persist learner grading/state through the production transaction;
+- return persistent Review;
+- keep HOME/REVIEW/REVIEW_REPLAY behavior unchanged.
+
+R3-11 activation alone does not issue set no.3. The next 5L is prepared only on a subsequent learner request.

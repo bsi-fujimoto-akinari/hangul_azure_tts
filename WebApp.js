@@ -3,7 +3,7 @@
  * Non-learning only. No Sheet/runtime/history mutation is authorized here.
  */
 
-function doGet(e) {
+function h3WebDoGet_(e) {
   var template = HtmlService.createTemplateFromFile('Index');
   template.bootJson = JSON.stringify(h3WebBootRequest_(e));
   return template

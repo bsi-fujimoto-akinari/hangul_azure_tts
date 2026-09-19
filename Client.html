@@ -214,52 +214,91 @@
     );
 
     var header =
-      el('section', 'home-hero');
+      el(
+        'section',
+        'home-hero'
+      );
+
+    var titleRow =
+      el(
+        'div',
+        'home-title-row'
+      );
+
     var title =
       document.createElement('h2');
     title.textContent = 'H3 5L';
-    var lead =
-      document.createElement('p');
-    lead.textContent =
-      '出題と復習をここから開けます。';
-    header.appendChild(title);
-    header.appendChild(lead);
-    root.appendChild(header);
+    titleRow.appendChild(title);
+
+    var subtitle =
+      document.createElement('span');
+    subtitle.className =
+      'home-subtitle';
+    subtitle.textContent =
+      '聞き取り';
+    titleRow.appendChild(
+      subtitle
+    );
+
+    header.appendChild(
+      titleRow
+    );
 
     var current =
       el(
-        'section',
-        'home-card'
+        'div',
+        'home-current-strip'
       );
-    var currentTitle =
-      document.createElement('h3');
-    currentTitle.textContent =
+
+    var currentMeta =
+      el(
+        'div',
+        'home-current-meta'
+      );
+
+    var currentLabel =
+      document.createElement('span');
+    currentLabel.className =
+      'home-current-label';
+    currentLabel.textContent =
       '現在の5L';
+    currentMeta.appendChild(
+      currentLabel
+    );
+
+    var currentValue =
+      document.createElement('strong');
+
+    if (
+      payload.current_learning
+    ) {
+      currentValue.textContent =
+        '5L #' +
+        payload.current_learning
+          .listening_set_no;
+    } else {
+      currentValue.textContent =
+        '回答待ちなし';
+    }
+
+    currentMeta.appendChild(
+      currentValue
+    );
     current.appendChild(
-      currentTitle
+      currentMeta
     );
 
     if (
       payload.current_learning
     ) {
-      var currentInfo =
-        document.createElement('p');
-      currentInfo.textContent =
-        '5L #' +
-        payload.current_learning
-          .listening_set_no;
-      current.appendChild(
-        currentInfo
-      );
-
       var openCurrent =
         el(
           'button',
-          'primary home-action'
+          'primary home-current-action'
         );
       openCurrent.type = 'button';
       openCurrent.textContent =
-        '問題を開く';
+        '開く';
       openCurrent.addEventListener(
         'click',
         function () {
@@ -272,32 +311,57 @@
       current.appendChild(
         openCurrent
       );
-    } else {
-      var none =
-        document.createElement('p');
-      none.textContent =
-        '現在回答待ちの5Lはありません。';
-      current.appendChild(none);
     }
 
-    root.appendChild(current);
+    header.appendChild(current);
+    root.appendChild(header);
 
     var review =
       el(
         'section',
         'home-card review-library'
       );
+
     var reviewHead =
       el(
         'div',
         'home-card-head'
       );
+
+    var reviewTitleWrap =
+      el(
+        'div',
+        'home-section-title'
+      );
+
     var reviewTitle =
       document.createElement('h3');
     reviewTitle.textContent =
       '復習';
-    reviewHead.appendChild(
+    reviewTitleWrap.appendChild(
       reviewTitle
+    );
+
+    if (
+      payload.review_history &&
+      payload.review_history.length
+    ) {
+      var count =
+        document.createElement('span');
+      count.className =
+        'home-history-count';
+      count.textContent =
+        String(
+          payload.review_history
+            .length
+        );
+      reviewTitleWrap.appendChild(
+        count
+      );
+    }
+
+    reviewHead.appendChild(
+      reviewTitleWrap
     );
 
     var filters =
@@ -305,6 +369,7 @@
         'div',
         'review-history-filters'
       );
+
     [
       {
         key: 'ALL',
@@ -312,7 +377,7 @@
       },
       {
         key: 'NEEDS_REVIEW',
-        label: '要復習あり'
+        label: '要復習'
       }
     ].forEach(function (spec) {
       var button =
@@ -356,6 +421,7 @@
                   node.dataset
                     .needsReview ===
                     'true';
+
                 node.classList.toggle(
                   'hidden',
                   !show
@@ -385,9 +451,12 @@
       !payload.review_history.length
     ) {
       var empty =
-        document.createElement('p');
+        el(
+          'div',
+          'home-empty-state'
+        );
       empty.textContent =
-        '復習できる履歴はまだありません。';
+        '復習履歴はまだありません。';
       history.appendChild(empty);
     } else {
       payload.review_history
@@ -397,6 +466,7 @@
               'article',
               'review-history-item'
             );
+
           item.dataset.needsReview =
             String(
               !!entry.needs_review
@@ -408,17 +478,42 @@
               'review-history-meta'
             );
 
+          var headingRow =
+            el(
+              'div',
+              'review-history-heading'
+            );
+
           var heading =
             document.createElement('h4');
           heading.textContent =
             '5L #' +
             entry.listening_set_no;
-          meta.appendChild(
+          headingRow.appendChild(
             heading
+          );
+
+          var score =
+            el(
+              'span',
+              'review-history-score'
+            );
+          score.textContent =
+            entry.score +
+            '/' +
+            entry.total;
+          headingRow.appendChild(
+            score
+          );
+
+          meta.appendChild(
+            headingRow
           );
 
           var date =
             document.createElement('p');
+          date.className =
+            'review-history-date';
           date.textContent =
             formatHistoryDate(
               entry.committed_at
@@ -427,11 +522,10 @@
 
           var summary =
             document.createElement('p');
+          summary.className =
+            'review-history-summary';
           summary.textContent =
-            entry.score +
-            ' / ' +
-            entry.total +
-            '　×' +
+            '×' +
             entry.wrong_count +
             '　?' +
             entry.uncertain_count;
@@ -454,7 +548,7 @@
             );
           open.type = 'button';
           open.textContent =
-            '復習する';
+            '復習';
           open.addEventListener(
             'click',
             function () {
@@ -514,37 +608,6 @@
   function renderQuestions(questions) {
     var root = document.getElementById('questions');
     root.textContent = '';
-
-    if (
-      app.payload &&
-      app.payload.mode ===
-        'REVIEW_REPLAY'
-    ) {
-      var replayNotice =
-        el(
-          'section',
-          'replay-notice'
-        );
-      var replayTitle =
-        document.createElement('h2');
-      replayTitle.textContent =
-        '再挑戦';
-      replayNotice.appendChild(
-        replayTitle
-      );
-
-      var replayText =
-        document.createElement('p');
-      replayText.textContent =
-        'この回答は学習成績・復習スケジュールには反映されません。';
-      replayNotice.appendChild(
-        replayText
-      );
-
-      root.appendChild(
-        replayNotice
-      );
-    }
 
     questions.forEach(function (q, index) {
       var qNo = index + 1;
@@ -1072,22 +1135,6 @@
       result.after_replay.schema ===
         'H3_PERSISTENT_REVIEW_PAYLOAD_V1'
     ) {
-      result.after_replay
-        .replay_comparison = {
-          replay_score:
-            Number(
-              result.score
-            ),
-          original_score:
-            Number(
-              result.original_score
-            ),
-          total:
-            Number(
-              result.total
-            )
-        };
-
       renderPersistentReview(
         result.after_replay
       );
@@ -1228,9 +1275,7 @@
     resetForPayload();
     app.payload = review;
     app.locked = true;
-    app.reviewFilter =
-      review.default_filter ||
-      'NEEDS_REVIEW';
+    app.activeIndex = 0;
 
     document.body.classList.add(
       'graded'
@@ -1245,172 +1290,55 @@
       'hidden'
     );
 
-    var header =
+    var pager =
       el(
-        'section',
-        'persistent-review-header'
+        'nav',
+        'review-progress'
       );
-
-    var eyebrow =
-      el(
-        'p',
-        'review-eyebrow'
-      );
-    eyebrow.textContent =
-      '5L #' +
-      review.listening_set_no +
-      ' 復習';
-    header.appendChild(
-      eyebrow
+    pager.setAttribute(
+      'aria-label',
+      '復習問題'
     );
 
-    var score =
-      el(
-        'p',
-        'persistent-review-score'
-      );
-    score.textContent =
-      review.score +
-      ' / ' +
-      review.total;
-    header.appendChild(score);
-
-    var wrongCount = 0;
-    var uncertainCount = 0;
-
-    review.sections.forEach(
-      function (part) {
-        if (
-          part.result === '×'
-        ) {
-          wrongCount += 1;
-        }
-        if (part.uncertain) {
-          uncertainCount += 1;
-        }
-      }
-    );
-
-    var counts =
-      el(
-        'p',
-        'review-counts'
-      );
-    counts.textContent =
-      '× ' +
-      wrongCount +
-      '　? ' +
-      uncertainCount;
-    header.appendChild(counts);
-
-    var strip =
-      el(
-        'div',
-        'review-result-strip'
-      );
     review.sections.forEach(
       function (part, index) {
-        var chip =
+        var button =
           el(
-            'span',
-            'review-result-chip'
+            'button',
+            'review-progress-button'
           );
-        chip.textContent =
+
+        button.type = 'button';
+        button.dataset.index =
+          String(index);
+        button.textContent =
           'Q' +
           (index + 1) +
           ' ' +
           part.result;
-        strip.appendChild(chip);
+        button.setAttribute(
+          'aria-label',
+          'Q' +
+          (index + 1) +
+          ' ' +
+          part.result
+        );
+
+        button.addEventListener(
+          'click',
+          function () {
+            setReviewPage(
+              index,
+              review
+            );
+          }
+        );
+
+        pager.appendChild(button);
       }
     );
-    header.appendChild(strip);
 
-    var filters =
-      el(
-        'div',
-        'review-filter-row'
-      );
-
-    [
-      {
-        key: 'NEEDS_REVIEW',
-        label: '要復習'
-      },
-      {
-        key: 'ALL',
-        label: '全問'
-      }
-    ].forEach(function (spec) {
-      var button =
-        el(
-          'button',
-          'review-filter-button'
-        );
-      button.type = 'button';
-      button.dataset.filter =
-        spec.key;
-      button.textContent =
-        spec.label;
-      button.classList.toggle(
-        'active',
-        spec.key ===
-          app.reviewFilter
-      );
-      button.addEventListener(
-        'click',
-        function () {
-          app.reviewFilter =
-            spec.key;
-
-          Array.prototype
-            .forEach.call(
-              filters.querySelectorAll(
-                '.review-filter-button'
-              ),
-              function (node) {
-                node.classList.toggle(
-                  'active',
-                  node === button
-                );
-              }
-            );
-
-          applyReviewFilter(
-            root
-          );
-        }
-      );
-      filters.appendChild(button);
-    });
-    header.appendChild(filters);
-
-    root.appendChild(header);
-
-    if (
-      review.replay_comparison
-    ) {
-      var comparison =
-        el(
-          'section',
-          'replay-comparison'
-        );
-      comparison.textContent =
-        '今回 ' +
-        review.replay_comparison
-          .replay_score +
-        ' / ' +
-        review.replay_comparison
-          .total +
-        '　元回答 ' +
-        review.replay_comparison
-          .original_score +
-        ' / ' +
-        review.replay_comparison
-          .total;
-      root.appendChild(
-        comparison
-      );
-    }
+    root.appendChild(pager);
 
     var cards =
       el(
@@ -1420,12 +1348,14 @@
 
     review.sections.forEach(
       function (part, index) {
-        cards.appendChild(
+        var card =
           buildPersistentReviewCard(
             part,
             index
-          )
-        );
+          );
+        card.dataset.reviewIndex =
+          String(index);
+        cards.appendChild(card);
       }
     );
 
@@ -1496,6 +1426,12 @@
       technical
     );
 
+    var actions =
+      el(
+        'div',
+        'review-footer-actions'
+      );
+
     var replay =
       el(
         'button',
@@ -1503,7 +1439,7 @@
       );
     replay.type = 'button';
     replay.textContent =
-      'もう一度この5問を解く';
+      '再挑戦';
     replay.addEventListener(
       'click',
       function () {
@@ -1512,9 +1448,7 @@
         );
       }
     );
-    root.appendChild(
-      replay
-    );
+    actions.appendChild(replay);
 
     var back =
       el(
@@ -1523,47 +1457,103 @@
       );
     back.type = 'button';
     back.textContent =
-      '復習一覧へ戻る';
+      'ホーム';
     back.addEventListener(
       'click',
       loadHome
     );
-    root.appendChild(back);
+    actions.appendChild(back);
 
-    applyReviewFilter(root);
+    root.appendChild(actions);
 
-    review.sections.forEach(
-      function (part, index) {
-        window.setTimeout(
-          function () {
-            ensureAudioLoaded(
-              part.audio_asset_key
-            );
-          },
-          100 + index * 100
-        );
-      }
+    setReviewPage(
+      0,
+      review
     );
   }
 
-  function applyReviewFilter(root) {
-    Array.prototype.forEach.call(
-      root.querySelectorAll(
-        '.persistent-review-card'
-      ),
-      function (card) {
-        var show =
-          app.reviewFilter ===
-            'ALL' ||
-          card.dataset.result !==
-            '○';
+  function setReviewPage(
+    index,
+    review
+  ) {
+    var max =
+      review.sections.length - 1;
+    app.activeIndex =
+      Math.max(
+        0,
+        Math.min(
+          max,
+          Number(index) || 0
+        )
+      );
 
-        card.classList.toggle(
-          'hidden',
-          !show
+    Array.prototype
+      .forEach.call(
+        document.querySelectorAll(
+          '.persistent-review-card'
+        ),
+        function (card) {
+          card.classList.toggle(
+            'review-active',
+            Number(
+              card.dataset.reviewIndex
+            ) === app.activeIndex
+          );
+        }
+      );
+
+    Array.prototype
+      .forEach.call(
+        document.querySelectorAll(
+          '.review-progress-button'
+        ),
+        function (button) {
+          var active =
+            Number(
+              button.dataset.index
+            ) === app.activeIndex;
+
+          button.classList.toggle(
+            'current',
+            active
+          );
+
+          button.setAttribute(
+            'aria-current',
+            active
+              ? 'step'
+              : 'false'
+          );
+        }
+      );
+
+    var section =
+      review.sections[
+        app.activeIndex
+      ];
+
+    if (section) {
+      ensureAudioLoaded(
+        section.audio_asset_key
+      );
+    }
+
+    if (isMobileMode()) {
+      var pager =
+        document.querySelector(
+          '.review-progress'
         );
+
+      if (
+        pager &&
+        pager.scrollIntoView
+      ) {
+        pager.scrollIntoView({
+          block: 'start',
+          behavior: 'smooth'
+        });
       }
-    );
+    }
   }
 
   function buildPersistentReviewCard(

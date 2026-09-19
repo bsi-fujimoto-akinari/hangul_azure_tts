@@ -174,6 +174,22 @@ function h3PreissueRequireK1_(
     );
   }
 
+  var qa = h3ProdParseJson_(
+    row[map.QA_PROFILE],
+    'PREISSUE_K1_QA_PROFILE_INVALID'
+  );
+  if (
+    !qa ||
+    !String(qa.mode || '').trim() ||
+    !String(qa.item_id || '').trim() ||
+    !String(qa.profile || '').trim() ||
+    !String(qa.image_source || '').trim()
+  ) {
+    throw new Error(
+      'PREISSUE_K1_QA_PROFILE_INVALID'
+    );
+  }
+
   var audit = h3ProdParseJson_(
     row[map.AUDIT_RESULT],
     'PREISSUE_K1_AUDIT_INVALID'
@@ -371,6 +387,16 @@ function h3PreissueRequireProvenance_(
   stateMap,
   policyMap
 ) {
+  if (
+    !sourceProv ||
+    sourceProv.hash_canonicalization !==
+      'JSON_SORT_KEYS_COMPACT_UTF8_V1'
+  ) {
+    throw new Error(
+      'PREISSUE_HASH_CANONICALIZATION_INVALID'
+    );
+  }
+
   var retests = [];
 
   H3_WEB_PROD_SECTIONS
@@ -404,6 +430,16 @@ function h3PreissueRequireProvenance_(
       ) {
         throw new Error(
           'PREISSUE_PROVENANCE_SKILL_MISMATCH:' +
+          section
+        );
+      }
+
+      if (
+        String(p.authoring_audit || '') !==
+          'PASS_UNIQUE_ANSWER'
+      ) {
+        throw new Error(
+          'PREISSUE_AUTHORING_AUDIT_NOT_PASS:' +
           section
         );
       }
@@ -523,6 +559,7 @@ function h3PreissueRequireQueue_(
     [
       'LISTEN_GEN_ID',
       'STATUS',
+      'CREATED_AT',
       'PARENT_SET_ID',
       'LISTENING_ISSUE_NO',
       'SECTION_KEY',
@@ -596,7 +633,13 @@ function h3PreissueRequireQueue_(
       ) !== 'done' ||
       String(
         row[table.map.ERROR] || ''
-      ) !== ''
+      ) !== '' ||
+      !String(
+        row[table.map.PROCESSED_AT] || ''
+      ) ||
+      String(
+        row[table.map.STORAGE_MODE] || ''
+      ) !== HQ_LISTENING_STORAGE_MODE
     ) {
       throw new Error(
         'PREISSUE_AUDIO_ROW_STATE_INVALID:' +
@@ -616,6 +659,46 @@ function h3PreissueRequireQueue_(
     ) {
       throw new Error(
         'PREISSUE_AUDIO_SKILL_MISMATCH:' +
+        section
+      );
+    }
+
+    var calculatedPayloadHash =
+      h3Sha256Hex_(
+        JSON.stringify([
+          String(
+            row[table.map.LISTEN_GEN_ID] || ''
+          ),
+          String(
+            row[table.map.CREATED_AT] || ''
+          ),
+          String(
+            row[table.map.PARENT_SET_ID] || ''
+          ),
+          Number(
+            row[table.map.LISTENING_ISSUE_NO]
+          ),
+          section,
+          String(
+            row[table.map.SKILL_ID] || ''
+          ),
+          String(
+            row[table.map.AUDIO_PLAN_JSON] || ''
+          ),
+          String(
+            row[table.map.STORAGE_MODE] || ''
+          )
+        ])
+      );
+
+    if (
+      calculatedPayloadHash !==
+      String(
+        row[table.map.PAYLOAD_HASH] || ''
+      )
+    ) {
+      throw new Error(
+        'PREISSUE_AUDIO_PAYLOAD_HASH_MISMATCH:' +
         section
       );
     }
@@ -676,6 +759,24 @@ function h3PreissueRequireQueue_(
     ) {
       throw new Error(
         'PREISSUE_AUDIO_FILE_INVALID:' +
+        section
+      );
+    }
+
+    var parents =
+      file.getParents();
+    var inTargetFolder = false;
+    while (parents.hasNext()) {
+      if (
+        parents.next().getId() ===
+          HQ_AUDIO_LISTENING_FOLDER_ID
+      ) {
+        inTargetFolder = true;
+      }
+    }
+    if (!inTargetFolder) {
+      throw new Error(
+        'PREISSUE_AUDIO_FOLDER_MISMATCH:' +
         section
       );
     }
@@ -827,6 +928,7 @@ function h3ProdValidatePreissueSet_(
       'ITEM_PAYLOAD_SHA256',
       'AUDIO_BINDING_JSON',
       'SOURCE_PROVENANCE_JSON',
+      'LOCKED_AT',
       'ISSUED_AT'
     ],
     'listening_set_payload_v1'
@@ -848,6 +950,9 @@ function h3ProdValidatePreissueSet_(
   if (
     String(p[pm.STATUS] || '') !==
       'AUDIO_BOUND' ||
+    !String(
+      p[pm.LOCKED_AT] || ''
+    ) ||
     String(
       p[pm.ISSUED_AT] || ''
     ) !== ''
@@ -944,7 +1049,12 @@ function h3ProdValidatePreissueSet_(
       stateMap.R3_07_PREP_TARGET_SET_ID &&
       stateMap.R3_07_PREP_TARGET_SET_ID.value ||
       ''
-    ) !== String(setId)
+    ) !== String(setId) ||
+    String(
+      stateMap.STATUS &&
+      stateMap.STATUS.value ||
+      ''
+    ) !== 'R3_07_PRODUCTION_PREP'
   ) {
     throw new Error(
       'PREISSUE_STATE_BINDING_INVALID'
@@ -966,9 +1076,13 @@ function h3ProdValidatePreissueSet_(
       ''
     ) !== String(setId) ||
     String(
+      policyMap.STATUS || ''
+    ) !== 'N5_AUDIO_TIMING_STAGED' ||
+    String(
       policyMap.PRODUCTION_GATE ||
       ''
-    ) === 'ACTIVE'
+    ) === 'ACTIVE' ||
+    H3_R3_PRODUCTION_COMMIT_ENABLED !== false
   ) {
     throw new Error(
       'PREISSUE_POLICY_GATE_INVALID'

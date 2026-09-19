@@ -412,8 +412,23 @@ jobs:
           assert(plan.score === 1, 'Synthetic L02 score must be 1/5.');
           assert(plan.activeWrongCount === 4, 'Synthetic L02 active wrong count must be 4.');
           assert(plan.overload === true, 'Synthetic L02 must enter overload.');
-          assert(plan.stateValues.OVERLOAD_STATUS === 'LISTENING_OVERLOAD_REVIEW',
+          assert(plan.stateValues.OVERLOAD_STATUS === 'LISTENING_OVERLOAD_PLAN_READY',
                  'Synthetic L02 overload status mismatch.');
+          const syntheticSchedulerPlan = JSON.parse(
+            plan.stateValues.OVERLOAD_PLAN_JSON
+          );
+          assert(
+            syntheticSchedulerPlan.schema === 'H3_LISTENING_OVERLOAD_PLAN_V2',
+            'Synthetic L02 scheduler schema mismatch.'
+          );
+          assert(
+            syntheticSchedulerPlan.next_set_no === 2,
+            'Synthetic L02 scheduler next set mismatch.'
+          );
+          assert(
+            syntheticSchedulerPlan.blocking_overflow.length === 0,
+            'Synthetic L02 scheduler should be feasible.'
+          );
           assert(plan.stateValues.NEXT_LISTENING_SET_NO === '2',
                  'Synthetic L02 next set must be 2.');
           assert(plan.stateValues.PHASE === 'BASELINE_1',

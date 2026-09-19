@@ -364,3 +364,34 @@ The production tag, not every production-affecting intermediate commit, is the c
 A historical baseline is a fallback reference, not a routine direct full-snapshot deployment source. Recovery must follow `RECOVERY.md`, including recovery-source selection and forward corrective history.
 
 GitHub Release objects are optional presentation metadata and are not a source of truth. They are not required retroactively for existing tags. If adopted later, they must reference existing immutable tags rather than replace or redefine them.
+
+
+## 11. R3 learner triggers, targeted audio dispatch, and Web receipt
+
+The canonical learner-facing trigger vocabulary is:
+
+- `K1` = prepare/verify persistent K1_READY only.
+- `5L` = Listening five-question Web flow.
+- `5W` = written five-question flow; this is the current learner-facing replacement for historical `5Q`.
+- `5Q` = deprecated for new learner requests. Do not rewrite historical records merely to rename it.
+
+For audio processing, the historical one-minute `processLatestPendingAudioJob()` trigger remains a fallback. R3 prefers the exact-target entry point:
+
+```text
+processPendingAudioForSet(mode, setId)
+```
+
+where `mode` is exactly `5L` or `5W`. The dispatcher must process only the supplied SET_ID and must never fall through to a different pending set.
+
+Web transactions hand a four-line receipt back to Chat:
+
+```text
+[H3_WEB_SYNC]
+SET_ID=<exact set id>
+TXN_ID=H3TX-YYYYMMDD-NNNNNN
+STATUS=COMMITTED
+```
+
+Chat treats this as a pointer to canonical backend state, not as sufficient proof by itself. Chat must read back the authoritative journal/state, verify the committed transaction, and only then generate post-answer learner-facing output. Chat never duplicates the backend answer/history mutation.
+
+The full frozen R3-04 contract is `H3_WEB_CHAT_CONTRACT.md`.

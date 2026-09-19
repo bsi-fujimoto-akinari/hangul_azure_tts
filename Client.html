@@ -74,9 +74,9 @@
         document.getElementById('questions').classList.remove('hidden');
         document.getElementById('controls').classList.remove('hidden');
         document.getElementById('mobile-progress').classList.remove('hidden');
-        document.getElementById('mobile-nav').classList.remove('hidden');
 
-        syncResponsiveState();
+        app.activeIndex = 0;
+        updateMobilePager();
         updateLiveSummary();
         scheduleInitialAudioPrefetch();
       })
@@ -156,6 +156,15 @@
           );
 
           updateLiveSummary();
+
+          if (
+            app.payload &&
+            index < app.payload.questions.length - 1
+          ) {
+            window.setTimeout(function () {
+              setActiveIndex(index + 1);
+            }, 80);
+          }
         });
 
         choices.appendChild(button);
@@ -415,6 +424,7 @@
         button.type = 'button';
         button.textContent = 'Q' + (index + 1);
         button.dataset.index = String(index);
+        if (index === 0) button.classList.add('current');
         button.addEventListener('click', function () {
           setActiveIndex(index);
         });
@@ -552,6 +562,12 @@
 
         document.body.classList.add('graded');
         setInteractiveDisabled(true);
+        pauseOtherAudio(null);
+
+        document.getElementById('questions').classList.add('hidden');
+        document.getElementById('controls').classList.add('hidden');
+        document.getElementById('mobile-progress').classList.add('hidden');
+
         renderResult(result);
         updateLiveSummary();
 
@@ -653,31 +669,42 @@
 
     var head = el('div', 'review-head');
     var title = document.createElement('h2');
-    title.textContent = '復習モード';
+    title.textContent = '復習';
 
     var description = document.createElement('p');
     description.textContent =
-      '結合音声を再生しながら、同じ画面でスクリプトを確認できます。';
+      '各問題の音声と対応するスクリプトを同じブロックで確認できます。';
 
     head.appendChild(title);
     head.appendChild(description);
     panel.appendChild(head);
 
-    var playerWrap = el('div', 'review-player-sticky');
-    var playerBlock = buildAudioBlock(
-      review.combined_audio_asset_key,
-      review.combined_audio_fallback_url,
-      '結合音声',
-      false
-    );
+    review.sections.forEach(function (part, index) {
+      var card = el('section', 'review-section');
 
-    playerWrap.appendChild(playerBlock);
-    panel.appendChild(playerWrap);
+      var sectionHead = el('div', 'review-section-head');
+      var sectionTitle = document.createElement('h3');
+      sectionTitle.textContent = 'Q' + (index + 1) + ' ' + part.display;
+      sectionHead.appendChild(sectionTitle);
 
-    var script = document.createElement('pre');
-    script.className = 'review-script';
-    script.textContent = review.review_script_text;
-    panel.appendChild(script);
+      sectionHead.appendChild(
+        buildAudioBlock(
+          part.audio_asset_key,
+          part.audio_fallback_url,
+          '',
+          true
+        )
+      );
+
+      card.appendChild(sectionHead);
+
+      var script = document.createElement('pre');
+      script.className = 'review-section-script';
+      script.textContent = part.script_text;
+      card.appendChild(script);
+
+      panel.appendChild(card);
+    });
 
     var scriptFallback = document.createElement('a');
     scriptFallback.className = 'media-fallback review-script-fallback';
@@ -689,9 +716,11 @@
 
     root.appendChild(panel);
 
-    window.setTimeout(function () {
-      ensureAudioLoaded(review.combined_audio_asset_key);
-    }, 150);
+    review.sections.forEach(function (part, index) {
+      window.setTimeout(function () {
+        ensureAudioLoaded(part.audio_asset_key);
+      }, 100 + index * 100);
+    });
   }
 
   function copyReceipt(text, button) {

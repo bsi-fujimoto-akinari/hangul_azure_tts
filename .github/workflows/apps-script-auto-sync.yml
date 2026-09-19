@@ -133,7 +133,18 @@ jobs:
       - name: Push audited main to Apps Script HEAD
         if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
         shell: bash
-        run: npx -y @google/clasp@3.4.0 push
+        run: |
+          set -o pipefail
+          output="$(npx -y @google/clasp@3.4.0 push --force 2>&1)"
+          printf '%s\n' "$output"
+          if printf '%s\n' "$output" | grep -q 'Skipping push'; then
+            echo "::error::clasp skipped the push."
+            exit 1
+          fi
+          if ! printf '%s\n' "$output" | grep -Eq '^Pushed (one|[0-9]+) file|^Pushed no files'; then
+            echo "::error::clasp did not report a completed push."
+            exit 1
+          fi
 
       - name: Read deployment inventory
         if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
@@ -151,5 +162,6 @@ jobs:
             echo "- Apps Script-impacting change: `${{ steps.impact.outputs.changed || 'unknown' }}`"
             echo "- clasp credential ready: `${{ steps.auth.outputs.ready || 'not-needed' }}`"
             echo "- target script ID: `1p_e1jKICTZXHpCrQ7rwU9HilloZdkFBpHry_lCq5YgXpaiU4FNEQlDa-`"
-            echo "- versioned /exec deployment: not changed by this workflow"
+            echo '- manifest overwrite mode: audited CI only (clasp push --force)'
+            echo '- versioned /exec deployment: not changed by this workflow'
           } >> "$GITHUB_STEP_SUMMARY"

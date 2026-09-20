@@ -46,6 +46,7 @@ jobs:
               'WebAppReviewListeningAdapter.js',
               'WebAppReviewPersistence.js',
               'WebAppReviewWrittenAdapter.js',
+              'ListeningBackendOrchestrator.js',
               'H3_WEB_CHAT_CONTRACT.md',
               'H3_REVIEW_ARCHITECTURE.md',
               'Index.html',
@@ -65,7 +66,7 @@ jobs:
           unexpected = sorted(tracked - allowed)
           missing = sorted({
               '.clasp.json', '.gitignore', 'Code.js',
-              'WebApp.js', 'WebAppFixture.js', 'WebAppProduction.js', 'WebAppTransactionCommon.js', 'WebAppWrittenProduction.js', 'WebAppProductionRender.js', 'WebAppPreissue.js', 'WebAppReceipt.js', 'Index.html',
+              'WebApp.js', 'WebAppFixture.js', 'WebAppProduction.js', 'WebAppTransactionCommon.js', 'WebAppWrittenProduction.js', 'ListeningBackendOrchestrator.js', 'WebAppProductionRender.js', 'WebAppPreissue.js', 'WebAppReceipt.js', 'Index.html',
               'Stylesheet.html', 'Client.html', 'appsscript.json'
           } - tracked)
 
@@ -4050,6 +4051,275 @@ jobs:
           console.log('Listening audio source attestation pure tests: PASS');
           NODE
 
+      - name: Check Listening backend orchestrator
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          src = Path('ListeningBackendOrchestrator.js').read_text(encoding='utf-8')
+          code = Path('Code.js').read_text(encoding='utf-8')
+          pre = Path('WebAppPreissue.js').read_text(encoding='utf-8')
+
+          required = [
+              "var H3_BACKEND_PREPARE_SCHEMA =",
+              "'H3_LISTENING_BACKEND_PREPARE_V1'",
+              "var H3_BACKEND_RESULT_SCHEMA =",
+              "'H3_LISTENING_BACKEND_PREPARE_RESULT_V1'",
+              "function prepareListeningBackendSet(",
+              "function h3BackendPreflight_(",
+              "function h3BackendMaterializePayload_(",
+              "function h3BackendMaterializeAudioQueue_(",
+              "function h3BackendRequireK1BindState_(",
+              "function h3BackendBindPrestage_(",
+              "function h3BackendAttestSource_(",
+              "function h3BackendBindAudioToPayload_(",
+              "function h3BackendRequirePreissuePass_(",
+              "processPendingAudioForSet(\n      '5L',",
+              "persistListeningSetScript(",
+              "validateProductionPreissueSet(",
+              "'PREISSUE_READY'",
+              "issue_performed: false",
+          ]
+          for needle in required:
+              if needle not in src:
+                  raise SystemExit(f'Listening backend orchestrator invariant missing: {needle}')
+
+          for forbidden in [
+              'consumeK1ReadyAfterIssue_(',
+              "getSheetByName('listening_log_v1')",
+              "getSheetByName('listening_web_txn_v1')",
+              "setValue('ISSUED')",
+              "ISSUED_AT).setValue",
+              'processLatestPendingAudioJob(',
+          ]:
+              if forbidden in src:
+                  raise SystemExit(f'Forbidden learner/runtime mutation surface in orchestrator: {forbidden}')
+
+          # O0-O3 -> source attestation -> targeted O4 -> O5-O7.
+          prep = src[src.index('function h3BackendPrepareLocked_('):src.index('function h3BackendFinalizeLocked_(')]
+          final = src[src.index('function h3BackendFinalizeLocked_('):src.index('function prepareListeningBackendSet(')]
+          entry = src[src.index('function prepareListeningBackendSet('):]
+          for sequence, label in [
+              (['O1_LOCK_SOURCE','O2_AUDIO_QUEUE','O3_BIND_AUTHORITIES'], 'O1-O3'),
+              (['O5_AUDIO_BINDING','O6_SCRIPT_TXT','O7_PREISSUE'], 'O5-O7'),
+          ]:
+              target = prep if label == 'O1-O3' else final
+              positions = [target.find(x) for x in sequence]
+              if any(x < 0 for x in positions) or positions != sorted(positions):
+                  raise SystemExit(f'Orchestrator phase order invalid: {label}')
+          a = entry.find('h3BackendAttestSource_(')
+          b = entry.find("processPendingAudioForSet(\n      '5L',")
+          c = entry.find('h3BackendFinalizeLocked_(')
+          if min(a,b,c) < 0 or not (a < b < c):
+              raise SystemExit('Source attestation / targeted audio / finalize order invalid.')
+
+          # The existing source validator remains authoritative and itself precedes audio mutation.
+          if 'assertListeningAudioSourceAttestation_(' not in src:
+              raise SystemExit('Orchestrator does not reuse source attestation.')
+          p = code.index('const sourceAttestation =')
+          q = code.index('runListeningSetBatch_(', p)
+          if p >= q:
+              raise SystemExit('Existing source attestation no longer precedes audio mutation.')
+
+          # Exact prestage and K1 gates must be fail closed.
+          for needle in [
+              'BACKEND_PRESTAGE_SCHEDULER_HASH_MISMATCH',
+              'BACKEND_PRESTAGE_HASH_MISMATCH',
+              'BACKEND_PRESTAGE_SCHEDULER_DRIFT',
+              'BACKEND_PRESTAGE_RETEST_PLAN_DRIFT',
+              'BACKEND_REQUESTED_K1_NOT_READY',
+              'BACKEND_K1_BOUND_TO_OTHER_SET',
+              'BACKEND_AUDIO_PARTIAL_SET_RECOVERY_REQUIRED',
+              'BACKEND_PAYLOAD_CONFLICT',
+              'BACKEND_AUDIO_PAYLOAD_HASH_MISMATCH',
+              'BACKEND_AUDIO_BOUND_RESUME_CONFLICT',
+              'BACKEND_PREISSUE_NOT_EXACT_PASS',
+          ]:
+              if needle not in src:
+                  raise SystemExit(f'Orchestrator fail-closed guard missing: {needle}')
+
+          # No new combined audio path and no duplicate issue/consume implementation.
+          if 'combined' in src.lower() and 'combined mp3' not in src.lower():
+              raise SystemExit('Unexpected combined-audio implementation in orchestrator.')
+          if 'function consumeK1ReadyAfterIssue_' in src:
+              raise SystemExit('K1 consume implementation leaked into orchestrator.')
+
+          # Existing primitives must still exist.
+          for needle in [
+              'function bindK1ReadyToListeningSet_(',
+              'function assertBoundK1ReadyForSet_(',
+              'function processPendingAudioForSet(',
+              'function persistListeningSetScript(',
+              'function assertListeningAudioSourceAttestation_(',
+          ]:
+              if needle not in code:
+                  raise SystemExit(f'Existing Listening primitive missing: {needle}')
+          if 'function validateProductionPreissueSet(' not in pre:
+              raise SystemExit('Existing production preissue primitive missing.')
+
+          print('Listening backend orchestrator static guards: PASS')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+
+          function canonicalize(value) {
+            if (Array.isArray(value)) return value.map(canonicalize);
+            if (value && typeof value === 'object') {
+              const out = {};
+              Object.keys(value).sort().forEach(k => out[k] = canonicalize(value[k]));
+              return out;
+            }
+            return value;
+          }
+          const ctx = vm.createContext({
+            console,
+            h3PreissueCanonicalJson_: value => JSON.stringify(canonicalize(value)),
+            hash_: text => crypto.createHash('sha256').update(String(text), 'utf8').digest('hex'),
+            HQ_K1_NUMBER_TEXTS: {
+              choice_number1:'マルイチ',
+              choice_number2:'マルニ',
+              choice_number3:'マルサン',
+              choice_number4:'マルヨン'
+            },
+            HQ_LISTENING_REPLAY_CUE_TEXT:'もう一度読みます',
+            HQ_LISTENING_STORAGE_MODE:'listening_audio_v1'
+          });
+          vm.runInContext(
+            fs.readFileSync('ListeningBackendOrchestrator.js','utf8'),
+            ctx,
+            {filename:'ListeningBackendOrchestrator.js'}
+          );
+          const run = x => vm.runInContext(x, ctx);
+          const assert = (cond,msg) => { if (!cond) throw new Error(msg); };
+          const expectThrow = (fn,msg) => {
+            let threw=false;
+            try { fn(); } catch (_e) { threw=true; }
+            assert(threw,msg);
+          };
+
+          // Pre-stage canonical hash contract.
+          ctx.__ps = {
+            id:'PS-1',
+            targetSetNo:4,
+            policyId:'POL',
+            primaryPolicyId:'PRI',
+            schedulerSnapshotSha256:'abc',
+            items:{
+              K2:{section:'K2',skill_id:'S2'},
+              K3:{section:'K3',skill_id:'S3'},
+              K4:{section:'K4',skill_id:'S4'},
+              K5:{section:'K5',skill_id:'S5'}
+            },
+            answerKey:{K2:2,K3:4,K4:1,K5:3},
+            sourceProvenance:{
+              K2:{slot_role:'RETEST'},
+              hash_canonicalization:'JSON_SORT_KEYS_COMPACT_UTF8_V1'
+            }
+          };
+          const psHash = run("h3BackendCanonicalSha_(h3BackendPrestageHashObject_(__ps))");
+          assert(
+            psHash === '05dbfd8e5988d96257d4832e011242322c43bac9304692f872121c968f232e77',
+            'Pre-stage canonical hash contract changed.'
+          );
+
+          // K2/K3 official numbered projection.
+          ctx.__item = {
+            prompt:'질문입니다.',
+            choices:['하나예요.','둘이에요.','셋이에요.','넷이에요.']
+          };
+          ctx.__k2 = run("h3BackendBuildNumberedPlan_(__item,'K2')");
+          ctx.__k3 = run("h3BackendBuildNumberedPlan_(__item,'K3')");
+          assert(ctx.__k2.length === 14 && ctx.__k3.length === 14, 'K2/K3 audio plan cardinality mismatch.');
+          assert(ctx.__k2[2].role === 'choice_number1' && ctx.__k2[2].text === 'マルイチ', 'K2 number cue missing.');
+          assert(ctx.__k2[1].pause_ms_after === 3200, 'K2 second prompt gap mismatch.');
+          assert(ctx.__k3[1].pause_ms_after === 5200, 'K3 second prompt gap mismatch.');
+
+          // K4/K5 Japanese replay cue projection.
+          ctx.__passage = {passage:'본문입니다.'};
+          ctx.__k4 = run("h3BackendBuildPassagePlan_(__passage)");
+          assert(
+            JSON.stringify(ctx.__k4.map(x=>x.role)) === JSON.stringify(['passage','replay_cue','passage']),
+            'K4/K5 passage role order mismatch.'
+          );
+          assert(ctx.__k4[1].text === 'もう一度読みます', 'K4/K5 Japanese replay cue mismatch.');
+
+          // Full source-lock payload is deterministic and includes all five answer authorities.
+          ctx.__k1 = {
+            id:'K1R',
+            answerKey:3,
+            imageSha256:'img',
+            choices:['a','b','c','d'],
+            qaProfile:{mode:'NEW_AUTHORING'}
+          };
+          ctx.__prest = {
+            items:{K2:{},K3:{},K4:{},K5:{}},
+            answerKey:{K2:2,K3:4,K4:1,K5:3},
+            sourceProvenance:{K2:{},K3:{},K4:{},K5:{}},
+            schedulerSnapshot:{slot_plan:{
+              K1:{slot_role:'RETEST',skill_id:'H3-K1-SK001',origin_set_no:3,due_min_set_no:4,due_max_set_no:6}
+            }}
+          };
+          ctx.__ak = run("h3BackendBuildAnswerKey_(__k1,__prest)");
+          assert(
+            JSON.stringify(ctx.__ak) === JSON.stringify({K1:3,K2:2,K3:4,K4:1,K5:3}),
+            'Full answer-key materialization mismatch.'
+          );
+          ctx.__prov = run("h3BackendBuildSourceProvenance_(__k1,__prest)");
+          assert(
+            ctx.__prov.K1.slot_role === 'RETEST' &&
+            ctx.__prov.K1.same_section_slot === true &&
+            ctx.__prov.hash_canonicalization === 'JSON_SORT_KEYS_COMPACT_UTF8_V1',
+            'K1 source provenance materialization mismatch.'
+          );
+
+          // Exact payload resume accepts LOCKED/AUDIO_BOUND only and rejects conflict/issued state.
+          ctx.__expected = {
+            setId:'SET', setNo:4, k1ReadyId:'K1R',
+            items:{K2:{},K3:{},K4:{},K5:{}},
+            answerKey:{K1:3,K2:2,K3:4,K4:1,K5:3},
+            itemPayloadSha256:'sha',
+            sourceProvenance:{K1:{},K2:{},K3:{},K4:{},K5:{},hash_canonicalization:'JSON_SORT_KEYS_COMPACT_UTF8_V1'}
+          };
+          ctx.__record = {
+            setId:'SET', setNo:4, status:'LOCKED', k1ReadyId:'K1R',
+            items:{K2:{},K3:{},K4:{},K5:{}},
+            answerKey:{K1:3,K2:2,K3:4,K4:1,K5:3},
+            itemPayloadSha256:'sha',
+            sourceProvenance:{K1:{},K2:{},K3:{},K4:{},K5:{},hash_canonicalization:'JSON_SORT_KEYS_COMPACT_UTF8_V1'},
+            lockedAt:'now', issuedAt:'', audioBindingRaw:''
+          };
+          run("h3BackendAssertPayloadExact_(__record,__expected)");
+          ctx.__bad = JSON.parse(JSON.stringify(ctx.__record));
+          ctx.__bad.itemPayloadSha256='other';
+          expectThrow(
+            () => run("h3BackendAssertPayloadExact_(__bad,__expected)"),
+            'Conflicting payload did not fail closed.'
+          );
+          ctx.__issued = JSON.parse(JSON.stringify(ctx.__record));
+          ctx.__issued.status='ISSUED'; ctx.__issued.issuedAt='now';
+          expectThrow(
+            () => run("h3BackendAssertPayloadExact_(__issued,__expected)"),
+            'Issued payload was accepted by preparation resume.'
+          );
+
+          // Partial audio materialization is structurally rejected by the runtime path.
+          const source = fs.readFileSync('ListeningBackendOrchestrator.js','utf8');
+          if (!source.includes("members.length !== 0 &&\n    members.length !== 5")) {
+            throw new Error('Partial audio cardinality guard missing.');
+          }
+
+          // Result surface is preissue-only.
+          if (!source.includes("status: 'PREISSUE_READY'") || !source.includes('issue_performed: false')) {
+            throw new Error('Preissue-only result contract missing.');
+          }
+
+          console.log('Listening backend orchestrator pure tests: PASS');
+          NODE
+
       - name: Check JavaScript syntax
         shell: bash
         run: |
@@ -4059,6 +4329,7 @@ jobs:
           node --check WebAppProduction.js
           node --check WebAppTransactionCommon.js
           node --check WebAppWrittenProduction.js
+          node --check ListeningBackendOrchestrator.js
           node --check WebAppProductionRender.js
           node --check WebAppPreissue.js
           node --check WebAppReceipt.js

@@ -223,3 +223,31 @@ Operational normal-flow reads follow `NORMAL_HOTPATH_READBACK_V1` in `H3_WEB_CHA
 Normal flow does not re-read GitHub `main`, `HANGUL_INFRA_STATUS_CURRENT`, manifest, or canonical release files on every learner request. Read those only for drift, canonical change, mismatch, recovery, or explicit audit.
 
 Connector/tool implementations must batch independent reads in one tool turn (for example with `Promise.all`) rather than serialize them. No new runtime aggregation Sheet/tab is authorized.
+
+
+## 31. Listening backend orchestrator
+
+`prepareListeningBackendSet(request)` is the preparation-only coordinator for one explicit future 5L set. It requires `schema=H3_LISTENING_BACKEND_PREPARE_V1`, an explicit `set_id`, and an explicit persisted `k1_ready_id`. It never allocates the learner SET_ID.
+
+The recovery-safe order is:
+
+```text
+O0 fresh policy/state/K1/pre-stage/source preflight
+-> O1 exact LOCKED listening_set_payload_v1 source lock
+-> O2 exactly five K1-K5 listening_audio_queue_v1 rows
+-> O3 K1_READY bind + pre-stage BOUND
+-> source attestation
+-> O4 targeted processPendingAudioForSet('5L', SET_ID)
+-> O5 exact AUDIO_BOUND binding
+-> O6 immutable SCRIPT_TXT materialization
+-> O7 validateProductionPreissueSet(SET_ID) PASS
+-> PREISSUE_READY
+```
+
+The outer coordinator does not hold ScriptLock while calling `processPendingAudioForSet`, because that targeted audio primitive owns its own ScriptLock. O0-O3 and O5-O7 each run under an orchestrator ScriptLock; the existing audio path re-validates bound K1 and `H3_LISTENING_AUDIO_SOURCE_ATTESTATION_V1` before any Azure/Drive mutation.
+
+Preparation writes are limited to the canonical preparation surfaces: `listening_set_payload_v1`, `listening_audio_queue_v1`, K1 `BOUND_LISTENING_SET_ID`, pre-stage `STATUS/BOUND_LISTENING_SET_ID`, source-attested split audio files, and the semantic set TXT. Exact prior LOCKED/AUDIO_BOUND state may be resumed only when source/hash/binding identity still matches. Partial audio rows, source drift, policy/scheduler drift, conflicting same-SET payload, K1 bound elsewhere, nonblank `ISSUED_AT`, or blocking overload are STOP conditions.
+
+This orchestrator does not issue a learner set, set `ISSUED_AT`, consume K1_READY, create learner log or production transaction rows, update `listening_state_v1` counters/pointers, or advance the scheduler. Learner issue remains a separate dedicated flow after a verified `PREISSUE_READY`.
+
+For current set no.4, K2-K5 pre-stage may remain READY while no new K1_READY exists. In that state the correct runtime behavior is to perform no backend materialization or audio start until a new valid K1_READY is supplied explicitly.

@@ -395,3 +395,17 @@ After iPhone validation showed the ChatGPT `Check this link is safe` interstitia
 HOME already validates and exposes the current `ISSUED`, uncommitted set through `h3ReviewCurrentLearning_()`, and the `開く` button loads that exact set client-side.
 
 No learner state, score, history, scheduler, K1_READY, payload, or production transaction semantics change.
+
+### Parameterless direct boot
+
+The parameterless canonical learner URL now boots directly into the current authorized 5L when one exists.
+
+Server-side boot behavior:
+- no query parameters;
+- read canonical HOME/current-learning state;
+- if an `ISSUED`, uncommitted, production-renderable 5L exists, boot as `mode=LISTENING` for that exact SET_ID;
+- otherwise boot as `mode=HOME`.
+
+Therefore normal Chat handoff remains the short parameterless URL, but the learner does not need to tap `現在の5L -> 開く` while an active issued set exists.
+
+Explicit query-string routes remain diagnostic/internal and do not change this default boot behavior.

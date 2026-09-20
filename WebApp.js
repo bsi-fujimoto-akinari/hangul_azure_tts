@@ -109,41 +109,63 @@ function h3WebBootRequest_(e) {
   var mode = 'HOME';
   var setId = null;
   var txnId = null;
+  var params =
+    e && e.parameter
+      ? e.parameter
+      : {};
+  var paramKeys =
+    Object.keys(params);
 
-  if (e && e.parameter) {
+  if (paramKeys.length) {
     if (
-      e.parameter.mode === 'REVIEW_REPLAY' &&
-      e.parameter.txn_id
+      params.mode === 'REVIEW_REPLAY' &&
+      params.txn_id
     ) {
       mode = 'REVIEW_REPLAY';
       txnId = String(
-        e.parameter.txn_id
+        params.txn_id
       );
     } else if (
-      e.parameter.mode === 'REVIEW' &&
-      e.parameter.txn_id
+      params.mode === 'REVIEW' &&
+      params.txn_id
     ) {
       mode = 'REVIEW';
       txnId = String(
-        e.parameter.txn_id
+        params.txn_id
       );
     } else if (
-      e.parameter.mode === 'LISTENING' &&
-      e.parameter.set_id
+      params.mode === 'LISTENING' &&
+      params.set_id
     ) {
       mode = 'LISTENING';
       setId = String(
-        e.parameter.set_id
+        params.set_id
       );
     } else if (
-      e.parameter.mode === 'SYSTEM_TEST' &&
+      params.mode === 'SYSTEM_TEST' &&
       h3SystemTestSetIdAllowed_(
-        e.parameter.set_id
+        params.set_id
       )
     ) {
       mode = 'SYSTEM_TEST';
       setId = String(
-        e.parameter.set_id
+        params.set_id
+      );
+    }
+  } else {
+    var spreadsheet =
+      SpreadsheetApp.openById(
+        H3_WEB_RUNTIME_SPREADSHEET_ID
+      );
+    var current =
+      h3ReviewCurrentLearning_(
+        spreadsheet
+      );
+
+    if (current) {
+      mode = 'LISTENING';
+      setId = String(
+        current.set_id
       );
     }
   }

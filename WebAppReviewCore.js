@@ -272,7 +272,13 @@ function h3ReviewHistoryEnvelope_(
 
 
 var H3_REVIEW_LEVEL_CONTRACT_ =
-  'H3_REVIEW_LEVEL_V1';
+  'H3_REVIEW_LEVEL_V2';
+
+var H3_REVIEW_LEVEL_HALF_LIFE_DAYS_ =
+  14;
+
+var H3_REVIEW_LEVEL_TIME_HEADROOM_SHARE_ =
+  0.40;
 
 
 function h3ReviewSkillEvidenceIndex_(
@@ -482,7 +488,7 @@ function h3ReviewSkillEvidenceIndex_(
 }
 
 
-function h3ReviewLevelForEntry_(
+function h3ReviewBaseLevelForEntry_(
   kind,
   entry,
   evidence
@@ -550,9 +556,115 @@ function h3ReviewLevelForEntry_(
     0,
     Math.min(
       100,
-      Math.round(level)
+      level
     )
   );
+}
+
+
+function h3ReviewTimestampMs_(
+  value
+) {
+  var normalized =
+    String(value || '').trim();
+
+  if (
+    !normalized ||
+    normalized === 'UNKNOWN'
+  ) {
+    return null;
+  }
+
+  var parsed =
+    Date.parse(normalized);
+
+  return isNaN(parsed)
+    ? null
+    : parsed;
+}
+
+
+function h3ReviewOldestKnownTimestampMs_(
+  envelopes
+) {
+  var known =
+    envelopes.map(
+      function (envelope) {
+        return h3ReviewTimestampMs_(
+          envelope.answered_at
+        );
+      }
+    ).filter(
+      function (value) {
+        return value !== null;
+      }
+    );
+
+  if (!known.length) {
+    return null;
+  }
+
+  return Math.min.apply(
+    null,
+    known
+  );
+}
+
+
+function h3ReviewLevelForEntry_(
+  kind,
+  entry,
+  evidence,
+  effectiveTimestampMs,
+  nowMs
+) {
+  var base =
+    h3ReviewBaseLevelForEntry_(
+      kind,
+      entry,
+      evidence
+    );
+  var ageDays =
+    Math.max(
+      0,
+      (
+        Number(nowMs) -
+        Number(effectiveTimestampMs)
+      ) /
+      86400000
+    );
+  var forgettingPressure =
+    1 - Math.pow(
+      2,
+      -ageDays /
+      H3_REVIEW_LEVEL_HALF_LIFE_DAYS_
+    );
+  var level =
+    base +
+    (
+      (100 - base) *
+      H3_REVIEW_LEVEL_TIME_HEADROOM_SHARE_ *
+      forgettingPressure
+    );
+
+  return {
+    base: Math.round(base),
+    age_days:
+      Math.round(
+        ageDays * 10
+      ) / 10,
+    forgetting_pressure:
+      Math.round(
+        forgettingPressure * 1000
+      ) / 1000,
+    level: Math.max(
+      0,
+      Math.min(
+        100,
+        Math.round(level)
+      )
+    )
+  };
 }
 
 
@@ -563,6 +675,12 @@ function h3ReviewAttachHomeMetadata_(
   var writtenIds =
     evidence.written_set_ids
       .slice();
+  var nowMs =
+    new Date().getTime();
+  var oldestKnownMs =
+    h3ReviewOldestKnownTimestampMs_(
+      envelopes
+    );
 
   envelopes.forEach(
     function (envelope) {
@@ -572,12 +690,52 @@ function h3ReviewAttachHomeMetadata_(
           envelope.kind;
       }
 
-      entry.review_level =
+      var actualTimestampMs =
+        h3ReviewTimestampMs_(
+          envelope.answered_at
+        );
+      var usedFallback =
+        actualTimestampMs === null;
+      var effectiveTimestampMs =
+        actualTimestampMs;
+
+      if (
+        effectiveTimestampMs === null
+      ) {
+        effectiveTimestampMs =
+          oldestKnownMs !== null
+            ? oldestKnownMs
+            : nowMs;
+      }
+
+      var levelMeta =
         h3ReviewLevelForEntry_(
           envelope.kind,
           entry,
-          evidence
+          evidence,
+          effectiveTimestampMs,
+          nowMs
         );
+
+      envelope.review_effective_at =
+        new Date(
+          effectiveTimestampMs
+        ).toISOString();
+
+      entry.review_effective_at =
+        envelope.review_effective_at;
+      entry.review_time_source =
+        usedFallback
+          ? 'UNKNOWN_FALLBACK_OLDEST'
+          : 'ACTUAL';
+      entry.review_age_days =
+        levelMeta.age_days;
+      entry.review_forgetting_pressure =
+        levelMeta.forgetting_pressure;
+      entry.review_base_level =
+        levelMeta.base;
+      entry.review_level =
+        levelMeta.level;
       entry.review_level_contract =
         H3_REVIEW_LEVEL_CONTRACT_;
 
@@ -656,9 +814,18 @@ function h3ReviewHomeHistory_(
   );
 
   envelopes.sort(function (a, b) {
-    if (a.answered_at !== b.answered_at) {
-      return a.answered_at <
-        b.answered_at
+    if (
+      a.review_effective_at !==
+      b.review_effective_at
+    ) {
+      return a.review_effective_at <
+        b.review_effective_at
+        ? 1
+        : -1;
+    }
+
+    if (a.set_id !== b.set_id) {
+      return a.set_id < b.set_id
         ? 1
         : -1;
     }
@@ -738,7 +905,11 @@ function buildReviewHomePayload_() {
       'REVIEW_LEVEL'
     ],
     review_level_contract:
-      H3_REVIEW_LEVEL_CONTRACT_
+      H3_REVIEW_LEVEL_CONTRACT_,
+    review_level_half_life_days:
+      H3_REVIEW_LEVEL_HALF_LIFE_DAYS_,
+    review_level_time_headroom_share:
+      H3_REVIEW_LEVEL_TIME_HEADROOM_SHARE_
   };
 }
 

@@ -1,131 +1,113 @@
 # H3 2026 New-Format Level Contract
 
-Version: H3-NEWFMT-LEVEL-20260921-V1
-Status: POLICY_STAGED_SOURCE_UNBOUND
+Version: H3-NEWFMT-LEVEL-20260921-V2
+Status: SOURCE_BOUND_RUNTIME_READY_FOR_H3
 
 ## 1. Purpose
 
-This contract separates the 2026 new-format family identity from the current 3級 5W source-ratio scheduler.
+This contract binds the approved 2026 format registry to the official 2026 format-change notice.
 
-The current live `generation_policy_v1` reserves `NEWFMT=1` in the 20-question 3級 5W window, but it does not define the detailed D2/D5/D12 format families. This contract records the already-approved project format tokens without inventing official source content or cardinality semantics that have not yet been source-verified.
+Source authority is `H3-2026-NEWFMT-SOURCE-20260921-V1`.
 
-No learner question is activated by this contract.
-
-## 2. Canonical planned format tokens
-
-The staged format registry is:
+## 2. Canonical source-bound formats
 
 ```text
-level=3級
-  format_id=H3_D2_FILL7
+3級
+  H3_D2_FILL7
   section=D2
-  raw_token=D2_fill7
+  item_count=7
+  points_each=1
+  total_points=7
+  source_status=SOURCE_BOUND
 
-level=3級
-  format_id=H3_D5_COMMON2
+3級
+  H3_D5_COMMON2
   section=D5
-  raw_token=D5_common2
+  item_count=2
+  points_each=1
+  total_points=2
+  source_status=SOURCE_BOUND
 
-level=準2級
-  format_id=JUN2_D5_COMMON2X2
+準2級
+  JUN2_D5_COMMON2X2
   section=D5
-  raw_token=D5_common2x2
+  item_count=2
+  points_each=2
+  total_points=4
+  source_status=SOURCE_BOUND
 
-level=準2級
-  format_id=JUN2_D12_KR_TO_JP_4X2
+準2級
+  JUN2_D12_JP_TO_KR_4X2
   section=D12
-  raw_token=D12_KRtoJP4x2
-  translation_direction=KR_TO_JP
+  item_count=4
+  points_each=2
+  total_points=8
+  surface_family=TRANSLATION
+  translation_direction=JP_TO_KR
+  source_status=SOURCE_BOUND
 ```
 
-The numeric and `x2` parts remain opaque format-token components in this phase. They must not be reinterpreted as a runtime item-count rule until the authoritative 2026 source defines that meaning.
+## 3. D12 legacy alias
 
-## 3. Level isolation
+`D12_KRtoJP4x2` is retained as a deprecated input alias only.
 
-Every format definition has an explicit canonical LEVEL.
+Canonical behavior is:
 
-A 3級 NEWFMT slot may select only a `level=3級` format definition.
+```text
+D12_KRtoJP4x2
+  -> JUN2_D12_JP_TO_KR_4X2
+  -> translation_direction=JP_TO_KR
+```
 
-A 準2級 format must not inherit:
+No runtime component may derive direction from the legacy token spelling.
 
+## 4. Level isolation
+
+A 3級 NEWFMT slot may select only level=3級 formats.
+
+準2級 formats never inherit:
 - the current 3級 20Q source ratio;
 - 3級 skill state;
 - 3級 retest obligations;
 - 3級 scheduler pointers;
 - 3級 coverage counters.
 
-The independent level-runtime contract `H3-LEVEL-RUNTIME-20260921-V1` remains authoritative for state isolation.
+`H3-LEVEL-RUNTIME-20260921-V1` remains authoritative for state isolation.
 
-## 4. Current 3級 ratio compatibility
+## 5. Current 3級 ratio compatibility
 
-The existing live ratio remains:
+The live 3級 5W ratio remains exactly:
 
 ```text
 20Q = TOWMI 11 / OFFICIAL 6 / ERROR 2 / NEWFMT 1
 ```
 
-This ratio remains specific to the current 3級 5W core window.
+The source-bound registry changes only which 3級 format is legal when a NEWFMT slot is assigned to D2 or D5.
 
-The new-format registry does not change the ratio, does not choose a format for the next live set, and does not alter any 5W stage.
+## 6. Section-aware 3級 selection
 
-## 5. Source-lock requirement
-
-Every format remains `SOURCE_UNBOUND` until an authoritative 2026 source supplies enough evidence to lock:
-
-- exact format identity;
-- exact prompt/body structure;
-- exact item/cardinality semantics;
-- answer representation;
-- level;
-- section;
-- direction where applicable;
-- source provenance/hash.
-
-A format token alone is insufficient to author learner content.
-
-## 6. Translation boundary
-
-`JUN2_D12_KR_TO_JP_4X2` is a Translation-family format candidate because its approved token explicitly declares KR-to-JP direction.
-
-That does not activate it in the existing 3級 P11/P12 Translation runtime.
-
-Future 準2級 D12 implementation must use:
+For level=3級:
 
 ```text
-surface_family=TRANSLATION
-level=準2級
-translation_direction=KR_TO_JP
+section=D2 -> H3_D2_FILL7
+section=D5 -> H3_D5_COMMON2
 ```
 
-and an independent 準2級 source/taxonomy.
+Any other section with primary_bucket=NEWFMT fails closed.
 
-## 7. Activation readiness
+## 7. 準2級 readiness
 
-A format may become runtime-eligible only when all are true:
+The source layer is now bound for:
+- D5 common-two-blanks format;
+- D12 JP_TO_KR multiple-choice translation format.
 
-- canonical level is valid;
-- authoritative source is bound;
-- exact format semantics are verified;
-- required taxonomy exists for that level;
-- target surface supports the format;
-- scheduler policy explicitly admits that level+format;
-- no cross-level state transfer occurs.
+Runtime activation still requires distinct 準2級 taxonomy/master rows and a later level-aware queue/scheduler phase.
 
-Until then, readiness is `SOURCE_UNBOUND`.
+## 8. Explicit non-goals
 
-## 8. Repository gate
-
-Merge is permitted only after the repository audit validates the registry contract, pure audit, and JavaScript syntax. This gate changes no runtime policy or learner state.
-
-## 9. Explicit non-goals
-
-This phase does not:
-
-- add official 2026 source rows;
-- infer the meaning of `7`, `2`, `2x2`, or `4x2`;
-- change `generation_policy_v1`;
-- change the 3級 11/6/2/1 ratio;
-- activate any 準2級 skill or question;
-- modify 5W/5L/Reading/Translation live stages;
-- modify Review/HOME;
+This contract does not:
+- create learner question wording;
+- activate a 準2級 scheduler;
+- copy 3級 state into 準2級;
+- change the 3級 source ratio;
 - issue learner content.

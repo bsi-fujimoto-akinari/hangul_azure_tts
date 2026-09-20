@@ -68,7 +68,7 @@ Binding creation may occur only after exact source readback. It is metadata pers
 
 HOME lists committed Review entries newest first and exposes provider-appropriate identity plus date/time, score, wrong count, uncertainty count, and computed Review level. Provider filtering is the exclusive `L / W` control; sorting is `Newest / Priority`.
 
-HOME uses the derived `review_home_index_v1` as its only history source. The table stores one ACTIVE row per `KIND + SET_ID` with stable set number, stored answer timestamp, score/count metadata, Review locator/source mode, and precomputed `BASE_PRIORITY`. It is a display index only: it is not learner history, transaction authority, Review payload authority, or scheduler state.
+HOME uses the derived `review_home_index_v1` as its only history source. The table stores one ACTIVE row per `KIND + SET_ID` with stable set number, stored answer timestamp, score/count metadata, Review locator/source mode, and precomputed `BASE_PRIORITY`. The current reader accepts both the legacy 13-column layout and the V2-compatible layout that appends `SURFACE_FAMILY` and `LEVEL`; missing metadata is interpreted only through the frozen legacy mapping LISTENING→5L/3級 and WRITTEN→5W/3級. The index remains a display index only: it is not learner history, transaction authority, Review payload authority, or scheduler state.
 
 HOME performs exactly one lightweight index read, computes only time-dependent Review-level metadata, and must not scan `listening_log_v1` or `generation_log_v1`, reconstruct Review payloads, or perform deep hash validation. `BASE_PRIORITY` is refreshed only after a committed Listening answer or Written Answer Sync, when the canonical logs already contain the new result. Opening a Review remains the full source-lock validation boundary through the existing provider-specific persistent Review loaders.
 
@@ -105,7 +105,7 @@ Each history card is the navigation target for its exact persistent Review. Sepa
 
 HOME uses an exclusive provider segment `L` / `W`; exactly one provider is visible at a time, and the initial provider follows the newest history entry. Sorting is a second segmented control, `Newest` / `Priority`. The control block remains sticky while the history list scrolls.
 
-Review priority is `H3_REVIEW_LEVEL_V2` on a 0–100 scale. First compute base weakness `B`: each item contributes `×=12 / △=6 / ○=0`; same-skill historical weakness adds `min(8, 2×wrong_count + uncertain_count)`. Missing skill identity contributes no skill bonus. Then compute elapsed-day pressure `F = 1 - 2^(-d/14)` and final priority `B + (100-B)×0.40×F`. The 14-day half-life is a simple exponential forgetting approximation, not a personalized memory estimate. Time can fill at most 40% of the remaining headroom, preserving strong recent error signals.
+Review priority is `H3_REVIEW_LEVEL_V2` on a 0–100 scale. First compute base weakness `B`: each item contributes `×=12 / △=6 / ○=0`; same-skill historical weakness adds `min(8, 2×wrong_count + uncertain_count)`. Same-skill evidence is keyed by `provider_kind + level + skill_id`, so 3級 and 準2級 evidence never cross-contaminates. Current logs without a LEVEL field are interpreted as the frozen legacy 3級 runtime only. Missing skill identity contributes no skill bonus. Then compute elapsed-day pressure `F = 1 - 2^(-d/14)` and final priority `B + (100-B)×0.40×F`. The 14-day half-life is a simple exponential forgetting approximation, not a personalized memory estimate. Time can fill at most 40% of the remaining headroom, preserving strong recent error signals.
 
 For `answered_at=UNKNOWN`, HOME uses the oldest valid timestamp among the current history entries as a provisional effective timestamp for sorting and age. The stored/displayed timestamp is not rewritten and remains `UNKNOWN`. If no valid timestamp exists, the current load time is used as the fail-safe fallback. Review priority changes display order only and must not mutate scheduler/retest state.
 
@@ -269,3 +269,14 @@ The Web App Review surface is the sole learner-facing authority for postgrade ex
 - Failure to materialize or open a production Written Review is a persistence/rendering defect. It does not authorize Chat or TXT fallback disclosure.
 - Review history must reopen the same source-bound learner-facing content for the exact committed set without mutating score, history, scheduler, retest state, counters, or pointers.
 
+
+
+## 32. Learning-surface compatibility envelope
+
+Review remains provider-routed at the top level (`LISTENING | WRITTEN`) while learner surfaces are identified independently by `surface_family = 5L | 5W | READING | TRANSLATION` and `level = 3級 | 準2級`.
+
+Opening a Review performs provider-specific source-lock validation first and only then attaches the common learning-surface metadata to the returned learner envelope. This avoids changing canonical stored Review hashes solely to expose routing metadata.
+
+The HOME index reader is backward compatible with the current physical V1 header. `migrateReviewHomeIndexV2()` is the explicit idempotent migration that appends `SURFACE_FAMILY` and `LEVEL` and materializes the frozen legacy values for existing rows. The migration is never implicit and does not alter learner history, answers, scores, scheduler state, or Review payload authority.
+
+Reading, Translation, and 準2級 remain inactive until their dedicated family adapters and scheduler contracts are separately enabled.

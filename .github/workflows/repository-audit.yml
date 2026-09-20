@@ -628,6 +628,7 @@ jobs:
           node <<'NODE'
           const fs = require('fs');
           const vm = require('vm');
+          const surfaceSource = fs.readFileSync('WebAppSurfaceCommon.js','utf8');
           const source = fs.readFileSync('WebAppProductionRender.js','utf8');
           const ctx = vm.createContext({console});
 
@@ -667,6 +668,7 @@ jobs:
           };
           ctx.h3ProdReadContext_ = () => ctx.__context;
 
+          vm.runInContext(surfaceSource, ctx, {filename:'WebAppSurfaceCommon.js'});
           vm.runInContext(source, ctx, {filename:'WebAppProductionRender.js'});
           ctx.__req = {schema:'H3_WEB_RENDER_REQUEST_V1',mode:'LISTENING',set_id:'H3-20260919-L03'};
           const result = vm.runInContext('buildProductionRenderPayload_(__req)',ctx);
@@ -4195,10 +4197,10 @@ jobs:
           const vm = require('vm');
           const crypto = require('crypto');
 
-          const source = fs.readFileSync(
-            'WebAppWrittenProduction.js',
-            'utf8'
-          );
+          const source = [
+            fs.readFileSync('WebAppSurfaceCommon.js', 'utf8'),
+            fs.readFileSync('WebAppWrittenProduction.js', 'utf8')
+          ].join('\n');
 
           const context = vm.createContext({
             console,
@@ -4589,6 +4591,11 @@ jobs:
             fs.readFileSync('WebAppTransactionCommon.js', 'utf8'),
             context,
             {filename:'WebAppTransactionCommon.js'}
+          );
+          vm.runInContext(
+            fs.readFileSync('WebAppSurfaceCommon.js', 'utf8'),
+            context,
+            {filename:'WebAppSurfaceCommon.js'}
           );
           vm.runInContext(
             fs.readFileSync('WebAppWrittenProduction.js', 'utf8'),
@@ -5544,6 +5551,8 @@ jobs:
           node --check WebAppFixture.js
           node --check WebAppProduction.js
           node --check WebAppTransactionCommon.js
+          node --check WebAppSurfaceCommon.js
+          node --check WebAppSurfaceCommonAudit.js
           node --check WebAppWrittenProduction.js
           node --check ListeningBackendOrchestrator.js
           node --check WebAppProductionRender.js

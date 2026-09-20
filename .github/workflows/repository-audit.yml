@@ -44,6 +44,8 @@ jobs:
               'WebAppLevelCommonAudit.js',
               'WebAppFormatCommon.js',
               'WebAppFormatCommonAudit.js',
+              'WebAppWrittenNewfmt.js',
+              'WebAppWrittenNewfmtAudit.js',
               'WebAppWrittenProduction.js',
               'WebAppWrittenAnswerSync.js',
               'WebAppProductionRender.js',
@@ -70,6 +72,7 @@ jobs:
               'H3_LEVEL_RUNTIME_CONTRACT.md',
               'H3_NEWFMT_LEVEL_CONTRACT.md',
               'H3_2026_NEWFMT_SOURCE_CONTRACT.md',
+              'H3_WRITTEN_NEWFMT_RUNTIME_CONTRACT.md',
               'H3_READING_P8_PILOT_CONTRACT.md',
               'H3_READING_ACTIVATION_CONTRACT.md',
               'H3_READING_PRODUCTION_CONTRACT.md',
@@ -6638,6 +6641,108 @@ jobs:
           );
           NODE
 
+      - name: Check 3級 NEWFMT written runtime
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          contract = Path('H3_WRITTEN_NEWFMT_RUNTIME_CONTRACT.md').read_text(encoding='utf-8')
+          runtime = Path('WebAppWrittenNewfmt.js').read_text(encoding='utf-8')
+          audit = Path('WebAppWrittenNewfmtAudit.js').read_text(encoding='utf-8')
+          sync = Path('WebAppWrittenAnswerSync.js').read_text(encoding='utf-8')
+
+          for needle in [
+              'Version: H3-H3-NEWFMT-RUNTIME-20260921-V1',
+              'Status: ACTIVE_FOR_SOURCE_BOUND_3KYU',
+              'D2 -> H3_D2_FILL7',
+              'D5 -> H3_D5_COMMON2',
+              '20Q = TOWMI 11 / OFFICIAL 6 / ERROR 2 / NEWFMT 1',
+              'STD-B002-S1',
+          ]:
+              if needle not in contract:
+                  raise SystemExit(f'Written NEWFMT runtime contract missing: {needle}')
+
+          for needle in [
+              'function h3WrittenNewfmtSlotMetadata_(',
+              'function h3WrittenNewfmtDecorateSlot_(',
+              'function h3WrittenNewfmtValidateSourceRows_(',
+              'function h3WrittenNewfmtValidatePlannedSlots_(',
+              'function h3WrittenNewfmtPatchStageMeta_(',
+          ]:
+              if needle not in runtime:
+                  raise SystemExit(f'Written NEWFMT runtime helper missing: {needle}')
+
+          for needle in [
+              'function auditWrittenNewfmtRuntimeV1_(',
+              'H3_WRITTEN_NEWFMT_RUNTIME_AUDIT_V1',
+              'D2_ROUTE',
+              'D5_ROUTE',
+              'UNSUPPORTED_SECTION',
+              'STAGE_PATCH',
+          ]:
+              if needle not in audit:
+                  raise SystemExit(f'Written NEWFMT runtime audit missing: {needle}')
+
+          for needle in [
+              'h3WrittenNewfmtDecorateSlot_(',
+              'h3WrittenNewfmtValidateSourceRows_(',
+              'h3WrittenNewfmtValidatePlannedSlots_(',
+              'newfmt_runtime_contract_id:',
+              'newfmt_source_contract_id:',
+          ]:
+              if needle not in sync:
+                  raise SystemExit(f'Answer Sync NEWFMT binding missing: {needle}')
+
+          print('3級 NEWFMT written runtime static boundary: PASS')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const context = vm.createContext({console});
+
+          [
+            'WebAppLevelCommon.js',
+            'WebAppFormatCommon.js',
+            'WebAppWrittenNewfmt.js',
+            'WebAppWrittenNewfmtAudit.js'
+          ].forEach(name => {
+            vm.runInContext(
+              fs.readFileSync(name, 'utf8'),
+              context,
+              {filename:name}
+            );
+          });
+
+          const result = vm.runInContext(
+            'auditWrittenNewfmtRuntimeV1_()',
+            context
+          );
+
+          if (
+            result.result !== 'PASS' ||
+            result.schema !==
+              'H3_WRITTEN_NEWFMT_RUNTIME_AUDIT_V1' ||
+            result.checks !== 7 ||
+            result.contract_id !==
+              'H3-H3-NEWFMT-RUNTIME-20260921-V1' ||
+            result.source_contract_id !==
+              'H3-2026-NEWFMT-SOURCE-20260921-V1'
+          ) {
+            throw new Error(
+              'Written NEWFMT runtime audit mismatch: ' +
+              JSON.stringify(result)
+            );
+          }
+
+          console.log(
+            '3級 NEWFMT written runtime pure audit: PASS',
+            JSON.stringify(result)
+          );
+          NODE
+
       - name: Check JavaScript syntax
         shell: bash
         run: |
@@ -6652,6 +6757,8 @@ jobs:
           node --check WebAppLevelCommonAudit.js
           node --check WebAppFormatCommon.js
           node --check WebAppFormatCommonAudit.js
+          node --check WebAppWrittenNewfmt.js
+          node --check WebAppWrittenNewfmtAudit.js
           node --check WebAppWrittenProduction.js
           node --check ListeningBackendOrchestrator.js
           node --check WebAppProductionRender.js

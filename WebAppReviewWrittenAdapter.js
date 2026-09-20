@@ -299,6 +299,22 @@ function h3WrittenReviewUnavailable_() {
 }
 
 
+function h3WrittenReviewCurrentLearning_(
+  spreadsheet
+) {
+  if (
+    typeof h3WrittenCurrentLearning_ !==
+      'function'
+  ) {
+    return null;
+  }
+
+  return h3WrittenCurrentLearning_(
+    spreadsheet
+  );
+}
+
+
 function h3WrittenReviewProvider_() {
   return {
     kind: 'WRITTEN',
@@ -306,7 +322,7 @@ function h3WrittenReviewProvider_() {
     historyEntries:
       h3WrittenReviewPersistentHistory_,
     currentLearning:
-      h3WrittenCurrentLearning_,
+      h3WrittenReviewCurrentLearning_,
     openReview:
       h3WrittenReviewOpen_,
     openMedia:

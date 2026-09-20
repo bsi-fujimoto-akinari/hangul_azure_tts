@@ -3046,3 +3046,839 @@ function gradeReviewReplay_(
       review
   };
 }
+
+
+/**
+ * Historical Written Review persistent loader.
+ *
+ * This layer is intentionally read-only and does not register the Written
+ * provider. It validates the isolated historical payload/binding tables,
+ * projects the stored reconstruction through WebAppReviewWrittenAdapter.js,
+ * and normalizes the result into a future learner-facing Review payload.
+ */
+var H3_WRITTEN_LEGACY_REVIEW_PAYLOAD_SHEET_ =
+  'written_legacy_review_payload_v1';
+
+var H3_WRITTEN_LEGACY_REVIEW_BINDING_SHEET_ =
+  'written_legacy_review_binding_v1';
+
+var H3_WRITTEN_LEGACY_REVIEW_CONTRACT_ID_ =
+  'H3-WRITTEN-LEGACY-REVIEW-CONTRACT-20260920-V1';
+
+var H3_WRITTEN_LEGACY_REVIEW_SCHEMA_ =
+  'H3_5W_HISTORICAL_RECONSTRUCTION_V2';
+
+var H3_WRITTEN_LEGACY_REVIEW_PAYLOAD_HEADERS_ = [
+  'LOGICAL_KEY',
+  'PAYLOAD_KEY',
+  'SET_ID',
+  'SOURCE_QUEUE_ROW',
+  'SOURCE_MODE',
+  'MATERIALIZED_AT',
+  'STATUS',
+  'RECONSTRUCTION_SCHEMA',
+  'RECONSTRUCTION_JSON',
+  'RECONSTRUCTION_SHA256',
+  'REVIEW_CONTRACT_ID',
+  'LOCKED_AT'
+];
+
+var H3_WRITTEN_LEGACY_REVIEW_BINDING_HEADERS_ = [
+  'LOGICAL_KEY',
+  'SET_ID',
+  'SOURCE_QUEUE_ROW',
+  'SOURCE_MODE',
+  'MATERIALIZED_AT',
+  'STATUS',
+  'RECONSTRUCTION_SCHEMA',
+  'RECONSTRUCTION_SHA256',
+  'REVIEW_CONTRACT_ID',
+  'REVIEW_BINDING_SHA256',
+  'LOCKED_AT'
+];
+
+
+function h3WrittenReviewStoredRowObject_(
+  table,
+  row
+) {
+  var out = {};
+  Object.keys(table.map).forEach(
+    function (key) {
+      out[key] = row[table.map[key]];
+    }
+  );
+  return out;
+}
+
+
+function h3WrittenReviewStoredText_(
+  row,
+  key
+) {
+  return String(
+    row && row[key] || ''
+  );
+}
+
+
+function h3WrittenReviewStoredInteger_(
+  row,
+  key
+) {
+  var value = Number(
+    row && row[key]
+  );
+  if (
+    !Number.isInteger(value) ||
+    value <= 0
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_STORED_INTEGER_INVALID:' +
+        key
+    );
+  }
+  return value;
+}
+
+
+function h3WrittenReviewBindingHashObject_(
+  binding
+) {
+  return {
+    LOGICAL_KEY:
+      binding.logicalKey,
+    RECONSTRUCTION_SCHEMA:
+      binding.reconstructionSchema,
+    RECONSTRUCTION_SHA256:
+      binding.reconstructionSha256,
+    REVIEW_CONTRACT_ID:
+      binding.reviewContractId,
+    SET_ID:
+      binding.setId,
+    SOURCE_MODE:
+      binding.sourceMode,
+    SOURCE_QUEUE_ROW:
+      binding.sourceQueueRow
+  };
+}
+
+
+function h3WrittenReviewPersistentValidateRows_(
+  payloadRow,
+  bindingRow
+) {
+  var payloadStatus =
+    h3WrittenReviewStoredText_(
+      payloadRow,
+      'STATUS'
+    );
+  var bindingStatus =
+    h3WrittenReviewStoredText_(
+      bindingRow,
+      'STATUS'
+    );
+
+  if (
+    payloadStatus !== 'LOCKED' ||
+    bindingStatus !== 'LOCKED' ||
+    !h3WrittenReviewStoredText_(
+      payloadRow,
+      'LOCKED_AT'
+    ) ||
+    !h3WrittenReviewStoredText_(
+      bindingRow,
+      'LOCKED_AT'
+    )
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_PERSISTENCE_NOT_LOCKED'
+    );
+  }
+
+  var setId =
+    h3WrittenReviewStoredText_(
+      payloadRow,
+      'SET_ID'
+    );
+
+  if (
+    !/^H3-\d{8}-\d{2,3}$/.test(
+      setId
+    ) ||
+    h3WrittenReviewStoredText_(
+      bindingRow,
+      'SET_ID'
+    ) !== setId
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_PERSISTENCE_SET_ID_MISMATCH'
+    );
+  }
+
+  var logicalKey =
+    'LEGACY_WRITTEN_REVIEW::' +
+    setId;
+
+  if (
+    h3WrittenReviewStoredText_(
+      payloadRow,
+      'LOGICAL_KEY'
+    ) !== logicalKey ||
+    h3WrittenReviewStoredText_(
+      bindingRow,
+      'LOGICAL_KEY'
+    ) !== logicalKey
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_PERSISTENCE_LOGICAL_KEY_MISMATCH'
+    );
+  }
+
+  var sourceQueueRow =
+    h3WrittenReviewStoredInteger_(
+      payloadRow,
+      'SOURCE_QUEUE_ROW'
+    );
+  var bindingQueueRow =
+    h3WrittenReviewStoredInteger_(
+      bindingRow,
+      'SOURCE_QUEUE_ROW'
+    );
+
+  if (
+    sourceQueueRow !==
+      bindingQueueRow
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_PERSISTENCE_QUEUE_ROW_MISMATCH'
+    );
+  }
+
+  var sourceMode =
+    h3WrittenReviewStoredText_(
+      payloadRow,
+      'SOURCE_MODE'
+    );
+
+  if (
+    H3_WRITTEN_REVIEW_SOURCE_MODES_
+      .indexOf(sourceMode) < 0 ||
+    h3WrittenReviewStoredText_(
+      bindingRow,
+      'SOURCE_MODE'
+    ) !== sourceMode
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_PERSISTENCE_SOURCE_MODE_MISMATCH'
+    );
+  }
+
+  var reconstructionSchema =
+    h3WrittenReviewStoredText_(
+      payloadRow,
+      'RECONSTRUCTION_SCHEMA'
+    );
+
+  if (
+    reconstructionSchema !==
+      H3_WRITTEN_LEGACY_REVIEW_SCHEMA_ ||
+    h3WrittenReviewStoredText_(
+      bindingRow,
+      'RECONSTRUCTION_SCHEMA'
+    ) !== reconstructionSchema
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_PERSISTENCE_SCHEMA_MISMATCH'
+    );
+  }
+
+  var reviewContractId =
+    h3WrittenReviewStoredText_(
+      payloadRow,
+      'REVIEW_CONTRACT_ID'
+    );
+
+  if (
+    reviewContractId !==
+      H3_WRITTEN_LEGACY_REVIEW_CONTRACT_ID_ ||
+    h3WrittenReviewStoredText_(
+      bindingRow,
+      'REVIEW_CONTRACT_ID'
+    ) !== reviewContractId
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_PERSISTENCE_CONTRACT_MISMATCH'
+    );
+  }
+
+  var materializedAt =
+    h3WrittenReviewStoredText_(
+      payloadRow,
+      'MATERIALIZED_AT'
+    );
+
+  if (
+    !materializedAt ||
+    h3WrittenReviewStoredText_(
+      bindingRow,
+      'MATERIALIZED_AT'
+    ) !== materializedAt
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_PERSISTENCE_MATERIALIZED_AT_MISMATCH'
+    );
+  }
+
+  var reconstructionSha256 =
+    h3WrittenReviewStoredText_(
+      payloadRow,
+      'RECONSTRUCTION_SHA256'
+    );
+
+  if (
+    !/^[0-9a-f]{64}$/.test(
+      reconstructionSha256
+    ) ||
+    h3WrittenReviewStoredText_(
+      bindingRow,
+      'RECONSTRUCTION_SHA256'
+    ) !== reconstructionSha256
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_PERSISTENCE_RECONSTRUCTION_HASH_MISMATCH'
+    );
+  }
+
+  var payloadKey =
+    h3WrittenReviewStoredText_(
+      payloadRow,
+      'PAYLOAD_KEY'
+    );
+
+  if (
+    payloadKey !==
+      logicalKey +
+      '::' +
+      reconstructionSha256
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_PERSISTENCE_PAYLOAD_KEY_MISMATCH'
+    );
+  }
+
+  var record =
+    h3ProdParseJson_(
+      payloadRow.RECONSTRUCTION_JSON,
+      'WRITTEN_REVIEW_RECONSTRUCTION_JSON_INVALID'
+    );
+
+  h3WrittenReviewValidateRecord_(
+    record
+  );
+
+  if (
+    record.schema !==
+      reconstructionSchema ||
+    record.set_id !== setId ||
+    record.source_mode !== sourceMode ||
+    Number(
+      record.source_queue_row
+    ) !== sourceQueueRow
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_PERSISTENCE_RECORD_IDENTITY_MISMATCH'
+    );
+  }
+
+  var calculatedReconstructionSha =
+    h3ReviewHash_(record);
+
+  if (
+    calculatedReconstructionSha !==
+      reconstructionSha256
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_PERSISTENCE_RECONSTRUCTION_HASH_MISMATCH'
+    );
+  }
+
+  var binding = {
+    logicalKey: logicalKey,
+    setId: setId,
+    sourceQueueRow:
+      sourceQueueRow,
+    sourceMode: sourceMode,
+    reconstructionSchema:
+      reconstructionSchema,
+    reconstructionSha256:
+      reconstructionSha256,
+    reviewContractId:
+      reviewContractId
+  };
+
+  var calculatedBindingSha =
+    h3ReviewHash_(
+      h3WrittenReviewBindingHashObject_(
+        binding
+      )
+    );
+  var storedBindingSha =
+    h3WrittenReviewStoredText_(
+      bindingRow,
+      'REVIEW_BINDING_SHA256'
+    );
+
+  if (
+    !/^[0-9a-f]{64}$/.test(
+      storedBindingSha
+    ) ||
+    calculatedBindingSha !==
+      storedBindingSha
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_PERSISTENCE_BINDING_HASH_MISMATCH'
+    );
+  }
+
+  return {
+    logicalKey: logicalKey,
+    payloadKey: payloadKey,
+    setId: setId,
+    sourceQueueRow:
+      sourceQueueRow,
+    sourceMode: sourceMode,
+    materializedAt:
+      materializedAt,
+    reconstructionSchema:
+      reconstructionSchema,
+    reconstructionSha256:
+      reconstructionSha256,
+    reviewContractId:
+      reviewContractId,
+    reviewBindingSha256:
+      storedBindingSha,
+    payloadLockedAt:
+      h3WrittenReviewStoredText_(
+        payloadRow,
+        'LOCKED_AT'
+      ),
+    bindingLockedAt:
+      h3WrittenReviewStoredText_(
+        bindingRow,
+        'LOCKED_AT'
+      ),
+    record: record,
+    projection:
+      h3WrittenReviewProjectHistorical_(
+        record
+      )
+  };
+}
+
+
+function h3WrittenReviewPersistentContext_(
+  spreadsheet,
+  setId
+) {
+  var normalizedSetId =
+    String(setId || '').trim();
+
+  if (
+    !/^H3-\d{8}-\d{2,3}$/.test(
+      normalizedSetId
+    )
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_SET_ID_INVALID'
+    );
+  }
+
+  var payloadSheet =
+    spreadsheet.getSheetByName(
+      H3_WRITTEN_LEGACY_REVIEW_PAYLOAD_SHEET_
+    );
+  var bindingSheet =
+    spreadsheet.getSheetByName(
+      H3_WRITTEN_LEGACY_REVIEW_BINDING_SHEET_
+    );
+
+  h3ReviewRequireExactHeader_(
+    payloadSheet,
+    H3_WRITTEN_LEGACY_REVIEW_PAYLOAD_HEADERS_,
+    'WRITTEN_REVIEW_PAYLOAD'
+  );
+  h3ReviewRequireExactHeader_(
+    bindingSheet,
+    H3_WRITTEN_LEGACY_REVIEW_BINDING_HEADERS_,
+    'WRITTEN_REVIEW_BINDING'
+  );
+
+  var payloadTable =
+    h3ReviewTable_(
+      payloadSheet
+    );
+  var bindingTable =
+    h3ReviewTable_(
+      bindingSheet
+    );
+
+  var payloadRecord =
+    h3ProdOneRowBy_(
+      payloadTable,
+      'SET_ID',
+      normalizedSetId,
+      H3_WRITTEN_LEGACY_REVIEW_PAYLOAD_SHEET_
+    );
+  var bindingRecord =
+    h3ProdOneRowBy_(
+      bindingTable,
+      'SET_ID',
+      normalizedSetId,
+      H3_WRITTEN_LEGACY_REVIEW_BINDING_SHEET_
+    );
+
+  return h3WrittenReviewPersistentValidateRows_(
+    h3WrittenReviewStoredRowObject_(
+      payloadTable,
+      payloadRecord.row
+    ),
+    h3WrittenReviewStoredRowObject_(
+      bindingTable,
+      bindingRecord.row
+    )
+  );
+}
+
+
+function h3WrittenReviewAnswerPosition_(
+  value
+) {
+  return {
+    '①': 1,
+    '②': 2,
+    '③': 3,
+    '④': 4
+  }[
+    String(value || '')
+  ] || null;
+}
+
+
+function h3WrittenReviewNormalizePersistent_(
+  context
+) {
+  var projection =
+    context.projection;
+
+  return {
+    schema:
+      'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1',
+    mode: 'REVIEW',
+    kind: 'WRITTEN',
+    read_only: true,
+    persisted: true,
+    review_contract_id:
+      context.reviewContractId,
+    review_binding_sha256:
+      context.reviewBindingSha256,
+    set_id:
+      projection.set_id,
+    answered_at:
+      projection.answered_at,
+    raw_input:
+      projection.raw_input,
+    score:
+      projection.score,
+    total:
+      projection.total,
+    wrong_count:
+      projection.wrong_count,
+    uncertainty_known:
+      projection.uncertainty_known,
+    uncertain_count:
+      projection.uncertain_count,
+    default_filter:
+      'NEEDS_REVIEW',
+    replay_capability:
+      'unavailable',
+    sections:
+      projection.questions.map(
+        function (question) {
+          var uncertaintyKnown =
+            question
+              .explicit_uncertainty !==
+              'UNKNOWN';
+
+          return {
+            section:
+              String(
+                question.section || ''
+              ),
+            display:
+              String(
+                question.section || ''
+              ),
+            result:
+              question.mark,
+            user_answer:
+              question.user_answer,
+            user_answer_position:
+              h3WrittenReviewAnswerPosition_(
+                question.user_answer
+              ),
+            user_answer_text:
+              h3WrittenReviewHas_(
+                question,
+                'user_answer_text'
+              )
+                ? question.user_answer_text
+                : null,
+            correct_answer:
+              question.correct_answer,
+            correct_answer_position:
+              h3WrittenReviewAnswerPosition_(
+                question.correct_answer
+              ),
+            correct_answer_text:
+              h3WrittenReviewHas_(
+                question,
+                'correct_answer_text'
+              )
+                ? question.correct_answer_text
+                : null,
+            uncertain_known:
+              uncertaintyKnown,
+            uncertain:
+              uncertaintyKnown
+                ? Boolean(
+                    question
+                      .explicit_uncertainty
+                  )
+                : null,
+            question_surface: {
+              rendered:
+                question.question_surface,
+              body:
+                h3WrittenReviewHas_(
+                  question,
+                  'question_body'
+                )
+                  ? question.question_body
+                  : null,
+              choices:
+                Array.isArray(
+                  question.choices
+                )
+                  ? h3WrittenReviewClone_(
+                      question.choices
+                    )
+                  : [],
+              dialogue_components:
+                Array.isArray(
+                  question
+                    .dialogue_components
+                )
+                  ? h3WrittenReviewClone_(
+                      question
+                        .dialogue_components
+                    )
+                  : []
+            },
+            script_text:
+              question.question_surface,
+            explanation: {
+              text:
+                h3WrittenReviewHas_(
+                  question,
+                  'explanation_text'
+                )
+                  ? question.explanation_text
+                  : 'UNKNOWN',
+              source:
+                h3WrittenReviewHas_(
+                  question,
+                  'explanation_source'
+                )
+                  ? question.explanation_source
+                  : 'UNKNOWN',
+              key_expression:
+                h3WrittenReviewHas_(
+                  question,
+                  'key_expression'
+                )
+                  ? question.key_expression
+                  : 'UNKNOWN'
+            },
+            audio_sources:
+              h3WrittenReviewHas_(
+                question,
+                'audio_sources'
+              )
+                ? h3WrittenReviewClone_(
+                    question.audio_sources
+                  )
+                : 'UNKNOWN',
+            provenance: {
+              generation_log:
+                h3WrittenReviewHas_(
+                  question,
+                  'generation_log'
+                )
+                  ? h3WrittenReviewClone_(
+                      question.generation_log
+                    )
+                  : 'UNKNOWN',
+              evidence:
+                h3WrittenReviewHas_(
+                  question,
+                  'evidence'
+                )
+                  ? h3WrittenReviewClone_(
+                      question.evidence
+                    )
+                  : 'UNKNOWN'
+            }
+          };
+        }
+      ),
+    technical: {
+      logical_key:
+        context.logicalKey,
+      payload_key:
+        context.payloadKey,
+      source_queue_row:
+        context.sourceQueueRow,
+      source_mode:
+        context.sourceMode,
+      materialized_at:
+        context.materializedAt,
+      reconstruction_schema:
+        context.reconstructionSchema,
+      reconstruction_sha256:
+        context.reconstructionSha256,
+      review_binding_sha256:
+        context.reviewBindingSha256,
+      payload_locked_at:
+        context.payloadLockedAt,
+      binding_locked_at:
+        context.bindingLockedAt
+    }
+  };
+}
+
+
+function buildWrittenPersistentReviewPayload_(
+  setId
+) {
+  var spreadsheet =
+    SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+
+  return h3WrittenReviewNormalizePersistent_(
+    h3WrittenReviewPersistentContext_(
+      spreadsheet,
+      setId
+    )
+  );
+}
+
+
+function validateWrittenPersistentReviewBinding_(
+  setId
+) {
+  var payload =
+    buildWrittenPersistentReviewPayload_(
+      setId
+    );
+
+  return {
+    schema:
+      'H3_WRITTEN_REVIEW_PERSISTENCE_GATE_V1',
+    status: 'PASS',
+    read_only: true,
+    provider_active: false,
+    set_id:
+      payload.set_id,
+    review_binding_sha256:
+      payload.review_binding_sha256,
+    section_count:
+      payload.sections.length
+  };
+}
+
+
+function validateWrittenPersistentReviewBackfill_() {
+  var spreadsheet =
+    SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+  var bindingSheet =
+    spreadsheet.getSheetByName(
+      H3_WRITTEN_LEGACY_REVIEW_BINDING_SHEET_
+    );
+
+  h3ReviewRequireExactHeader_(
+    bindingSheet,
+    H3_WRITTEN_LEGACY_REVIEW_BINDING_HEADERS_,
+    'WRITTEN_REVIEW_BINDING'
+  );
+
+  var bindingTable =
+    h3ReviewTable_(
+      bindingSheet
+    );
+  var seen = {};
+  var results = [];
+
+  bindingTable.rows.forEach(
+    function (row) {
+      var setId = String(
+        row[
+          bindingTable.map.SET_ID
+        ] || ''
+      );
+
+      if (!setId) {
+        return;
+      }
+
+      if (seen[setId]) {
+        throw new Error(
+          'WRITTEN_REVIEW_BACKFILL_DUPLICATE_SET_ID:' +
+            setId
+        );
+      }
+      seen[setId] = true;
+
+      var payload =
+        h3WrittenReviewNormalizePersistent_(
+          h3WrittenReviewPersistentContext_(
+            spreadsheet,
+            setId
+          )
+        );
+
+      results.push({
+        set_id:
+          payload.set_id,
+        review_binding_sha256:
+          payload.review_binding_sha256,
+        section_count:
+          payload.sections.length
+      });
+    }
+  );
+
+  return {
+    schema:
+      'H3_WRITTEN_REVIEW_BACKFILL_GATE_V1',
+    status: 'PASS',
+    read_only: true,
+    provider_active: false,
+    set_count:
+      results.length,
+    sets: results
+  };
+}

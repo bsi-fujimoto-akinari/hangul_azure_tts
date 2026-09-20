@@ -6441,7 +6441,7 @@ jobs:
           for needle in [
               'Version: H3-LEVEL-RUNTIME-20260921-V1',
               'Status: STAGED_NO_JUN2_TAXONOMY',
-              '3級|<SKILL_ID>',
+              '<LEVEL>|<SKILL_ID>',
               '準2級|<future 準2級 skill id>',
               'BLOCKED_NO_JUN2_TAXONOMY',
               'accuracy >= 80%',

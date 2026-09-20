@@ -40,7 +40,7 @@ STAGE_ID = TRANS-P11-YYYYMMDD-NNN
 Rules:
 
 - `YYYYMMDD` is the Asia/Tokyo allocation date supplied by the caller.
-- `NNN` is the next unused Translation allocation serial for that date across P11/P12.
+- `NNN` is `max(existing Translation serial for that date)+1` across P11/P12. Gaps are never reused.
 - SET_ID serial is shared across P11/P12.
 - STAGE_ID section must match SECTION_KEY.
 - STAGE_ID date and serial must exactly match SET_ID.
@@ -117,6 +117,7 @@ Preissue fails closed unless:
 - item_count matches;
 - source-binding hash matches;
 - locked-bundle hash matches a fresh canonical hash;
+- stored `LOCKED_BUNDLE_JSON` canonicalizes byte-for-byte to the fresh locked bundle and hashes to `LOCKED_BUNDLE_SHA256`;
 - SET_ID is explicit;
 - no committed Translation transaction is already bound to that SET_ID.
 

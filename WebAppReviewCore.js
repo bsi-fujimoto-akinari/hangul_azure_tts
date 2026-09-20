@@ -280,6 +280,25 @@ var H3_REVIEW_LEVEL_HALF_LIFE_DAYS_ =
 var H3_REVIEW_LEVEL_TIME_HEADROOM_SHARE_ =
   0.40;
 
+var H3_REVIEW_HOME_INDEX_SHEET_ =
+  'review_home_index_v1';
+
+var H3_REVIEW_HOME_INDEX_HEADERS_ = [
+  'KIND',
+  'SET_ID',
+  'SET_NO',
+  'ANSWERED_AT',
+  'SCORE',
+  'TOTAL',
+  'WRONG_COUNT',
+  'UNCERTAINTY_KNOWN',
+  'UNCERTAIN_COUNT',
+  'BASE_PRIORITY',
+  'REVIEW_SOURCE_ID',
+  'SOURCE_MODE',
+  'STATUS'
+];
+
 
 function h3ReviewSkillEvidenceIndex_(
   spreadsheet
@@ -562,6 +581,732 @@ function h3ReviewBaseLevelForEntry_(
 }
 
 
+
+function h3ReviewHomeIndexTable_(
+  spreadsheet
+) {
+  var sheet =
+    spreadsheet.getSheetByName(
+      H3_REVIEW_HOME_INDEX_SHEET_
+    );
+
+  if (!sheet) {
+    throw new Error(
+      'REVIEW_HOME_INDEX_SHEET_MISSING'
+    );
+  }
+
+  var table =
+    h3ReviewTable_(sheet);
+
+  if (
+    JSON.stringify(table.header) !==
+    JSON.stringify(
+      H3_REVIEW_HOME_INDEX_HEADERS_
+    )
+  ) {
+    throw new Error(
+      'REVIEW_HOME_INDEX_HEADER_MISMATCH'
+    );
+  }
+
+  return {
+    sheet: sheet,
+    table: table
+  };
+}
+
+
+function h3ReviewHomeIndexBoolean_(
+  value
+) {
+  var text =
+    String(value || '')
+      .toUpperCase();
+
+  if (text === 'TRUE') {
+    return true;
+  }
+  if (text === 'FALSE') {
+    return false;
+  }
+
+  throw new Error(
+    'REVIEW_HOME_INDEX_BOOLEAN_INVALID'
+  );
+}
+
+
+function h3ReviewHomeIndexRowEntry_(
+  row,
+  map
+) {
+  var kind =
+    String(row[map.KIND] || '');
+  var setId =
+    String(row[map.SET_ID] || '');
+  var setNo =
+    Number(row[map.SET_NO] || 0);
+  var status =
+    String(row[map.STATUS] || '');
+
+  if (
+    ['LISTENING', 'WRITTEN']
+      .indexOf(kind) < 0 ||
+    !setId ||
+    !Number.isInteger(setNo) ||
+    setNo < 1 ||
+    status !== 'ACTIVE'
+  ) {
+    throw new Error(
+      'REVIEW_HOME_INDEX_ROW_INVALID:' +
+        kind +
+        ':' +
+        setId
+    );
+  }
+
+  var uncertaintyKnown =
+    h3ReviewHomeIndexBoolean_(
+      row[map.UNCERTAINTY_KNOWN]
+    );
+  var uncertainText =
+    String(
+      row[map.UNCERTAIN_COUNT] || ''
+    );
+  var uncertainCount =
+    uncertaintyKnown
+      ? Number(uncertainText || 0)
+      : null;
+
+  if (
+    uncertaintyKnown &&
+    (
+      !Number.isInteger(
+        uncertainCount
+      ) ||
+      uncertainCount < 0
+    )
+  ) {
+    throw new Error(
+      'REVIEW_HOME_INDEX_UNCERTAIN_INVALID:' +
+        setId
+    );
+  }
+
+  var entry = {
+    review_kind: kind,
+    set_id: setId,
+    answered_at:
+      String(
+        row[map.ANSWERED_AT] ||
+        'UNKNOWN'
+      ),
+    score:
+      Number(row[map.SCORE] || 0),
+    total:
+      Number(row[map.TOTAL] || 0),
+    wrong_count:
+      Number(
+        row[map.WRONG_COUNT] || 0
+      ),
+    uncertainty_known:
+      uncertaintyKnown,
+    uncertain_count:
+      uncertainCount,
+    needs_review:
+      Number(
+        row[map.WRONG_COUNT] || 0
+      ) > 0 ||
+      (
+        uncertaintyKnown &&
+        uncertainCount > 0
+      ),
+    replay_capability:
+      'unavailable',
+    source_mode:
+      String(
+        row[map.SOURCE_MODE] || ''
+      ),
+    review_open_validation:
+      'FULL_SOURCE_LOCK_ON_OPEN',
+    review_base_level:
+      Number(
+        row[map.BASE_PRIORITY] || 0
+      )
+  };
+
+  var reviewSourceId =
+    String(
+      row[
+        map.REVIEW_SOURCE_ID
+      ] || ''
+    );
+
+  if (kind === 'LISTENING') {
+    entry.listening_set_no =
+      setNo;
+
+    if (
+      entry.source_mode ===
+        'LEGACY_PRE_WEB'
+    ) {
+      entry.legacy_review_id =
+        reviewSourceId;
+    } else {
+      entry.txn_id =
+        reviewSourceId;
+    }
+  } else {
+    entry.written_set_no =
+      setNo;
+  }
+
+  return entry;
+}
+
+
+function h3ReviewHomeIndexEnvelopes_(
+  spreadsheet
+) {
+  var indexed =
+    h3ReviewHomeIndexTable_(
+      spreadsheet
+    );
+  var out = [];
+  var seen = {};
+
+  indexed.table.rows.forEach(
+    function (row) {
+      if (
+        !String(
+          row[
+            indexed.table.map.SET_ID
+          ] || ''
+        )
+      ) {
+        return;
+      }
+
+      if (
+        String(
+          row[
+            indexed.table.map.STATUS
+          ] || ''
+        ) !== 'ACTIVE'
+      ) {
+        return;
+      }
+
+      var entry =
+        h3ReviewHomeIndexRowEntry_(
+          row,
+          indexed.table.map
+        );
+      var key =
+        entry.review_kind +
+        '|' +
+        entry.set_id;
+
+      if (seen[key]) {
+        throw new Error(
+          'REVIEW_HOME_INDEX_DUPLICATE:' +
+            key
+        );
+      }
+      seen[key] = true;
+
+      out.push({
+        kind:
+          entry.review_kind,
+        set_id:
+          entry.set_id,
+        set_no:
+          Number(
+            entry.listening_set_no ||
+            entry.written_set_no ||
+            0
+          ),
+        answered_at:
+          entry.answered_at,
+        review_source_id:
+          entry.txn_id ||
+          entry.legacy_review_id ||
+          entry.set_id,
+        source_mode:
+          entry.source_mode,
+        entry: entry
+      });
+    }
+  );
+
+  return out;
+}
+
+
+function h3ReviewHomeIndexNextSetNo_(
+  table,
+  kind
+) {
+  var maxSetNo = 0;
+
+  table.rows.forEach(
+    function (row) {
+      if (
+        String(
+          row[table.map.KIND] || ''
+        ) !== kind ||
+        String(
+          row[table.map.STATUS] || ''
+        ) !== 'ACTIVE'
+      ) {
+        return;
+      }
+
+      maxSetNo =
+        Math.max(
+          maxSetNo,
+          Number(
+            row[
+              table.map.SET_NO
+            ] || 0
+          )
+        );
+    }
+  );
+
+  return maxSetNo + 1;
+}
+
+
+function h3ReviewHomeIndexFind_(
+  table,
+  kind,
+  setId
+) {
+  var matches = [];
+
+  table.rows.forEach(
+    function (row, index) {
+      if (
+        String(
+          row[table.map.KIND] || ''
+        ) === kind &&
+        String(
+          row[table.map.SET_ID] || ''
+        ) === setId
+      ) {
+        matches.push({
+          rowNumber: index + 2,
+          row: row
+        });
+      }
+    }
+  );
+
+  if (matches.length > 1) {
+    throw new Error(
+      'REVIEW_HOME_INDEX_SET_DUPLICATE:' +
+        kind +
+        ':' +
+        setId
+    );
+  }
+
+  return matches.length
+    ? matches[0]
+    : null;
+}
+
+
+function h3ReviewHomeIndexRawRow_(
+  entry
+) {
+  return [
+    entry.kind,
+    entry.set_id,
+    entry.set_no,
+    entry.answered_at,
+    entry.score,
+    entry.total,
+    entry.wrong_count,
+    entry.uncertainty_known
+      ? 'TRUE'
+      : 'FALSE',
+    entry.uncertainty_known
+      ? entry.uncertain_count
+      : '',
+    Number(
+      entry.base_priority || 0
+    ),
+    entry.review_source_id,
+    entry.source_mode,
+    'ACTIVE'
+  ];
+}
+
+
+function h3ReviewHomeIndexRefreshBasePriorities_(
+  spreadsheet
+) {
+  var indexed =
+    h3ReviewHomeIndexTable_(
+      spreadsheet
+    );
+  var evidence =
+    h3ReviewSkillEvidenceIndex_(
+      spreadsheet
+    );
+  var values = [];
+
+  indexed.table.rows.forEach(
+    function (row) {
+      if (
+        !String(
+          row[
+            indexed.table.map.SET_ID
+          ] || ''
+        )
+      ) {
+        return;
+      }
+
+      if (
+        String(
+          row[
+            indexed.table.map.STATUS
+          ] || ''
+        ) !== 'ACTIVE'
+      ) {
+        values.push([
+          row[
+            indexed.table.map
+              .BASE_PRIORITY
+          ] || ''
+        ]);
+        return;
+      }
+
+      var entry =
+        h3ReviewHomeIndexRowEntry_(
+          row,
+          indexed.table.map
+        );
+
+      values.push([
+        h3ReviewBaseLevelForEntry_(
+          entry.review_kind,
+          entry,
+          evidence
+        )
+      ]);
+    }
+  );
+
+  if (values.length) {
+    indexed.sheet
+      .getRange(
+        2,
+        indexed.table.map
+          .BASE_PRIORITY + 1,
+        values.length,
+        1
+      )
+      .setValues(values);
+  }
+}
+
+
+function h3ReviewHomeIndexUpsertAfterCommit_(
+  result,
+  reviewPayload
+) {
+  if (
+    !result ||
+    result.status !== 'COMMITTED' ||
+    ['LISTENING', 'WRITTEN']
+      .indexOf(
+        String(result.mode || '')
+      ) < 0
+  ) {
+    throw new Error(
+      'REVIEW_HOME_INDEX_COMMIT_RESULT_INVALID'
+    );
+  }
+
+  var lock =
+    LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    var spreadsheet =
+      SpreadsheetApp.openById(
+        H3_WEB_RUNTIME_SPREADSHEET_ID
+      );
+    var indexed =
+      h3ReviewHomeIndexTable_(
+        spreadsheet
+      );
+    var kind =
+      String(result.mode);
+    var setId =
+      String(result.set_id || '');
+    var existing =
+      h3ReviewHomeIndexFind_(
+        indexed.table,
+        kind,
+        setId
+      );
+    var entry = null;
+
+    if (kind === 'LISTENING') {
+      var txn =
+        h3ReviewTxnContext_(
+          spreadsheet,
+          result.txn_id
+        );
+
+      if (
+        !reviewPayload ||
+        reviewPayload.schema !==
+          'H3_PERSISTENT_REVIEW_PAYLOAD_V1' ||
+        reviewPayload.set_id !== setId ||
+        reviewPayload.txn_id !==
+          String(result.txn_id)
+      ) {
+        throw new Error(
+          'REVIEW_HOME_INDEX_LISTENING_REVIEW_INVALID'
+        );
+      }
+
+      var wrongCount =
+        result.summary.filter(
+          function (item) {
+            return (
+              item.result === '×'
+            );
+          }
+        ).length;
+      var uncertainCount =
+        txn.rawInput.answers.filter(
+          function (item) {
+            return !!item.uncertain;
+          }
+        ).length;
+
+      entry = {
+        kind: kind,
+        set_id: setId,
+        set_no:
+          txn.setNo,
+        answered_at:
+          String(
+            txn.row[
+              txn.map.COMMITTED_AT
+            ] || ''
+          ),
+        score:
+          Number(result.score),
+        total:
+          Number(result.total),
+        wrong_count:
+          wrongCount,
+        uncertainty_known: true,
+        uncertain_count:
+          uncertainCount,
+        review_source_id:
+          String(result.txn_id),
+        source_mode:
+          'LISTENING_PRODUCTION_WEB',
+        base_priority: 0
+      };
+    } else {
+      if (
+        !reviewPayload ||
+        reviewPayload.schema !==
+          'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1' ||
+        reviewPayload.kind !==
+          'WRITTEN' ||
+        reviewPayload.set_id !==
+          setId
+      ) {
+        throw new Error(
+          'REVIEW_HOME_INDEX_WRITTEN_REVIEW_INVALID'
+        );
+      }
+
+      entry = {
+        kind: kind,
+        set_id: setId,
+        set_no:
+          existing
+            ? Number(
+                existing.row[
+                  indexed.table.map.SET_NO
+                ]
+              )
+            : h3ReviewHomeIndexNextSetNo_(
+                indexed.table,
+                'WRITTEN'
+              ),
+        answered_at:
+          String(
+            reviewPayload
+              .answered_at || ''
+          ),
+        score:
+          Number(
+            reviewPayload.score
+          ),
+        total:
+          Number(
+            reviewPayload.total
+          ),
+        wrong_count:
+          Number(
+            reviewPayload
+              .wrong_count || 0
+          ),
+        uncertainty_known:
+          reviewPayload
+            .uncertainty_known !==
+            false,
+        uncertain_count:
+          reviewPayload
+            .uncertainty_known ===
+            false
+            ? null
+            : Number(
+                reviewPayload
+                  .uncertain_count || 0
+              ),
+        review_source_id:
+          setId,
+        source_mode:
+          'WRITTEN_PRODUCTION_WEB',
+        base_priority: 0
+      };
+    }
+
+    if (
+      !entry.answered_at ||
+      !entry.review_source_id
+    ) {
+      throw new Error(
+        'REVIEW_HOME_INDEX_ENTRY_IDENTITY_MISSING'
+      );
+    }
+
+    var raw =
+      h3ReviewHomeIndexRawRow_(
+        entry
+      );
+
+    if (existing) {
+      var existingSourceId =
+        String(
+          existing.row[
+            indexed.table.map
+              .REVIEW_SOURCE_ID
+          ] || ''
+        );
+      var existingSetNo =
+        Number(
+          existing.row[
+            indexed.table.map.SET_NO
+          ] || 0
+        );
+
+      if (
+        existingSourceId !==
+          entry.review_source_id ||
+        existingSetNo !==
+          Number(entry.set_no)
+      ) {
+        throw new Error(
+          'REVIEW_HOME_INDEX_EXISTING_IDENTITY_MISMATCH'
+        );
+      }
+
+      indexed.sheet
+        .getRange(
+          existing.rowNumber,
+          1,
+          1,
+          H3_REVIEW_HOME_INDEX_HEADERS_
+            .length
+        )
+        .setValues([raw]);
+    } else {
+      indexed.sheet
+        .appendRow(raw);
+    }
+
+    SpreadsheetApp.flush();
+
+    h3ReviewHomeIndexRefreshBasePriorities_(
+      spreadsheet
+    );
+    SpreadsheetApp.flush();
+
+    var readback =
+      h3ReviewHomeIndexTable_(
+        spreadsheet
+      );
+    var stored =
+      h3ReviewHomeIndexFind_(
+        readback.table,
+        kind,
+        setId
+      );
+
+    if (!stored) {
+      throw new Error(
+        'REVIEW_HOME_INDEX_READBACK_MISSING'
+      );
+    }
+
+    var storedEntry =
+      h3ReviewHomeIndexRowEntry_(
+        stored.row,
+        readback.table.map
+      );
+
+    if (
+      storedEntry.review_kind !==
+        kind ||
+      storedEntry.set_id !== setId ||
+      Number(
+        storedEntry.listening_set_no ||
+        storedEntry.written_set_no ||
+        0
+      ) !== Number(entry.set_no)
+    ) {
+      throw new Error(
+        'REVIEW_HOME_INDEX_READBACK_MISMATCH'
+      );
+    }
+
+    return {
+      schema:
+        'H3_REVIEW_HOME_INDEX_SYNC_V1',
+      status: 'PASS',
+      kind: kind,
+      set_id: setId,
+      set_no:
+        Number(entry.set_no),
+      base_priority:
+        Number(
+          storedEntry
+            .review_base_level || 0
+        )
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
 function h3ReviewTimestampMs_(
   value
 ) {
@@ -616,18 +1361,18 @@ function h3ReviewOldestKnownTimestampMs_(
 }
 
 
-function h3ReviewLevelForEntry_(
-  kind,
-  entry,
-  evidence,
+function h3ReviewLevelFromBase_(
+  base,
   effectiveTimestampMs,
   nowMs
 ) {
-  var base =
-    h3ReviewBaseLevelForEntry_(
-      kind,
-      entry,
-      evidence
+  var normalizedBase =
+    Math.max(
+      0,
+      Math.min(
+        100,
+        Number(base || 0)
+      )
     );
   var ageDays =
     Math.max(
@@ -645,15 +1390,18 @@ function h3ReviewLevelForEntry_(
       H3_REVIEW_LEVEL_HALF_LIFE_DAYS_
     );
   var level =
-    base +
+    normalizedBase +
     (
-      (100 - base) *
+      (100 - normalizedBase) *
       H3_REVIEW_LEVEL_TIME_HEADROOM_SHARE_ *
       forgettingPressure
     );
 
   return {
-    base: Math.round(base),
+    base:
+      Math.round(
+        normalizedBase
+      ),
     age_days:
       Math.round(
         ageDays * 10
@@ -673,13 +1421,27 @@ function h3ReviewLevelForEntry_(
 }
 
 
-function h3ReviewAttachHomeMetadata_(
-  envelopes,
-  evidence
+function h3ReviewLevelForEntry_(
+  kind,
+  entry,
+  evidence,
+  effectiveTimestampMs,
+  nowMs
 ) {
-  var writtenIds =
-    evidence.written_set_ids
-      .slice();
+  return h3ReviewLevelFromBase_(
+    h3ReviewBaseLevelForEntry_(
+      kind,
+      entry,
+      evidence
+    ),
+    effectiveTimestampMs,
+    nowMs
+  );
+}
+
+function h3ReviewAttachHomeMetadata_(
+  envelopes
+) {
   var nowMs =
     h3ReviewNowMs_();
   var oldestKnownMs =
@@ -690,11 +1452,6 @@ function h3ReviewAttachHomeMetadata_(
   envelopes.forEach(
     function (envelope) {
       var entry = envelope.entry;
-      if (!entry.review_kind) {
-        entry.review_kind =
-          envelope.kind;
-      }
-
       var actualTimestampMs =
         h3ReviewTimestampMs_(
           envelope.answered_at
@@ -714,10 +1471,8 @@ function h3ReviewAttachHomeMetadata_(
       }
 
       var levelMeta =
-        h3ReviewLevelForEntry_(
-          envelope.kind,
-          entry,
-          evidence,
+        h3ReviewLevelFromBase_(
+          entry.review_base_level,
           effectiveTimestampMs,
           nowMs
         );
@@ -743,79 +1498,20 @@ function h3ReviewAttachHomeMetadata_(
         levelMeta.level;
       entry.review_level_contract =
         H3_REVIEW_LEVEL_CONTRACT_;
-
-      if (
-        envelope.kind ===
-          'WRITTEN' &&
-        writtenIds.indexOf(
-          String(entry.set_id || '')
-        ) < 0
-      ) {
-        writtenIds.push(
-          String(entry.set_id || '')
-        );
-      }
-    }
-  );
-
-  writtenIds.sort();
-  var ordinalBySet = {};
-  writtenIds.forEach(
-    function (setId, index) {
-      ordinalBySet[setId] =
-        index + 1;
-    }
-  );
-
-  envelopes.forEach(
-    function (envelope) {
-      if (
-        envelope.kind ===
-          'WRITTEN'
-      ) {
-        envelope.entry
-          .written_set_no =
-          Number(
-            ordinalBySet[
-              String(
-                envelope.entry
-                  .set_id || ''
-              )
-            ] || 0
-          );
-      }
     }
   );
 }
 
-
 function h3ReviewHomeHistory_(
   spreadsheet
 ) {
-  var envelopes = [];
-
-  h3ReviewProviders_().forEach(
-    function (provider) {
-      provider
-        .historyEntries(
-          spreadsheet
-        )
-        .forEach(function (entry) {
-          envelopes.push(
-            h3ReviewHistoryEnvelope_(
-              provider,
-              entry
-            )
-          );
-        });
-    }
-  );
+  var envelopes =
+    h3ReviewHomeIndexEnvelopes_(
+      spreadsheet
+    );
 
   h3ReviewAttachHomeMetadata_(
-    envelopes,
-    h3ReviewSkillEvidenceIndex_(
-      spreadsheet
-    )
+    envelopes
   );
 
   envelopes.sort(function (a, b) {
@@ -844,7 +1540,6 @@ function h3ReviewHomeHistory_(
       return envelope.entry;
     });
 }
-
 
 function h3ReviewCurrentLearning_(
   spreadsheet
@@ -893,10 +1588,7 @@ function buildReviewHomePayload_() {
       'H3_WEB_HOME_V1',
     mode: 'HOME',
     read_only: true,
-    current_learning:
-      h3ReviewCurrentLearning_(
-        spreadsheet
-      ),
+    current_learning: null,
     review_history:
       h3ReviewHomeHistory_(
         spreadsheet

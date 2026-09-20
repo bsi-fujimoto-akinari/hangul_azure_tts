@@ -1530,7 +1530,7 @@ function processPendingAudioForSet(
     }
 
     const members =
-      collectListeningSetRows_(
+      snapshotListeningSet_(
         sheet,
         targetSetId
       );
@@ -1588,11 +1588,12 @@ function processPendingAudioForSet(
 
     return processListeningAudioSet_(
       sheet,
-      readListeningJob_(
-        sheet,
-        runnable.row
+      readListeningSnapshotJob_(
+        runnable,
+        false
       ),
-      c
+      c,
+      members
     );
   } finally {
     lock.releaseLock();
@@ -1859,10 +1860,12 @@ function collectListeningSetRows_(
 function processListeningAudioSet_(
   sheet,
   seed,
-  c
+  c,
+  prefetchedMembers
 ) {
   let members =
-    collectListeningSetRows_(
+    prefetchedMembers ||
+    snapshotListeningSet_(
       sheet,
       seed.parentSetId
     );
@@ -1930,7 +1933,7 @@ function processListeningAudioSet_(
 
   /**
    * Persistent K1_READY is the source authority.
-   * This gate runs before any runListeningJob_ call,
+   * This gate runs before the set-level batch call,
    * therefore before Apps Script writes audio state
    * or starts Azure generation for the set.
    */
@@ -1940,82 +1943,20 @@ function processListeningAudioSet_(
     c
   );
 
-  for (
-    let i = 0;
-    i < members.length;
-    i++
-  ) {
-    const m = members[i];
-    const status = m.values[1];
-
-    if (status === 'done') {
-      continue;
-    }
-
-    if (
-      status !== 'pending' &&
-      status !== 'processing'
-    ) {
-      throw new Error(
-        '5L member ' +
-        m.values[0] +
-        ' has non-runnable status ' +
-        status +
-        '.'
-      );
-    }
-
-    const job =
-      readListeningJob_(
-        sheet,
-        m.row
-      );
-
-    const result =
-      runListeningJob_(
-        sheet,
-        job,
-        c
-      );
-
-    if (
-      !result ||
-      result.status !== 'done'
-    ) {
-      return {
-        status:
-          result &&
-          result.status ||
-          'error',
-        queue: 'listening_set',
-        parent_set_id:
-          seed.parentSetId,
-        listening_set_no:
-          setNos[0],
-        member_result:
-          result || null
-      };
-    }
-  }
-
-  members =
-    collectListeningSetRows_(
+  const result =
+    runListeningSetBatch_(
       sheet,
-      seed.parentSetId
-    )
-      .sort(
-        (a, b) =>
-          order[a.values[5]] -
-          order[b.values[5]]
-      );
+      seed.parentSetId,
+      members,
+      c
+    );
 
   if (
-    members.some(
-      x => x.values[1] !== 'done'
-    )
+    !result ||
+    result.status !== 'done'
   ) {
-    return {
-      status: 'partial',
+    return result || {
+      status: 'error',
       queue: 'listening_set',
       parent_set_id:
         seed.parentSetId,
@@ -2023,6 +1964,8 @@ function processListeningAudioSet_(
         setNos[0]
     };
   }
+
+  members = result.members;
 
   const script =
     persistListeningSetScript_(
@@ -2045,6 +1988,814 @@ function processListeningAudioSet_(
     script_url:
       script.url
   };
+}
+
+
+/**
+ * Loads the Listening queue once and keeps the row/formula/note evidence
+ * needed by the set-level fast path. No member-level Sheet lookup occurs.
+ */
+function snapshotListeningSet_(
+  sheet,
+  parentSetId
+) {
+  const last =
+    sheet.getLastRow();
+
+  if (last < 2) {
+    return [];
+  }
+
+  const range =
+    sheet.getRange(
+      2,
+      1,
+      last - 1,
+      HQ_LISTENING_HEADERS.length
+    );
+
+  const values =
+    range.getDisplayValues();
+  const formulas =
+    range.getFormulas();
+  const notes =
+    sheet
+      .getRange(
+        2,
+        1,
+        last - 1,
+        1
+      )
+      .getNotes();
+
+  return values
+    .map(
+      (rowValues, i) => ({
+        row: i + 2,
+        values: rowValues,
+        formulas: formulas[i],
+        note: notes[i][0]
+      })
+    )
+    .filter(
+      member =>
+        member.values[3] ===
+        parentSetId
+    );
+}
+
+
+function snapshotListeningSheet_(
+  member
+) {
+  return {
+    getRange: function(
+      row,
+      column,
+      rowCount,
+      columnCount
+    ) {
+      if (
+        row !== member.row ||
+        column !== 1 ||
+        rowCount !== 1 ||
+        columnCount !==
+          HQ_LISTENING_HEADERS.length
+      ) {
+        throw new Error(
+          'Invalid Listening snapshot range.'
+        );
+      }
+
+      return {
+        getFormulas: function() {
+          return [
+            member.formulas.slice()
+          ];
+        },
+        getDisplayValues: function() {
+          return [
+            member.values.slice()
+          ];
+        }
+      };
+    }
+  };
+}
+
+
+function readListeningSnapshotJob_(
+  member,
+  allowDone
+) {
+  return readListeningJob_(
+    snapshotListeningSheet_(
+      member
+    ),
+    member.row,
+    allowDone === true
+  );
+}
+
+
+function parseListeningStateNote_(
+  note,
+  j
+) {
+  if (!note) {
+    return null;
+  }
+
+  if (
+    !note.startsWith(
+      HQ_LISTENING_NOTE
+    )
+  ) {
+    throw new Error(
+      'Listening A-cell note is reserved for HANGUL_LISTENING_AUDIO_STATE_V1 recovery metadata.'
+    );
+  }
+
+  const state =
+    JSON.parse(
+      note.slice(
+        HQ_LISTENING_NOTE.length
+      )
+    );
+
+  if (
+    state.id !== j.id ||
+    state.hash !== j.hash
+  ) {
+    throw new Error(
+      'Immutable Listening content differs from its checkpoint.'
+    );
+  }
+
+  return state;
+}
+
+
+function listeningBatchState_(
+  member,
+  j,
+  c
+) {
+  let state =
+    parseListeningStateNote_(
+      member.note,
+      j
+    );
+
+  if (!state) {
+    if (
+      j.status === 'processing' ||
+      j.status === 'done'
+    ) {
+      throw new Error(
+        j.status +
+        ' Listening row has no checkpoint.'
+      );
+    }
+
+    const voice =
+      shuffle_(
+        HQ_VOICES.slice()
+      )[0];
+
+    state = {
+      id: j.id,
+      hash: j.hash,
+      folderId:
+        audioTargetFolderId_(
+          c,
+          '5L',
+          j.parentSetId
+        ),
+      voice: voice.label,
+      audioVersion:
+        HQ_LISTENING_AUDIO_VERSION,
+      stage: 'prepared',
+      attempts: 0
+    };
+  }
+
+  assertAudioFolderState_(
+    c,
+    audioTargetFolderId_(
+      c,
+      '5L',
+      j.parentSetId
+    ),
+    state.folderId
+  );
+
+  if (
+    state.audioVersion !==
+      HQ_LISTENING_AUDIO_VERSION &&
+    state.audioVersion !==
+      HQ_LISTENING_AUDIO_VERSION_V2 &&
+    state.audioVersion !==
+      HQ_LISTENING_AUDIO_VERSION_LEADING5S
+  ) {
+    throw new Error(
+      'Unknown persisted Listening audio version.'
+    );
+  }
+
+  if (
+    state.audioVersion ===
+      HQ_LISTENING_AUDIO_VERSION
+  ) {
+    validateListeningOfficialParityPlan_(
+      j.plan,
+      j.section
+    );
+  }
+
+  return state;
+}
+
+
+function listeningBatchCheckpoint_(
+  sheet,
+  item
+) {
+  item.state.updatedAt =
+    new Date().toISOString();
+
+  sheet
+    .getRange(
+      item.member.row,
+      1
+    )
+    .setNote(
+      HQ_LISTENING_NOTE +
+      JSON.stringify(
+        item.state
+      )
+    );
+}
+
+
+function assertListeningBatchCurrent_(
+  sheet,
+  parentSetId,
+  items
+) {
+  const current =
+    snapshotListeningSet_(
+      sheet,
+      parentSetId
+    );
+
+  if (
+    current.length !==
+    HQ_LISTENING_SET_SIZE
+  ) {
+    throw new Error(
+      'Listening set row count changed during processing.'
+    );
+  }
+
+  const byId = {};
+
+  current.forEach(
+    member => {
+      const id = member.values[0];
+
+      if (byId[id]) {
+        throw new Error(
+          'LISTEN_GEN_ID must occur exactly once in the set snapshot.'
+        );
+      }
+
+      byId[id] = member;
+    }
+  );
+
+  items.forEach(
+    item => {
+      const member =
+        byId[item.job.id];
+
+      if (!member) {
+        throw new Error(
+          'Listening member disappeared during processing.'
+        );
+      }
+
+      const job =
+        readListeningSnapshotJob_(
+          member,
+          true
+        );
+
+      if (
+        job.hash !== item.job.hash
+      ) {
+        throw new Error(
+          'Immutable Listening audio input changed during set processing; restore A,C:H,O.'
+        );
+      }
+
+      item.member = member;
+    }
+  );
+}
+
+
+function verifyDoneListeningItem_(
+  item,
+  audio
+) {
+  const values =
+    item.member.values;
+
+  if (
+    item.state.stage !== 'done' ||
+    values[8] !== item.job.hash ||
+    values[9] !==
+      item.spec.assignment ||
+    values[10] !== audio.getId() ||
+    values[11] !== audio.getUrl() ||
+    !values[13]
+  ) {
+    throw new Error(
+      'Done Listening row lacks verified final audio evidence.'
+    );
+  }
+}
+
+
+function publishListeningBatchError_(
+  sheet,
+  items,
+  stage,
+  error,
+  c
+) {
+  const message =
+    stage + ': ' +
+    safeError_(error, c);
+
+  try {
+    /**
+     * Never publish an error through stale row numbers. If the source or row
+     * identity changed, leave the durable processing checkpoint untouched and
+     * fail closed for manual inspection.
+     */
+    assertListeningBatchCurrent_(
+      sheet,
+      items[0].job.parentSetId,
+      items
+    );
+  } catch (sourceError) {
+    console.error(
+      'Could not safely publish Listening batch error: ' +
+      safeError_(sourceError, c)
+    );
+
+    return {
+      status: 'error',
+      queue: 'listening_set',
+      parent_set_id:
+        items[0].job.parentSetId,
+      stage: stage,
+      error: message
+    };
+  }
+
+  items
+    .filter(
+      item =>
+        item.job.status !== 'done'
+    )
+    .forEach(
+      item => {
+        sheet
+          .getRange(
+            item.member.row,
+            13
+          )
+          .setValue(message);
+
+        sheet
+          .getRange(
+            item.member.row,
+            2
+          )
+          .setValue('error');
+      }
+    );
+
+  SpreadsheetApp.flush();
+
+  return {
+    status: 'error',
+    queue: 'listening_set',
+    parent_set_id:
+      items.length
+        ? items[0].job.parentSetId
+        : '',
+    stage: stage,
+    error: message
+  };
+}
+
+
+/**
+ * Recovery-safe 5L fast path.
+ *
+ * - set-level source/parity validation
+ * - one checkpoint flush before network work
+ * - one fetchAll for only missing audio
+ * - one final immutable recheck and publish flush
+ */
+function runListeningSetBatch_(
+  sheet,
+  parentSetId,
+  members,
+  c
+) {
+  let stage = 'preflight';
+  const folders = {};
+  const items = [];
+
+  try {
+    const preparedItems =
+      members.map(
+        member => {
+          const status =
+            member.values[1];
+
+          if (
+            status !== 'pending' &&
+            status !== 'processing' &&
+            status !== 'done'
+          ) {
+            throw new Error(
+              '5L member ' +
+              member.values[0] +
+              ' has non-runnable status ' +
+              status +
+              '.'
+            );
+          }
+
+          const job =
+            readListeningSnapshotJob_(
+              member,
+              true
+            );
+
+          return {
+            member: member,
+            job: job,
+            state: null,
+            spec: null,
+            folder: null,
+            audio: null,
+            blob: null
+          };
+        }
+      );
+
+    preparedItems.forEach(
+      item => items.push(item)
+    );
+
+    items.forEach(
+      item => {
+        const member = item.member;
+        const job = item.job;
+        const status = job.status;
+
+        const state =
+          listeningBatchState_(
+            member,
+            job,
+            c
+          );
+
+        const spec =
+          listeningAudioSpec_(
+            job,
+            state
+          );
+
+        if (!folders[state.folderId]) {
+          folders[state.folderId] =
+            DriveApp.getFolderById(
+              state.folderId
+            );
+        }
+
+        const audio =
+          findAudio_(
+            folders[state.folderId],
+            job.id,
+            spec,
+            state
+          );
+
+        item.state = state;
+        item.spec = spec;
+        item.folder =
+          folders[state.folderId];
+        item.audio = audio;
+
+        if (status === 'done') {
+          if (!audio) {
+            throw new Error(
+              'Done Listening row has no verified audio file.'
+            );
+          }
+
+          verifyDoneListeningItem_(
+            item,
+            audio
+          );
+        } else {
+          if (status === 'pending') {
+            state.attempts = 0;
+          }
+
+          if (state.attempts >= 3) {
+            throw new Error(
+              'Repeated Listening interruption: inspect the execution log, then reset STATUS to pending.'
+            );
+          }
+
+          state.attempts++;
+
+          if (audio) {
+            state.audioId =
+              audio.getId();
+            state.stage =
+              'audio_saved';
+          } else {
+            state.stage =
+              'audio_requested';
+          }
+        }
+      }
+    );
+
+    const active =
+      items.filter(
+        item =>
+          item.job.status !== 'done'
+      );
+
+    if (!active.length) {
+      return {
+        status: 'done',
+        members: members
+      };
+    }
+
+    stage = 'checkpoint';
+
+    /**
+     * Resolve the whole set once immediately before buffered writes so a row
+     * insertion cannot redirect a checkpoint to another member.
+     */
+    assertListeningBatchCurrent_(
+      sheet,
+      parentSetId,
+      items
+    );
+
+    active.forEach(
+      item => {
+        sheet
+          .getRange(
+            item.member.row,
+            2
+          )
+          .setValue('processing');
+
+        sheet
+          .getRange(
+            item.member.row,
+            9,
+            1,
+            2
+          )
+          .setValues([
+            [
+              item.job.hash,
+              item.spec.assignment
+            ]
+          ]);
+
+        sheet
+          .getRange(
+            item.member.row,
+            13
+          )
+          .clearContent();
+
+        listeningBatchCheckpoint_(
+          sheet,
+          item
+        );
+      }
+    );
+
+    SpreadsheetApp.flush();
+
+    /**
+     * Check the immutable source again after the durable checkpoint and
+     * immediately before Azure/Drive mutation.
+     */
+    assertListeningBatchCurrent_(
+      sheet,
+      parentSetId,
+      items
+    );
+
+    const missing =
+      active.filter(
+        item => !item.audio
+      );
+
+    if (missing.length) {
+      stage = 'azure_batch';
+
+      const requests =
+        missing.map(
+          item =>
+            azureTtsFetchAllRequest_(
+              item.spec.ssml,
+              c
+            )
+        );
+
+      if (
+        requests.length >
+        HQ_LISTENING_SET_SIZE
+      ) {
+        throw new Error(
+          'Listening Azure batch exceeds five requests.'
+        );
+      }
+
+      const responses =
+        UrlFetchApp.fetchAll(
+          requests
+        );
+
+      if (
+        responses.length !==
+        missing.length
+      ) {
+        throw new Error(
+          'Azure TTS batch response count mismatch.'
+        );
+      }
+
+      /**
+       * Validate every response before creating any Drive file. A single
+       * invalid response therefore cannot produce a partially-published set.
+       */
+      const blobs =
+        responses.map(
+          response =>
+            azureTtsBlobFromResponse_(
+              response
+            )
+        );
+
+      missing.forEach(
+        (item, i) => {
+          item.blob = blobs[i];
+        }
+      );
+    }
+
+    stage = 'drive_publish';
+
+    active.forEach(
+      item => {
+        if (!item.audio) {
+          item.blob.setName(
+            item.spec.tempName
+          );
+
+          item.audio =
+            item.folder.createFile(
+              item.blob
+            );
+        }
+
+        item.audio.setDescription(
+          item.spec.description
+        );
+
+        item.state.audioId =
+          item.audio.getId();
+        item.state.stage =
+          'audio_saved';
+
+        item.audio.setName(
+          item.job.id + '.mp3'
+        );
+      }
+    );
+
+    stage = 'final_source_check';
+
+    assertListeningBatchCurrent_(
+      sheet,
+      parentSetId,
+      items
+    );
+
+    stage = 'final_publish';
+
+    active.forEach(
+      item => {
+        const completed =
+          item.state.completedAt ||
+          new Date().toISOString();
+
+        sheet
+          .getRange(
+            item.member.row,
+            9,
+            1,
+            6
+          )
+          .setValues([
+            [
+              item.job.hash,
+              item.spec.assignment,
+              item.audio.getId(),
+              item.audio.getUrl(),
+              '',
+              completed
+            ]
+          ]);
+
+        item.state.stage = 'done';
+        item.state.completedAt =
+          completed;
+
+        listeningBatchCheckpoint_(
+          sheet,
+          item
+        );
+
+        sheet
+          .getRange(
+            item.member.row,
+            2
+          )
+          .setValue('done');
+      }
+    );
+
+    SpreadsheetApp.flush();
+
+    const finalMembers =
+      items
+        .map(item => {
+          item.member.values[1] =
+            'done';
+          item.member.values[8] =
+            item.job.hash;
+          item.member.values[9] =
+            item.spec.assignment;
+          item.member.values[10] =
+            item.audio.getId();
+          item.member.values[11] =
+            item.audio.getUrl();
+          item.member.values[12] = '';
+          item.member.values[13] =
+            item.state.completedAt;
+          return item.member;
+        });
+
+    return {
+      status: 'done',
+      members: finalMembers
+    };
+
+  } catch (e) {
+    if (!items.length) {
+      throw e;
+    }
+
+    return publishListeningBatchError_(
+      sheet,
+      items,
+      stage,
+      e,
+      c
+    );
+  }
 }
 
 
@@ -2359,7 +3110,8 @@ function persistListeningSetScript_(
 
 function readListeningJob_(
   sheet,
-  row
+  row,
+  allowDone
 ) {
   const range =
     sheet.getRange(
@@ -2426,10 +3178,19 @@ function readListeningJob_(
 
   if (
     j.status !== 'pending' &&
-    j.status !== 'processing'
+    j.status !== 'processing' &&
+    !(
+      allowDone === true &&
+      j.status === 'done'
+    )
   ) {
     throw new Error(
-      'Listening STATUS must be pending or processing.'
+      'Listening STATUS must be pending or processing' +
+      (
+        allowDone === true
+          ? ' or done.'
+          : '.'
+      )
     );
   }
 
@@ -2923,37 +3684,10 @@ function loadListeningState_(
       )
       .getNote();
 
-  if (!note) {
-    return null;
-  }
-
-  if (
-    !note.startsWith(
-      HQ_LISTENING_NOTE
-    )
-  ) {
-    throw new Error(
-      'Listening A-cell note is reserved for HANGUL_LISTENING_AUDIO_STATE_V1 recovery metadata.'
-    );
-  }
-
-  const state =
-    JSON.parse(
-      note.slice(
-        HQ_LISTENING_NOTE.length
-      )
-    );
-
-  if (
-    state.id !== j.id ||
-    state.hash !== j.hash
-  ) {
-    throw new Error(
-      'Immutable Listening content differs from its checkpoint.'
-    );
-  }
-
-  return state;
+  return parseListeningStateNote_(
+    note,
+    j
+  );
 }
 
 
@@ -4698,34 +5432,81 @@ function synthesize_(
   ssml,
   c
 ) {
+  const request =
+    azureTtsRequest_(
+      ssml,
+      c
+    );
+
   const response =
     UrlFetchApp.fetch(
+      request.url,
+      request.params
+    );
+
+  return azureTtsBlobFromResponse_(
+    response
+  );
+}
+
+
+function azureTtsRequest_(
+  ssml,
+  c
+) {
+  return {
+    url:
       'https://' +
       c.AZURE_SPEECH_REGION +
       '.tts.speech.microsoft.com/cognitiveservices/v1',
-      {
-        method: 'post',
+    params: {
+      method: 'post',
 
-        contentType:
-          'application/ssml+xml',
+      contentType:
+        'application/ssml+xml',
 
-        headers: {
-          'Ocp-Apim-Subscription-Key':
-            c.AZURE_SPEECH_KEY,
+      headers: {
+        'Ocp-Apim-Subscription-Key':
+          c.AZURE_SPEECH_KEY,
 
-          'X-Microsoft-OutputFormat':
-            'audio-24khz-160kbitrate-mono-mp3',
+        'X-Microsoft-OutputFormat':
+          'audio-24khz-160kbitrate-mono-mp3',
 
-          'User-Agent':
-            'hangul-azure-tts'
-        },
+        'User-Agent':
+          'hangul-azure-tts'
+      },
 
-        payload: ssml,
+      payload: ssml,
 
-        muteHttpExceptions:
-          true
-      }
+      muteHttpExceptions:
+        true
+    }
+  };
+}
+
+
+function azureTtsFetchAllRequest_(
+  ssml,
+  c
+) {
+  const request =
+    azureTtsRequest_(
+      ssml,
+      c
     );
+
+  return Object.assign(
+    {
+      url: request.url
+    },
+    request.params
+  );
+}
+
+
+function azureTtsBlobFromResponse_(
+  response
+) {
 
   if (
     response.getResponseCode() !==

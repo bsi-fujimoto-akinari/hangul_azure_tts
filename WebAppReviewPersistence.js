@@ -3190,6 +3190,51 @@ function h3WrittenReviewExplanationBaseChoiceText_(
 }
 
 
+function h3WrittenReviewExplanationSourceGateBody_(
+  part
+) {
+  var body =
+    String(
+      part &&
+      part.question_surface &&
+      part.question_surface.body ||
+      ''
+    );
+  var section =
+    String(
+      part &&
+      part.section ||
+      ''
+    );
+
+  if (
+    section !== 'D4' &&
+    section !== 'D5'
+  ) {
+    return body;
+  }
+
+  var lines =
+    body.split(/\r?\n/);
+
+  if (
+    lines.length > 1 &&
+    /[\u3040-\u30ff]/.test(
+      lines[0]
+    ) &&
+    !/[가-힣]/.test(
+      lines[0]
+    )
+  ) {
+    return lines
+      .slice(1)
+      .join('\n');
+  }
+
+  return body;
+}
+
+
 function h3WrittenReviewExplanationValidateDisplay_(
   display,
   review
@@ -3241,11 +3286,8 @@ function h3WrittenReviewExplanationValidateDisplay_(
           ) < 0 ||
         !gate ||
         String(gate.body_ko || '') !==
-          String(
-            part &&
-            part.question_surface &&
-            part.question_surface.body ||
-            ''
+          h3WrittenReviewExplanationSourceGateBody_(
+            part
           ) ||
         JSON.stringify(
           gate.choices_ko || []

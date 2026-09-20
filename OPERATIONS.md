@@ -1040,3 +1040,13 @@ The exact direct LISTENING route remains available only for internal diagnostics
 
 If the resolver passes but HOME cannot expose the just-issued set, stop and audit. Do not substitute a query-string learner link.
 
+### Parameterless direct boot
+
+For the canonical parameterless learner URL, `h3WebBootRequest_()` now resolves the current learning target server-side.
+
+- If canonical backend state exposes an `ISSUED`, uncommitted, renderable 5L, boot directly as LISTENING.
+- If no such set exists, boot HOME.
+- No query parameters are required for the normal learner handoff.
+- Explicit `mode=LISTENING&set_id=...` remains internal/diagnostic only.
+
+This preserves the short URL while removing the extra HOME tap for an active learner set.

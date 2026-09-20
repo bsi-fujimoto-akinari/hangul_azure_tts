@@ -2939,11 +2939,91 @@ function h3ReviewReplayValidateTxnId_(request, schemaName) {
 function buildReviewReplayPayload_(
   txnId
 ) {
-  return h3ReviewReplayPayloadFromReview_(
+  var review =
     buildPersistentReviewPayload_(
       txnId
-    )
-  );
+    );
+
+  var questions =
+    review.sections.map(
+      function (part) {
+        var visibleChoices = null;
+        var surface =
+          part.question_surface || {};
+
+        if (
+          part.section === 'K4' &&
+          Array.isArray(
+            surface.choices_ja
+          )
+        ) {
+          visibleChoices =
+            surface.choices_ja.slice();
+        } else if (
+          part.section === 'K5' &&
+          Array.isArray(
+            surface.choices_ko
+          )
+        ) {
+          visibleChoices =
+            surface.choices_ko.slice();
+        }
+
+        var question = {
+          section:
+            part.section,
+          display:
+            part.display,
+          audio_asset_key:
+            part.audio_asset_key,
+          audio_fallback_url:
+            part.audio_fallback_url,
+          choice_ids:
+            [1, 2, 3, 4],
+          visible_choices:
+            visibleChoices
+        };
+
+        if (
+          part.section === 'K1'
+        ) {
+          question.image_data_uri =
+            surface.image_data_uri;
+          question.image_sha256 =
+            surface.image_sha256;
+          question.image_size_bytes =
+            surface.image_size_bytes;
+        }
+
+        return question;
+      }
+    );
+
+  return {
+    schema:
+      'H3_REVIEW_REPLAY_SET_V1',
+    mode:
+      'REVIEW_REPLAY',
+    nonlearning: true,
+    persisted: false,
+    read_only_source: true,
+    txn_id:
+      review.txn_id,
+    set_id:
+      review.set_id,
+    listening_set_no:
+      review.listening_set_no,
+    source_review_binding_sha256:
+      review.review_binding_sha256,
+    canonical_render_version:
+      H3_R3_LISTENING_RENDER_VERSION,
+    surface_contract_id:
+      H3_R3_WEB_SURFACE_CONTRACT_ID,
+    replay_contract_id:
+      'H3-REVIEW-REPLAY-20260920-V1',
+    questions:
+      questions
+  };
 }
 
 function buildLegacyReviewReplayPayload_(

@@ -1,7 +1,7 @@
 # H3 Reading Activation Core Contract
 
-Version: H3-READING-ACTIVATION-CORE-20260920-V1
-Status: STAGED_NOT_ROUTE_ACTIVE
+Version: H3-READING-ACTIVATION-CORE-20260921-V2
+Status: PREISSUE_CAPABLE_ROUTE_INACTIVE
 
 ## 1. Scope
 
@@ -9,7 +9,7 @@ This contract advances the staged P8 Reading pilot from a pure source/render pro
 
 It defines Reading-owned runtime identity, stage identity, transaction shape, submission normalization, preissue validation, committed-result projection, and current-learning candidate rules.
 
-This phase does not create or mutate any live Sheet, issue any learner set, register any Web route, write learner answers/history, expose Reading through HOME, or persist Reading Review.
+This contract permits bounded Reading-only stage/schema materialization through `PREISSUE_READY`. It still does not issue any learner set, register a Web route, write learner answers/history, expose Reading through HOME, or persist Reading Review.
 
 ## 2. Provider and surface identity
 
@@ -22,19 +22,33 @@ section_key=H3-P8
 
 Reading remains a Written-provider surface but is not the 5W surface. It never inherits the D2-D6 fixed cardinality or the 5W 11/6/2/1 source-ratio policy.
 
-## 3. Identity scope
+## 3. Identity scope and allocation
 
 Reading owns its own issue sequence.
 
 ```text
 ISSUE_NO = ordinal within surface_family=READING
 STAGE_ID = Reading preparation identity
-SET_ID   = allocated learner-set identity after stage lock
+SET_ID   = immutable learner-set identity allocated before stage lock
 ```
 
 Historical 5W and 5L ISSUE_NO values remain unchanged.
 
-The activation core accepts only explicit IDs. It never predicts the next live SET_ID.
+Reading allocation is deterministic and independent of ISSUE_NO:
+
+```text
+SET_ID   = H3-YYYYMMDD-RNNN
+STAGE_ID = READ-P8-YYYYMMDD-NNN
+```
+
+- `YYYYMMDD` is the Asia/Tokyo allocation date.
+- `NNN` is the next unused Reading allocation serial for that date.
+- the `RNNN` suffix is an allocation serial, never the learner-facing ISSUE_NO;
+- ISSUE_NO is `max(existing Reading ISSUE_NO)+1`;
+- allocation scans the canonical Reading stage authority and fails closed on malformed or duplicate existing identities;
+- before the allocator runs, coordination still reports `SET_ID=PENDING_ALLOCATION`; no caller may predict the next ID.
+
+The first pilot may be materialized only after the exact source bundle has been freshly verified against the official source authorities.
 
 ## 4. Future physical authorities
 
@@ -60,8 +74,9 @@ A Reading stage binds exactly one locked Reading bundle to:
 - item_count
 - source_binding_sha256
 - locked_bundle_sha256
+- locked_bundle_json
 
-Staged status is `LOCKED`. A preissue validator may project `PREISSUE_READY` only when the exact locked bundle, stage identity, source binding, cardinality, and transaction state all agree.
+Staged status begins as `LOCKED`. The stage persists the canonical locked bundle JSON itself, not only its hashes. A preissue validator may project `PREISSUE_READY` only when the exact locked bundle, stored JSON, stage identity, source binding, cardinality, and transaction state all agree. The stored JSON must canonicalize byte-for-byte to the fresh locked bundle and hash to `LOCKED_BUNDLE_SHA256`.
 
 The P8 pilot has item_count=2 and one shared passage.
 
@@ -147,7 +162,7 @@ It returns a provider-neutral current-learning candidate but does not register i
 
 This phase does not:
 
-- create `reading_stage_v1`, `reading_web_txn_v1`, or `reading_log_v1`;
+- append any learner transaction or answer log row;
 - activate a Reading GET/submit route;
 - modify `WebApp.js` dispatch;
 - modify HOME or Review provider persistence;
@@ -162,13 +177,11 @@ This phase does not:
 After this core is merged and audited, the next bounded phase is:
 
 ```text
-live schema creation
-→ exact P8 stage materialization
-→ preissue readback
-→ Reading route wiring
-→ one pilot issue
-→ transaction/log persistence
+exact P8 PREISSUE_READY readback
+→ Reading route + transaction persistence wiring
 → Review/HOME integration
+→ one pilot issue
+→ committed transaction/log verification
 ```
 
 Review/HOME integration remains serialized against any concurrent historical 5W Review write work.

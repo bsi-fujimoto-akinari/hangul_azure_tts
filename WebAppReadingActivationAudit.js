@@ -1,5 +1,5 @@
 /**
- * Pure audit for H3 Reading activation core.
+ * Pure audit for H3 Reading activation core V2.
  */
 
 function h3ReadingActivationAuditAssert_(
@@ -41,25 +41,126 @@ function auditReadingActivationCoreV1_() {
       source
     );
 
-  var stage =
-    h3ReadingBuildStage_(
-      {
-        issue_no: 1,
-        stage_id:
-          'READING-P8-PILOT-STAGE-001',
-        set_id:
-          'READING-P8-PILOT-SET-001'
-      },
-      locked
+  var allocation =
+    h3ReadingAllocateIdentityFromStageRows_(
+      '20260921',
+      []
     );
 
   h3ReadingActivationAuditAssert_(
-    stage.status === 'LOCKED' &&
+    allocation.issue_no === 1 &&
+      allocation.stage_id ===
+        'READ-P8-20260921-001' &&
+      allocation.set_id ===
+        'H3-20260921-R001',
+    'EMPTY_ALLOCATION'
+  );
+
+  var nextAllocation =
+    h3ReadingAllocateIdentityFromStageRows_(
+      '20260921',
+      [
+        {
+          issue_no: 2,
+          stage_id:
+            'READ-P8-20260920-002',
+          set_id:
+            'H3-20260920-R002'
+        },
+        {
+          issue_no: 4,
+          stage_id:
+            'READ-P8-20260921-007',
+          set_id:
+            'H3-20260921-R007'
+        }
+      ]
+    );
+
+  h3ReadingActivationAuditAssert_(
+    nextAllocation.issue_no === 5 &&
+      nextAllocation.stage_id ===
+        'READ-P8-20260921-008' &&
+      nextAllocation.set_id ===
+        'H3-20260921-R008',
+    'NONEMPTY_ALLOCATION'
+  );
+
+  h3ReadingActivationAuditExpectThrow_(
+    function () {
+      h3ReadingAllocateIdentityFromStageRows_(
+        '20260921',
+        [
+          {
+            issue_no: 1,
+            stage_id: 'DUP',
+            set_id:
+              'H3-20260921-R001'
+          },
+          {
+            issue_no: 2,
+            stage_id: 'DUP',
+            set_id:
+              'H3-20260921-R002'
+          }
+        ]
+      );
+    },
+    'ALLOCATION_DUPLICATE_FAIL_CLOSED'
+  );
+
+  var plan =
+    h3ReadingBuildMaterializationPlan_(
+      '20260921',
+      [],
+      locked,
+      '2026-09-21T01:05:00+09:00'
+    );
+
+  var stage =
+    plan.stage;
+
+  h3ReadingActivationAuditAssert_(
+    stage.status ===
+      'PREISSUE_READY' &&
       stage.issue_no === 1 &&
       stage.item_count === 2 &&
       stage.source_binding_sha256 ===
-        locked.source_binding_sha256,
-    'STAGE_LOCK'
+        locked.source_binding_sha256 &&
+      stage.set_id ===
+        'H3-20260921-R001',
+    'MATERIALIZATION_STAGE'
+  );
+
+  h3ReadingActivationAuditAssert_(
+    Array.isArray(
+      plan.row_values
+    ) &&
+      plan.row_values.length ===
+        H3_READING_STAGE_HEADERS_.length &&
+      plan.row_values.length === 14 &&
+      plan.row_values[9] ===
+        stage.locked_bundle_json,
+    'STAGE_ROW_SHAPE'
+  );
+
+  var storedLocked =
+    h3ReadingParseLockedBundleJson_(
+      stage.locked_bundle_json
+    );
+
+  h3ReadingActivationAuditAssert_(
+    h3ReadingCanonicalJson_(
+      storedLocked
+    ) ===
+      h3ReadingCanonicalJson_(
+        locked
+      ) &&
+      h3ReadingHash_(
+        storedLocked
+      ) ===
+        stage.locked_bundle_sha256,
+    'LOCKED_JSON_PARITY'
   );
 
   var preissue =
@@ -86,6 +187,27 @@ function auditReadingActivationCoreV1_() {
       );
     },
     'PREISSUE_COMMITTED_FAIL_CLOSED'
+  );
+
+  h3ReadingActivationAuditExpectThrow_(
+    function () {
+      var drift =
+        JSON.parse(
+          JSON.stringify(stage)
+        );
+      drift.locked_bundle_json =
+        drift.locked_bundle_json
+          .replace(
+            'H3-P8-SK001',
+            'H3-P8-SK999'
+          );
+      h3ReadingPreissueValidate_(
+        drift,
+        locked,
+        []
+      );
+    },
+    'LOCKED_JSON_DRIFT_FAIL_CLOSED'
   );
 
   var request = {
@@ -129,7 +251,7 @@ function auditReadingActivationCoreV1_() {
     'NORMALIZE'
   );
 
-  var plan =
+  var txnPlan =
     h3ReadingBuildTxnPlan_(
       stage,
       locked,
@@ -137,10 +259,10 @@ function auditReadingActivationCoreV1_() {
     );
 
   h3ReadingActivationAuditAssert_(
-    plan.journal_sheet ===
+    txnPlan.journal_sheet ===
       'reading_web_txn_v1' &&
-      plan.request_fingerprint &&
-      plan.normalized_request
+      txnPlan.request_fingerprint &&
+      txnPlan.normalized_request
         .surface_family ===
         'READING',
     'TXN_PLAN'
@@ -180,7 +302,7 @@ function auditReadingActivationCoreV1_() {
       stage,
       locked,
       grade,
-      'H3TX-20260920-999999'
+      'H3TX-20260921-999999'
     );
 
   h3ReadingActivationAuditAssert_(
@@ -202,7 +324,7 @@ function auditReadingActivationCoreV1_() {
   issued.status =
     'ISSUED';
   issued.issued_at =
-    '2026-09-20T15:00:00+09:00';
+    '2026-09-21T01:10:00+09:00';
 
   var current =
     h3ReadingCurrentLearningCandidate_(
@@ -248,14 +370,24 @@ function auditReadingActivationCoreV1_() {
 
   return {
     schema:
-      'H3_READING_ACTIVATION_CORE_AUDIT_V1',
+      'H3_READING_ACTIVATION_CORE_AUDIT_V2',
+    contract_id:
+      H3_READING_ACTIVATION_CONTRACT_ID_,
     result:
       'PASS',
     checks:
-      10,
+      16,
     source_group_id:
       '245',
     item_count:
-      2
+      2,
+    allocated_set_id:
+      allocation.set_id,
+    allocated_stage_id:
+      allocation.stage_id,
+    locked_bundle_sha256:
+      stage.locked_bundle_sha256,
+    source_binding_sha256:
+      stage.source_binding_sha256
   };
 }

@@ -3234,6 +3234,349 @@ jobs:
           print('H3 normal hot-path audit: PASS')
           PY
 
+      - name: Check staged 5W Web transaction D1/D2
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          written = Path('WebAppWrittenProduction.js').read_text(encoding='utf-8')
+          common = Path('WebAppTransactionCommon.js').read_text(encoding='utf-8')
+          prod = Path('WebAppProduction.js').read_text(encoding='utf-8')
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+          client = Path('Client.html').read_text(encoding='utf-8')
+
+          required_written = [
+              'var H3_WRITTEN_PRODUCTION_COMMIT_ENABLED = false;',
+              "var H3_WEB_WRITTEN_TXN_SHEET = 'written_web_txn_v1';",
+              'function h3WrittenNormalizeAnswers_(request)',
+              'function h3WrittenFingerprint_(setId, answers)',
+              'function h3WrittenValidateSourceIdentity_(context)',
+              'function h3WrittenRequireNewSubmitPrecondition_(context)',
+              'function h3WrittenSourceBinding_(context)',
+              'function h3WrittenGrade_(context, answers)',
+              'function h3WrittenBuildAnswerLog_(',
+              'function h3WrittenSnapshot_(setId, answersLog)',
+              'function h3WrittenRecoverPrepared_(',
+              'function h3WrittenSubmit_(request)',
+              "'H3_WRITTEN_WEB_ANSWER_LOG_V1'",
+              "'H3_WRITTEN_QUEUE_ANSWER_STATE_V1'",
+              "'H3_WRITTEN_SOURCE_BINDING_V1'",
+              "'WRITTEN_PREPARED_RUNTIME_MIXED'",
+              "'WRITTEN_RECOVERY_REQUIRED_BLOCK'",
+          ]
+          for needle in required_written:
+              if needle not in written:
+                  raise SystemExit(f'5W written core invariant missing: {needle}')
+
+          # D1/D2 must remain staged and unreachable from production/client routes.
+          if "request.mode === 'WRITTEN'" in web or 'h3WrittenSubmit_(' in web:
+              raise SystemExit('WRITTEN route was activated in WebApp.js.')
+          if 'h3WrittenSubmit_(' in client or "mode: 'WRITTEN'" in client:
+              raise SystemExit('WRITTEN submit was activated in Client.html.')
+
+          # Global allocator must scan all three journals and tolerate an absent written tab.
+          for sheet in [
+              'listening_web_test_txn_v1',
+              'listening_web_txn_v1',
+              'written_web_txn_v1',
+          ]:
+              if sheet not in common:
+                  raise SystemExit(f'Global H3TX allocator missing journal: {sheet}')
+          for needle in [
+              'function h3NextWebTxnId_(',
+              'function h3NextWebTxnIdFromRows_(',
+              'WEB_TXN_DUPLICATE_AUTHORITY',
+          ]:
+              if needle not in common:
+                  raise SystemExit(f'Global H3TX invariant missing: {needle}')
+          if 'return h3NextWebTxnId_(spreadsheet);' not in prod:
+              raise SystemExit('5L allocator does not delegate to global H3TX allocator.')
+          if 'function h3NextTestTxnId_(spreadsheet)' not in web:
+              raise SystemExit('SYSTEM_TEST allocator signature was not migrated.')
+          if 'var txnId = h3NextTestTxnId_(spreadsheet);' not in web:
+              raise SystemExit('SYSTEM_TEST does not allocate from the shared spreadsheet namespace.')
+
+          # G1: source identity and blank queue.E new-submit precondition are separate.
+          source_start = written.index('function h3WrittenValidateSourceIdentity_(context)')
+          source_end = written.index('function h3WrittenRequireNewSubmitPrecondition_(context)', source_start)
+          source_fn = written[source_start:source_end]
+          if 'answersLog' in source_fn or 'ANSWERS_LOG' in source_fn:
+              raise SystemExit('G1 failed: source identity validation depends on queue ANSWERS_LOG.')
+          pre_start = source_end
+          pre_end = written.index('function h3WrittenSourceBinding_(context)', pre_start)
+          pre_fn = written[pre_start:pre_end]
+          if 'context.answersLog' not in pre_fn or 'WRITTEN_SET_ALREADY_ANSWERED_OUTSIDE_WEB' not in pre_fn:
+              raise SystemExit('G1 failed: new-submit blank queue.E precondition is missing.')
+          recover_start = written.index('function h3WrittenRecoverPrepared_(')
+          recover_end = written.index('function h3WrittenSubmit_(request)', recover_start)
+          recover_fn = written[recover_start:recover_end]
+          if 'h3WrittenRequireNewSubmitPrecondition_' in recover_fn:
+              raise SystemExit('G1 failed: PREPARED recovery incorrectly reuses new-submit blank-E gate.')
+
+          # Queue learner mutation is E-only. Journal writes are allowed.
+          if written.count('getRange(context.queueRowNumber, 5)') != 3:
+              raise SystemExit('Unexpected queue answer-cell read/write surface count.')
+          if written.count('.setValue(answerLog);') != 2:
+              raise SystemExit('Queue ANSWERS_LOG write count is not exactly new-submit + PRESTATE recovery.')
+          for forbidden in [
+              'generation_log_v1',
+              'skill_queue_v1',
+              'generation_state_v1',
+              'generation_policy_v1',
+              'source_block_plan_v1',
+              'DriveApp.',
+          ]:
+              if forbidden in written:
+                  raise SystemExit(f'Forbidden 5W Web mutation dependency present: {forbidden}')
+
+          # written_set_stage_v1 is a read-only source authority in this core.
+          if re.search(r'stageSheet\s*\.\s*(appendRow|setValue|setValues|clearContent|deleteRow)', written):
+              raise SystemExit('written_set_stage_v1 write surface detected.')
+
+          # G2: H3_WEB_SUBMIT_RESULT_V1 summaries are explicitly mode-specific.
+          wp = written[written.index('function h3WrittenBuildResult_('):written.index('function h3WrittenClassifyTxnState_(')]
+          lp = prod[prod.index('function h3ProdBuildResult_('):prod.index('function h3ProdSubmit_(')]
+          for needle in ['correct: item.correct', 'uncertain: item.uncertain', 'mark: item.mark']:
+              if needle not in wp:
+                  raise SystemExit(f'WRITTEN result summary field missing: {needle}')
+          if 'result: x.result' not in lp:
+              raise SystemExit('LISTENING result summary regression.')
+          if 'mark: item.mark' in lp or 'result: x.result' in wp:
+              raise SystemExit('G2 failed: LISTENING/WRITTEN summary shapes were collapsed.')
+
+          # T17/T18 fail-closed recovery identity guards.
+          for needle in [
+              'WRITTEN_PREPARED_SOURCE_BINDING_MISMATCH',
+              'WRITTEN_PREPARED_SOURCE_DRIFT:',
+              'WRITTEN_PREPARED_RESULT_IDENTITY_MISMATCH',
+              'WRITTEN_POSTSTATE_HASH_MISMATCH',
+          ]:
+              if needle not in recover_fn:
+                  raise SystemExit(f'PREPARED recovery fail-closed guard missing: {needle}')
+
+          # Existing 5L and SYSTEM_TEST durability contracts remain present.
+          for needle in [
+              'var H3_R3_PRODUCTION_COMMIT_ENABLED = true;',
+              "var H3_WEB_PROD_TXN_SHEET = 'listening_web_txn_v1';",
+              'function h3ProdRestoreSnapshot_(',
+              "'ROLLED_BACK'",
+              "'RECOVERY_REQUIRED'",
+          ]:
+              if needle not in prod:
+                  raise SystemExit(f'5L regression invariant missing: {needle}')
+          for needle in [
+              'function h3CaptureLearnerRuntimeSentinel_(',
+              'function h3CommitSystemTestTransaction_(',
+              "'SYSTEM_TEST'",
+              "'TEST_TXN_RECOVERY_REQUIRED'",
+          ]:
+              if needle not in web:
+                  raise SystemExit(f'SYSTEM_TEST regression invariant missing: {needle}')
+
+          print('5W D1/D2 static guards: PASS')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+
+          const context = vm.createContext({
+            console,
+            h3Sha256Hex_: text =>
+              crypto.createHash('sha256').update(String(text), 'utf8').digest('hex'),
+            h3BuildWebReceipt_: (setId, txnId) => [
+              '[H3_WEB_SYNC]',
+              'SET_ID=' + String(setId),
+              'TXN_ID=' + String(txnId),
+              'STATUS=COMMITTED'
+            ].join('\n')
+          });
+          vm.runInContext(
+            fs.readFileSync('WebAppTransactionCommon.js', 'utf8'),
+            context,
+            {filename:'WebAppTransactionCommon.js'}
+          );
+          vm.runInContext(
+            fs.readFileSync('WebAppWrittenProduction.js', 'utf8'),
+            context,
+            {filename:'WebAppWrittenProduction.js'}
+          );
+
+          const run = expression => vm.runInContext(expression, context);
+          const assert = (condition, message) => {
+            if (!condition) throw new Error(message);
+          };
+          const expectThrow = (expression, label) => {
+            let failed = false;
+            try { run(expression); } catch (_err) { failed = true; }
+            assert(failed, label + ' did not fail closed.');
+          };
+
+          const expectedHeaders = [
+            'TXN_ID','SET_ID','STAGE_ID','MODE','RAW_INPUT_JSON',
+            'REQUEST_FINGERPRINT','SOURCE_BINDING_SHA256','CREATED_AT',
+            'STATUS','RESULT_JSON','SCORE','PRESTATE_JSON','PRESTATE_SHA256',
+            'POSTSTATE_SHA256','COMMITTED_AT','ERROR'
+          ];
+          assert(
+            JSON.stringify(run('H3_WEB_WRITTEN_TXN_HEADERS')) === JSON.stringify(expectedHeaders),
+            'Written journal 16-column header contract mismatch.'
+          );
+          assert(run('H3_WRITTEN_PRODUCTION_COMMIT_ENABLED') === false, 'Written commit gate is not OFF.');
+
+          context.__request = {
+            schema:'H3_WEB_SUBMIT_V1',
+            mode:'WRITTEN',
+            set_id:'H3-20260920-01',
+            answers:[
+              {section:'D2',answer:1,uncertain:false},
+              {section:'D3',answer:2,uncertain:true},
+              {section:'D4',answer:3,uncertain:true},
+              {section:'D5',answer:2,uncertain:false},
+              {section:'D6',answer:1,uncertain:false}
+            ]
+          };
+          run('__answers=h3WrittenNormalizeAnswers_(__request)');
+          assert(run('__answers.length') === 5, 'WRITTEN normalization failed.');
+          expectThrow(
+            "h3WrittenNormalizeAnswers_({schema:'H3_WEB_SUBMIT_V1',mode:'WRITTEN',set_id:'X',answers:[{section:'D3',answer:1,uncertain:false},{section:'D2',answer:1,uncertain:false},{section:'D4',answer:1,uncertain:false},{section:'D5',answer:1,uncertain:false},{section:'D6',answer:1,uncertain:false}]})",
+            'T04 section order'
+          );
+          expectThrow(
+            "h3WrittenNormalizeAnswers_({schema:'H3_WEB_SUBMIT_V1',mode:'WRITTEN',set_id:'X',answers:[{section:'D2',answer:0,uncertain:false},{section:'D3',answer:1,uncertain:false},{section:'D4',answer:1,uncertain:false},{section:'D5',answer:1,uncertain:false},{section:'D6',answer:1,uncertain:false}]})",
+            'T05 answer range'
+          );
+          expectThrow(
+            "h3WrittenNormalizeAnswers_({schema:'H3_WEB_SUBMIT_V1',mode:'WRITTEN',set_id:'X',answers:[{section:'D2',answer:1,uncertain:'?'},{section:'D3',answer:1,uncertain:false},{section:'D4',answer:1,uncertain:false},{section:'D5',answer:1,uncertain:false},{section:'D6',answer:1,uncertain:false}]})",
+            'T06 uncertainty type'
+          );
+
+          run('__fp1=h3WrittenFingerprint_(__request.set_id,__answers)');
+          run('__fp2=h3WrittenFingerprint_(__request.set_id,__answers)');
+          assert(run('__fp1===__fp2 && /^[0-9a-f]{64}$/.test(__fp1)'), 'Fingerprint is not deterministic.');
+          run('__answers2=JSON.parse(JSON.stringify(__answers));__answers2[0].uncertain=true;__fp3=h3WrittenFingerprint_(__request.set_id,__answers2)');
+          assert(run('__fp1!==__fp3'), 'Fingerprint ignores uncertainty.');
+
+          context.__sourceContext = {
+            setId:'H3-20260920-01',
+            queueStatus:'done',
+            questionsLog:'[SET H3-20260920-01]\nDATE=2026-09-20',
+            answersLog:'already-nonblank-for-G1',
+            queueAudio:['a','b','c','d','e','f','g'],
+            storageMode:'sheet_only_v3',
+            stageId:'STD-B001-S4',
+            stageStatus:'ISSUED',
+            questionsTemplate:'[SET_ID_PLACEHOLDER]\nDATE={DATE_PLACEHOLDER}',
+            answerKeyJson:JSON.stringify([
+              {q:1,answer_pos:1},{q:2,answer_pos:2},{q:3,answer_pos:4},
+              {q:4,answer_pos:2},{q:5,answer_pos:1}
+            ]),
+            questionMetaJson:JSON.stringify({
+              stage_id:'STD-B001-S4',
+              questions:[
+                {q:1,answer_pos:1},{q:2,answer_pos:2},{q:3,answer_pos:4},
+                {q:4,answer_pos:2},{q:5,answer_pos:1}
+              ]
+            }),
+            stageAudio:['a','b','c','d','e','f','g'],
+            approvedSource:'SRC',
+            policyId:'POL',
+            sourceSnapshotId:'SNAP',
+            actualSetId:'H3-20260920-01',
+            issuedAt:'2026-09-20T14:00:00+09:00'
+          };
+          run('__sourceContext=h3WrittenValidateSourceIdentity_(__sourceContext)');
+          assert(run('__sourceContext.answerPositions.join(",")==="1,2,4,2,1"'), 'Source answer lock failed.');
+          expectThrow('h3WrittenRequireNewSubmitPrecondition_(__sourceContext)', 'G1 new-submit blank E');
+          run('__sourceContext.answersLog="";h3WrittenRequireNewSubmitPrecondition_(__sourceContext)');
+
+          run('__binding1=h3WrittenSourceBinding_(__sourceContext);__binding2=h3WrittenSourceBinding_(__sourceContext)');
+          assert(run('__binding1.sha256===__binding2.sha256'), 'Source binding is not deterministic.');
+
+          run('__grade=h3WrittenGrade_(__sourceContext,__answers)');
+          assert(run('__grade.score===4'), 'WRITTEN score mismatch.');
+          assert(run('__grade.graded[0].mark==="○"'), 'Correct mark mismatch.');
+          assert(run('__grade.graded[1].mark==="△"'), 'Uncertain-correct mark mismatch.');
+          assert(run('__grade.graded[2].mark==="×" && __grade.graded[2].uncertain===true'), 'Wrong+uncertain semantics mismatch.');
+
+          run('__log=h3WrittenBuildAnswerLog_(__sourceContext,__grade,"H3TX-20260920-000010",__binding1.sha256)');
+          assert(run('__log.includes("RAW_INPUT=1 2? 3? 2 1")'), 'Deterministic RAW_INPUT mismatch.');
+          assert(run('__log.includes("Q3 SECTION=D4 USER=3? ANSWER=4 UNCERTAIN=1 RESULT=×")'), 'Deterministic answer-log Q3 mismatch.');
+
+          run('__pre=h3WrittenSnapshot_(__sourceContext.setId,"");__post=h3WrittenSnapshot_(__sourceContext.setId,__log)');
+          assert(run('__pre.sha256!==__post.sha256'), 'PRE/POST hashes did not separate states.');
+
+          // T08-T10 idempotency classifier.
+          assert(run("h3WrittenClassifyTxnState_('COMMITTED','a','a')")==='RETURN_COMMITTED','T08 classifier mismatch');
+          assert(run("h3WrittenClassifyTxnState_('COMMITTED','a','b')")==='CONFLICT_COMMITTED','T09 classifier mismatch');
+          assert(run("h3WrittenClassifyTxnState_('PREPARED','a','b')")==='CONFLICT_PREPARED','T10 classifier mismatch');
+
+          // T12-T16 PREPARED recovery state decisions.
+          assert(run("h3WrittenRecoveryDecision_('pre','pre','post')")==='AT_PRESTATE','T12/T15 recovery mismatch');
+          assert(run("h3WrittenRecoveryDecision_('post','pre','post')")==='AT_POSTSTATE','T13/T16 recovery mismatch');
+          assert(run("h3WrittenRecoveryDecision_('mixed','pre','post')")==='MIXED','T14 recovery mismatch');
+
+          // T40/T41/T42 allocator/header behavior is pure and written journal may be absent.
+          context.__journals = {
+            listening_web_test_txn_v1:[['H3TX-20260920-000005']],
+            listening_web_txn_v1:[['H3TX-20260920-000009']],
+            written_web_txn_v1:[['H3TX-20260920-000002']]
+          };
+          assert(
+            run("h3NextWebTxnIdFromRows_('20260920',__journals)") === 'H3TX-20260920-000010',
+            'T41 global allocator did not choose global max + 1.'
+          );
+          context.__journalsNoWritten = {
+            listening_web_test_txn_v1:[['H3TX-20260920-000005']],
+            listening_web_txn_v1:[['H3TX-20260920-000009']]
+          };
+          assert(
+            run("h3NextWebTxnIdFromRows_('20260920',__journalsNoWritten)") === 'H3TX-20260920-000010',
+            'Missing written journal is not tolerated before D3.'
+          );
+          context.__duplicateJournals = {
+            listening_web_test_txn_v1:[['H3TX-20260920-000005']],
+            listening_web_txn_v1:[['H3TX-20260920-000005']]
+          };
+          expectThrow(
+            "h3NextWebTxnIdFromRows_('20260920',__duplicateJournals)",
+            'T11 duplicate H3TX authority'
+          );
+
+          run('__result=h3WrittenBuildResult_(__sourceContext,__grade,"H3TX-20260920-000010",__binding1.sha256)');
+          assert(run('__result.mode==="WRITTEN" && __result.summary[0].mark==="○" && !("result" in __result.summary[0])'), 'G2 WRITTEN summary shape mismatch.');
+
+          console.log('5W D1/D2 pure transaction tests: PASS');
+          NODE
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const receiptSource = fs.readFileSync('WebAppReceipt.js', 'utf8');
+          const ctx = vm.createContext({});
+          vm.runInContext(receiptSource, ctx, {filename:'WebAppReceipt.js'});
+          const receipt = vm.runInContext(
+            "h3BuildWebReceipt_('H3-20260920-01','H3TX-20260920-000123')",
+            ctx
+          );
+          const parsed = vm.runInContext(
+            'h3ParseWebReceipt_(' + JSON.stringify(receipt) + ')',
+            ctx
+          );
+          if (
+            parsed.schema !== 'H3_WEB_SYNC_V1' ||
+            parsed.set_id !== 'H3-20260920-01' ||
+            parsed.txn_id !== 'H3TX-20260920-000123' ||
+            parsed.status !== 'COMMITTED'
+          ) {
+            throw new Error('H3_WEB_SYNC roundtrip regression.');
+          }
+          console.log('H3_WEB_SYNC WRITTEN-compatible roundtrip: PASS');
+          NODE
+
       - name: Check JavaScript syntax
         shell: bash
         run: |
@@ -3241,6 +3584,8 @@ jobs:
           node --check WebApp.js
           node --check WebAppFixture.js
           node --check WebAppProduction.js
+          node --check WebAppTransactionCommon.js
+          node --check WebAppWrittenProduction.js
           node --check WebAppProductionRender.js
           node --check WebAppPreissue.js
           node --check WebAppReceipt.js

@@ -1081,6 +1081,8 @@ jobs:
               'function h3ReviewRequireExactHeader_(',
               'function h3ReviewProviders_(',
               'function h3ReviewHistoryEnvelope_(',
+              'function h3ReviewSurfaceMetadata_(',
+              'function h3ReviewAttachSurfaceMetadata_(',
               'function h3ReviewHomeIndexTable_(',
               'function h3ReviewHomeIndexEnvelopes_(',
               "'review_home_index_v1'",
@@ -1123,6 +1125,7 @@ jobs:
               'function gradeReviewReplay_(',
               'function h3ReviewHomeIndexUpsertAfterCommit_(',
               'function h3ReviewHomeIndexRefreshBasePriorities_(',
+              'function migrateReviewHomeIndexV2()',
           ]:
               if needle not in persistence:
                   raise SystemExit(f'Listening persistence surface missing: {needle}')
@@ -1284,6 +1287,28 @@ jobs:
             actualHome.review_level_contract,
             'H3_REVIEW_LEVEL_V2'
           );
+          assert.strictEqual(
+            actualHome.review_home_index_contract,
+            'H3_REVIEW_HOME_INDEX_V2_COMPAT'
+          );
+          assert.strictEqual(
+            actualHome.learning_surface_schema,
+            'H3_LEARNING_SURFACE_V1'
+          );
+          actualHome.review_history.forEach(entry => {
+            assert.strictEqual(
+              entry.provider_kind,
+              'LISTENING'
+            );
+            assert.strictEqual(
+              entry.surface_family,
+              '5L'
+            );
+            assert.strictEqual(
+              entry.level,
+              '3級'
+            );
+          });
 
           const unknownEntry = actualHome.review_history.find(
             entry => entry.set_id === 'S1'
@@ -1310,6 +1335,81 @@ jobs:
             knownEntry.review_base_level
           );
 
+          context.__v2Row = [
+            'WRITTEN','W1',1,'2026-09-20T09:00:00Z',1,2,1,
+            'TRUE',0,12,'W1','WRITTEN_PRODUCTION_WEB','ACTIVE',
+            'READING','準2級'
+          ];
+          context.__v2Map = Object.fromEntries([
+            'KIND','SET_ID','SET_NO','ANSWERED_AT','SCORE','TOTAL',
+            'WRONG_COUNT','UNCERTAINTY_KNOWN','UNCERTAIN_COUNT',
+            'BASE_PRIORITY','REVIEW_SOURCE_ID','SOURCE_MODE','STATUS',
+            'SURFACE_FAMILY','LEVEL'
+          ].map((name, i) => [name, i]));
+          const v2Entry = call(
+            'h3ReviewHomeIndexRowEntry_(__v2Row,__v2Map)'
+          );
+          assert.strictEqual(
+            v2Entry.surface_family,
+            'READING'
+          );
+          assert.strictEqual(
+            v2Entry.level,
+            '準2級'
+          );
+
+          context.h3ReviewTable_ = value => value;
+          context.h3ProdRequireColumns_ = () => {};
+          context.__evidenceSpreadsheet = {
+            getSheetByName:name => {
+              if (name === 'generation_log_v1') {
+                return {
+                  map:{
+                    SET_ID:0,SKILL_ID:1,STATUS:2,
+                    USER_RESULT:3,LEVEL:4
+                  },
+                  rows:[
+                    ['A','SK1','ANSWERED','×','3級'],
+                    ['B','SK1','ANSWERED','×','準2級']
+                  ]
+                };
+              }
+              return null;
+            }
+          };
+          const evidence = call(
+            'h3ReviewSkillEvidenceIndex_(__evidenceSpreadsheet)'
+          );
+          assert.strictEqual(
+            evidence.bySkill['WRITTEN|3級|SK1'].wrong,
+            1
+          );
+          assert.strictEqual(
+            evidence.bySkill['WRITTEN|準2級|SK1'].wrong,
+            1
+          );
+          context.__evidence = evidence;
+          context.__entry3 = {
+            set_id:'A', level:'3級'
+          };
+          context.__entry2 = {
+            set_id:'B', level:'準2級'
+          };
+          assert.strictEqual(
+            vm.runInContext(
+              "h3ReviewBaseLevelForEntry_('WRITTEN',__entry3,__evidence)",
+              context
+            ),
+            14
+          );
+          assert.strictEqual(
+            vm.runInContext(
+              "h3ReviewBaseLevelForEntry_('WRITTEN',__entry2,__evidence)",
+              context
+            ),
+            14
+          );
+
           const providers = vm.runInContext('h3ReviewProviders_()', context);
           assert.strictEqual(providers.length, 1, 'Written provider became active.');
           assert.strictEqual(providers[0].kind, 'LISTENING', 'Listening provider missing.');
@@ -1327,11 +1427,25 @@ jobs:
           ));
           assert.deepStrictEqual(
             call("h3ReviewRenderRequest_({mode:'REVIEW',txn_id:'T'})"),
-            {route:'txn-review'}
+            {
+              route:'txn-review',
+              learning_surface_schema:
+                'H3_LEARNING_SURFACE_V1',
+              provider_kind:'LISTENING',
+              surface_family:'5L',
+              level:'3級'
+            }
           );
           assert.deepStrictEqual(
             call("h3ReviewRenderRequest_({mode:'REVIEW',legacy_review_id:'L'})"),
-            {route:'legacy-review'}
+            {
+              route:'legacy-review',
+              learning_surface_schema:
+                'H3_LEARNING_SURFACE_V1',
+              provider_kind:'LISTENING',
+              surface_family:'5L',
+              level:'3級'
+            }
           );
           assert.deepStrictEqual(
             call("h3ReviewMediaRequest_({mode:'REVIEW',txn_id:'T'})"),

@@ -1226,13 +1226,16 @@ jobs:
             );
           }
 
-          // CASE 9: script persistence runs once after all five are done.
+          // CASE 9: SCRIPT_TXT stays outside the learner issue critical path.
           {
             const rt = makeRuntime('H3-FASTPATH-CASE9');
             const result = runSet(rt);
+            assert(result.status === 'done', 'CASE9 did not finish');
+            assert(rt.calls.script === 0, 'CASE9 unexpectedly materialized SCRIPT_TXT');
             assert(
-              result.status === 'done' && rt.calls.script === 1,
-              'CASE9 script persistence mismatch'
+              !Object.prototype.hasOwnProperty.call(result, 'script_file_id') &&
+              !Object.prototype.hasOwnProperty.call(result, 'script_url'),
+              'CASE9 returned SCRIPT_TXT fields from the learner issue path'
             );
           }
 

@@ -84,7 +84,7 @@ When Chat receives a receipt:
 5. Require exact SET_ID equality.
 6. Require STATUS=COMMITTED.
 7. Read back RESULT_JSON / SCORE / fingerprint / hashes required for that route.
-8. Verify route-specific state before producing learner-facing scoring/explanation.
+8. Verify route-specific state before producing the minimal learner-facing sync verdict.
 9. Chat must not duplicate the backend answer/history write.
 10. Re-pasting the same committed receipt is idempotent and must not create another write.
 
@@ -179,7 +179,7 @@ Canonical Chat handoff URL:
 https://script.google.com/macros/s/AKfycby8I309RUkfVIsnJks808KA713QLppfrGiAFUTV2tA/dev
 ```
 
-The normal 5L handoff is parameterless HOME. HOME resolves the current authorized uncommitted `ISSUED` set from canonical backend state and exposes it as `現在の5L` with an `開く` action.
+The normal 5L handoff is parameterless HOME. HOME resolves the current authorized uncommitted `ISSUED` set from canonical backend state and exposes it as `現在の5L` with an `開く` action. On a successful `5L` Chat trigger, the learner-facing Chat response is exactly the parameterless Web App URL and nothing else.
 
 After issue succeeds, Chat MUST obtain the URL authority through:
 
@@ -464,3 +464,38 @@ Future learner-facing behavior after Phase 3:
 - Review and optional replay are read-only and zero-mutation.
 
 Until Phase 2 and Phase 3 are completed, 5L #1 must not be exposed as a learner-facing persistent Review entry merely because the Phase-1 contract exists.
+
+
+## 22. Minimal Chat output contract
+
+This contract minimizes learner-facing Chat latency and noise without weakening backend verification.
+
+### 5L trigger
+
+After the exact set passes canonical preissue/issue and the parameterless learner URL is authorized, Chat returns exactly one line:
+
+```text
+https://script.google.com/macros/s/AKfycby8I309RUkfVIsnJks808KA713QLppfrGiAFUTV2tA/dev
+```
+
+Do not add a label, preamble, postamble, progress report, source-audit commentary, SET_ID, TXN_ID, or direct diagnostic URL.
+
+### H3_WEB_SYNC receipt
+
+Chat still performs authoritative receipt readback before responding. The learner-facing response is exactly one of:
+
+```text
+問題なし
+```
+
+or
+
+```text
+問題あり
+```
+
+No score, answer vector, explanation, audit detail, progress detail, or next-step commentary is included in that turn.
+
+The Web App and persistent Review own ordinary post-answer explanation. If the learner separately asks for explanation or troubleshooting, Chat may provide it in that separate turn.
+
+Minimal learner-facing text never authorizes skipping transaction validation, idempotency, source-lock, scheduler, or recovery checks.

@@ -87,6 +87,12 @@ function submitListeningWebAnswers(request) {
         result.txn_id
       );
 
+    result.home_index_sync =
+      h3ReviewHomeIndexUpsertAfterCommit_(
+        result,
+        result.after_sync
+      );
+
     return result;
   }
 
@@ -106,6 +112,12 @@ function submitListeningWebAnswers(request) {
     writtenResult.after_sync =
       getWrittenProductionPersistentReviewPayload_(
         writtenResult.set_id
+      );
+
+    writtenResult.home_index_sync =
+      h3ReviewHomeIndexUpsertAfterCommit_(
+        writtenResult,
+        writtenResult.after_sync
       );
 
     return writtenResult;

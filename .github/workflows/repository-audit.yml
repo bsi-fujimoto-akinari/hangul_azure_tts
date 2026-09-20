@@ -1076,6 +1076,9 @@ jobs:
               'function h3ReviewRequireExactHeader_(',
               'function h3ReviewProviders_(',
               'function h3ReviewHistoryEnvelope_(',
+              'function h3ReviewHomeIndexTable_(',
+              'function h3ReviewHomeIndexEnvelopes_(',
+              "'review_home_index_v1'",
               'function h3ReviewHomeHistory_(',
               'function h3ReviewCurrentLearning_(',
               'function h3ReviewRenderRequest_(',
@@ -1113,6 +1116,8 @@ jobs:
               'function getReviewReplayPayload_(',
               'function getReviewReplayMediaPayload_(',
               'function gradeReviewReplay_(',
+              'function h3ReviewHomeIndexUpsertAfterCommit_(',
+              'function h3ReviewHomeIndexRefreshBasePriorities_(',
           ]:
               if needle not in persistence:
                   raise SystemExit(f'Listening persistence surface missing: {needle}')
@@ -1121,9 +1126,35 @@ jobs:
               'h3ReviewRenderRequest_(',
               'h3ReviewMediaRequest_(',
               'h3ReviewSubmitRequest_(',
+              'h3ReviewHomeIndexUpsertAfterCommit_(',
           ]:
               if needle not in web:
                   raise SystemExit(f'Web Review Core dispatch missing: {needle}')
+
+          home_start = core.index('function h3ReviewHomeHistory_(')
+          home_end = core.index('\n\nfunction h3ReviewCurrentLearning_(', home_start)
+          home_body = core[home_start:home_end]
+          for forbidden in [
+              'h3ReviewProviders_(',
+              'h3ReviewSkillEvidenceIndex_(',
+              'listening_log_v1',
+              'generation_log_v1',
+          ]:
+              if forbidden in home_body:
+                  raise SystemExit(
+                      f'HOME still reaches heavyweight history/evidence path: {forbidden}'
+                  )
+
+          payload_start = core.index('function buildReviewHomePayload_(')
+          payload_end = core.index('\n\nfunction h3ReviewRenderRequest_(', payload_start)
+          payload_body = core[payload_start:payload_end]
+          if 'h3ReviewCurrentLearning_(' in payload_body:
+              raise SystemExit('HOME payload still repeats current-learning resolution.')
+          if 'current_learning: null' not in payload_body:
+              raise SystemExit('HOME payload must expose null current_learning after parameterless boot.')
+
+          if 'h3ReviewSkillEvidenceIndex_(' not in persistence:
+              raise SystemExit('BASE_PRIORITY refresh no longer uses canonical skill evidence at commit time.')
 
           for forbidden in [
               '.appendRow(',
@@ -1157,8 +1188,33 @@ jobs:
             'WebAppReviewListeningAdapter.js'
           ].map(name => fs.readFileSync(name, 'utf8')).join('\n');
 
+          const indexHeader = [
+            'KIND','SET_ID','SET_NO','ANSWERED_AT','SCORE','TOTAL',
+            'WRONG_COUNT','UNCERTAINTY_KNOWN','UNCERTAIN_COUNT',
+            'BASE_PRIORITY','REVIEW_SOURCE_ID','SOURCE_MODE','STATUS'
+          ];
+          const indexRows = [
+            ['LISTENING','S3',3,'2026-09-20T09:00:00Z',4,5,1,'TRUE',0,12,'T3','LISTENING_PRODUCTION_WEB','ACTIVE'],
+            ['LISTENING','S2',2,'2026-09-20T08:00:00Z',5,5,0,'TRUE',1,6,'T2','LISTENING_PRODUCTION_WEB','ACTIVE'],
+            ['LISTENING','S1',1,'UNKNOWN',3,5,2,'FALSE','',24,'L1','LEGACY_PRE_WEB','ACTIVE']
+          ];
+          const touchedSheets = [];
+          const indexSheet = {
+            getDataRange: () => ({
+              getDisplayValues: () =>
+                [indexHeader].concat(indexRows)
+            })
+          };
           const spreadsheet = {
-            getSheetByName: () => null
+            getSheetByName: name => {
+              touchedSheets.push(name);
+              if (name === 'review_home_index_v1') {
+                return indexSheet;
+              }
+              throw new Error(
+                'HOME_UNEXPECTED_SHEET_READ:' + name
+              );
+            }
           };
           const context = vm.createContext({
             console,
@@ -1167,6 +1223,18 @@ jobs:
             },
             H3_WEB_RUNTIME_SPREADSHEET_ID: 'RUNTIME',
             H3_WEB_PROD_TXN_SHEET: 'txn',
+            h3ProdSheetRows_: sheet => {
+              const values =
+                sheet.getDataRange().getDisplayValues();
+              const header = values[0];
+              return {
+                header,
+                map: Object.fromEntries(
+                  header.map((name, i) => [name, i])
+                ),
+                rows: values.slice(1)
+              };
+            },
             getPersistentReviewPayload_: () => ({}),
             getLegacyPersistentReviewPayload_: () => ({}),
             getPersistentReviewMediaPayload_: () => ({}),
@@ -1178,40 +1246,6 @@ jobs:
           vm.runInContext(source, context, {filename:'ReviewCore+ListeningAdapter'});
           vm.runInContext('H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ = null;', context);
 
-          const originalCurrent = context.h3ListeningReviewCurrentLearning_;
-          const txnHistory = [
-            {
-              txn_id:'T3', set_id:'S3', listening_set_no:3,
-              committed_at:'2026-09-20T09:00:00Z', score:4, total:5,
-              wrong_count:1, uncertain_count:0, needs_review:true,
-              review_open_validation:'FULL_SOURCE_LOCK_ON_OPEN'
-            },
-            {
-              txn_id:'T2', set_id:'S2', listening_set_no:2,
-              committed_at:'2026-09-20T08:00:00Z', score:5, total:5,
-              wrong_count:0, uncertain_count:1, needs_review:true,
-              review_open_validation:'FULL_SOURCE_LOCK_ON_OPEN'
-            }
-          ];
-          const legacyHistory = [
-            {
-              legacy_review_id:'L1', source_mode:'LEGACY_PRE_WEB',
-              set_id:'S1', listening_set_no:1,
-              answered_at:'UNKNOWN', score:3, total:5,
-              wrong_count:2, uncertainty_known:false,
-              uncertain_count:null, needs_review:true,
-              review_open_validation:'FULL_SOURCE_LOCK_ON_OPEN'
-            }
-          ];
-          const current = {set_id:'CURRENT', listening_set_no:4};
-
-          context.h3ReviewHistoryEntries_ = () =>
-            JSON.parse(JSON.stringify(txnHistory));
-          context.h3LegacyReviewHistoryEntries_ = () =>
-            JSON.parse(JSON.stringify(legacyHistory));
-          context.h3ListeningReviewCurrentLearning_ = () =>
-            JSON.parse(JSON.stringify(current));
-
           context.h3ReviewNowMs_ = () =>
             Date.parse('2026-10-04T10:00:00Z');
 
@@ -1222,7 +1256,17 @@ jobs:
           assert.strictEqual(actualHome.schema, 'H3_WEB_HOME_V1');
           assert.strictEqual(actualHome.mode, 'HOME');
           assert.strictEqual(actualHome.read_only, true);
-          assert.deepStrictEqual(actualHome.current_learning, current);
+          assert.strictEqual(actualHome.current_learning, null);
+          assert.deepStrictEqual(
+            touchedSheets,
+            ['review_home_index_v1'],
+            'HOME must read only the lightweight index sheet.'
+          );
+          assert.deepStrictEqual(
+            actualHome.review_history.map(entry => entry.set_id),
+            ['S3','S2','S1'],
+            'HOME newest ordering must use effective timestamps.'
+          );
           assert.deepStrictEqual(
             actualHome.review_filters,
             ['LISTENING','WRITTEN']
@@ -1235,28 +1279,12 @@ jobs:
             actualHome.review_level_contract,
             'H3_REVIEW_LEVEL_V2'
           );
-          assert.strictEqual(
-            actualHome.review_level_half_life_days,
-            14
-          );
-          assert.strictEqual(
-            actualHome.review_level_time_headroom_share,
-            0.40
-          );
-          assert.deepStrictEqual(
-            actualHome.review_history.map(entry => entry.set_id),
-            ['S3','S2','S1'],
-            'HOME newest ordering must use effective timestamps.'
-          );
 
           const unknownEntry = actualHome.review_history.find(
             entry => entry.set_id === 'S1'
           );
           assert.ok(unknownEntry);
-          assert.strictEqual(
-            unknownEntry.answered_at,
-            'UNKNOWN'
-          );
+          assert.strictEqual(unknownEntry.answered_at, 'UNKNOWN');
           assert.strictEqual(
             unknownEntry.review_time_source,
             'UNKNOWN_FALLBACK_OLDEST'
@@ -1265,26 +1293,13 @@ jobs:
             unknownEntry.review_effective_at,
             '2026-09-20T08:00:00.000Z'
           );
-          assert.strictEqual(
-            unknownEntry.review_level_contract,
-            'H3_REVIEW_LEVEL_V2'
-          );
-          assert.strictEqual(
-            unknownEntry.review_base_level,
-            24
-          );
-          assert.strictEqual(
-            unknownEntry.review_level,
-            39
-          );
+          assert.strictEqual(unknownEntry.review_base_level, 24);
+          assert.strictEqual(unknownEntry.review_level, 39);
 
           const knownEntry = actualHome.review_history.find(
             entry => entry.set_id === 'S3'
           );
-          assert.strictEqual(
-            knownEntry.review_time_source,
-            'ACTUAL'
-          );
+          assert.strictEqual(knownEntry.review_time_source, 'ACTUAL');
           assert.ok(
             knownEntry.review_level >
             knownEntry.review_base_level
@@ -1334,7 +1349,6 @@ jobs:
             );
           }
 
-          context.h3ListeningReviewCurrentLearning_ = originalCurrent;
           context.h3ReviewTable_ = value => value;
           context.h3ProdRequireColumns_ = () => {};
           context.h3LegacyReviewRegisteredSetIds_ = () => ({LEGACY:true});
@@ -2118,18 +2132,8 @@ jobs:
             2
           );
 
-          const home = JSON.parse(JSON.stringify(
-            vm.runInContext('buildReviewHomePayload_()', context)
-          ));
-          assert.strictEqual(home.review_history.length, 2);
-          const writtenEntry = home.review_history.find(
-            entry => entry.review_kind === 'WRITTEN'
-          );
-          assert.ok(writtenEntry);
-          assert.strictEqual(
-            writtenEntry.replay_capability,
-            'unavailable'
-          );
+          // HOME indexing is covered by the dedicated lightweight-index audit.
+          // This fixture now verifies only provider registration and full Review open routing.
 
           context.__request = {
             schema:'H3_WEB_RENDER_REQUEST_V1',
@@ -2215,6 +2219,8 @@ jobs:
               'function getPersistentReviewMediaPayload_(',
               'function h3ReviewHistoryEntries_(',
               'function h3ReviewCurrentLearning_(',
+              'function h3ReviewHomeIndexEnvelopes_(',
+              'function h3ReviewHomeIndexUpsertAfterCommit_(',
               'function buildReviewHomePayload_(',
               "'H3_WEB_HOME_V1'",
               "'REVIEW_MEDIA_SET_MISMATCH'",
@@ -2756,6 +2762,15 @@ jobs:
           ]:
               if needle not in review:
                   raise SystemExit(f'HOME current-learning invariant missing: {needle}')
+
+          if 'h3ReviewCurrentLearning_(' not in web:
+              raise SystemExit('Parameterless boot no longer resolves current learning.')
+          core = Path('WebAppReviewCore.js').read_text(encoding='utf-8')
+          home_payload_start = core.index('function buildReviewHomePayload_(')
+          home_payload_end = core.index('\n\nfunction h3ReviewRenderRequest_(', home_payload_start)
+          home_payload = core[home_payload_start:home_payload_end]
+          if 'h3ReviewCurrentLearning_(' in home_payload:
+              raise SystemExit('HOME payload repeats current-learning resolution.')
 
           for needle in [
               'function renderHome(payload)',

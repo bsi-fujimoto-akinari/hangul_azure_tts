@@ -501,3 +501,31 @@ No score, answer vector, explanation, audit detail, progress detail, or next-ste
 The Web App and persistent Review own ordinary post-answer explanation. If the learner separately asks for explanation or troubleshooting, Chat may provide it in that separate turn.
 
 Minimal learner-facing text never authorizes skipping transaction validation, idempotency, source-lock, scheduler, or recovery checks.
+
+## 23. NORMAL_HOTPATH_READBACK_V1
+
+`NORMAL_HOTPATH_READBACK_V1` is the canonical normal-flow readback contract for `K1`, `5L`, and `[H3_WEB_SYNC]`.
+
+General rules:
+
+1. Read only the canonical Sheet ranges required by the current operation.
+2. Independent reads must be issued in one parallel fan-out at the connector/tool layer (for example, `Promise.all` in one tool turn); serial independent Sheet reads are prohibited in normal flow.
+3. GitHub `main`, `HANGUL_INFRA_STATUS_CURRENT`, source manifest, canonical release files, and historical audit/release material are not per-request normal-flow reads.
+4. Those version/canonical surfaces are read only for version drift, a canonical change, recovery, mismatch, explicit audit, or another concrete integrity signal.
+5. This optimization never removes source-lock, item/audio hash validation, scheduler gates, idempotency checks, preissue validation, receipt verification, or fail-closed recovery behavior.
+6. Do not create a new runtime Sheet/tab merely to aggregate hot-path reads.
+
+### A. K1 preparation readback
+
+Normal K1 preparation uses one bounded parallel read bundle for only the runtime inputs required to author/persist the next K1 surface, such as the current Listening state/policy and any K1_READY row needed for supersede/eligibility checks. After a new K1_READY row is atomically persisted, its exact A:M verification follows the one-shot K1 contract; the same row is not repeatedly re-read merely to reconfirm already-verified immutable fields.
+
+### B. 5L preparation and preissue readback
+
+Normal 5L preparation begins with one bounded parallel fan-out for independent runtime authorities needed for the target set: Listening state/policy, the eligible persisted K1_READY, scheduler/retest inputs, and relevant target-set/log/transaction/audio state. Reads that depend on a newly created identifier or prior write still occur after that dependency, but independent authorities must not be serialized. The final preissue gate remains authoritative and fail-closed.
+
+### C. H3_WEB_SYNC receipt verification readback
+
+After exact four-line receipt parsing, Chat resolves the exact TXN_ID/SET_ID and performs one bounded parallel authoritative verification bundle for the matching production transaction, exact five learner-log rows, current Listening state, and unresolved `RECOVERY_REQUIRED` condition. The receipt itself is never treated as proof of commit. A PASS still requires the same identity/hash/state checks defined by this contract.
+
+This contract changes read scheduling only. It does not authorize live writes, relaxed validation, inferred state, or cached-state substitution for an authoritative required readback.
+

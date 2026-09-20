@@ -1135,3 +1135,45 @@ Phase 3 = HOME history exposure + Review/Replay device validation
 ```
 
 Phase 1 performs documentation/audit writes only and changes no learner runtime data.
+
+## 27. 5L #1 legacy Review phase-2 close
+
+Phase 2 is complete for `H3-20260919-L02` / 5L #1.
+
+Implementation:
+- dedicated registry `listening_legacy_review_v1`;
+- source mode `LEGACY_PRE_WEB`;
+- exact original result derived from `listening_log_v1` on every validation;
+- dedicated legacy Review builder / validator / history preview;
+- registered legacy sets excluded from `h3ReviewCurrentLearning_()`;
+- HOME review history remains transaction-backed only until Phase 3.
+
+Locked legacy identity:
+
+```text
+LEGACY_REVIEW_ID=H3LEG-20260919-L02-R1
+SET_ID=H3-20260919-L02
+LISTENING_SET_NO=1
+ORIGINAL_SCORE=1/5
+UNCERTAINTY_KNOWN=false
+RESULT_SHA256=15de34e79bc8f661b1366a4313ffb5118948fc0b28f7226e0957c262247d7402
+ITEM_PAYLOAD_SHA256=4e8d06171c598eab1c36a156c665e530c60cd23c82630fdcba644fe770a822fd
+EXPLANATION_SET_SHA256=85264d1127287f682e6ac565bd5ea8e0fcf43659e1a732f319cc65df5acd8887
+AUDIO_BINDING_SHA256=8e8062e4d89c1de1c899a29ed01ff934473c4c82a0aa5852da5ffd816f23b4bf
+K1_IMAGE_SHA256=61f2de44bc7bc11bac54cf6b03f14940c0349c4871544351168530f584fba347
+LEGACY_REVIEW_BINDING_SHA256=dc7b106e349a29b071e7d3e600da9cd734e7be1dab834dbd2f33c99d789606c8
+```
+
+Five explanation rows are LOCKED with provenance `LEGACY_PRE_WEB_BACKFILL` and the original L02 source surface.
+
+Phase-2 validation:
+- repository audit PASS;
+- Apps Script main source synchronized;
+- legacy registry cardinality = 1;
+- L02 explanation cardinality = 5;
+- result/audio/explanation/item/K1/binding hashes all independently recomputed and matched;
+- L02 production transaction cardinality remains 0;
+- L02 transaction-backed review binding cardinality remains 0;
+- learner runtime state, score, counters, pointer, scheduler, K1_READY, payload and audio are unchanged.
+
+Phase 2 does not expose the legacy entry in HOME. Phase 3 owns learner-visible history merge, Review/Replay routing, and device validation.

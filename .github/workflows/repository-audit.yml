@@ -2599,6 +2599,54 @@ jobs:
           }
           NODE
 
+      - name: Check 5L #1 legacy Review phase-2 backend
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          review = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          arch = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
+          ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
+
+          for needle in [
+              "var H3_LEGACY_REVIEW_SHEET =",
+              "'listening_legacy_review_v1'",
+              "H3-LEGACY-REVIEW-CONTRACT-20260920-V1",
+              "function h3LegacyReviewResultFromLog_(",
+              "function h3LegacyReviewContext_(",
+              "function buildLegacyPersistentReviewPayload_(",
+              "function validateLegacyPersistentReviewBinding_(",
+              "function h3LegacyReviewHistoryEntries_(",
+              "function h3LegacyReviewRegisteredSetIds_(",
+              "function h3LegacyReviewPhase2Preview_(",
+              "LEGACY_REVIEW_RESULT_SOURCE_MISMATCH",
+              "LEGACY_REVIEW_BINDING_HASH_MISMATCH",
+              "!legacyRegistered[setId]",
+          ]:
+              if needle not in review:
+                  raise SystemExit(f'Legacy Review phase-2 implementation missing: {needle}')
+
+          m = re.search(
+              r"function buildReviewHomePayload_\(\) \{(?P<body>.*?)\n\}\n\nfunction h3ReviewReplayValidateTxnId_",
+              review,
+              re.S,
+          )
+          if not m:
+              raise SystemExit('Could not isolate buildReviewHomePayload_.')
+          home = m.group('body')
+          if 'h3LegacyReviewHistoryEntries_' in home:
+              raise SystemExit('Phase 2 must not expose legacy Review history in HOME.')
+
+          if '## 26. 5L #1 legacy pre-Web Review phase-1 freeze' not in arch:
+              raise SystemExit('Phase-1 architecture freeze missing.')
+          if '## 27. 5L #1 legacy Review three-phase migration' not in ops:
+              raise SystemExit('Three-phase operations contract missing.')
+
+          print('5L #1 legacy Review phase-2 backend static audit: PASS')
+          PY
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

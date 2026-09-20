@@ -36,6 +36,30 @@ var H3_REVIEW_BINDING_HEADERS = [
 var H3_REVIEW_CONTRACT_ID =
   'H3-REVIEW-CONTRACT-20260919-V1';
 
+var H3_LEGACY_REVIEW_SHEET =
+  'listening_legacy_review_v1';
+
+var H3_LEGACY_REVIEW_HEADERS = [
+  'LEGACY_REVIEW_ID',
+  'LISTENING_SET_ID',
+  'LISTENING_SET_NO',
+  'ANSWERED_AT',
+  'STATUS',
+  'SOURCE_MODE',
+  'RESULT_JSON',
+  'RESULT_SHA256',
+  'ITEM_PAYLOAD_SHA256',
+  'EXPLANATION_SET_SHA256',
+  'AUDIO_BINDING_SHA256',
+  'K1_IMAGE_SHA256',
+  'REVIEW_CONTRACT_ID',
+  'LEGACY_REVIEW_BINDING_SHA256',
+  'LOCKED_AT'
+];
+
+var H3_LEGACY_REVIEW_CONTRACT_ID =
+  'H3-LEGACY-REVIEW-CONTRACT-20260920-V1';
+
 function h3ReviewCanonicalizeValue_(value) {
   if (Array.isArray(value)) {
     return value.map(function (item) {
@@ -1348,6 +1372,813 @@ function getPersistentReviewMediaPayload_(
   };
 }
 
+function h3LegacyReviewResultFromLog_(
+  spreadsheet,
+  source
+) {
+  var sheet =
+    spreadsheet.getSheetByName(
+      'listening_log_v1'
+    );
+
+  if (!sheet) {
+    throw new Error(
+      'LEGACY_REVIEW_LOG_SHEET_MISSING'
+    );
+  }
+
+  var table =
+    h3ReviewTable_(sheet);
+
+  h3ProdRequireColumns_(
+    table,
+    [
+      'PARENT_SET_ID',
+      'LISTENING_ISSUE_NO',
+      'SECTION_KEY',
+      'STATUS',
+      'USER_RESULT',
+      'ANSWERED_AT',
+      'PROVENANCE_JSON'
+    ],
+    'listening_log_v1'
+  );
+
+  var bySection = {};
+  var answeredAt = '';
+
+  table.rows.forEach(
+    function (row) {
+      if (
+        String(
+          row[
+            table.map.PARENT_SET_ID
+          ] || ''
+        ) !== source.setId
+      ) {
+        return;
+      }
+
+      var section = String(
+        row[
+          table.map.SECTION_KEY
+        ] || ''
+      );
+
+      if (
+        H3_WEB_PROD_SECTIONS.indexOf(
+          section
+        ) < 0
+      ) {
+        return;
+      }
+
+      if (bySection[section]) {
+        throw new Error(
+          'LEGACY_REVIEW_LOG_DUPLICATE:' +
+            section
+        );
+      }
+
+      if (
+        Number(
+          row[
+            table.map
+              .LISTENING_ISSUE_NO
+          ]
+        ) !== source.setNo ||
+        String(
+          row[
+            table.map.STATUS
+          ] || ''
+        ) !== 'VALID'
+      ) {
+        throw new Error(
+          'LEGACY_REVIEW_LOG_INVALID:' +
+            section
+        );
+      }
+
+      var provenance =
+        h3ProdParseJson_(
+          row[
+            table.map
+              .PROVENANCE_JSON
+          ],
+          'LEGACY_REVIEW_PROVENANCE_INVALID:' +
+            section
+        );
+
+      var rowAnsweredAt = String(
+        row[
+          table.map.ANSWERED_AT
+        ] || ''
+      );
+
+      if (!answeredAt) {
+        answeredAt = rowAnsweredAt;
+      }
+
+      if (
+        !rowAnsweredAt ||
+        rowAnsweredAt !== answeredAt ||
+        provenance.set_id !==
+          source.setId ||
+        Number(
+          provenance.listening_set_no
+        ) !== source.setNo ||
+        provenance.answer_source !==
+          'manual_chat_submission' ||
+        String(
+          provenance.result || ''
+        ) !==
+          String(
+            row[
+              table.map.USER_RESULT
+            ] || ''
+          ) ||
+        Number(
+          provenance.correct_answer
+        ) !==
+          Number(
+            source.answerKey[
+              section
+            ]
+          )
+      ) {
+        throw new Error(
+          'LEGACY_REVIEW_LOG_SOURCE_MISMATCH:' +
+            section
+        );
+      }
+
+      bySection[section] = {
+        answer:
+          Number(
+            provenance.raw_answer
+          ),
+        correct_answer:
+          Number(
+            provenance.correct_answer
+          ),
+        result:
+          String(
+            provenance.result || ''
+          )
+      };
+    }
+  );
+
+  H3_WEB_PROD_SECTIONS.forEach(
+    function (section) {
+      if (!bySection[section]) {
+        throw new Error(
+          'LEGACY_REVIEW_LOG_SECTION_MISSING:' +
+            section
+        );
+      }
+    }
+  );
+
+  var summary =
+    H3_WEB_PROD_SECTIONS.map(
+      function (section) {
+        var item =
+          bySection[section];
+        return {
+          section: section,
+          answer: item.answer,
+          correct_answer:
+            item.correct_answer,
+          result: item.result
+        };
+      }
+    );
+
+  var score =
+    summary.filter(
+      function (item) {
+        return item.result === '○';
+      }
+    ).length;
+
+  return {
+    schema:
+      'H3_LEGACY_REVIEW_RESULT_V1',
+    source_mode:
+      'LEGACY_PRE_WEB',
+    set_id:
+      source.setId,
+    listening_set_no:
+      source.setNo,
+    answered_at:
+      answeredAt,
+    score: score,
+    total: 5,
+    uncertainty_known: false,
+    summary: summary
+  };
+}
+
+function h3LegacyReviewBindingHashObject_(
+  legacy,
+  source,
+  explanations
+) {
+  return {
+    LEGACY_REVIEW_ID:
+      legacy.legacyReviewId,
+    LISTENING_SET_ID:
+      legacy.setId,
+    LISTENING_SET_NO:
+      legacy.setNo,
+    SOURCE_MODE:
+      legacy.sourceMode,
+    RESULT_SHA256:
+      h3ReviewHash_(
+        legacy.result
+      ),
+    ITEM_PAYLOAD_SHA256:
+      source.itemPayloadSha256,
+    EXPLANATION_SET_SHA256:
+      explanations.sha256,
+    AUDIO_BINDING_SHA256:
+      h3ReviewHash_(
+        source.audioBinding
+      ),
+    K1_IMAGE_SHA256:
+      source.k1ImageSha256,
+    REVIEW_CONTRACT_ID:
+      H3_LEGACY_REVIEW_CONTRACT_ID
+  };
+}
+
+function h3LegacyReviewContext_(
+  spreadsheet,
+  legacyReviewId
+) {
+  var sheet =
+    spreadsheet.getSheetByName(
+      H3_LEGACY_REVIEW_SHEET
+    );
+
+  h3ReviewRequireExactHeader_(
+    sheet,
+    H3_LEGACY_REVIEW_HEADERS,
+    'LEGACY_REVIEW'
+  );
+
+  var table =
+    h3ReviewTable_(sheet);
+
+  var record =
+    h3ProdOneRowBy_(
+      table,
+      'LEGACY_REVIEW_ID',
+      legacyReviewId,
+      H3_LEGACY_REVIEW_SHEET
+    );
+
+  var row = record.row;
+  var map = table.map;
+
+  var setId = String(
+    row[
+      map.LISTENING_SET_ID
+    ] || ''
+  );
+  var setNo = Number(
+    row[
+      map.LISTENING_SET_NO
+    ]
+  );
+  var sourceMode = String(
+    row[
+      map.SOURCE_MODE
+    ] || ''
+  );
+
+  if (
+    String(
+      row[map.STATUS] || ''
+    ) !== 'LOCKED' ||
+    !String(
+      row[map.LOCKED_AT] || ''
+    ) ||
+    sourceMode !==
+      'LEGACY_PRE_WEB'
+  ) {
+    throw new Error(
+      'LEGACY_REVIEW_NOT_LOCKED'
+    );
+  }
+
+  var source =
+    h3ReviewSourceContext_(
+      spreadsheet,
+      setId
+    );
+
+  if (source.setNo !== setNo) {
+    throw new Error(
+      'LEGACY_REVIEW_SET_NO_MISMATCH'
+    );
+  }
+
+  var derivedResult =
+    h3LegacyReviewResultFromLog_(
+      spreadsheet,
+      source
+    );
+  var storedResult =
+    h3ProdParseJson_(
+      row[
+        map.RESULT_JSON
+      ],
+      'LEGACY_REVIEW_RESULT_JSON_INVALID'
+    );
+
+  if (
+    h3ReviewCanonicalJson_(
+      storedResult
+    ) !==
+      h3ReviewCanonicalJson_(
+        derivedResult
+      )
+  ) {
+    throw new Error(
+      'LEGACY_REVIEW_RESULT_SOURCE_MISMATCH'
+    );
+  }
+
+  var resultSha =
+    h3ReviewHash_(
+      derivedResult
+    );
+
+  if (
+    String(
+      row[
+        map.RESULT_SHA256
+      ] || ''
+    ) !== resultSha ||
+    String(
+      row[
+        map.ANSWERED_AT
+      ] || ''
+    ) !==
+      derivedResult.answered_at
+  ) {
+    throw new Error(
+      'LEGACY_REVIEW_RESULT_HASH_MISMATCH'
+    );
+  }
+
+  var explanations =
+    h3ReviewExplanationSet_(
+      spreadsheet,
+      source
+    );
+
+  var legacy = {
+    legacyReviewId:
+      String(legacyReviewId),
+    setId: setId,
+    setNo: setNo,
+    sourceMode:
+      sourceMode,
+    result:
+      derivedResult
+  };
+
+  var expected =
+    h3LegacyReviewBindingHashObject_(
+      legacy,
+      source,
+      explanations
+    );
+  var bindingSha =
+    h3ReviewHash_(
+      expected
+    );
+
+  if (
+    String(
+      row[
+        map.ITEM_PAYLOAD_SHA256
+      ] || ''
+    ) !==
+      expected.ITEM_PAYLOAD_SHA256 ||
+    String(
+      row[
+        map.EXPLANATION_SET_SHA256
+      ] || ''
+    ) !==
+      expected.EXPLANATION_SET_SHA256 ||
+    String(
+      row[
+        map.AUDIO_BINDING_SHA256
+      ] || ''
+    ) !==
+      expected.AUDIO_BINDING_SHA256 ||
+    String(
+      row[
+        map.K1_IMAGE_SHA256
+      ] || ''
+    ) !==
+      expected.K1_IMAGE_SHA256 ||
+    String(
+      row[
+        map.REVIEW_CONTRACT_ID
+      ] || ''
+    ) !==
+      H3_LEGACY_REVIEW_CONTRACT_ID ||
+    String(
+      row[
+        map.LEGACY_REVIEW_BINDING_SHA256
+      ] || ''
+    ) !== bindingSha
+  ) {
+    throw new Error(
+      'LEGACY_REVIEW_BINDING_HASH_MISMATCH'
+    );
+  }
+
+  return {
+    sheet: sheet,
+    table: table,
+    record: record,
+    legacyReviewId:
+      String(legacyReviewId),
+    setId: setId,
+    setNo: setNo,
+    sourceMode:
+      sourceMode,
+    result:
+      derivedResult,
+    source: source,
+    explanations:
+      explanations,
+    bindingSha256:
+      bindingSha,
+    hashes: expected
+  };
+}
+
+function h3LegacyReviewSummaryMap_(
+  legacy
+) {
+  var out = {};
+  legacy.result.summary.forEach(
+    function (item) {
+      out[item.section] = item;
+    }
+  );
+  return out;
+}
+
+function buildLegacyPersistentReviewPayload_(
+  legacyReviewId
+) {
+  var spreadsheet =
+    SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+  var legacy =
+    h3LegacyReviewContext_(
+      spreadsheet,
+      legacyReviewId
+    );
+  var indexed =
+    h3LegacyReviewSummaryMap_(
+      legacy
+    );
+
+  return {
+    schema:
+      'H3_LEGACY_PERSISTENT_REVIEW_PAYLOAD_V1',
+    mode: 'REVIEW',
+    read_only: true,
+    persisted: true,
+    source_mode:
+      'LEGACY_PRE_WEB',
+    legacy_review_id:
+      legacy.legacyReviewId,
+    set_id:
+      legacy.setId,
+    listening_set_no:
+      legacy.setNo,
+    answered_at:
+      legacy.result.answered_at,
+    score:
+      legacy.result.score,
+    total:
+      legacy.result.total,
+    uncertainty_known: false,
+    uncertain_count: null,
+    default_filter:
+      'NEEDS_REVIEW',
+    review_contract_id:
+      H3_LEGACY_REVIEW_CONTRACT_ID,
+    legacy_review_binding_sha256:
+      legacy.bindingSha256,
+    sections:
+      H3_WEB_PROD_SECTIONS.map(
+        function (section) {
+          var summary =
+            indexed[section];
+          var surface =
+            h3ReviewQuestionSurface_(
+              legacy.source,
+              section
+            );
+
+          if (!summary) {
+            throw new Error(
+              'LEGACY_REVIEW_SECTION_RESULT_MISSING:' +
+                section
+            );
+          }
+
+          return {
+            section: section,
+            display:
+              H3_R3_SECTION_DISPLAY[
+                section
+              ],
+            result:
+              summary.result,
+            user_answer:
+              Number(
+                summary.answer
+              ),
+            uncertain_known:
+              false,
+            uncertain: null,
+            correct_answer:
+              Number(
+                summary.correct_answer
+              ),
+            audio_asset_key:
+              section,
+            audio_fallback_url:
+              legacy.source
+                .audioBinding
+                .individual[
+                  section
+                ]
+                .audio_url,
+            script_text:
+              h3ReviewScriptFromSurface_(
+                section,
+                surface
+              ),
+            question_surface:
+              surface,
+            explanation:
+              legacy.explanations
+                .bySection[
+                  section
+                ]
+                .explanation,
+            explanation_revision_id:
+              legacy.explanations
+                .bySection[
+                  section
+                ]
+                .revisionId,
+            explanation_sha256:
+              legacy.explanations
+                .bySection[
+                  section
+                ]
+                .sha256
+          };
+        }
+      ),
+    technical: {
+      result_sha256:
+        legacy.hashes
+          .RESULT_SHA256,
+      item_payload_sha256:
+        legacy.hashes
+          .ITEM_PAYLOAD_SHA256,
+      explanation_set_sha256:
+        legacy.hashes
+          .EXPLANATION_SET_SHA256,
+      audio_binding_sha256:
+        legacy.hashes
+          .AUDIO_BINDING_SHA256,
+      k1_image_sha256:
+        legacy.hashes
+          .K1_IMAGE_SHA256
+    }
+  };
+}
+
+function validateLegacyPersistentReviewBinding_(
+  legacyReviewId
+) {
+  var payload =
+    buildLegacyPersistentReviewPayload_(
+      legacyReviewId
+    );
+
+  return {
+    schema:
+      'H3_LEGACY_REVIEW_PERSISTENCE_GATE_V1',
+    status: 'PASS',
+    read_only: true,
+    legacy_review_id:
+      payload.legacy_review_id,
+    set_id:
+      payload.set_id,
+    review_binding_sha256:
+      payload
+        .legacy_review_binding_sha256,
+    section_count:
+      payload.sections.length
+  };
+}
+
+function h3LegacyReviewHistoryEntries_(
+  spreadsheet
+) {
+  var sheet =
+    spreadsheet.getSheetByName(
+      H3_LEGACY_REVIEW_SHEET
+    );
+
+  if (!sheet) {
+    return [];
+  }
+
+  h3ReviewRequireExactHeader_(
+    sheet,
+    H3_LEGACY_REVIEW_HEADERS,
+    'LEGACY_REVIEW'
+  );
+
+  var table =
+    h3ReviewTable_(sheet);
+  var entries = [];
+
+  table.rows.forEach(
+    function (row) {
+      var id = String(
+        row[
+          table.map
+            .LEGACY_REVIEW_ID
+        ] || ''
+      );
+
+      if (!id) return;
+
+      var legacy;
+      try {
+        legacy =
+          h3LegacyReviewContext_(
+            spreadsheet,
+            id
+          );
+      } catch (err) {
+        return;
+      }
+
+      var wrongCount =
+        legacy.result.summary.filter(
+          function (item) {
+            return (
+              item.result !== '○'
+            );
+          }
+        ).length;
+
+      entries.push({
+        legacy_review_id:
+          legacy.legacyReviewId,
+        source_mode:
+          'LEGACY_PRE_WEB',
+        set_id:
+          legacy.setId,
+        listening_set_no:
+          legacy.setNo,
+        answered_at:
+          legacy.result.answered_at,
+        score:
+          legacy.result.score,
+        total:
+          legacy.result.total,
+        wrong_count:
+          wrongCount,
+        uncertainty_known:
+          false,
+        uncertain_count:
+          null,
+        needs_review:
+          wrongCount > 0,
+        review_open_validation:
+          'FULL_SOURCE_LOCK_ON_OPEN'
+      });
+    }
+  );
+
+  entries.sort(function (a, b) {
+    var at = String(
+      a.answered_at || ''
+    );
+    var bt = String(
+      b.answered_at || ''
+    );
+
+    if (at !== bt) {
+      return at < bt ? 1 : -1;
+    }
+
+    return (
+      Number(
+        b.listening_set_no || 0
+      ) -
+      Number(
+        a.listening_set_no || 0
+      )
+    );
+  });
+
+  return entries.slice(0, 50);
+}
+
+function h3LegacyReviewRegisteredSetIds_(
+  spreadsheet
+) {
+  var sheet =
+    spreadsheet.getSheetByName(
+      H3_LEGACY_REVIEW_SHEET
+    );
+
+  if (!sheet) {
+    return {};
+  }
+
+  h3ReviewRequireExactHeader_(
+    sheet,
+    H3_LEGACY_REVIEW_HEADERS,
+    'LEGACY_REVIEW'
+  );
+
+  var table =
+    h3ReviewTable_(sheet);
+  var out = {};
+
+  table.rows.forEach(
+    function (row) {
+      if (
+        String(
+          row[
+            table.map.STATUS
+          ] || ''
+        ) === 'LOCKED' &&
+        String(
+          row[
+            table.map
+              .SOURCE_MODE
+          ] || ''
+        ) === 'LEGACY_PRE_WEB'
+      ) {
+        var setId = String(
+          row[
+            table.map
+              .LISTENING_SET_ID
+          ] || ''
+        );
+        if (setId) {
+          out[setId] = true;
+        }
+      }
+    }
+  );
+
+  return out;
+}
+
+function h3LegacyReviewPhase2Preview_() {
+  var spreadsheet =
+    SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+
+  return {
+    schema:
+      'H3_LEGACY_REVIEW_PHASE2_PREVIEW_V1',
+    read_only: true,
+    learner_visible: false,
+    entries:
+      h3LegacyReviewHistoryEntries_(
+        spreadsheet
+      )
+  };
+}
+
 function h3ReviewHistoryEntries_(
   spreadsheet
 ) {
@@ -1610,6 +2441,7 @@ function h3ReviewHistoryEntries_(
   return entries.slice(0, 50);
 }
 
+
 function h3ReviewCurrentLearning_(
   spreadsheet
 ) {
@@ -1668,6 +2500,11 @@ function h3ReviewCurrentLearning_(
     }
   });
 
+  var legacyRegistered =
+    h3LegacyReviewRegisteredSetIds_(
+      spreadsheet
+    );
+
   var candidates = [];
   payload.rows.forEach(
     function (row) {
@@ -1690,7 +2527,8 @@ function h3ReviewCurrentLearning_(
         ) === 'ISSUED' &&
         setId &&
         Number.isInteger(setNo) &&
-        !committed[setId]
+        !committed[setId] &&
+        !legacyRegistered[setId]
       ) {
         candidates.push({
           set_id: setId,

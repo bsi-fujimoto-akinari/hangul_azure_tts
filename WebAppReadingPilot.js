@@ -1,5 +1,5 @@
 /**
- * H3 Reading P8 pilot contract.
+ * H3 Reading P8-P10 pilot source-lock core.
  *
  * Repository-only pilot. This file does not read/write Sheets, issue learner
  * sets, advance scheduler state, or register a production route.
@@ -100,7 +100,13 @@ function h3ReadingValidateSourceBundle_(
     source.provider_kind !== 'WRITTEN' ||
     source.surface_family !== 'READING' ||
     source.level !== '3級' ||
-    source.section_key !== 'H3-P8'
+    [
+      'H3-P8',
+      'H3-P9',
+      'H3-P10'
+    ].indexOf(
+      source.section_key
+    ) < 0
   ) {
     throw new Error(
       'READING_SOURCE_SCOPE_INVALID'
@@ -145,6 +151,13 @@ function h3ReadingValidateSourceBundle_(
 
   var seenItem = {};
   var seenKey = {};
+  var expectedSection =
+    String(
+      source.section_key
+    ).replace(
+      'H3-',
+      ''
+    );
 
   source.items.forEach(
     function (item, index) {
@@ -153,7 +166,7 @@ function h3ReadingValidateSourceBundle_(
         Number(item.q_no) !==
           index + 1 ||
         String(item.section || '') !==
-          'P8'
+          expectedSection
       ) {
         throw new Error(
           'READING_ITEM_ORDER_INVALID'
@@ -215,8 +228,10 @@ function h3ReadingValidateSourceBundle_(
       }
 
       if (
-        !String(item.skill_id)
-          .startsWith('H3-P8-SK')
+        !/^H3-P(?:8|9|10)-SK\d+$/
+          .test(
+            String(item.skill_id)
+          )
       ) {
         throw new Error(
           'READING_ITEM_SKILL_SCOPE_INVALID'
@@ -309,7 +324,12 @@ function h3ReadingLockBundle_(
           display:
             String(
               item.display ||
-              '筆8／読解'
+              (
+                '筆' +
+                expectedSection
+                  .slice(1) +
+                '／読解'
+              )
             ),
           skill_id:
             item.skill_id,
@@ -339,7 +359,8 @@ function h3ReadingLockBundle_(
     provider_kind: 'WRITTEN',
     surface_family: 'READING',
     level: '3級',
-    section_key: 'H3-P8',
+    section_key:
+      source.section_key,
     passage_id:
       source.passage.passage_id,
     passage_sha256:
@@ -364,7 +385,8 @@ function h3ReadingLockBundle_(
     provider_kind: 'WRITTEN',
     surface_family: 'READING',
     level: '3級',
-    section_key: 'H3-P8',
+    section_key:
+      source.section_key,
     source_batch_id:
       source.passage.source_batch_id,
     passage: {
@@ -472,7 +494,10 @@ function h3ReadingBuildRenderPayload_(
     set_id:
       String(
         setId ||
-        'READING-PILOT-H3-P8'
+        (
+          'READING-PILOT-' +
+          locked.section_key
+        )
       ),
     learning_surface_schema:
       surface.learning_surface_schema,

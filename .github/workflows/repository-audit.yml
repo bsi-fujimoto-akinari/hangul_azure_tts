@@ -69,6 +69,7 @@ jobs:
               'H3_LEARNING_SURFACE_CONTRACT.md',
               'H3_LEVEL_RUNTIME_CONTRACT.md',
               'H3_NEWFMT_LEVEL_CONTRACT.md',
+              'H3_2026_NEWFMT_SOURCE_CONTRACT.md',
               'H3_READING_P8_PILOT_CONTRACT.md',
               'H3_READING_ACTIVATION_CONTRACT.md',
               'H3_READING_PRODUCTION_CONTRACT.md',
@@ -6526,58 +6527,70 @@ jobs:
           );
           NODE
 
-      - name: Check level-scoped 2026 new-format registry
+      - name: Check source-bound 2026 new-format registry
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
+          source = Path('H3_2026_NEWFMT_SOURCE_CONTRACT.md').read_text(encoding='utf-8')
           contract = Path('H3_NEWFMT_LEVEL_CONTRACT.md').read_text(encoding='utf-8')
           common = Path('WebAppFormatCommon.js').read_text(encoding='utf-8')
           audit = Path('WebAppFormatCommonAudit.js').read_text(encoding='utf-8')
 
           for needle in [
-              'Version: H3-NEWFMT-LEVEL-20260921-V1',
-              'Status: POLICY_STAGED_SOURCE_UNBOUND',
-              'raw_token=D2_fill7',
-              'raw_token=D5_common2',
-              'raw_token=D5_common2x2',
-              'raw_token=D12_KRtoJP4x2',
-              'translation_direction=KR_TO_JP',
-              'SOURCE_UNBOUND',
-              'must not inherit',
+              'Version: H3-2026-NEWFMT-SOURCE-20260921-V1',
+              'Status: SOURCE_BOUND_VERIFIED',
+              'H3_D2_FILL7',
+              'H3_D5_COMMON2',
+              'JUN2_D5_COMMON2X2',
+              'JUN2_D12_JP_TO_KR_4X2',
+              'JP_TO_KR',
+              'D12_KRtoJP4x2',
+              'DEPRECATED_DIRECTION_MISMATCH',
           ]:
-              if needle not in contract:
-                  raise SystemExit(f'New-format level contract missing: {needle}')
+              if needle not in source:
+                  raise SystemExit(f'2026 source contract missing: {needle}')
 
           for needle in [
-              "var H3_NEWFMT_LEVEL_CONTRACT_ID_ =",
-              "var H3_NEWFMT_REGISTRY_ = [",
+              'Version: H3-NEWFMT-LEVEL-20260921-V2',
+              'Status: SOURCE_BOUND_RUNTIME_READY_FOR_H3',
+              'item_count=7',
+              'item_count=2',
+              'item_count=4',
+              'translation_direction=JP_TO_KR',
+              '20Q = TOWMI 11 / OFFICIAL 6 / ERROR 2 / NEWFMT 1',
+          ]:
+              if needle not in contract:
+                  raise SystemExit(f'New-format level V2 contract missing: {needle}')
+
+          for needle in [
+              "var H3_NEWFMT_SOURCE_CONTRACT_ID_ =",
+              "var H3_NEWFMT_SOURCE_EVIDENCE_SHA256_ =",
               "'H3_D2_FILL7'",
               "'H3_D5_COMMON2'",
               "'JUN2_D5_COMMON2X2'",
-              "'JUN2_D12_KR_TO_JP_4X2'",
-              "function h3NewfmtDefinition_(",
-              "function h3NewfmtValidateLevel_(",
-              "function h3NewfmtCanUseCurrentH3Ratio_(",
+              "'JUN2_D12_JP_TO_KR_4X2'",
+              "'JP_TO_KR'",
+              "function h3NewfmtResolveFormatId_(",
+              "function h3NewfmtDefinitionForSlot_(",
               "function h3NewfmtActivationReadiness_(",
-              "function h3NewfmtAssertNoRatioInheritance_(",
           ]:
               if needle not in common:
-                  raise SystemExit(f'New-format helper missing: {needle}')
+                  raise SystemExit(f'New-format V2 helper missing: {needle}')
 
           for needle in [
-              'function auditNewfmtLevelV1_(',
-              'H3_NEWFMT_LEVEL_AUDIT_V1',
-              'JUN2_NO_RATIO_INHERITANCE',
-              'LEVEL_MISMATCH',
-              'SOURCE_LOCK_REQUIRED',
-              'RATIO_ISOLATION',
+              'function auditNewfmtLevelV2_(',
+              'H3_NEWFMT_LEVEL_AUDIT_V2',
+              'LEGACY_ALIAS',
+              'H3_SLOT_ROUTING',
+              'NON_NEWFMT_SECTION_REJECTED',
+              'JUN2_RUNTIME_GATE',
           ]:
               if needle not in audit:
-                  raise SystemExit(f'New-format audit missing: {needle}')
+                  raise SystemExit(f'New-format V2 audit missing: {needle}')
 
-          print('Level-scoped 2026 new-format static boundary: PASS')
+          print('Source-bound 2026 new-format static boundary: PASS')
           PY
 
           node <<'NODE'
@@ -6599,26 +6612,28 @@ jobs:
           });
 
           const result = vm.runInContext(
-            'auditNewfmtLevelV1_()',
+            'auditNewfmtLevelV2_()',
             context
           );
 
           if (
             result.result !== 'PASS' ||
             result.schema !==
-              'H3_NEWFMT_LEVEL_AUDIT_V1' ||
+              'H3_NEWFMT_LEVEL_AUDIT_V2' ||
             result.checks !== 9 ||
-            result.contract_id !==
-              'H3-NEWFMT-LEVEL-20260921-V1'
+            result.level_contract_id !==
+              'H3-NEWFMT-LEVEL-20260921-V2' ||
+            result.source_contract_id !==
+              'H3-2026-NEWFMT-SOURCE-20260921-V1'
           ) {
             throw new Error(
-              'New-format level pure audit mismatch: ' +
+              'Source-bound new-format V2 audit mismatch: ' +
               JSON.stringify(result)
             );
           }
 
           console.log(
-            'Level-scoped 2026 new-format pure audit: PASS',
+            'Source-bound 2026 new-format pure audit: PASS',
             JSON.stringify(result)
           );
           NODE

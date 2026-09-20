@@ -1,6 +1,6 @@
 # H3 Web / Chat Contract
 
-Version: H3-WEB-CHAT-CURRENT-20260920-V1
+Version: H3-WEB-CHAT-CURRENT-20260920-V2
 
 This document defines the current learner trigger, Web handoff, receipt, and minimal Chat response contract. Completed migration chronology remains in Git history.
 
@@ -26,7 +26,7 @@ TXN_ID=H3TX-YYYYMMDD-NNNNNN
 STATUS=COMMITTED
 ```
 
-The receipt contains no score, answers, answer key, explanation, or journal name. The grammar is shared by SYSTEM_TEST, 5L production, and future 5W production.
+The receipt contains no score, answers, answer key, explanation, or journal name. The grammar is shared by SYSTEM_TEST, 5L production, and 5W production.
 
 ## 4. Receipt verification
 
@@ -114,7 +114,20 @@ For 5L, SCRIPT_TXT is explicitly outside the learner issue critical path. Audio 
 
 Committed 5L answers open the persistent Review built from exact transaction, payload, binding, image, and audio sources. HOME lists committed Reviews. Opening a Review performs full source-lock validation.
 
+For 5W, a committed production answer must also materialize an immediate persistent Written Review and make the exact committed set available from HOME. A missing production Written Review is an implementation defect and must not be worked around by reproducing explanation or script content in Chat.
+
 REVIEW_REPLAY is nonlearning, reuses the original locked media, hides protected answers/explanation until local completion, and performs zero learner-runtime writes. Detailed invariants are in `H3_REVIEW_ARCHITECTURE.md`.
+
+## 10. Learner-facing explanation and script ownership
+
+This contract applies equally to 5L and 5W learner-facing postgrade content.
+
+- The Web App immediate Review / persistent Review page is the only learner-facing surface for translations, explanations, correct-answer rationale, comparison notes, pronunciation notes, Hanja notes, and semantic audio-script text.
+- Chat must not reproduce those explanation or script contents after grading. Chat remains limited to the contract-approved handoff, receipt verification, integrity status, and coordination outputs.
+- Chat must not attach or link a Daily TXT as a learner-facing script handoff.
+- Script TXT files may continue to exist as noncanonical internal/audit conveniences, but they are not a learner-facing artifact and must not be used as a fallback when Review persistence or rendering is missing.
+- Review reconstruction must retain or source-lock the exact script content required for the Review page without depending on chat-local state.
+- HOME history must reopen the same source-bound explanation and script content for the exact committed set.
 
 ## 18. Listening audio reliability
 
@@ -144,7 +157,7 @@ The learner surface remains five K1-K5 slots. Normal sets allow at most one rete
 
 ## 22. Minimal Chat output contract
 
-After a successful `5L` issue, Chat returns the parameterless Web App URL and nothing else.
+After a successful `5L` or `5W` issue, Chat returns the parameterless Web App URL and nothing else.
 
 After authoritative `[H3_WEB_SYNC]` verification, Chat returns exactly one of:
 

@@ -1085,3 +1085,72 @@ V20 preissue behavior:
 Canonical render contract: `H3-LISTENING-RENDER-RULES-20260920-V20`.
 
 This patch does not rewrite the already-issued L04 payload, audio queue row, MP3, answers, history, scheduler, counter, pointer, or production transaction.
+
+## 25. Official Listening audio parity V21
+
+User verification against official Listening audio established three production-parity corrections for future unissued 5L sets.
+
+Effective scope:
+- applies from the next unissued 5L only;
+- does not rewrite or regenerate H3-20260920-L04;
+- does not change learner history, score, counters, pointers, scheduler, Review binding, or committed transactions.
+
+### K2 / K3 choice-number audio
+
+Before each Korean answer choice, the audio plan must include the Japanese circled-number announcement:
+
+- ① = `マルイチ`
+- ② = `マルニ`
+- ③ = `マルサン`
+- ④ = `マルヨン`
+
+The number voice is `ja-JP-NanamiNeural`.
+K2/K3 production projection is:
+
+```text
+prompt x2
+マルイチ -> choice1 x2
+マルニ   -> choice2 x2
+マルサン -> choice3 x2
+マルヨン -> choice4 x2
+```
+
+Each number announcement is an explicit `choice_number1..4` segment with `repeat=1` and `pause_ms_after=900`.
+
+### K3 dialogue speakers
+
+K3 prompt and response choices must use different Korean speakers.
+
+The production pairing is deterministic:
+
+```text
+Hyunsu -> JiMin
+InJoon -> YuJin
+JiMin  -> Hyunsu
+YuJin  -> InJoon
+```
+
+The prompt is read by `VOICE`; all K3 response choices are read by `RESPONSE_VOICE`. `VOICE=RESPONSE_VOICE` is a preissue failure.
+
+### K4 / K5 replay cue
+
+The replay cue between first and second passage readings is Japanese:
+
+```text
+もう一度読みます
+```
+
+It is an explicit `replay_cue` segment read by `ja-JP-NanamiNeural`.
+The previous Korean cue `다시 한 번 들으세요.` is prohibited for new V21 production.
+
+### Enforcement
+
+The audio engine uses `azure-listening-v3-official-parity-number-dual-jp-cue`.
+
+Before issue:
+- Code.js validates the V21 plan shape before Azure generation;
+- WebAppPreissue.js independently verifies the persisted AUDIO_PLAN_JSON against the locked item payload;
+- WebAppPreissue.js verifies NUMBER_VOICE / RESPONSE_VOICE / CUE_VOICE assignments;
+- any missing number cue, same-speaker K3, or non-Japanese K4/K5 replay cue blocks issue.
+
+Canonical render contract: `H3-LISTENING-RENDER-RULES-20260920-V21`.

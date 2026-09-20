@@ -161,8 +161,11 @@ const HQ_LISTENING_NOTE =
 const HQ_LISTENING_AUDIO_VERSION_LEADING5S =
   'azure-listening-v1-24k160k-leading5s-segments';
 
-const HQ_LISTENING_AUDIO_VERSION =
+const HQ_LISTENING_AUDIO_VERSION_V2 =
   'azure-listening-v2-24k160k-no-leading-segments';
+
+const HQ_LISTENING_AUDIO_VERSION =
+  'azure-listening-v3-official-parity-number-dual-jp-cue';
 
 const HQ_K1_NUMBER_VOICE = {
   label: 'Nanami',
@@ -177,7 +180,17 @@ const HQ_K1_NUMBER_TEXTS = {
   choice_number4: 'マルヨン'
 };
 
-const HQ_LISTENING_MAX_SEGMENTS = 12;
+const HQ_LISTENING_REPLAY_CUE_TEXT =
+  'もう一度読みます';
+
+const HQ_LISTENING_DIALOGUE_VOICE_PAIRS = {
+  Hyunsu: 'JiMin',
+  InJoon: 'YuJin',
+  JiMin: 'Hyunsu',
+  YuJin: 'InJoon'
+};
+
+const HQ_LISTENING_MAX_SEGMENTS = 16;
 const HQ_LISTENING_MAX_PAUSE_MS = 6000;
 const HQ_LISTENING_MAX_TOTAL_CHARS = 12000;
 
@@ -2542,7 +2555,8 @@ function validateListeningAudioPlan_(
     'choice2',
     'choice3',
     'choice4',
-    'passage'
+    'passage',
+    'replay_cue'
   ]);
 
   let totalChars = 0;
@@ -2590,6 +2604,10 @@ function validateListeningAudioPlan_(
             segment.role
           );
 
+      const isReplayCue =
+        segment.role ===
+          'replay_cue';
+
       if (
         !roles.has(
           segment.role
@@ -2605,10 +2623,24 @@ function validateListeningAudioPlan_(
 
       if (
         isNumberRole &&
-        section !== 'K1'
+        ['K1','K2','K3'].indexOf(
+          section
+        ) === -1
       ) {
         throw new Error(
-          'K1 choice-number roles are not allowed in ' +
+          'Choice-number roles are not allowed in ' +
+          section +
+          '.'
+        );
+      }
+
+      if (
+        isReplayCue &&
+        section !== 'K4' &&
+        section !== 'K5'
+      ) {
+        throw new Error(
+          'Replay cue is not allowed in ' +
           section +
           '.'
         );
@@ -2622,7 +2654,18 @@ function validateListeningAudioPlan_(
           ]
         ) {
           throw new Error(
-            'Invalid K1 choice-number text at segment ' +
+            'Invalid choice-number text at segment ' +
+            (i + 1) +
+            '.'
+          );
+        }
+      } else if (isReplayCue) {
+        if (
+          segment.text !==
+            HQ_LISTENING_REPLAY_CUE_TEXT
+        ) {
+          throw new Error(
+            'Invalid Japanese replay cue text at segment ' +
             (i + 1) +
             '.'
           );
@@ -2635,10 +2678,12 @@ function validateListeningAudioPlan_(
         !/[가-힣]/.test(
           segment.text
         ) ||
-        /[\u3040-\u30ff]/
-          .test(segment.text) ||
-        /[\x00-\x08\x0B\x0C\x0E-\x1F]/
-          .test(segment.text)
+        /[぀-ヿ]/.test(
+          segment.text
+        ) ||
+        /[ --]/.test(
+          segment.text
+        )
       ) {
         throw new Error(
           'Invalid Korean audio text at segment ' +
@@ -2659,11 +2704,14 @@ function validateListeningAudioPlan_(
       }
 
       if (
-        isNumberRole &&
+        (
+          isNumberRole ||
+          isReplayCue
+        ) &&
         segment.repeat !== 1
       ) {
         throw new Error(
-          'K1 choice-number repeat must be 1 at segment ' +
+          'Japanese announcer segment repeat must be 1 at segment ' +
           (i + 1) +
           '.'
         );
@@ -2693,13 +2741,102 @@ function validateListeningAudioPlan_(
 
   if (
     totalChars >
-    HQ_LISTENING_MAX_TOTAL_CHARS
+      HQ_LISTENING_MAX_TOTAL_CHARS
   ) {
     throw new Error(
       'AUDIO_PLAN_JSON total text exceeds ' +
       HQ_LISTENING_MAX_TOTAL_CHARS +
       ' characters.'
     );
+  }
+
+  return plan;
+}
+
+
+function validateListeningOfficialParityPlan_(
+  plan,
+  section
+) {
+  if (
+    section === 'K2' ||
+    section === 'K3'
+  ) {
+    const roles = [
+      'prompt',
+      'prompt',
+      'choice_number1',
+      'choice1',
+      'choice1',
+      'choice_number2',
+      'choice2',
+      'choice2',
+      'choice_number3',
+      'choice3',
+      'choice3',
+      'choice_number4',
+      'choice4',
+      'choice4'
+    ];
+
+    if (
+      plan.length !== roles.length ||
+      plan.some(
+        (segment, index) =>
+          segment.role !==
+            roles[index]
+      )
+    ) {
+      throw new Error(
+        section +
+        ' official-parity audio plan must be prompt x2 then numbered choice pairs.'
+      );
+    }
+
+    [2,5,8,11].forEach(
+      index => {
+        const segment =
+          plan[index];
+
+        if (
+          segment.repeat !== 1 ||
+          segment.pause_ms_after !== 900
+        ) {
+          throw new Error(
+            section +
+            ' choice-number segment must use repeat=1 and 900ms gap.'
+          );
+        }
+      }
+    );
+  }
+
+  if (
+    section === 'K4' ||
+    section === 'K5'
+  ) {
+    const roles = [
+      'passage',
+      'replay_cue',
+      'passage'
+    ];
+
+    if (
+      plan.length !== roles.length ||
+      plan.some(
+        (segment, index) =>
+          segment.role !==
+            roles[index]
+      ) ||
+      plan[1].text !==
+        HQ_LISTENING_REPLAY_CUE_TEXT ||
+      plan[1].repeat !== 1
+    ) {
+      throw new Error(
+        section +
+        ' official-parity audio plan must use the Japanese replay cue.'
+      );
+    }
   }
 
   return plan;
@@ -2907,6 +3044,8 @@ function runListeningJob_(
       state.audioVersion !==
         HQ_LISTENING_AUDIO_VERSION &&
       state.audioVersion !==
+        HQ_LISTENING_AUDIO_VERSION_V2 &&
+      state.audioVersion !==
         HQ_LISTENING_AUDIO_VERSION_LEADING5S
     ) {
       throw new Error(
@@ -2961,6 +3100,16 @@ function runListeningJob_(
     SpreadsheetApp.flush();
 
     stage = 'preflight';
+
+    if (
+      state.audioVersion ===
+        HQ_LISTENING_AUDIO_VERSION
+    ) {
+      validateListeningOfficialParityPlan_(
+        j.plan,
+        j.section
+      );
+    }
 
     const spec =
       listeningAudioSpec_(
@@ -3199,6 +3348,34 @@ function runListeningJob_(
 }
 
 
+function listeningDialogueVoice_(
+  primaryVoice
+) {
+  const pairedLabel =
+    HQ_LISTENING_DIALOGUE_VOICE_PAIRS[
+      primaryVoice.label
+    ];
+
+  const paired =
+    HQ_VOICES.find(
+      v =>
+        v.label === pairedLabel
+    );
+
+  if (
+    !paired ||
+    paired.label ===
+      primaryVoice.label
+  ) {
+    throw new Error(
+      'Listening dialogue voice pair is invalid.'
+    );
+  }
+
+  return paired;
+}
+
+
 function listeningAudioSpec_(
   j,
   state
@@ -3220,12 +3397,26 @@ function listeningAudioSpec_(
     state.audioVersion !==
       HQ_LISTENING_AUDIO_VERSION &&
     state.audioVersion !==
+      HQ_LISTENING_AUDIO_VERSION_V2 &&
+    state.audioVersion !==
       HQ_LISTENING_AUDIO_VERSION_LEADING5S
   ) {
     throw new Error(
       'Unknown persisted Listening audio version.'
     );
   }
+
+  const isOfficialParity =
+    state.audioVersion ===
+      HQ_LISTENING_AUDIO_VERSION;
+
+  const responseVoice =
+    j.section === 'K3' &&
+    isOfficialParity
+      ? listeningDialogueVoice_(
+          voice
+        )
+      : voice;
 
   const hasNumberVoice =
     j.plan.some(
@@ -3237,19 +3428,43 @@ function listeningAudioSpec_(
           )
     );
 
+  const hasReplayCue =
+    j.plan.some(
+      segment =>
+        segment.role ===
+          'replay_cue'
+    );
+
   let body = '';
   let first = true;
 
   j.plan.forEach(
     segment => {
-      const segmentVoice =
+      const isNumber =
         Object.prototype
           .hasOwnProperty.call(
             HQ_K1_NUMBER_TEXTS,
             segment.role
-          )
+          );
+
+      const isReplayCue =
+        segment.role ===
+          'replay_cue';
+
+      const isK3Response =
+        j.section === 'K3' &&
+        /^choice[1-4]$/.test(
+          segment.role
+        ) &&
+        isOfficialParity;
+
+      const segmentVoice =
+        isNumber ||
+        isReplayCue
           ? HQ_K1_NUMBER_VOICE
-          : voice;
+          : isK3Response
+            ? responseVoice
+            : voice;
 
       for (
         let n = 0;
@@ -3299,30 +3514,43 @@ function listeningAudioSpec_(
       ssml
     );
 
+  let assignment =
+    'VOICE=' +
+    state.voice;
+
+  if (
+    j.section === 'K3' &&
+    isOfficialParity
+  ) {
+    assignment +=
+      ';RESPONSE_VOICE=' +
+      responseVoice.label;
+  }
+
+  if (hasNumberVoice) {
+    assignment +=
+      ';NUMBER_VOICE=' +
+      HQ_K1_NUMBER_VOICE.label;
+  }
+
+  if (hasReplayCue) {
+    assignment +=
+      ';CUE_VOICE=' +
+      HQ_K1_NUMBER_VOICE.label;
+  }
+
   return {
     ssml: ssml,
-
-    assignment:
-      'VOICE=' +
-      state.voice +
-      (
-        hasNumberVoice
-          ? ';NUMBER_VOICE=' +
-            HQ_K1_NUMBER_VOICE.label
-          : ''
-      ),
-
+    assignment: assignment,
     fingerprint:
       fingerprint,
-
     tempName:
       j.id +
       '.' +
       fingerprint +
       '.mp3',
-
     description:
-      'HANGUL_LISTENING_AUDIO_V1:' +
+      'HANGUL_LISTENING_AUDIO_V2:' +
       fingerprint
   };
 }

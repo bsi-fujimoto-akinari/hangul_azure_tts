@@ -14,6 +14,24 @@
 var H3_WEB_AUDIO_QUEUE_SPREADSHEET_ID =
   '18c5SAfWH473fslNViN_i282ChdDFE1gvGay5l9CZJXI';
 
+
+var H3_PREISSUE_LISTENING_NUMBER_TEXTS = [
+  'マルイチ',
+  'マルニ',
+  'マルサン',
+  'マルヨン'
+];
+
+var H3_PREISSUE_LISTENING_REPLAY_CUE =
+  'もう一度読みます';
+
+var H3_PREISSUE_LISTENING_DIALOGUE_PAIRS = {
+  Hyunsu: 'JiMin',
+  InJoon: 'YuJin',
+  JiMin: 'Hyunsu',
+  YuJin: 'InJoon'
+};
+
 function h3PreissueCanonicalize_(value) {
   if (Array.isArray(value)) {
     return value.map(h3PreissueCanonicalize_);
@@ -604,98 +622,287 @@ function h3PreissueRequireAudioProjection_(
     return;
   }
 
-  if (
-    section !== 'K2' &&
-    section !== 'K3'
-  ) {
-    return;
-  }
-
   var item =
     items &&
     items[section];
 
   if (
-    !item ||
-    !String(
-      item.prompt || ''
-    ).trim() ||
-    !Array.isArray(
-      item.choices
-    ) ||
-    item.choices.length !== 4
+    section === 'K2' ||
+    section === 'K3'
   ) {
-    throw new Error(
-      'PREISSUE_AUDIO_ITEM_PROJECTION_INVALID:' +
-      section
+    if (
+      !item ||
+      !String(
+        item.prompt || ''
+      ).trim() ||
+      !Array.isArray(
+        item.choices
+      ) ||
+      item.choices.length !== 4
+    ) {
+      throw new Error(
+        'PREISSUE_AUDIO_ITEM_PROJECTION_INVALID:' +
+        section
+      );
+    }
+
+    var expected = [
+      {
+        role: 'prompt',
+        text: String(item.prompt),
+        pause: null
+      },
+      {
+        role: 'prompt',
+        text: String(item.prompt),
+        pause: null
+      }
+    ];
+
+    item.choices.forEach(
+      function (choice, index) {
+        var n =
+          index + 1;
+        var role =
+          'choice' +
+          String(n);
+
+        expected.push({
+          role:
+            'choice_number' +
+            String(n),
+          text:
+            H3_PREISSUE_LISTENING_NUMBER_TEXTS[
+              index
+            ],
+          pause: 900
+        });
+        expected.push({
+          role: role,
+          text: String(choice),
+          pause: null
+        });
+        expected.push({
+          role: role,
+          text: String(choice),
+          pause: null
+        });
+      }
     );
+
+    if (
+      plan.length !==
+        expected.length
+    ) {
+      throw new Error(
+        'PREISSUE_AUDIO_PROJECTION_LENGTH_MISMATCH:' +
+        section
+      );
+    }
+
+    expected.forEach(
+      function (spec, index) {
+        var segment =
+          plan[index];
+
+        if (
+          !segment ||
+          String(
+            segment.role || ''
+          ) !== spec.role ||
+          String(
+            segment.text || ''
+          ) !== spec.text ||
+          Number(
+            segment.repeat
+          ) !== 1 ||
+          (
+            spec.pause !== null &&
+            Number(
+              segment.pause_ms_after
+            ) !== spec.pause
+          )
+        ) {
+          throw new Error(
+            'PREISSUE_AUDIO_PROJECTION_MISMATCH:' +
+            section +
+            ':' +
+            String(index + 1)
+          );
+        }
+      }
+    );
+
+    return;
   }
-
-  var expected = [
-    {
-      role: 'prompt',
-      text: String(item.prompt)
-    },
-    {
-      role: 'prompt',
-      text: String(item.prompt)
-    }
-  ];
-
-  item.choices.forEach(
-    function (choice, index) {
-      var role =
-        'choice' +
-        String(index + 1);
-
-      expected.push({
-        role: role,
-        text: String(choice)
-      });
-      expected.push({
-        role: role,
-        text: String(choice)
-      });
-    }
-  );
 
   if (
-    plan.length !==
-      expected.length
+    section === 'K4' ||
+    section === 'K5'
+  ) {
+    if (
+      !item ||
+      !String(
+        item.passage || ''
+      ).trim()
+    ) {
+      throw new Error(
+        'PREISSUE_AUDIO_ITEM_PROJECTION_INVALID:' +
+        section
+      );
+    }
+
+    var expectedPassage =
+      String(item.passage);
+
+    if (
+      plan.length !== 3 ||
+      !plan[0] ||
+      !plan[1] ||
+      !plan[2] ||
+      String(plan[0].role || '') !==
+        'passage' ||
+      String(plan[0].text || '') !==
+        expectedPassage ||
+      Number(plan[0].repeat) !== 1 ||
+      String(plan[1].role || '') !==
+        'replay_cue' ||
+      String(plan[1].text || '') !==
+        H3_PREISSUE_LISTENING_REPLAY_CUE ||
+      Number(plan[1].repeat) !== 1 ||
+      String(plan[2].role || '') !==
+        'passage' ||
+      String(plan[2].text || '') !==
+        expectedPassage ||
+      Number(plan[2].repeat) !== 1
+    ) {
+      throw new Error(
+        'PREISSUE_AUDIO_PROJECTION_MISMATCH:' +
+        section
+      );
+    }
+  }
+}
+
+
+function h3PreissueRequireListeningAssignment_(
+  section,
+  rawAssignment
+) {
+  var parts =
+    String(rawAssignment || '')
+      .split(';')
+      .filter(Boolean);
+
+  var map = {};
+
+  parts.forEach(
+    function (part) {
+      var eq =
+        part.indexOf('=');
+
+      if (eq <= 0) {
+        throw new Error(
+          'PREISSUE_AUDIO_ASSIGNMENT_INVALID:' +
+          section
+        );
+      }
+
+      var key =
+        part.slice(0, eq);
+      var value =
+        part.slice(eq + 1);
+
+      if (
+        !value ||
+        Object.prototype
+          .hasOwnProperty.call(
+            map,
+            key
+          )
+      ) {
+        throw new Error(
+          'PREISSUE_AUDIO_ASSIGNMENT_INVALID:' +
+          section
+        );
+      }
+
+      map[key] = value;
+    }
+  );
+
+  var allowedVoices = [
+    'Hyunsu',
+    'InJoon',
+    'JiMin',
+    'YuJin'
+  ];
+
+  if (
+    allowedVoices.indexOf(
+      map.VOICE
+    ) === -1
   ) {
     throw new Error(
-      'PREISSUE_AUDIO_PROJECTION_LENGTH_MISMATCH:' +
+      'PREISSUE_AUDIO_PRIMARY_VOICE_INVALID:' +
       section
     );
   }
 
-  expected.forEach(
-    function (spec, index) {
-      var segment =
-        plan[index];
+  if (
+    (
+      section === 'K1' ||
+      section === 'K2'
+    ) &&
+    (
+      map.NUMBER_VOICE !==
+        'Nanami' ||
+      Object.keys(map).length !== 2
+    )
+  ) {
+    throw new Error(
+      'PREISSUE_AUDIO_NUMBER_VOICE_INVALID:' +
+      section
+    );
+  }
 
-      if (
-        !segment ||
-        String(
-          segment.role || ''
-        ) !== spec.role ||
-        String(
-          segment.text || ''
-        ) !== spec.text ||
-        Number(
-          segment.repeat
-        ) !== 1
-      ) {
-        throw new Error(
-          'PREISSUE_AUDIO_PROJECTION_MISMATCH:' +
-          section +
-          ':' +
-          String(index + 1)
-        );
-      }
+  if (section === 'K3') {
+    if (
+      map.NUMBER_VOICE !==
+        'Nanami' ||
+      !map.RESPONSE_VOICE ||
+      map.RESPONSE_VOICE ===
+        map.VOICE ||
+      H3_PREISSUE_LISTENING_DIALOGUE_PAIRS[
+        map.VOICE
+      ] !==
+        map.RESPONSE_VOICE ||
+      Object.keys(map).length !== 3
+    ) {
+      throw new Error(
+        'PREISSUE_K3_DIALOGUE_VOICE_INVALID'
+      );
     }
-  );
+  }
+
+  if (
+    (
+      section === 'K4' ||
+      section === 'K5'
+    ) &&
+    (
+      map.CUE_VOICE !==
+        'Nanami' ||
+      Object.keys(map).length !== 2
+    )
+  ) {
+    throw new Error(
+      'PREISSUE_REPLAY_CUE_VOICE_INVALID:' +
+      section
+    );
+  }
 }
+
 
 function h3PreissueRequireQueue_(
   setId,
@@ -839,6 +1046,13 @@ function h3PreissueRequireQueue_(
       ],
       items,
       k1Info
+    );
+
+    h3PreissueRequireListeningAssignment_(
+      section,
+      row[
+        table.map.ASSIGNMENT
+      ]
     );
 
     var calculatedPayloadHash =

@@ -1372,6 +1372,154 @@ function getPersistentReviewMediaPayload_(
   };
 }
 
+
+function h3LegacyReviewValidateRequest_(
+  request,
+  schemaName
+) {
+  if (
+    !request ||
+    request.schema !== schemaName ||
+    request.mode !== 'REVIEW' ||
+    !request.legacy_review_id ||
+    request.txn_id
+  ) {
+    throw new Error(
+      'INVALID_LEGACY_REVIEW_REQUEST'
+    );
+  }
+
+  var legacyReviewId = String(
+    request.legacy_review_id
+  );
+
+  if (
+    legacyReviewId.length > 128 ||
+    /[\x00-\x1F]/.test(
+      legacyReviewId
+    )
+  ) {
+    throw new Error(
+      'INVALID_LEGACY_REVIEW_ID'
+    );
+  }
+
+  return legacyReviewId;
+}
+
+function getLegacyPersistentReviewPayload_(
+  request
+) {
+  var legacyReviewId =
+    h3LegacyReviewValidateRequest_(
+      request,
+      'H3_WEB_RENDER_REQUEST_V1'
+    );
+
+  return buildLegacyPersistentReviewPayload_(
+    legacyReviewId
+  );
+}
+
+function getLegacyPersistentReviewMediaPayload_(
+  request
+) {
+  var legacyReviewId =
+    h3LegacyReviewValidateRequest_(
+      request,
+      'H3_WEB_MEDIA_REQUEST_V1'
+    );
+
+  if (!request.asset_key) {
+    throw new Error(
+      'INVALID_LEGACY_REVIEW_MEDIA_REQUEST'
+    );
+  }
+
+  var section = String(
+    request.asset_key
+  );
+
+  if (
+    H3_WEB_PROD_SECTIONS.indexOf(
+      section
+    ) < 0
+  ) {
+    throw new Error(
+      'LEGACY_REVIEW_MEDIA_ASSET_NOT_ALLOWLISTED'
+    );
+  }
+
+  var spreadsheet =
+    SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+
+  var legacy =
+    h3LegacyReviewContext_(
+      spreadsheet,
+      legacyReviewId
+    );
+
+  if (
+    request.set_id &&
+    String(request.set_id) !==
+      legacy.setId
+  ) {
+    throw new Error(
+      'LEGACY_REVIEW_MEDIA_SET_MISMATCH'
+    );
+  }
+
+  var binding =
+    legacy.source
+      .audioBinding
+      .individual[
+        section
+      ];
+
+  if (
+    !binding ||
+    !binding.audio_file_id ||
+    !binding.audio_url
+  ) {
+    throw new Error(
+      'LEGACY_REVIEW_MEDIA_BINDING_INVALID:' +
+        section
+    );
+  }
+
+  var media =
+    h3DriveDataUri_(
+      binding.audio_file_id,
+      'audio/mpeg',
+      null,
+      8 * 1024 * 1024
+    );
+
+  return {
+    schema:
+      'H3_WEB_MEDIA_V1',
+    mode: 'REVIEW',
+    read_only: true,
+    legacy_review_id:
+      legacy.legacyReviewId,
+    set_id:
+      legacy.setId,
+    asset_key:
+      section,
+    data_uri:
+      media.data_uri,
+    mime_type:
+      media.mime_type,
+    size_bytes:
+      media.size_bytes,
+    trim_start_ms: 0,
+    fallback_url:
+      binding.audio_url
+  };
+}
+
 function h3LegacyReviewResultFromLog_(
   spreadsheet,
   source
@@ -2573,6 +2721,50 @@ function buildReviewHomePayload_() {
       H3_WEB_RUNTIME_SPREADSHEET_ID
     );
 
+  var history =
+    h3ReviewHistoryEntries_(
+      spreadsheet
+    );
+
+  var legacyHistory =
+    h3LegacyReviewHistoryEntries_(
+      spreadsheet
+    ).map(function (entry) {
+      entry.committed_at =
+        entry.answered_at;
+      return entry;
+    });
+
+  history =
+    history
+      .concat(legacyHistory)
+      .sort(function (a, b) {
+        var at = String(
+          a.committed_at ||
+          a.answered_at ||
+          ''
+        );
+        var bt = String(
+          b.committed_at ||
+          b.answered_at ||
+          ''
+        );
+
+        if (at !== bt) {
+          return at < bt ? 1 : -1;
+        }
+
+        return (
+          Number(
+            b.listening_set_no || 0
+          ) -
+          Number(
+            a.listening_set_no || 0
+          )
+        );
+      })
+      .slice(0, 50);
+
   return {
     schema:
       'H3_WEB_HOME_V1',
@@ -2583,9 +2775,7 @@ function buildReviewHomePayload_() {
         spreadsheet
       ),
     review_history:
-      h3ReviewHistoryEntries_(
-        spreadsheet
-      ),
+      history,
     review_filters: [
       'ALL',
       'NEEDS_REVIEW'
@@ -2593,42 +2783,44 @@ function buildReviewHomePayload_() {
   };
 }
 
-function h3ReviewReplayValidateTxnId_(request, schemaName) {
+
+function h3ReviewReplayValidateLegacyId_(
+  request,
+  schemaName
+) {
   if (
     !request ||
     request.schema !== schemaName ||
     request.mode !== 'REVIEW_REPLAY' ||
-    !request.txn_id
+    !request.legacy_review_id ||
+    request.txn_id
   ) {
     throw new Error(
-      'INVALID_REVIEW_REPLAY_REQUEST'
+      'INVALID_LEGACY_REVIEW_REPLAY_REQUEST'
     );
   }
 
-  var txnId = String(
-    request.txn_id
+  var legacyReviewId = String(
+    request.legacy_review_id
   );
 
   if (
-    txnId.length > 128 ||
-    /[\x00-\x1F]/.test(txnId)
+    legacyReviewId.length > 128 ||
+    /[\x00-\x1F]/.test(
+      legacyReviewId
+    )
   ) {
     throw new Error(
-      'INVALID_REVIEW_REPLAY_TXN_ID'
+      'INVALID_LEGACY_REVIEW_REPLAY_ID'
     );
   }
 
-  return txnId;
+  return legacyReviewId;
 }
 
-function buildReviewReplayPayload_(
-  txnId
+function h3ReviewReplayPayloadFromReview_(
+  review
 ) {
-  var review =
-    buildPersistentReviewPayload_(
-      txnId
-    );
-
   var questions =
     review.sections.map(
       function (part) {
@@ -2693,13 +2885,18 @@ function buildReviewReplayPayload_(
     persisted: false,
     read_only_source: true,
     txn_id:
-      review.txn_id,
+      review.txn_id || null,
+    legacy_review_id:
+      review.legacy_review_id ||
+      null,
     set_id:
       review.set_id,
     listening_set_no:
       review.listening_set_no,
     source_review_binding_sha256:
-      review.review_binding_sha256,
+      review.review_binding_sha256 ||
+      review
+        .legacy_review_binding_sha256,
     canonical_render_version:
       H3_R3_LISTENING_RENDER_VERSION,
     surface_contract_id:
@@ -2711,9 +2908,72 @@ function buildReviewReplayPayload_(
   };
 }
 
+function h3ReviewReplayValidateTxnId_(request, schemaName) {
+  if (
+    !request ||
+    request.schema !== schemaName ||
+    request.mode !== 'REVIEW_REPLAY' ||
+    !request.txn_id
+  ) {
+    throw new Error(
+      'INVALID_REVIEW_REPLAY_REQUEST'
+    );
+  }
+
+  var txnId = String(
+    request.txn_id
+  );
+
+  if (
+    txnId.length > 128 ||
+    /[\x00-\x1F]/.test(txnId)
+  ) {
+    throw new Error(
+      'INVALID_REVIEW_REPLAY_TXN_ID'
+    );
+  }
+
+  return txnId;
+}
+
+function buildReviewReplayPayload_(
+  txnId
+) {
+  return h3ReviewReplayPayloadFromReview_(
+    buildPersistentReviewPayload_(
+      txnId
+    )
+  );
+}
+
+function buildLegacyReviewReplayPayload_(
+  legacyReviewId
+) {
+  return h3ReviewReplayPayloadFromReview_(
+    buildLegacyPersistentReviewPayload_(
+      legacyReviewId
+    )
+  );
+}
+
 function getReviewReplayPayload_(
   request
 ) {
+  if (
+    request &&
+    request.legacy_review_id
+  ) {
+    var legacyReviewId =
+      h3ReviewReplayValidateLegacyId_(
+        request,
+        'H3_WEB_RENDER_REQUEST_V1'
+      );
+
+    return buildLegacyReviewReplayPayload_(
+      legacyReviewId
+    );
+  }
+
   var txnId =
     h3ReviewReplayValidateTxnId_(
       request,
@@ -2728,25 +2988,52 @@ function getReviewReplayPayload_(
 function getReviewReplayMediaPayload_(
   request
 ) {
-  var txnId =
-    h3ReviewReplayValidateTxnId_(
-      request,
-      'H3_WEB_MEDIA_REQUEST_V1'
-    );
+  var media;
 
-  var media =
-    getPersistentReviewMediaPayload_({
-      schema:
-        'H3_WEB_MEDIA_REQUEST_V1',
-      mode:
-        'REVIEW',
-      txn_id:
-        txnId,
-      set_id:
-        request.set_id || null,
-      asset_key:
-        request.asset_key
-    });
+  if (
+    request &&
+    request.legacy_review_id
+  ) {
+    var legacyReviewId =
+      h3ReviewReplayValidateLegacyId_(
+        request,
+        'H3_WEB_MEDIA_REQUEST_V1'
+      );
+
+    media =
+      getLegacyPersistentReviewMediaPayload_({
+        schema:
+          'H3_WEB_MEDIA_REQUEST_V1',
+        mode:
+          'REVIEW',
+        legacy_review_id:
+          legacyReviewId,
+        set_id:
+          request.set_id || null,
+        asset_key:
+          request.asset_key
+      });
+  } else {
+    var txnId =
+      h3ReviewReplayValidateTxnId_(
+        request,
+        'H3_WEB_MEDIA_REQUEST_V1'
+      );
+
+    media =
+      getPersistentReviewMediaPayload_({
+        schema:
+          'H3_WEB_MEDIA_REQUEST_V1',
+        mode:
+          'REVIEW',
+        txn_id:
+          txnId,
+        set_id:
+          request.set_id || null,
+        asset_key:
+          request.asset_key
+      });
+  }
 
   media.mode =
     'REVIEW_REPLAY';
@@ -2767,7 +3054,14 @@ function h3ReviewReplayNormalizeAnswers_(
       'H3_WEB_SUBMIT_V1' ||
     request.mode !==
       'REVIEW_REPLAY' ||
-    !request.txn_id ||
+    (
+      !request.txn_id &&
+      !request.legacy_review_id
+    ) ||
+    (
+      request.txn_id &&
+      request.legacy_review_id
+    ) ||
     !request.set_id ||
     !Array.isArray(
       request.answers
@@ -2844,13 +3138,30 @@ function gradeReviewReplay_(
       request.txn_id ||
       ''
     );
+  var legacyReviewId =
+    String(
+      request &&
+      request.legacy_review_id ||
+      ''
+    );
 
   if (
+    (
+      !txnId &&
+      !legacyReviewId
+    ) ||
+    (
+      txnId &&
+      legacyReviewId
+    ) ||
     txnId.length > 128 ||
-    /[\x00-\x1F]/.test(txnId)
+    legacyReviewId.length > 128 ||
+    /[\x00-\x1F]/.test(
+      txnId + legacyReviewId
+    )
   ) {
     throw new Error(
-      'INVALID_REVIEW_REPLAY_TXN_ID'
+      'INVALID_REVIEW_REPLAY_REFERENCE'
     );
   }
 
@@ -2859,9 +3170,13 @@ function gradeReviewReplay_(
       request
     );
   var review =
-    buildPersistentReviewPayload_(
-      txnId
-    );
+    legacyReviewId
+      ? buildLegacyPersistentReviewPayload_(
+          legacyReviewId
+        )
+      : buildPersistentReviewPayload_(
+          txnId
+        );
 
   if (
     String(request.set_id) !==
@@ -2930,7 +3245,10 @@ function gradeReviewReplay_(
     persisted: false,
     runtime_write_count: 0,
     txn_id:
-      review.txn_id,
+      review.txn_id || null,
+    legacy_review_id:
+      review.legacy_review_id ||
+      null,
     set_id:
       review.set_id,
     listening_set_no:

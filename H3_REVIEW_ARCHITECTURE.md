@@ -7,7 +7,7 @@ This document defines the current durable Review contract. Completed R3 phase ch
 
 ## 1. Authority and scope
 
-The persistent Review is the learner-facing explanation authority after a committed 5L transaction. It does not replace the production answer transaction, learner history, scheduler, retest state, K1_READY, locked payload, or individual audio authorities.
+The persistent Review is the learner-facing explanation authority after a committed 5L or 5W transaction. It does not replace the production answer transaction, learner history, scheduler, retest state, Listening K1_READY/locked payload authority, Written issued-stage/queue authority, or bound media authorities.
 
 The implementation must not:
 
@@ -19,7 +19,9 @@ The implementation must not:
 
 ## 2. Source-of-truth model
 
-Review reconstruction requires exact agreement across:
+Review reconstruction is provider-specific but always fail-closed.
+
+Listening requires exact agreement across:
 
 - `listening_web_txn_v1`: committed transaction authority;
 - `listening_log_v1`: committed per-question result/provenance;
@@ -28,7 +30,15 @@ Review reconstruction requires exact agreement across:
 - `listening_review_binding_v1`: transaction/set/payload binding;
 - existing K1 image and K1-K5 individual audio bindings.
 
-The transaction must be `COMMITTED`; the set, transaction, payload, result, explanation, item, binding, image, and audio identities must agree.
+Production Written requires exact agreement across:
+
+- `written_web_txn_v1`: committed Written transaction authority;
+- `written_answer_sync_v1`: `STATUS=COMMITTED` and `PHASE=CORE_COMPLETE`;
+- exact issued `written_set_stage_v1` and queue source binding;
+- `written_review_payload_v1`: locked learner-facing Review payload;
+- `written_review_binding_v1`: TXN/set/stage/result/source/Review binding.
+
+The relevant transaction must be `COMMITTED`; every identity and hash required by that provider must agree before Review content is returned.
 
 ## 3. Explanation payload
 
@@ -56,15 +66,15 @@ Binding creation may occur only after exact source readback. It is metadata pers
 
 ## 5. Reconstruction and HOME index
 
-HOME lists committed Review entries newest first and exposes at least date/time, 5L number, score, wrong count, and uncertainty count. Filters may include all, wrong, and uncertain.
+HOME lists committed Review entries newest first and exposes provider-appropriate identity plus date/time, score, wrong count, and uncertainty count. Filters may include all, wrong, and uncertain.
 
 HOME uses a lightweight eligibility index. It must not perform full payload reconstruction or deep hash validation. Opening a Review performs full source-lock validation through `buildPersistentReviewPayload_()` before revealing content.
 
-The current-learning resolver excludes committed sets and registered legacy Review sets. It may expose only an `ISSUED`, uncommitted, production-renderable set.
+The current-learning resolver excludes committed sets and registered legacy Review sets. It may expose only an `ISSUED`, uncommitted, production-renderable 5L or 5W set, with provider arbitration failing closed on ambiguity.
 
 ## 6. Routes and launcher
 
-The learner launcher is the parameterless canonical Web App URL. Server boot resolves an active safe set as LISTENING; otherwise it renders HOME.
+The learner launcher is the parameterless canonical Web App URL. Server boot resolves an active safe set as LISTENING or WRITTEN according to current-learning arbitration; otherwise it renders HOME.
 
 Controlled internal routes remain available for diagnostics and in-app navigation:
 
@@ -235,7 +245,7 @@ For newly authored or unissued 5W, learner-facing Review authoring is stored
 inside each question's `QUESTION_META_JSON.review` before issue. The
 Written source binding hashes `QUESTION_META_JSON`, so Japanese body/choice
 translations, rationale, and learning blocks are locked before submission.
-Missing or mismatched Review authoring blocks render/new-submit.
+Missing or mismatched Review authoring blocks fail render and new-submit.
 
 Already issued or committed stages are immutable. A one-time production repair
 may create only production Review payload/binding rows from already committed

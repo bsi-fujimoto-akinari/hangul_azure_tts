@@ -264,7 +264,9 @@ function h3PreissueRequireK1_(
     row: row,
     map: map,
     choices: choices,
-    image_sha256: imageSha
+    image_sha256: imageSha,
+    tts_segments:
+      tts.segments
   };
 }
 
@@ -558,11 +560,150 @@ function h3PreissueRequireProvenance_(
   return retests;
 }
 
+function h3PreissueRequireAudioProjection_(
+  section,
+  rawPlan,
+  items,
+  k1Info
+) {
+  var plan;
+
+  try {
+    plan = JSON.parse(
+      String(rawPlan || '')
+    );
+  } catch (e) {
+    throw new Error(
+      'PREISSUE_AUDIO_PLAN_JSON_INVALID:' +
+      section
+    );
+  }
+
+  if (!Array.isArray(plan)) {
+    throw new Error(
+      'PREISSUE_AUDIO_PLAN_NOT_ARRAY:' +
+      section
+    );
+  }
+
+  if (section === 'K1') {
+    if (
+      !k1Info ||
+      !Array.isArray(
+        k1Info.tts_segments
+      ) ||
+      JSON.stringify(plan) !==
+        JSON.stringify(
+          k1Info.tts_segments
+        )
+    ) {
+      throw new Error(
+        'PREISSUE_K1_AUDIO_PROJECTION_MISMATCH'
+      );
+    }
+    return;
+  }
+
+  if (
+    section !== 'K2' &&
+    section !== 'K3'
+  ) {
+    return;
+  }
+
+  var item =
+    items &&
+    items[section];
+
+  if (
+    !item ||
+    !String(
+      item.prompt || ''
+    ).trim() ||
+    !Array.isArray(
+      item.choices
+    ) ||
+    item.choices.length !== 4
+  ) {
+    throw new Error(
+      'PREISSUE_AUDIO_ITEM_PROJECTION_INVALID:' +
+      section
+    );
+  }
+
+  var expected = [
+    {
+      role: 'prompt',
+      text: String(item.prompt)
+    },
+    {
+      role: 'prompt',
+      text: String(item.prompt)
+    }
+  ];
+
+  item.choices.forEach(
+    function (choice, index) {
+      var role =
+        'choice' +
+        String(index + 1);
+
+      expected.push({
+        role: role,
+        text: String(choice)
+      });
+      expected.push({
+        role: role,
+        text: String(choice)
+      });
+    }
+  );
+
+  if (
+    plan.length !==
+      expected.length
+  ) {
+    throw new Error(
+      'PREISSUE_AUDIO_PROJECTION_LENGTH_MISMATCH:' +
+      section
+    );
+  }
+
+  expected.forEach(
+    function (spec, index) {
+      var segment =
+        plan[index];
+
+      if (
+        !segment ||
+        String(
+          segment.role || ''
+        ) !== spec.role ||
+        String(
+          segment.text || ''
+        ) !== spec.text ||
+        Number(
+          segment.repeat
+        ) !== 1
+      ) {
+        throw new Error(
+          'PREISSUE_AUDIO_PROJECTION_MISMATCH:' +
+          section +
+          ':' +
+          String(index + 1)
+        );
+      }
+    }
+  );
+}
+
 function h3PreissueRequireQueue_(
   setId,
   setNo,
   audioBinding,
-  sourceProv
+  sourceProv,
+  items,
+  k1Info
 ) {
   var spreadsheet =
     SpreadsheetApp.openById(
@@ -690,6 +831,15 @@ function h3PreissueRequireQueue_(
         section
       );
     }
+
+    h3PreissueRequireAudioProjection_(
+      section,
+      row[
+        table.map.AUDIO_PLAN_JSON
+      ],
+      items,
+      k1Info
+    );
 
     var calculatedPayloadHash =
       h3Sha256Hex_(
@@ -1242,7 +1392,9 @@ function h3ProdValidatePreissueSet_(
       setId,
       setNo,
       audioBinding,
-      sourceProv
+      sourceProv,
+      items,
+      k1Info
     );
 
   var script =

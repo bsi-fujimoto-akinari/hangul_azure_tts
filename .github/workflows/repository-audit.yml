@@ -1463,7 +1463,7 @@ jobs:
               'getReviewReplayPayload_(',
               'getReviewReplayMediaPayload_(',
               'gradeReviewReplay_(',
-              "e.parameter.mode === 'REVIEW_REPLAY'",
+              "params.mode === 'REVIEW_REPLAY'",
           ]:
               if needle not in web:
                   raise SystemExit(f'R3-09E Web route invariant missing: {needle}')

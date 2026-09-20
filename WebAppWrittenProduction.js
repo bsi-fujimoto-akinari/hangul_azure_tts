@@ -967,3 +967,589 @@ function h3WrittenSubmit_(request) {
     lock.releaseLock();
   }
 }
+
+
+/* =========================================================
+ * 5W current-learning / render
+ * =======================================================*/
+
+var H3_WRITTEN_RENDER_VERSION =
+  'H3-WRITTEN-RENDER-20260918-V7';
+
+var H3_WRITTEN_WEB_SURFACE_CONTRACT_ID =
+  'H3-5W-WEB-SURFACE-20260920-V1';
+
+var H3_WRITTEN_DISPLAY = {
+  D2: '筆2/語彙',
+  D3: '筆3/文法',
+  D4: '筆4/置換',
+  D5: '筆5/共通',
+  D6: '筆6/応答'
+};
+
+
+function h3WrittenValidateRenderRequest_(
+  request
+) {
+  if (
+    !request ||
+    request.schema !==
+      'H3_WEB_RENDER_REQUEST_V1' ||
+    request.mode !== 'WRITTEN' ||
+    !/^H3-\d{8}-\d{2,3}$/.test(
+      String(
+        request.set_id || ''
+      )
+    )
+  ) {
+    throw new Error(
+      'INVALID_WRITTEN_RENDER_REQUEST'
+    );
+  }
+}
+
+
+function h3WrittenRenderTxnGate_(
+  runtimeSpreadsheet,
+  setId
+) {
+  var journal =
+    h3WrittenRequireJournal_(
+      runtimeSpreadsheet
+    );
+
+  var lastRow =
+    journal.getLastRow();
+  var rows =
+    lastRow > 1
+      ? journal
+          .getRange(
+            2,
+            1,
+            lastRow - 1,
+            H3_WEB_WRITTEN_TXN_HEADERS
+              .length
+          )
+          .getDisplayValues()
+      : [];
+
+  var committed = 0;
+  var blocking = [];
+
+  rows.forEach(
+    function (row) {
+      if (
+        String(row[1] || '') !==
+          String(setId)
+      ) {
+        return;
+      }
+
+      var status =
+        String(row[8] || '');
+
+      if (status === 'COMMITTED') {
+        committed += 1;
+      }
+
+      if (
+        status === 'PREPARED' ||
+        status ===
+          'RECOVERY_REQUIRED'
+      ) {
+        blocking.push(status);
+      }
+    }
+  );
+
+  if (committed > 1) {
+    throw new Error(
+      'WRITTEN_RENDER_DUPLICATE_COMMITTED_AUTHORITY'
+    );
+  }
+
+  if (committed === 1) {
+    throw new Error(
+      'WRITTEN_RENDER_ALREADY_COMMITTED'
+    );
+  }
+
+  if (blocking.length) {
+    throw new Error(
+      'WRITTEN_RENDER_TRANSACTION_RECOVERY_BLOCK'
+    );
+  }
+}
+
+
+function h3WrittenRenderQuestions_(
+  context
+) {
+  var meta =
+    h3WrittenParseJson_(
+      context.questionMetaJson,
+      'WRITTEN_RENDER_META_JSON_INVALID'
+    );
+
+  if (
+    !meta ||
+    meta.stage_id !==
+      context.stageId ||
+    !Array.isArray(meta.questions) ||
+    meta.questions.length !== 5
+  ) {
+    throw new Error(
+      'WRITTEN_RENDER_META_SHAPE_INVALID'
+    );
+  }
+
+  var sourceText =
+    h3WrittenNormalizeLineEndings_(
+      context.questionsLog
+    );
+
+  return H3_WEB_WRITTEN_SECTIONS.map(
+    function (section, i) {
+      var q =
+        meta.questions[i];
+
+      if (
+        !q ||
+        Number(q.q) !== i + 1 ||
+        !String(
+          q.question || ''
+        ).trim() ||
+        !Array.isArray(q.choices) ||
+        q.choices.length !== 4
+      ) {
+        throw new Error(
+          'WRITTEN_RENDER_QUESTION_SHAPE_INVALID:' +
+            String(i + 1)
+        );
+      }
+
+      var question =
+        h3WrittenNormalizeLineEndings_(
+          String(q.question)
+        );
+      var choices =
+        q.choices.map(
+          function (choice) {
+            return String(
+              choice || ''
+            );
+          }
+        );
+
+      if (
+        choices.some(
+          function (choice) {
+            return !choice.trim();
+          }
+        )
+      ) {
+        throw new Error(
+          'WRITTEN_RENDER_CHOICE_BLANK:' +
+            String(i + 1)
+        );
+      }
+
+      if (
+        sourceText.indexOf(
+          question
+        ) < 0
+      ) {
+        throw new Error(
+          'WRITTEN_RENDER_QUESTION_SOURCE_MISMATCH:' +
+            String(i + 1)
+        );
+      }
+
+      choices.forEach(
+        function (choice) {
+          if (
+            sourceText.indexOf(
+              choice
+            ) < 0
+          ) {
+            throw new Error(
+              'WRITTEN_RENDER_CHOICE_SOURCE_MISMATCH:' +
+                String(i + 1)
+            );
+          }
+        }
+      );
+
+      return {
+        section:
+          section,
+        display:
+          H3_WRITTEN_DISPLAY[
+            section
+          ],
+        question_text:
+          question,
+        choice_ids:
+          [1, 2, 3, 4],
+        visible_choices:
+          choices,
+        audio_asset_key:
+          null,
+        audio_fallback_url:
+          null
+      };
+    }
+  );
+}
+
+
+function buildWrittenProductionRenderPayload_(
+  request
+) {
+  h3WrittenValidateRenderRequest_(
+    request
+  );
+
+  var runtimeSpreadsheet =
+    SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+
+  h3WrittenRenderTxnGate_(
+    runtimeSpreadsheet,
+    request.set_id
+  );
+
+  var context =
+    h3WrittenValidateSourceIdentity_(
+      h3WrittenReadContext_(
+        runtimeSpreadsheet,
+        request.set_id
+      )
+    );
+
+  h3WrittenRequireNewSubmitPrecondition_(
+    context
+  );
+
+  var questions =
+    h3WrittenRenderQuestions_(
+      context
+    );
+  var sourceBinding =
+    h3WrittenSourceBinding_(
+      context
+    );
+
+  return {
+    schema:
+      'H3_WEB_SET_V1',
+    mode:
+      'WRITTEN',
+    nonlearning:
+      false,
+    persisted:
+      true,
+    set_id:
+      context.setId,
+    stage_id:
+      context.stageId,
+    canonical_render_version:
+      H3_WRITTEN_RENDER_VERSION,
+    surface_contract_id:
+      H3_WRITTEN_WEB_SURFACE_CONTRACT_ID,
+    source_binding_sha256:
+      sourceBinding.sha256,
+    transport: {
+      audio:
+        'NONE',
+      image:
+        'NONE',
+      review:
+        'WRITTEN_PERSISTENT_REVIEW_PENDING'
+    },
+    questions:
+      questions
+  };
+}
+
+
+function h3WrittenCurrentLearning_(
+  runtimeSpreadsheet
+) {
+  var stageSheet =
+    runtimeSpreadsheet.getSheetByName(
+      'written_set_stage_v1'
+    );
+  var journal =
+    h3WrittenRequireJournal_(
+      runtimeSpreadsheet
+    );
+
+  if (!stageSheet) {
+    return null;
+  }
+
+  var stage =
+    h3WrittenReadRows_(
+      stageSheet,
+      24
+    );
+
+  h3WrittenRequireColumns_(
+    stage.map,
+    [
+      'STAGE_ID',
+      'STATUS',
+      'ACTUAL_SET_ID',
+      'ISSUED_AT'
+    ],
+    'written_set_stage_v1'
+  );
+
+  var txnRows =
+    journal.getLastRow() > 1
+      ? journal
+          .getRange(
+            2,
+            1,
+            journal.getLastRow() - 1,
+            H3_WEB_WRITTEN_TXN_HEADERS
+              .length
+          )
+          .getDisplayValues()
+      : [];
+
+  var committed = {};
+  var blocking = {};
+
+  txnRows.forEach(
+    function (row) {
+      var setId =
+        String(row[1] || '');
+      var status =
+        String(row[8] || '');
+
+      if (!setId) {
+        return;
+      }
+
+      if (status === 'COMMITTED') {
+        committed[setId] = true;
+      }
+
+      if (
+        status === 'PREPARED' ||
+        status ===
+          'RECOVERY_REQUIRED'
+      ) {
+        blocking[setId] =
+          status;
+      }
+    }
+  );
+
+  var candidates = [];
+
+  stage.rows.forEach(
+    function (row) {
+      var setId =
+        String(
+          row[
+            stage.map.ACTUAL_SET_ID
+          ] || ''
+        );
+      var status =
+        String(
+          row[
+            stage.map.STATUS
+          ] || ''
+        );
+      var issuedAt =
+        String(
+          row[
+            stage.map.ISSUED_AT
+          ] || ''
+        );
+
+      if (
+        status !== 'ISSUED' ||
+        !setId ||
+        !issuedAt ||
+        committed[setId]
+      ) {
+        return;
+      }
+
+      if (blocking[setId]) {
+        throw new Error(
+          'WRITTEN_CURRENT_LEARNING_RECOVERY_BLOCK:' +
+            setId
+        );
+      }
+
+      var context;
+
+      try {
+        context =
+          h3WrittenValidateSourceIdentity_(
+            h3WrittenReadContext_(
+              runtimeSpreadsheet,
+              setId
+            )
+          );
+      } catch (_err) {
+        return;
+      }
+
+      if (
+        String(
+          context.answersLog || ''
+        ) !== ''
+      ) {
+        return;
+      }
+
+      try {
+        buildWrittenProductionRenderPayload_({
+          schema:
+            'H3_WEB_RENDER_REQUEST_V1',
+          mode:
+            'WRITTEN',
+          set_id:
+            setId
+        });
+      } catch (_err2) {
+        return;
+      }
+
+      candidates.push({
+        mode:
+          'WRITTEN',
+        review_kind:
+          'WRITTEN',
+        set_id:
+          setId,
+        stage_id:
+          context.stageId,
+        issued_at:
+          issuedAt
+      });
+    }
+  );
+
+  if (!candidates.length) {
+    return null;
+  }
+
+  if (candidates.length !== 1) {
+    throw new Error(
+      'WRITTEN_CURRENT_LEARNING_AMBIGUOUS:' +
+        String(
+          candidates.length
+        )
+    );
+  }
+
+  return candidates[0];
+}
+
+
+function h3BuildWrittenLearnerUrl_(
+  setId
+) {
+  var normalized =
+    String(setId || '').trim();
+
+  if (
+    !/^H3-\d{8}-\d{2,3}$/.test(
+      normalized
+    )
+  ) {
+    throw new Error(
+      'WRITTEN_LEARNER_URL_SET_ID_INVALID'
+    );
+  }
+
+  return (
+    H3_LEARNER_WEB_APP_BASE_URL +
+    '?mode=WRITTEN&set_id=' +
+    encodeURIComponent(
+      normalized
+    )
+  );
+}
+
+
+function getWrittenLearnerUrl(
+  setId
+) {
+  var normalized =
+    String(setId || '').trim();
+
+  var payload =
+    buildWrittenProductionRenderPayload_({
+      schema:
+        'H3_WEB_RENDER_REQUEST_V1',
+      mode:
+        'WRITTEN',
+      set_id:
+        normalized
+    });
+
+  if (
+    !payload ||
+    payload.mode !== 'WRITTEN' ||
+    String(
+      payload.set_id || ''
+    ) !== normalized
+  ) {
+    throw new Error(
+      'WRITTEN_LEARNER_URL_RENDER_GATE_FAILED'
+    );
+  }
+
+  var spreadsheet =
+    SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+  var current =
+    h3ReviewCurrentLearning_(
+      spreadsheet
+    );
+
+  if (
+    !current ||
+    current.mode !== 'WRITTEN' ||
+    String(
+      current.set_id || ''
+    ) !== normalized
+  ) {
+    throw new Error(
+      'WRITTEN_LEARNER_URL_CURRENT_GATE_FAILED'
+    );
+  }
+
+  return {
+    schema:
+      'H3_LEARNER_URL_V2',
+    mode:
+      'HOME',
+    handoff_mode:
+      'HOME_PARAMETERLESS',
+    set_id:
+      normalized,
+    url:
+      H3_LEARNER_WEB_APP_BASE_URL,
+    home_url:
+      H3_LEARNER_WEB_APP_BASE_URL,
+    direct_url:
+      h3BuildWrittenLearnerUrl_(
+        normalized
+      ),
+    direct_url_policy:
+      'INTERNAL_DIAGNOSTIC_ONLY',
+    host:
+      'script.google.com'
+  };
+}

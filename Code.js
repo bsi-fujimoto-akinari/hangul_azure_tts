@@ -2555,7 +2555,8 @@ function validateListeningAudioPlan_(
     'choice2',
     'choice3',
     'choice4',
-    'passage'
+    'passage',
+    'replay_cue'
   ]);
 
   let totalChars = 0;
@@ -2603,6 +2604,10 @@ function validateListeningAudioPlan_(
             segment.role
           );
 
+      const isReplayCue =
+        segment.role ===
+          'replay_cue';
+
       if (
         !roles.has(
           segment.role
@@ -2618,10 +2623,24 @@ function validateListeningAudioPlan_(
 
       if (
         isNumberRole &&
-        section !== 'K1'
+        ['K1','K2','K3'].indexOf(
+          section
+        ) === -1
       ) {
         throw new Error(
-          'K1 choice-number roles are not allowed in ' +
+          'Choice-number roles are not allowed in ' +
+          section +
+          '.'
+        );
+      }
+
+      if (
+        isReplayCue &&
+        section !== 'K4' &&
+        section !== 'K5'
+      ) {
+        throw new Error(
+          'Replay cue is not allowed in ' +
           section +
           '.'
         );
@@ -2635,7 +2654,18 @@ function validateListeningAudioPlan_(
           ]
         ) {
           throw new Error(
-            'Invalid K1 choice-number text at segment ' +
+            'Invalid choice-number text at segment ' +
+            (i + 1) +
+            '.'
+          );
+        }
+      } else if (isReplayCue) {
+        if (
+          segment.text !==
+            HQ_LISTENING_REPLAY_CUE_TEXT
+        ) {
+          throw new Error(
+            'Invalid Japanese replay cue text at segment ' +
             (i + 1) +
             '.'
           );
@@ -2648,10 +2678,12 @@ function validateListeningAudioPlan_(
         !/[가-힣]/.test(
           segment.text
         ) ||
-        /[\u3040-\u30ff]/
-          .test(segment.text) ||
-        /[\x00-\x08\x0B\x0C\x0E-\x1F]/
-          .test(segment.text)
+        /[぀-ヿ]/.test(
+          segment.text
+        ) ||
+        /[ --]/.test(
+          segment.text
+        )
       ) {
         throw new Error(
           'Invalid Korean audio text at segment ' +
@@ -2672,11 +2704,14 @@ function validateListeningAudioPlan_(
       }
 
       if (
-        isNumberRole &&
+        (
+          isNumberRole ||
+          isReplayCue
+        ) &&
         segment.repeat !== 1
       ) {
         throw new Error(
-          'K1 choice-number repeat must be 1 at segment ' +
+          'Japanese announcer segment repeat must be 1 at segment ' +
           (i + 1) +
           '.'
         );
@@ -2706,13 +2741,102 @@ function validateListeningAudioPlan_(
 
   if (
     totalChars >
-    HQ_LISTENING_MAX_TOTAL_CHARS
+      HQ_LISTENING_MAX_TOTAL_CHARS
   ) {
     throw new Error(
       'AUDIO_PLAN_JSON total text exceeds ' +
       HQ_LISTENING_MAX_TOTAL_CHARS +
       ' characters.'
     );
+  }
+
+  return plan;
+}
+
+
+function validateListeningOfficialParityPlan_(
+  plan,
+  section
+) {
+  if (
+    section === 'K2' ||
+    section === 'K3'
+  ) {
+    const roles = [
+      'prompt',
+      'prompt',
+      'choice_number1',
+      'choice1',
+      'choice1',
+      'choice_number2',
+      'choice2',
+      'choice2',
+      'choice_number3',
+      'choice3',
+      'choice3',
+      'choice_number4',
+      'choice4',
+      'choice4'
+    ];
+
+    if (
+      plan.length !== roles.length ||
+      plan.some(
+        (segment, index) =>
+          segment.role !==
+            roles[index]
+      )
+    ) {
+      throw new Error(
+        section +
+        ' official-parity audio plan must be prompt x2 then numbered choice pairs.'
+      );
+    }
+
+    [2,5,8,11].forEach(
+      index => {
+        const segment =
+          plan[index];
+
+        if (
+          segment.repeat !== 1 ||
+          segment.pause_ms_after !== 900
+        ) {
+          throw new Error(
+            section +
+            ' choice-number segment must use repeat=1 and 900ms gap.'
+          );
+        }
+      }
+    );
+  }
+
+  if (
+    section === 'K4' ||
+    section === 'K5'
+  ) {
+    const roles = [
+      'passage',
+      'replay_cue',
+      'passage'
+    ];
+
+    if (
+      plan.length !== roles.length ||
+      plan.some(
+        (segment, index) =>
+          segment.role !==
+            roles[index]
+      ) ||
+      plan[1].text !==
+        HQ_LISTENING_REPLAY_CUE_TEXT ||
+      plan[1].repeat !== 1
+    ) {
+      throw new Error(
+        section +
+        ' official-parity audio plan must use the Japanese replay cue.'
+      );
+    }
   }
 
   return plan;
@@ -2976,6 +3100,16 @@ function runListeningJob_(
     SpreadsheetApp.flush();
 
     stage = 'preflight';
+
+    if (
+      state.audioVersion ===
+        HQ_LISTENING_AUDIO_VERSION
+    ) {
+      validateListeningOfficialParityPlan_(
+        j.plan,
+        j.section
+      );
+    }
 
     const spec =
       listeningAudioSpec_(

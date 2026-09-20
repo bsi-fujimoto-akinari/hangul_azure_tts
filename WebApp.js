@@ -36,6 +36,15 @@ function getListeningWebSet(request) {
   }
 
   if (request && request.mode === 'WRITTEN') {
+    if (
+      request.surface_family ===
+        'READING'
+    ) {
+      return buildReadingProductionRenderPayload_(
+        request
+      );
+    }
+
     return buildWrittenProductionRenderPayload_(
       request
     );
@@ -97,6 +106,15 @@ function submitListeningWebAnswers(request) {
   }
 
   if (request && request.mode === 'WRITTEN') {
+    if (
+      request.surface_family ===
+        'READING'
+    ) {
+      return h3ReadingSubmit_(
+        request
+      );
+    }
+
     var writtenResult =
       h3WrittenSubmit_(request);
 
@@ -151,6 +169,7 @@ function h3WebBootRequest_(e) {
   var mode = 'HOME';
   var setId = null;
   var txnId = null;
+  var surfaceFamily = null;
   var params =
     e && e.parameter
       ? e.parameter
@@ -183,6 +202,13 @@ function h3WebBootRequest_(e) {
       setId = String(
         params.set_id
       );
+      if (
+        params.surface_family ===
+          'READING'
+      ) {
+        surfaceFamily =
+          'READING';
+      }
     } else if (
       params.mode === 'SYSTEM_TEST' &&
       h3SystemTestSetIdAllowed_(
@@ -220,6 +246,12 @@ function h3WebBootRequest_(e) {
       setId = String(
         current.set_id
       );
+      surfaceFamily =
+        current.surface_family
+          ? String(
+              current.surface_family
+            )
+          : null;
     }
   }
 
@@ -227,6 +259,8 @@ function h3WebBootRequest_(e) {
     schema:
       'H3_WEB_RENDER_REQUEST_V1',
     mode: mode,
+    surface_family:
+      surfaceFamily,
     set_id: setId,
     txn_id: txnId
   };

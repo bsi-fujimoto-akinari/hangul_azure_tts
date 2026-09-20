@@ -13,6 +13,7 @@
     locked: false,
     submitting: false,
     activeIndex: 0,
+    surfaceFamily: null,
     mediaCache: {},
     mediaTrimMs: {},
     mediaLoading: {},
@@ -68,6 +69,7 @@
     app.locked = false;
     app.submitting = false;
     app.activeIndex = 0;
+    app.surfaceFamily = null;
     app.mediaCache = {};
     app.mediaTrimMs = {};
     app.mediaLoading = {};
@@ -101,6 +103,182 @@
     error.classList.add('hidden');
   }
 
+  function resolveLearningSurfaceFamily_(payload) {
+    var declared =
+      String(
+        payload &&
+        payload.surface_family ||
+        ''
+      );
+
+    if (declared) {
+      return declared;
+    }
+
+    var mode =
+      String(
+        payload &&
+        payload.mode ||
+        ''
+      );
+
+    if (mode === 'LISTENING') {
+      return '5L';
+    }
+    if (mode === 'WRITTEN') {
+      return '5W';
+    }
+    if (mode === 'SYSTEM_TEST') {
+      return 'SYSTEM_TEST';
+    }
+
+    return '';
+  }
+
+  function validateLearningPayloadShape_(payload) {
+    var questions =
+      payload && payload.questions;
+    if (!Array.isArray(questions)) {
+      throw new Error(
+        'QUESTION_PAYLOAD_SHAPE_INVALID'
+      );
+    }
+
+    var family =
+      resolveLearningSurfaceFamily_(
+        payload
+      );
+    var rawCount =
+      payload.item_count;
+    var itemCount =
+      rawCount === undefined ||
+      rawCount === null ||
+      rawCount === ''
+        ? questions.length
+        : Number(rawCount);
+
+    if (
+      !Number.isInteger(itemCount) ||
+      itemCount < 1 ||
+      itemCount !== questions.length
+    ) {
+      throw new Error(
+        'QUESTION_PAYLOAD_COUNT_INVALID'
+      );
+    }
+
+    var providerKind =
+      String(
+        payload.provider_kind || ''
+      );
+    var level =
+      String(payload.level || '');
+
+    if (
+      level &&
+      ['3級', '準2級'].indexOf(
+        level
+      ) < 0
+    ) {
+      throw new Error(
+        'QUESTION_PAYLOAD_LEVEL_INVALID'
+      );
+    }
+
+    var expectedSections = null;
+    if (family === '5L') {
+      if (
+        providerKind &&
+        providerKind !== 'LISTENING'
+      ) {
+        throw new Error(
+          'QUESTION_PAYLOAD_PROVIDER_INVALID'
+        );
+      }
+      expectedSections = [
+        'K1', 'K2', 'K3', 'K4', 'K5'
+      ];
+    } else if (family === '5W') {
+      if (
+        providerKind &&
+        providerKind !== 'WRITTEN'
+      ) {
+        throw new Error(
+          'QUESTION_PAYLOAD_PROVIDER_INVALID'
+        );
+      }
+      expectedSections = [
+        'D2', 'D3', 'D4', 'D5', 'D6'
+      ];
+    } else if (
+      family === 'READING' ||
+      family === 'TRANSLATION'
+    ) {
+      if (providerKind !== 'WRITTEN') {
+        throw new Error(
+          'QUESTION_PAYLOAD_PROVIDER_INVALID'
+        );
+      }
+      return family;
+    } else if (
+      family === 'SYSTEM_TEST'
+    ) {
+      if (itemCount !== 5) {
+        throw new Error(
+          'QUESTION_PAYLOAD_SYSTEM_TEST_COUNT_INVALID'
+        );
+      }
+      return family;
+    } else {
+      throw new Error(
+        'QUESTION_PAYLOAD_FAMILY_INVALID'
+      );
+    }
+
+    if (itemCount !== 5) {
+      throw new Error(
+        'QUESTION_PAYLOAD_FIXED_COUNT_INVALID'
+      );
+    }
+
+    questions.forEach(
+      function (question, index) {
+        if (
+          !question ||
+          String(
+            question.section || ''
+          ) !== expectedSections[index]
+        ) {
+          throw new Error(
+            'QUESTION_PAYLOAD_SECTION_ORDER_INVALID'
+          );
+        }
+      }
+    );
+
+    return family;
+  }
+
+  function renderLearningSurface_(
+    payload,
+    family
+  ) {
+    if (
+      ['5L', '5W', 'SYSTEM_TEST']
+        .indexOf(family) >= 0
+    ) {
+      renderQuestions(
+        payload.questions
+      );
+      return;
+    }
+
+    throw new Error(
+      'SURFACE_FAMILY_RENDERER_NOT_ACTIVE:' +
+        family
+    );
+  }
+
   function loadSet(request) {
     setLoading(true);
     resetForPayload();
@@ -128,16 +306,12 @@
           return;
         }
 
-        if (
-          !Array.isArray(
-            payload.questions
-          ) ||
-          payload.questions.length !== 5
-        ) {
-          throw new Error(
-            'QUESTION_PAYLOAD_SHAPE_INVALID'
+        var surfaceFamily =
+          validateLearningPayloadShape_(
+            payload
           );
-        }
+        app.surfaceFamily =
+          surfaceFamily;
 
         sections =
           payload.questions.map(
@@ -148,8 +322,9 @@
             }
           );
 
-        renderQuestions(
-          payload.questions
+        renderLearningSurface_(
+          payload,
+          surfaceFamily
         );
         buildMobileProgress(
           payload.questions.length

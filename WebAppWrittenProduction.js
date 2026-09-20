@@ -589,9 +589,25 @@ function h3WrittenBuildResult_(
   txnId,
   sourceBindingSha
 ) {
+  var surface =
+    h3LearningSurfaceMetadataForMode_(
+      'WRITTEN',
+      grade.graded
+    );
+
   return {
     schema: 'H3_WEB_SUBMIT_RESULT_V1',
     mode: 'WRITTEN',
+    learning_surface_schema:
+      surface.learning_surface_schema,
+    provider_kind:
+      surface.provider_kind,
+    surface_family:
+      surface.surface_family,
+    level:
+      surface.level,
+    item_count:
+      surface.item_count,
     persisted: true,
     set_id: context.setId,
     stage_id: context.stageId,
@@ -1339,12 +1355,27 @@ function buildWrittenProductionRenderPayload_(
     h3WrittenSourceBinding_(
       context
     );
+  var surface =
+    h3LearningSurfaceMetadataForMode_(
+      'WRITTEN',
+      questions
+    );
 
   return {
     schema:
       'H3_WEB_SET_V1',
     mode:
       'WRITTEN',
+    learning_surface_schema:
+      surface.learning_surface_schema,
+    provider_kind:
+      surface.provider_kind,
+    surface_family:
+      surface.surface_family,
+    level:
+      surface.level,
+    item_count:
+      surface.item_count,
     nonlearning:
       false,
     persisted:

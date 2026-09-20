@@ -258,9 +258,25 @@ function buildProductionRenderPayload_(request) {
   questions[0].image_size_bytes =
     image.size_bytes;
 
+  var surface =
+    h3LearningSurfaceMetadataForMode_(
+      'LISTENING',
+      questions
+    );
+
   return {
     schema: 'H3_WEB_SET_V1',
     mode: 'LISTENING',
+    learning_surface_schema:
+      surface.learning_surface_schema,
+    provider_kind:
+      surface.provider_kind,
+    surface_family:
+      surface.surface_family,
+    level:
+      surface.level,
+    item_count:
+      surface.item_count,
     nonlearning: false,
     persisted: true,
     set_id: context.setId,

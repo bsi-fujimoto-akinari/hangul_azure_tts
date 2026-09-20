@@ -1442,9 +1442,25 @@ function h3ProdApplyTxnId_(plan, txnId) {
 }
 
 function h3ProdBuildResult_(plan, context, txnId) {
+  var surface =
+    h3LearningSurfaceMetadataForMode_(
+      'LISTENING',
+      plan.graded
+    );
+
   return {
     schema: 'H3_WEB_SUBMIT_RESULT_V1',
     mode: 'LISTENING',
+    learning_surface_schema:
+      surface.learning_surface_schema,
+    provider_kind:
+      surface.provider_kind,
+    surface_family:
+      surface.surface_family,
+    level:
+      surface.level,
+    item_count:
+      surface.item_count,
     persisted: true,
     set_id: context.setId,
     txn_id: txnId,

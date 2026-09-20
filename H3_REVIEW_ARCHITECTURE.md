@@ -1,6 +1,6 @@
 # H3 Review Architecture
 
-Version: H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V5
+Version: H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V6
 Status: R3_CLOSED_NORMAL_LIVE
 
 This document defines the current durable Review contract. Completed R3 phase chronology and device-validation evidence remain in Git history and Drive `06_AUDIT`.
@@ -68,9 +68,11 @@ Binding creation may occur only after exact source readback. It is metadata pers
 
 HOME lists committed Review entries newest first and exposes provider-appropriate identity plus date/time, score, wrong count, and uncertainty count. Filters may include all, wrong, and uncertain.
 
-HOME uses a lightweight eligibility index. It must not perform full payload reconstruction or deep hash validation. Opening a Review performs full source-lock validation through `buildPersistentReviewPayload_()` before revealing content.
+HOME uses the derived `review_home_index_v1` as its only history source. The table stores one ACTIVE row per `KIND + SET_ID` with stable set number, stored answer timestamp, score/count metadata, Review locator/source mode, and precomputed `BASE_PRIORITY`. It is a display index only: it is not learner history, transaction authority, Review payload authority, or scheduler state.
 
-The current-learning resolver excludes committed sets and registered legacy Review sets. It may expose only an `ISSUED`, uncommitted, production-renderable 5L or 5W set, with provider arbitration failing closed on ambiguity.
+HOME performs exactly one lightweight index read, computes only time-dependent Review-level metadata, and must not scan `listening_log_v1` or `generation_log_v1`, reconstruct Review payloads, or perform deep hash validation. `BASE_PRIORITY` is refreshed only after a committed Listening answer or Written Answer Sync, when the canonical logs already contain the new result. Opening a Review remains the full source-lock validation boundary through the existing provider-specific persistent Review loaders.
+
+The current-learning resolver excludes committed sets and registered legacy Review sets. It may expose only an `ISSUED`, uncommitted, production-renderable 5L or 5W set, with provider arbitration failing closed on ambiguity. Parameterless boot owns this resolution; if it selects HOME, the HOME payload does not run the resolver a second time and exposes `current_learning=null`.
 
 ## 6. Routes and launcher
 

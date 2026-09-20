@@ -4572,14 +4572,30 @@ jobs:
 
           context.__schedulerContext = {
             sourceRows,
-            sourcePlan:{map:sourceMap,rows:sourceRows.map(r => ({
-              rowNumber:r.rowNumber,
-              values:r.values.slice()
-            }))},
-            stages:{rows:[],map:{
-              STAGE_ID:0,BLOCK_NO:1,SET_OFFSET:2,STATUS:3,
-              QUESTION_META_JSON:6
-            }},
+            sourcePlan:{
+              headers:sourceHeader,
+              map:sourceMap,
+              rows:sourceRows.map(r => ({
+                rowNumber:r.rowNumber,
+                values:r.values.slice()
+              }))
+            },
+            stages:{
+              headers:[
+                'STAGE_ID','BLOCK_NO','SET_OFFSET','STATUS',
+                'QUESTIONS_LOG_TEMPLATE','ANSWER_KEY_JSON','QUESTION_META_JSON',
+                'Q1_AUDIO','Q2_AUDIO','Q3_AUDIO','Q4_AUDIO',
+                'Q5A1','Q5B1','Q5A2','SLOT_PATCH_JSON',
+                'ANSWER_POSITION_JSON','PRON_AUDIT_JSON','APPROVED_SOURCE',
+                'POLICY_ID','SOURCE_SNAPSHOT_ID','ACTUAL_SET_ID',
+                'CREATED_AT','ISSUED_AT','NOTES'
+              ],
+              rows:[],
+              map:{
+                STAGE_ID:0,BLOCK_NO:1,SET_OFFSET:2,STATUS:3,
+                QUESTION_META_JSON:6
+              }
+            },
             nextBlockNo:2,
             nextSetOffset:1
           };

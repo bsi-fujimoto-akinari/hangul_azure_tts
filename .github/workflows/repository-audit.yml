@@ -2962,6 +2962,10 @@ jobs:
             {filename:name}
           ));
 
+          context.hash_ = value =>
+            crypto.createHash('sha256')
+              .update(String(value), 'utf8')
+              .digest('hex');
           context.h3ReviewRequireExactHeader_ = () => {};
           context.h3ReviewTable_ = sheet => sheet;
 

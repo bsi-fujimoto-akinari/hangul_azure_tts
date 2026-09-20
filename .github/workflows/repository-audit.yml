@@ -6282,7 +6282,7 @@ jobs:
             activation.result !== 'PASS' ||
             activation.schema !==
               'H3_TRANSLATION_ACTIVATION_CORE_AUDIT_V1' ||
-            activation.checks !== 12 ||
+            activation.checks !== 14 ||
             activation.p11_set_id !==
               'H3-20260921-T001' ||
             activation.p11_stage_id !==

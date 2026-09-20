@@ -2931,6 +2931,10 @@ jobs:
               }
               return {};
             };
+            ctx.assertListeningAudioSourceAttestation_ = () => ({
+              object: {schema:'H3_LISTENING_AUDIO_SOURCE_ATTESTATION_V1'},
+              sha256:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+            });
             ctx.persistListeningSetScript_ = (_setId, members) => {
               calls.script++;
               assert(

@@ -1,6 +1,6 @@
 # H3 Web / Chat Contract
 
-Version: H3-WEB-CHAT-CURRENT-20260920-V4
+Version: H3-WEB-CHAT-CURRENT-20260920-V5
 
 This document defines the current learner trigger, Web handoff, receipt, and minimal Chat response contract. Completed migration chronology remains in Git history.
 
@@ -135,8 +135,10 @@ This contract applies equally to 5L and 5W learner-facing postgrade content.
 - HOME does not render an unanswered/current-learning header. Active issued learning is resolved by parameterless boot before HOME is shown.
 - Written history receives a stable chronological `5W #N` ordinal; Listening retains `5L #N`.
 - HOME cards themselves are the Review navigation target; separate `復習` and `再挑戦` buttons are not learner-facing controls.
-- HOME filters are `聞きとり` and `筆記`; sorting supports newest-first and descending Review level.
-- Review level uses `H3_REVIEW_LEVEL_V1` (0–100): each item contributes result severity `×=12 / △=6 / ○=0` plus up to 8 points from repeated weakness on the same skill (`2×historical wrong + historical uncertain`). Higher values mean higher review priority.
+- HOME filter is an exclusive `L` / `W` segmented control; exactly one provider is visible at a time. The initial provider follows the newest HOME history entry.
+- HOME sort is a compact `Newest` / `Priority` segmented control.
+- Review level uses `H3_REVIEW_LEVEL_V2` (0–100). Base weakness remains `×=12 / △=6 / ○=0` plus up to 8 points from repeated weakness on the same skill (`2×historical wrong + historical uncertain`). Time pressure then uses `F = 1 - 2^(-d/14)` where `d` is elapsed days, and the final level is `B + (100-B)×0.40×F`. Higher values mean higher review priority.
+- If a history entry has `answered_at=UNKNOWN`, HOME temporarily substitutes the oldest valid timestamp present in the current HOME history for ordering and Review-level age only. The learner-visible date remains `UNKNOWN`; this fallback is provisional pending historical investigation.
 
 ## 18. Listening audio reliability
 

@@ -3048,6 +3048,484 @@ function gradeReviewReplay_(
 }
 
 
+
+/* =========================================================
+ * Written 5W learner-facing explanation overlay
+ * =======================================================*/
+
+var H3_WRITTEN_REVIEW_EXPLANATION_OVERLAY_SHEET_ =
+  'written_review_explanation_overlay_v1';
+var H3_WRITTEN_REVIEW_EXPLANATION_BINDING_SHEET_ =
+  'written_review_explanation_binding_v1';
+var H3_WRITTEN_REVIEW_EXPLANATION_OVERLAY_CONTRACT_ID_ =
+  'H3-WRITTEN-REVIEW-EXPLANATION-OVERLAY-20260921-V1';
+var H3_WRITTEN_REVIEW_EXPLANATION_DISPLAY_SCHEMA_ =
+  'H3_5W_REVIEW_EXPLANATION_DISPLAY_V1';
+var H3_WRITTEN_REVIEW_EXPLANATION_APPROVED_TEXT_SHA256_ =
+  '9b13effe68f565a1ef1fea5c13441dddf7ef3bed5296050c3e62931db48a670f';
+
+var H3_WRITTEN_REVIEW_EXPLANATION_OVERLAY_HEADERS_ = [
+  'SET_ID',
+  'BASE_SOURCE_MODE',
+  'BASE_AUTHORITY_SHA256',
+  'DISPLAY_SCHEMA',
+  'DISPLAY_JSON',
+  'DISPLAY_SHA256',
+  'PROVENANCE_JSON',
+  'STATUS',
+  'OVERLAY_CONTRACT_ID',
+  'LOCKED_AT'
+];
+
+var H3_WRITTEN_REVIEW_EXPLANATION_BINDING_HEADERS_ = [
+  'SET_ID',
+  'BASE_SOURCE_MODE',
+  'BASE_AUTHORITY_SHA256',
+  'DISPLAY_SHA256',
+  'OVERLAY_CONTRACT_ID',
+  'OVERLAY_BINDING_SHA256',
+  'STATUS',
+  'LOCKED_AT'
+];
+
+var H3_WRITTEN_REVIEW_EXPLANATION_PROVENANCE_MODES_ = [
+  'HISTORICAL_REFORMAT',
+  'HISTORICAL_WHY_EXPAND',
+  'SOURCE_LINKED_REBUILD',
+  'CURRENT_REGENERATED_FROM_VERIFIED_SOURCES',
+  'CURRENT_NATIVE_STRICT'
+];
+
+
+function h3WrittenReviewExplanationOverlayBindingObject_(
+  setId,
+  baseSourceMode,
+  baseAuthoritySha256,
+  displaySha256
+) {
+  return {
+    BASE_AUTHORITY_SHA256:
+      String(baseAuthoritySha256 || ''),
+    BASE_SOURCE_MODE:
+      String(baseSourceMode || ''),
+    DISPLAY_SHA256:
+      String(displaySha256 || ''),
+    OVERLAY_CONTRACT_ID:
+      H3_WRITTEN_REVIEW_EXPLANATION_OVERLAY_CONTRACT_ID_,
+    SET_ID:
+      String(setId || '')
+  };
+}
+
+
+function h3WrittenReviewExplanationOverlayTables_(
+  spreadsheet
+) {
+  var payloadSheet =
+    spreadsheet.getSheetByName(
+      H3_WRITTEN_REVIEW_EXPLANATION_OVERLAY_SHEET_
+    );
+  var bindingSheet =
+    spreadsheet.getSheetByName(
+      H3_WRITTEN_REVIEW_EXPLANATION_BINDING_SHEET_
+    );
+
+  if (!payloadSheet && !bindingSheet) {
+    return null;
+  }
+  if (!payloadSheet || !bindingSheet) {
+    throw new Error(
+      'WRITTEN_REVIEW_EXPLANATION_OVERLAY_PARTIAL_STORAGE'
+    );
+  }
+
+  h3ReviewRequireExactHeader_(
+    payloadSheet,
+    H3_WRITTEN_REVIEW_EXPLANATION_OVERLAY_HEADERS_,
+    'WRITTEN_REVIEW_EXPLANATION_OVERLAY'
+  );
+  h3ReviewRequireExactHeader_(
+    bindingSheet,
+    H3_WRITTEN_REVIEW_EXPLANATION_BINDING_HEADERS_,
+    'WRITTEN_REVIEW_EXPLANATION_BINDING'
+  );
+
+  return {
+    payload:
+      h3ReviewTable_(payloadSheet),
+    binding:
+      h3ReviewTable_(bindingSheet)
+  };
+}
+
+
+function h3WrittenReviewExplanationRowsBySet_(
+  table,
+  setId
+) {
+  return table.rows.filter(
+    function (row) {
+      return String(
+        row[table.map.SET_ID] || ''
+      ) === String(setId || '');
+    }
+  );
+}
+
+
+function h3WrittenReviewExplanationBaseChoiceText_(
+  choice
+) {
+  if (
+    choice !== null &&
+    typeof choice === 'object'
+  ) {
+    return String(
+      choice.text ||
+      choice.ko ||
+      ''
+    );
+  }
+  return String(choice || '');
+}
+
+
+function h3WrittenReviewExplanationValidateDisplay_(
+  display,
+  review
+) {
+  if (
+    !display ||
+    display.schema !==
+      H3_WRITTEN_REVIEW_EXPLANATION_DISPLAY_SCHEMA_ ||
+    display.set_id !== review.set_id ||
+    display.approved_text_sha256 !==
+      H3_WRITTEN_REVIEW_EXPLANATION_APPROVED_TEXT_SHA256_ ||
+    !Array.isArray(display.questions) ||
+    display.questions.length !== 5 ||
+    !Array.isArray(review.sections) ||
+    review.sections.length !== 5
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_EXPLANATION_DISPLAY_IDENTITY_MISMATCH'
+    );
+  }
+
+  display.questions.forEach(
+    function (item, index) {
+      var part =
+        review.sections[index];
+      var gate =
+        item && item.source_gate;
+      var explanation =
+        item && item.explanation;
+      var baseChoices =
+        (
+          part &&
+          part.question_surface &&
+          Array.isArray(
+            part.question_surface.choices
+          )
+            ? part.question_surface.choices
+            : []
+        ).map(
+          h3WrittenReviewExplanationBaseChoiceText_
+        );
+
+      if (
+        !item ||
+        item.q_no !== index + 1 ||
+        H3_WRITTEN_REVIEW_EXPLANATION_PROVENANCE_MODES_
+          .indexOf(
+            item.provenance_mode
+          ) < 0 ||
+        !gate ||
+        String(gate.body_ko || '') !==
+          String(
+            part &&
+            part.question_surface &&
+            part.question_surface.body ||
+            ''
+          ) ||
+        JSON.stringify(
+          gate.choices_ko || []
+        ) !==
+          JSON.stringify(baseChoices) ||
+        Number(gate.correct_position) !==
+          Number(
+            part.correct_answer_position
+          ) ||
+        String(gate.mark || '') !==
+          String(part.result || '') ||
+        !explanation ||
+        typeof explanation !== 'object' ||
+        !String(
+          explanation.body_ja || ''
+        ) ||
+        !Array.isArray(
+          explanation.choices
+        ) ||
+        explanation.choices.length !== 4 ||
+        !String(
+          explanation.reason || ''
+        ) ||
+        !Array.isArray(
+          explanation.learning_blocks
+        )
+      ) {
+        throw new Error(
+          'WRITTEN_REVIEW_EXPLANATION_DISPLAY_Q_MISMATCH:Q' +
+            String(index + 1)
+        );
+      }
+
+      explanation.choices.forEach(
+        function (choice, choiceIndex) {
+          if (
+            !choice ||
+            String(choice.ko || '') !==
+              String(
+                baseChoices[
+                  choiceIndex
+                ] || ''
+              ) ||
+            !String(choice.ja || '')
+          ) {
+            throw new Error(
+              'WRITTEN_REVIEW_EXPLANATION_CHOICE_MISMATCH:Q' +
+                String(index + 1) +
+                ':C' +
+                String(choiceIndex + 1)
+            );
+          }
+        }
+      );
+    }
+  );
+}
+
+
+function h3WrittenReviewApplyExplanationOverlay_(
+  spreadsheet,
+  baseReview,
+  baseSourceMode,
+  baseAuthoritySha256
+) {
+  var tables =
+    h3WrittenReviewExplanationOverlayTables_(
+      spreadsheet
+    );
+
+  if (!tables) {
+    return baseReview;
+  }
+
+  var setId =
+    String(
+      baseReview &&
+      baseReview.set_id ||
+      ''
+    );
+  var payloadRows =
+    h3WrittenReviewExplanationRowsBySet_(
+      tables.payload,
+      setId
+    );
+  var bindingRows =
+    h3WrittenReviewExplanationRowsBySet_(
+      tables.binding,
+      setId
+    );
+
+  if (
+    payloadRows.length === 0 &&
+    bindingRows.length === 0
+  ) {
+    return baseReview;
+  }
+  if (
+    payloadRows.length !== 1 ||
+    bindingRows.length !== 1
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_EXPLANATION_OVERLAY_AUTHORITY_COUNT:' +
+        payloadRows.length +
+        ':' +
+        bindingRows.length
+    );
+  }
+
+  var p =
+    h3WrittenReviewStoredRowObject_(
+      tables.payload,
+      payloadRows[0]
+    );
+  var b =
+    h3WrittenReviewStoredRowObject_(
+      tables.binding,
+      bindingRows[0]
+    );
+  var fields = [
+    'SET_ID',
+    'BASE_SOURCE_MODE',
+    'BASE_AUTHORITY_SHA256',
+    'DISPLAY_SHA256',
+    'OVERLAY_CONTRACT_ID',
+    'STATUS',
+    'LOCKED_AT'
+  ];
+
+  fields.forEach(function (field) {
+    if (
+      String(p[field] || '') !==
+        String(b[field] || '')
+    ) {
+      throw new Error(
+        'WRITTEN_REVIEW_EXPLANATION_OVERLAY_BINDING_FIELD_MISMATCH:' +
+          field
+      );
+    }
+  });
+
+  if (
+    String(p.STATUS || '') !== 'LOCKED' ||
+    !String(p.LOCKED_AT || '') ||
+    String(p.OVERLAY_CONTRACT_ID || '') !==
+      H3_WRITTEN_REVIEW_EXPLANATION_OVERLAY_CONTRACT_ID_ ||
+    String(p.DISPLAY_SCHEMA || '') !==
+      H3_WRITTEN_REVIEW_EXPLANATION_DISPLAY_SCHEMA_ ||
+    String(p.BASE_SOURCE_MODE || '') !==
+      String(baseSourceMode || '') ||
+    String(p.BASE_AUTHORITY_SHA256 || '') !==
+      String(baseAuthoritySha256 || '') ||
+    !/^[0-9a-f]{64}$/.test(
+      String(p.BASE_AUTHORITY_SHA256 || '')
+    )
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_EXPLANATION_OVERLAY_BASE_MISMATCH'
+    );
+  }
+
+  var display =
+    h3WrittenParseJson_(
+      p.DISPLAY_JSON,
+      'WRITTEN_REVIEW_EXPLANATION_DISPLAY_JSON_INVALID'
+    );
+  var displaySha =
+    h3ReviewHash_(display);
+
+  if (
+    displaySha !==
+      String(p.DISPLAY_SHA256 || '') ||
+    displaySha !==
+      String(b.DISPLAY_SHA256 || '')
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_EXPLANATION_DISPLAY_HASH_MISMATCH'
+    );
+  }
+
+  var provenance =
+    h3WrittenParseJson_(
+      p.PROVENANCE_JSON,
+      'WRITTEN_REVIEW_EXPLANATION_PROVENANCE_JSON_INVALID'
+    );
+
+  if (
+    !provenance ||
+    provenance.set_id !== setId ||
+    provenance.approved_text_sha256 !==
+      H3_WRITTEN_REVIEW_EXPLANATION_APPROVED_TEXT_SHA256_ ||
+    !Array.isArray(
+      provenance.questions
+    ) ||
+    provenance.questions.length !== 5
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_EXPLANATION_PROVENANCE_INVALID'
+    );
+  }
+
+  provenance.questions.forEach(
+    function (question, index) {
+      if (
+        !question ||
+        question.q_no !== index + 1 ||
+        question.provenance_mode !==
+          display.questions[
+            index
+          ].provenance_mode
+      ) {
+        throw new Error(
+          'WRITTEN_REVIEW_EXPLANATION_PROVENANCE_MISMATCH:Q' +
+            String(index + 1)
+        );
+      }
+    }
+  );
+
+  h3WrittenReviewExplanationValidateDisplay_(
+    display,
+    baseReview
+  );
+
+  var bindingSha =
+    h3ReviewHash_(
+      h3WrittenReviewExplanationOverlayBindingObject_(
+        setId,
+        baseSourceMode,
+        baseAuthoritySha256,
+        displaySha
+      )
+    );
+
+  if (
+    bindingSha !==
+      String(
+        b.OVERLAY_BINDING_SHA256 || ''
+      )
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_EXPLANATION_OVERLAY_BINDING_HASH_MISMATCH'
+    );
+  }
+
+  var review =
+    h3WrittenReviewClone_(
+      baseReview
+    );
+
+  display.questions.forEach(
+    function (item, index) {
+      review.sections[index]
+        .explanation =
+          h3WrittenReviewClone_(
+            item.explanation
+          );
+    }
+  );
+
+  review.technical =
+    review.technical || {};
+  review.technical
+    .explanation_overlay = {
+      contract_id:
+        H3_WRITTEN_REVIEW_EXPLANATION_OVERLAY_CONTRACT_ID_,
+      display_sha256:
+        displaySha,
+      overlay_binding_sha256:
+        bindingSha,
+      provenance:
+        h3WrittenReviewClone_(
+          provenance
+        )
+    };
+
+  return review;
+}
+
+
 /**
  * Historical Written Review persistent loader.
  *
@@ -3972,17 +4450,31 @@ function getWrittenPersistentReviewPayload_(
       setId
     )
   ) {
-    return h3WrittenProductionReviewContextBySet_(
+    var productionContext =
+      h3WrittenProductionReviewContextBySet_(
+        spreadsheet,
+        setId
+      );
+    return h3WrittenReviewApplyExplanationOverlay_(
       spreadsheet,
-      setId
-    ).payload;
+      productionContext.payload,
+      'WRITTEN_PRODUCTION_WEB',
+      productionContext.reviewSha256
+    );
   }
 
-  return h3WrittenReviewNormalizePersistent_(
+  var legacyContext =
     h3WrittenReviewPersistentContext_(
       spreadsheet,
       setId
-    )
+    );
+  return h3WrittenReviewApplyExplanationOverlay_(
+    spreadsheet,
+    h3WrittenReviewNormalizePersistent_(
+      legacyContext
+    ),
+    legacyContext.sourceMode,
+    legacyContext.reconstructionSha256
   );
 }
 
@@ -5368,10 +5860,18 @@ function getWrittenProductionPersistentReviewPayload_(
       H3_WEB_RUNTIME_SPREADSHEET_ID
     );
 
-  return h3WrittenProductionReviewContextBySet_(
+  var productionContext =
+    h3WrittenProductionReviewContextBySet_(
+      spreadsheet,
+      setId
+    );
+
+  return h3WrittenReviewApplyExplanationOverlay_(
     spreadsheet,
-    setId
-  ).payload;
+    productionContext.payload,
+    'WRITTEN_PRODUCTION_WEB',
+    productionContext.reviewSha256
+  );
 }
 
 /* =========================================================

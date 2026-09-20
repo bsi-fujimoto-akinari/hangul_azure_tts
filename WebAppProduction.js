@@ -743,6 +743,31 @@ function h3ProdBuildOverloadPlan_(
   var occupied = {};
   var normalRetests = [];
   var overflow = [];
+  var activeWrongCap = Number(
+    policyMap.ACTIVE_WRONG_CAP || 3
+  );
+  var baseRetestCap = Number(
+    policyMap.LISTENING_RETEST_PER_SET_CAP || 1
+  );
+  var overloadRetestCap = Number(
+    policyMap.OVERLOAD_RETEST_PER_SET_CAP || 2
+  );
+  var overloadMode =
+    obligations.length > activeWrongCap;
+  var perSetRetestCap =
+    overloadMode
+      ? overloadRetestCap
+      : baseRetestCap;
+
+  if (
+    !Number.isInteger(perSetRetestCap) ||
+    perSetRetestCap < 1 ||
+    perSetRetestCap > 5
+  ) {
+    throw new Error(
+      'LISTENING_RETEST_PER_SET_CAP_INVALID'
+    );
+  }
 
   obligations.forEach(function (item) {
     var firstSet = Math.max(
@@ -756,8 +781,15 @@ function h3ProdBuildOverloadPlan_(
       setNo <= item.due_max_set_no;
       setNo += 1
     ) {
-      if (!occupied[setNo]) {
-        occupied[setNo] = true;
+      var occupiedCount =
+        Number(occupied[setNo] || 0);
+
+      if (
+        occupiedCount <
+          perSetRetestCap
+      ) {
+        occupied[setNo] =
+          occupiedCount + 1;
         assignedSet = setNo;
         break;
       }
@@ -802,9 +834,13 @@ function h3ProdBuildOverloadPlan_(
 
   return {
     schema:
-      'H3_LISTENING_OVERLOAD_PLAN_V2',
+      'H3_LISTENING_OVERLOAD_PLAN_V3',
     evaluated_after_set_no:
       Number(nextSetNo) - 1,
+    overload_mode:
+      overloadMode,
+    normal_retest_per_set_cap:
+      perSetRetestCap,
     next_set_no:
       Number(nextSetNo),
     active_wrong_count:

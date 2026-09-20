@@ -2167,6 +2167,11 @@ function h3WrittenSyncBuildSchedulerPlan_(
             Boolean(match)
         };
 
+        slot =
+          h3WrittenNewfmtDecorateSlot_(
+            slot
+          );
+
         if (match) {
           slot.skill_id =
             match.skillId;
@@ -2221,6 +2226,13 @@ function h3WrittenSyncBuildSchedulerPlan_(
         JSON.stringify(ratio)
     );
   }
+
+  h3WrittenNewfmtValidateSourceRows_(
+    sourceRows
+  );
+  h3WrittenNewfmtValidatePlannedSlots_(
+    plannedSlots
+  );
 
   return {
     plannedSlots:
@@ -2405,7 +2417,11 @@ function h3WrittenSyncStageValues_(
           }
         ),
       source_ratio_after_plan:
-        scheduler.ratio
+        scheduler.ratio,
+      newfmt_runtime_contract_id:
+        H3_WRITTEN_NEWFMT_RUNTIME_CONTRACT_ID_,
+      newfmt_source_contract_id:
+        H3_NEWFMT_SOURCE_CONTRACT_ID_
     });
   existing[
     m.SLOT_PATCH_JSON

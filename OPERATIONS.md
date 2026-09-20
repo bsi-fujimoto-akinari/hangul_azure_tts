@@ -1235,3 +1235,16 @@ Normal production Chat surfaces are intentionally minimal:
 - failed `[H3_WEB_SYNC]` verification -> `Issue detected.` only.
 
 This changes presentation only. Canonical backend verification, idempotency, source locks, preissue gates, scheduler checks, and recovery behavior remain mandatory. Detailed explanation belongs to the Web App / persistent Review unless the learner explicitly asks for it in a separate Chat turn.
+
+## 30. Normal hot-path readback
+
+Operational normal-flow reads follow `NORMAL_HOTPATH_READBACK_V1` in `H3_WEB_CHAT_CONTRACT.md`.
+
+- `K1`: perform one bounded parallel runtime read bundle, then one exact A:M readback after atomic K1_READY persist. Do not repeatedly read the same immutable K1_READY fields.
+- `5L`: fan out independent state/policy/K1_READY/scheduler/target-set/log/transaction/audio reads in parallel; preserve write-dependent sequencing and the final fail-closed preissue gate.
+- `H3_WEB_SYNC`: after exact receipt parsing, fan out exact transaction, five learner-log rows, current Listening state, and recovery-status verification in parallel, then evaluate the existing identity/hash/state contract.
+
+Normal flow does not re-read GitHub `main`, `HANGUL_INFRA_STATUS_CURRENT`, manifest, or canonical release files on every learner request. Read those only for drift, canonical change, mismatch, recovery, or explicit audit.
+
+Connector/tool implementations must batch independent reads in one tool turn (for example with `Promise.all`) rather than serialize them. No new runtime aggregation Sheet/tab is authorized.
+

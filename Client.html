@@ -1885,8 +1885,15 @@
         ? circled[
             part.user_answer_position - 1
           ]
-        : String(
-            part.user_answer || ''
+        : (
+            typeof part.user_answer ===
+              'number'
+              ? circled[
+                  part.user_answer - 1
+                ]
+              : String(
+                  part.user_answer || ''
+                )
           );
     user.textContent =
       'あなた　' +
@@ -1910,8 +1917,15 @@
         ? circled[
             part.correct_answer_position - 1
           ]
-        : String(
-            part.correct_answer || ''
+        : (
+            typeof part.correct_answer ===
+              'number'
+              ? circled[
+                  part.correct_answer - 1
+                ]
+              : String(
+                  part.correct_answer || ''
+                )
           );
     correct.textContent =
       '正答　　' +

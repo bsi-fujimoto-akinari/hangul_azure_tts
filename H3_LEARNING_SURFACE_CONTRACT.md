@@ -114,9 +114,9 @@ Still intentionally inactive:
 
 ## 10. Reading activation-core staging
 
-The repository now stages `H3-READING-ACTIVATION-CORE-20260920-V1` as the next compatibility layer for Reading.
+The repository now stages `H3-READING-ACTIVATION-CORE-20260921-V2` as the next compatibility layer for Reading.
 
-It defines Reading-owned ISSUE_NO/STAGE_ID/SET_ID semantics, future `reading_stage_v1 / reading_web_txn_v1 / reading_log_v1` authorities, question-key submission normalization, source-bound preissue validation, transaction planning, committed-result projection, and a pure current-learning candidate.
+It defines Reading-owned ISSUE_NO/STAGE_ID/SET_ID semantics, deterministic `H3-YYYYMMDD-RNNN` allocation, the `reading_stage_v1 / reading_web_txn_v1 / reading_log_v1` authorities, persisted locked-bundle JSON, question-key submission normalization, source-bound preissue validation, transaction planning, committed-result projection, and a pure current-learning candidate.
 
 These primitives are not yet wired into `WebApp.js`, HOME, Review persistence, or any live Sheet. Current 5W D2-D6 scheduler/Answer Sync behavior is unchanged.
 

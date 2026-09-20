@@ -1608,11 +1608,25 @@ jobs:
           );
           assert.deepStrictEqual(
             call("h3ReviewRenderRequest_({mode:'REVIEW',txn_id:'H3TX-1'})"),
-            {provider:'LISTENING',route:'txn-review'}
+            {
+              provider:'LISTENING',
+              route:'txn-review',
+              learning_surface_schema:'H3_LEARNING_SURFACE_V1',
+              provider_kind:'LISTENING',
+              surface_family:'5L',
+              level:'3級'
+            }
           );
           assert.deepStrictEqual(
             call("h3ReviewRenderRequest_({mode:'REVIEW',legacy_review_id:'L02'})"),
-            {provider:'LISTENING',route:'legacy-review'}
+            {
+              provider:'LISTENING',
+              route:'legacy-review',
+              learning_surface_schema:'H3_LEARNING_SURFACE_V1',
+              provider_kind:'LISTENING',
+              surface_family:'5L',
+              level:'3級'
+            }
           );
           assert.deepStrictEqual(
             call("h3ReviewMediaRequest_({mode:'REVIEW',txn_id:'H3TX-1'})"),
@@ -1771,6 +1785,26 @@ jobs:
           );
           assert.strictEqual(routed.kind, 'WRITTEN');
           assert.strictEqual(routed.read_only, true);
+          assert.strictEqual(
+            routed.learning_surface_schema,
+            'H3_LEARNING_SURFACE_V1'
+          );
+          assert.strictEqual(
+            routed.provider_kind,
+            'WRITTEN'
+          );
+          assert.strictEqual(
+            routed.surface_family,
+            '5W'
+          );
+          assert.strictEqual(
+            routed.level,
+            '3級'
+          );
+          assert.strictEqual(
+            routed.item_count,
+            5
+          );
           throws(
             "h3ReviewMediaRequest_({mode:'REVIEW',review_kind:'WRITTEN'})",
             'WRITTEN_REVIEW_CAPABILITY_UNAVAILABLE'

@@ -1,13 +1,13 @@
 # H3 Review Architecture
 
-Version: H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V2
+Version: H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V3
 Status: R3_CLOSED_NORMAL_LIVE
 
 This document defines the current durable Review contract. Completed R3 phase chronology and device-validation evidence remain in Git history and Drive `06_AUDIT`.
 
 ## 1. Authority and scope
 
-The persistent Review is the learner-facing explanation authority after a committed 5L transaction. It does not replace the production answer transaction, learner history, scheduler, retest state, K1_READY, locked payload, or individual audio authorities.
+The persistent Review is the learner-facing explanation authority after a committed 5L or 5W transaction. It does not replace the production answer transaction, learner history, scheduler, retest state, Listening K1_READY/locked payload authority, Written issued-stage/queue authority, or bound media authorities.
 
 The implementation must not:
 
@@ -19,7 +19,9 @@ The implementation must not:
 
 ## 2. Source-of-truth model
 
-Review reconstruction requires exact agreement across:
+Review reconstruction is provider-specific but always fail-closed.
+
+Listening requires exact agreement across:
 
 - `listening_web_txn_v1`: committed transaction authority;
 - `listening_log_v1`: committed per-question result/provenance;
@@ -28,7 +30,15 @@ Review reconstruction requires exact agreement across:
 - `listening_review_binding_v1`: transaction/set/payload binding;
 - existing K1 image and K1-K5 individual audio bindings.
 
-The transaction must be `COMMITTED`; the set, transaction, payload, result, explanation, item, binding, image, and audio identities must agree.
+Production Written requires exact agreement across:
+
+- `written_web_txn_v1`: committed Written transaction authority;
+- `written_answer_sync_v1`: `STATUS=COMMITTED` and `PHASE=CORE_COMPLETE`;
+- exact issued `written_set_stage_v1` and queue source binding;
+- `written_review_payload_v1`: locked learner-facing Review payload;
+- `written_review_binding_v1`: TXN/set/stage/result/source/Review binding.
+
+The relevant transaction must be `COMMITTED`; every identity and hash required by that provider must agree before Review content is returned.
 
 ## 3. Explanation payload
 
@@ -56,15 +66,15 @@ Binding creation may occur only after exact source readback. It is metadata pers
 
 ## 5. Reconstruction and HOME index
 
-HOME lists committed Review entries newest first and exposes at least date/time, 5L number, score, wrong count, and uncertainty count. Filters may include all, wrong, and uncertain.
+HOME lists committed Review entries newest first and exposes provider-appropriate identity plus date/time, score, wrong count, and uncertainty count. Filters may include all, wrong, and uncertain.
 
 HOME uses a lightweight eligibility index. It must not perform full payload reconstruction or deep hash validation. Opening a Review performs full source-lock validation through `buildPersistentReviewPayload_()` before revealing content.
 
-The current-learning resolver excludes committed sets and registered legacy Review sets. It may expose only an `ISSUED`, uncommitted, production-renderable set.
+The current-learning resolver excludes committed sets and registered legacy Review sets. It may expose only an `ISSUED`, uncommitted, production-renderable 5L or 5W set, with provider arbitration failing closed on ambiguity.
 
 ## 6. Routes and launcher
 
-The learner launcher is the parameterless canonical Web App URL. Server boot resolves an active safe set as LISTENING; otherwise it renders HOME.
+The learner launcher is the parameterless canonical Web App URL. Server boot resolves an active safe set as LISTENING or WRITTEN according to current-learning arbitration; otherwise it renders HOME.
 
 Controlled internal routes remain available for diagnostics and in-app navigation:
 
@@ -164,76 +174,91 @@ Review/media/replay use internal `legacy_review_id` routing without learner URL 
 
 ## 28. Review / HOME provider core
 
-`WebAppReviewCore.js` owns provider-neutral canonical JSON/hash helpers, exact table/header helpers, HOME history ordering, current-learning arbitration, and Review request dispatch. `WebAppReviewListeningAdapter.js` is the only active provider and delegates to the existing transaction-backed and legacy Listening persistence implementation.
+`WebAppReviewCore.js` owns provider-neutral canonical JSON/hash helpers, exact table/header helpers, HOME history ordering, current-learning arbitration, and Review request dispatch. Both Listening and Written providers are active.
 
-The internal provider contract exposes history, current learning, Review/media, and replay operations without changing any learner-facing payload. The Written provider factory remains `null`: this is only a future adapter slot and does not enable a Written route, schema, transaction, history entry, or HOME card.
+`WebAppReviewListeningAdapter.js` delegates to transaction-backed and legacy Listening persistence. `WebAppReviewWrittenAdapter.js` exposes the common Written provider over two isolated persistence classes: immutable historical reconstruction tables and transaction-backed production Written Review tables.
 
-`WebAppReviewWrittenAdapter.js` adds a storage-independent, read-only projection from `H3_5W_HISTORICAL_RECONSTRUCTION_V1` and its uncertainty-corrected V2 successor. It preserves source question surfaces, parsed prompts, choices, dialogue, answers, marks, uncertainty, explanations, audio, generation provenance, and raw input without filling `UNKNOWN` or generating transaction identities. Its provider factory exists only as an unregistered seam; Written HOME, media, replay, submission, and production routing remain inactive.
+Provider dispatch is explicit when more than one provider is present. `review_kind=WRITTEN + set_id` selects Written Review, while Listening transaction and legacy identities continue to select Listening. A selector conflict, an unknown kind, or a selector-free ambiguous request fails closed.
 
-Provider dispatch is explicit when more than one provider is present. `review_kind` selects an exact provider, while existing `txn_id` and `legacy_review_id` identities continue to select Listening. A selector conflict, an unknown kind, or a selector-free multi-provider request fails closed.
-
-One-shot migration helpers are absent from active code. Detailed migration and validation evidence remains recoverable from Git history and Drive `06_AUDIT`.
+Written media/replay/grade operations remain unavailable; enabling Written Review history does not grant those capabilities. One-shot migration helpers are absent from active code. Detailed migration and validation evidence remains recoverable from Git history and Drive `06_AUDIT`.
 
 
-## 27. Written historical Review staging
+## 27. Written historical Review compatibility
 
-Historical 5W Review storage is materialized in the isolated read-only tables
+Historical 5W Review storage remains isolated and read-only in
 `written_legacy_review_payload_v1` and
 `written_legacy_review_binding_v1`.
 
-The repository contains a fail-closed loader that requires exact headers,
-`LOCKED` status, matching set/source identities, the V2 reconstruction
-schema, the frozen Written legacy Review contract, canonical reconstruction
-SHA-256, and canonical binding SHA-256 before returning a normalized
+The fail-closed legacy loader requires exact headers, `LOCKED` status,
+matching set/source identities, the V2 reconstruction schema, the frozen
+Written legacy Review contract, canonical reconstruction SHA-256, and
+canonical binding SHA-256 before returning a normalized
 `H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1`.
 
-This stage does not register the Written provider, expose Written entries in
-HOME, add a learner Web route, enable media, or enable replay/submission.
-`H3_REVIEW_WRITTEN_PROVIDER_FACTORY_` remains `null` until a later,
-separately audited activation stage.
+These legacy tables are not reused for new production answers. They remain
+immutable compatibility sources and are merged into HOME history only through
+the active Written provider.
 
 
-## 28. Written HOME and Review UI staging
+## 28A. Written HOME and Review UI
 
-Phase ② prepares the inactive Written provider for persistent HOME history and
-Review rendering without changing production provider activation.
+HOME merges immutable legacy Written history and production Written history.
+Every Written entry carries `review_kind=WRITTEN`, preserves
+score/uncertainty metadata, and advertises
+`replay_capability=unavailable`.
 
-When the Written provider factory is enabled in a later audited phase, HOME
-history reads the locked historical Written binding/payload tables through the
-same fail-closed persistent context used by Review open. Written history
-entries carry `review_kind=WRITTEN`, preserve score/uncertainty metadata, and
-advertise `replay_capability=unavailable`.
-
-The client is prepared to distinguish 5L and 5W history entries, request
-Written Review by `review_kind=WRITTEN + set_id`, render D2-D6 symbolic
-answers and stored explanation text, omit audio controls when no audio asset
-key exists, and omit both HOME and Review replay controls for Written.
-
-Production activation remains separate: the factory stays `null`, direct Web
-boot routing is unchanged, and Written media/replay/grade capabilities remain
-fail-closed until a later phase.
+The client distinguishes 5L and 5W history entries, requests Written Review by
+`review_kind=WRITTEN + set_id`, renders D2-D6 symbolic answers, exact
+source-bound semantic script, translations, rationale, and learning blocks,
+and omits audio controls when no audio asset key exists. Written replay/media
+controls remain unavailable.
 
 
-## 29. Written provider production activation
+## 29. Written production persistent Review
 
-The historical Written Review provider is active in the common Review/HOME
-provider registry through `h3ReviewWrittenProviderFactory_`.
+New production 5W Review uses dedicated tables:
 
-Production HOME now aggregates Listening and Written history. Written entries
-remain read-only and are opened only by the explicit selector
-`review_kind=WRITTEN` plus `set_id`; Listening transaction and legacy
-identities continue to route to the Listening provider. Requests without a
-selector or Listening identity remain fail-closed when routing would be
-ambiguous.
+- `written_review_payload_v1`
+- `written_review_binding_v1`
 
-Written Review continues to expose no media, replay, replay media, or grading
-capability. Those routes remain fail-closed with
-`WRITTEN_REVIEW_CAPABILITY_UNAVAILABLE`. The historical payload/binding
-tables remain immutable/read-only source material; provider activation does
-not create `written_web_txn_v1` or mutate learner history, scheduler state,
-or generation state.
+The frozen production contract is
+`H3-WRITTEN-PRODUCTION-REVIEW-CONTRACT-20260920-V1`; the learner payload
+schema is `H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1`.
 
-## 29. Learner-facing explanation and script ownership
+The normal postgrade order is:
+
+```text
+WRITTEN transaction COMMITTED
+→ written_answer_sync_v1 STATUS=COMMITTED / PHASE=CORE_COMPLETE
+→ Review payload PREPARED
+→ exact result/source/review binding LOCKED
+→ payload LOCKED
+→ immediate persistent Review
+```
+
+The production binding covers the exact TXN_ID, SET_ID, STAGE_ID,
+canonical result SHA-256, Written source-binding SHA-256, Review payload
+SHA-256, and Review contract. Partial or conflicting authority is fail-closed;
+same-hash completed materialization is idempotent.
+
+For newly authored or unissued 5W, learner-facing Review authoring is stored
+inside each question's `QUESTION_META_JSON.review` before issue. The
+Written source binding hashes `QUESTION_META_JSON`, so Japanese body/choice
+translations, rationale, and learning blocks are locked before submission.
+Missing or mismatched Review authoring blocks fail render and new-submit.
+
+Already issued or committed stages are immutable. A one-time production repair
+may create only production Review payload/binding rows from already committed
+source/result evidence, with no rewrite of stage, queue history, scheduler,
+learner history, counters, or pointers.
+
+Production HOME merges these rows with the separate immutable legacy Written
+Review tables. Opening a production Review performs full source-lock
+validation; HOME history remains a lightweight index. Written media, replay,
+replay media, and grading capabilities continue to fail closed with
+`WRITTEN_REVIEW_CAPABILITY_UNAVAILABLE`.
+
+## 30. Learner-facing explanation and script ownership
 
 The Web App Review surface is the sole learner-facing authority for postgrade explanation and semantic script content for both Listening (5L) and Written (5W).
 

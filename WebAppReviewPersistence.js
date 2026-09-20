@@ -4038,3 +4038,1196 @@ function validateWrittenPersistentReviewBackfill_() {
     sets: results
   };
 }
+
+/* =========================================================
+ * Production Written persistent Review
+ * =======================================================*/
+
+var H3_WRITTEN_PRODUCTION_REVIEW_PAYLOAD_SHEET_ =
+  'written_review_payload_v1';
+
+var H3_WRITTEN_PRODUCTION_REVIEW_BINDING_SHEET_ =
+  'written_review_binding_v1';
+
+var H3_WRITTEN_PRODUCTION_REVIEW_CONTRACT_ID_ =
+  'H3-WRITTEN-PRODUCTION-REVIEW-CONTRACT-20260920-V1';
+
+var H3_WRITTEN_PRODUCTION_REVIEW_SCHEMA_ =
+  'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1';
+
+var H3_WRITTEN_PRODUCTION_REVIEW_PAYLOAD_HEADERS_ = [
+  'TXN_ID',
+  'SET_ID',
+  'STAGE_ID',
+  'MATERIALIZED_AT',
+  'STATUS',
+  'REVIEW_SCHEMA',
+  'REVIEW_JSON',
+  'REVIEW_SHA256',
+  'SOURCE_BINDING_SHA256',
+  'RESULT_SHA256',
+  'REVIEW_CONTRACT_ID',
+  'LOCKED_AT'
+];
+
+var H3_WRITTEN_PRODUCTION_REVIEW_BINDING_HEADERS_ = [
+  'TXN_ID',
+  'SET_ID',
+  'STAGE_ID',
+  'MATERIALIZED_AT',
+  'STATUS',
+  'RESULT_SHA256',
+  'SOURCE_BINDING_SHA256',
+  'REVIEW_SHA256',
+  'REVIEW_CONTRACT_ID',
+  'REVIEW_BINDING_SHA256',
+  'LOCKED_AT'
+];
+
+
+function h3WrittenProductionReviewRowsBy_(
+  table,
+  column,
+  value
+) {
+  var out = [];
+  var col = table.map[column];
+
+  if (typeof col !== 'number') {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_COLUMN_MISSING:' +
+        column
+    );
+  }
+
+  table.rows.forEach(function (row, index) {
+    if (
+      String(row[col] || '') ===
+      String(value || '')
+    ) {
+      out.push({
+        rowNumber: index + 2,
+        row: row
+      });
+    }
+  });
+
+  return out;
+}
+
+
+function h3WrittenProductionReviewRequireSheets_(
+  spreadsheet
+) {
+  var payloadSheet =
+    spreadsheet.getSheetByName(
+      H3_WRITTEN_PRODUCTION_REVIEW_PAYLOAD_SHEET_
+    );
+  var bindingSheet =
+    spreadsheet.getSheetByName(
+      H3_WRITTEN_PRODUCTION_REVIEW_BINDING_SHEET_
+    );
+
+  h3ReviewRequireExactHeader_(
+    payloadSheet,
+    H3_WRITTEN_PRODUCTION_REVIEW_PAYLOAD_HEADERS_,
+    'WRITTEN_PRODUCTION_REVIEW_PAYLOAD'
+  );
+  h3ReviewRequireExactHeader_(
+    bindingSheet,
+    H3_WRITTEN_PRODUCTION_REVIEW_BINDING_HEADERS_,
+    'WRITTEN_PRODUCTION_REVIEW_BINDING'
+  );
+
+  return {
+    payloadSheet: payloadSheet,
+    bindingSheet: bindingSheet,
+    payloadTable:
+      h3ReviewTable_(payloadSheet),
+    bindingTable:
+      h3ReviewTable_(bindingSheet)
+  };
+}
+
+
+function h3WrittenProductionReviewTxnContext_(
+  spreadsheet,
+  txnId
+) {
+  var journal =
+    h3WrittenRequireJournal_(
+      spreadsheet
+    );
+  var table =
+    h3ReviewTable_(journal);
+  var txnRows =
+    h3WrittenProductionReviewRowsBy_(
+      table,
+      'TXN_ID',
+      txnId
+    );
+
+  if (txnRows.length !== 1) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_TXN_AUTHORITY_COUNT:' +
+        txnRows.length
+    );
+  }
+
+  var row =
+    txnRows[0].row;
+  var map =
+    table.map;
+
+  if (
+    String(row[map.MODE] || '') !==
+      'WRITTEN' ||
+    String(row[map.STATUS] || '') !==
+      'COMMITTED'
+  ) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_TXN_NOT_COMMITTED'
+    );
+  }
+
+  var setId =
+    String(row[map.SET_ID] || '');
+  var stageId =
+    String(row[map.STAGE_ID] || '');
+  var sourceBindingSha =
+    String(
+      row[
+        map.SOURCE_BINDING_SHA256
+      ] || ''
+    );
+  var result =
+    h3WrittenParseJson_(
+      row[map.RESULT_JSON],
+      'WRITTEN_PRODUCTION_REVIEW_RESULT_JSON_INVALID'
+    );
+
+  if (
+    result.schema !==
+      'H3_WEB_SUBMIT_RESULT_V1' ||
+    result.mode !== 'WRITTEN' ||
+    result.status !== 'COMMITTED' ||
+    result.txn_id !== String(txnId) ||
+    result.set_id !== setId ||
+    result.stage_id !== stageId ||
+    result.source_binding_sha256 !==
+      sourceBindingSha ||
+    !Array.isArray(result.summary) ||
+    result.summary.length !== 5
+  ) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_RESULT_IDENTITY_MISMATCH'
+    );
+  }
+
+  var syncSheet =
+    spreadsheet.getSheetByName(
+      H3_WRITTEN_ANSWER_SYNC_SHEET
+    );
+  h3ReviewRequireExactHeader_(
+    syncSheet,
+    H3_WRITTEN_ANSWER_SYNC_HEADERS,
+    'WRITTEN_PRODUCTION_REVIEW_ANSWER_SYNC'
+  );
+  var syncTable =
+    h3ReviewTable_(syncSheet);
+  var syncRows =
+    h3WrittenProductionReviewRowsBy_(
+      syncTable,
+      'TXN_ID',
+      txnId
+    );
+
+  if (syncRows.length !== 1) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_SYNC_AUTHORITY_COUNT:' +
+        syncRows.length
+    );
+  }
+
+  var syncRow =
+    syncRows[0].row;
+  var syncMap =
+    syncTable.map;
+
+  if (
+    String(syncRow[syncMap.SET_ID] || '') !==
+      setId ||
+    String(syncRow[syncMap.STAGE_ID] || '') !==
+      stageId ||
+    String(syncRow[syncMap.STATUS] || '') !==
+      'COMMITTED' ||
+    String(syncRow[syncMap.PHASE] || '') !==
+      'CORE_COMPLETE'
+  ) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_SYNC_NOT_COMPLETE'
+    );
+  }
+
+  return {
+    txnId: String(txnId),
+    setId: setId,
+    stageId: stageId,
+    sourceBindingSha256:
+      sourceBindingSha,
+    result: result,
+    resultSha256:
+      h3ReviewHash_(result),
+    committedAt:
+      String(row[map.COMMITTED_AT] || '')
+  };
+}
+
+
+function h3WrittenProductionReviewQuestionMeta_(
+  context
+) {
+  var meta =
+    h3WrittenParseJson_(
+      context.questionMetaJson,
+      'WRITTEN_PRODUCTION_REVIEW_META_INVALID'
+    );
+
+  if (
+    !meta ||
+    meta.stage_id !==
+      context.stageId ||
+    !Array.isArray(meta.questions) ||
+    meta.questions.length !== 5
+  ) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_META_SHAPE_INVALID'
+    );
+  }
+
+  return meta;
+}
+
+
+function h3WrittenProductionReviewQuestionSurface_(
+  question,
+  index
+) {
+  var choices =
+    (question.choices || []).map(
+      function (text, choiceIndex) {
+        return {
+          position: choiceIndex + 1,
+          symbol:
+            ['①', '②', '③', '④'][
+              choiceIndex
+            ],
+          text: String(text || '')
+        };
+      }
+    );
+
+  return {
+    rendered:
+      'Q' +
+      String(index + 1) +
+      ' [' +
+      String(
+        H3_WRITTEN_DISPLAY[
+          H3_WEB_WRITTEN_SECTIONS[index]
+        ] || ''
+      ) +
+      ']\n' +
+      String(question.question || '') +
+      '\n' +
+      choices.map(
+        function (choice) {
+          return (
+            choice.symbol +
+            ' ' +
+            choice.text
+          );
+        }
+      ).join('\n'),
+    body:
+      String(question.question || ''),
+    choices:
+      choices,
+    dialogue_components:
+      String(question.question || '')
+        .split('\n')
+        .filter(function (line) {
+          return /^[AB]：/.test(line);
+        })
+  };
+}
+
+
+function h3WrittenProductionReviewBuildPayload_(
+  txn,
+  context
+) {
+  var authoring =
+    h3WrittenReviewAuthoring_(
+      context
+    );
+  var meta =
+    h3WrittenProductionReviewQuestionMeta_(
+      context
+    );
+
+  var wrongCount = 0;
+  var uncertainCount = 0;
+
+  var sections =
+    txn.result.summary.map(
+      function (item, index) {
+        var question =
+          meta.questions[index];
+        var userPosition =
+          Number(item.answer);
+        var correctPosition =
+          Number(item.correct_answer);
+
+        if (item.mark === '×') {
+          wrongCount += 1;
+        }
+        if (item.uncertain) {
+          uncertainCount += 1;
+        }
+
+        return {
+          section:
+            H3_WEB_WRITTEN_SECTIONS[index],
+          display:
+            H3_WRITTEN_DISPLAY[
+              H3_WEB_WRITTEN_SECTIONS[index]
+            ],
+          result:
+            item.mark,
+          user_answer:
+            userPosition,
+          user_answer_position:
+            userPosition,
+          user_answer_text:
+            String(
+              question.choices[
+                userPosition - 1
+              ] || ''
+            ),
+          correct_answer:
+            correctPosition,
+          correct_answer_position:
+            correctPosition,
+          correct_answer_text:
+            String(
+              question.choices[
+                correctPosition - 1
+              ] || ''
+            ),
+          uncertain_known: true,
+          uncertain:
+            Boolean(item.uncertain),
+          question_surface:
+            h3WrittenProductionReviewQuestionSurface_(
+              question,
+              index
+            ),
+          script_text:
+            h3WrittenReviewScriptForQuestion_(
+              context,
+              index
+            ),
+          explanation:
+            h3WrittenReviewClone_(
+              authoring[index]
+            ),
+          audio_asset_key: null,
+          audio_fallback_url: null
+        };
+      }
+    );
+
+  return {
+    schema:
+      H3_WRITTEN_PRODUCTION_REVIEW_SCHEMA_,
+    mode: 'REVIEW',
+    kind: 'WRITTEN',
+    read_only: true,
+    persisted: true,
+    review_contract_id:
+      H3_WRITTEN_PRODUCTION_REVIEW_CONTRACT_ID_,
+    review_binding_sha256: '',
+    txn_id:
+      txn.txnId,
+    set_id:
+      txn.setId,
+    stage_id:
+      txn.stageId,
+    answered_at:
+      txn.committedAt,
+    raw_input:
+      txn.result.summary.map(
+        function (item) {
+          return (
+            String(item.answer) +
+            (
+              item.uncertain
+                ? '?'
+                : ''
+            )
+          );
+        }
+      ).join(' '),
+    score:
+      Number(txn.result.score),
+    total:
+      Number(txn.result.total),
+    wrong_count:
+      wrongCount,
+    uncertainty_known: true,
+    uncertain_count:
+      uncertainCount,
+    default_filter:
+      'NEEDS_REVIEW',
+    replay_capability:
+      'unavailable',
+    source_binding_sha256:
+      txn.sourceBindingSha256,
+    authoring_mode:
+      'ISSUE_LOCKED_META',
+    sections:
+      sections,
+    technical: {
+      receipt:
+        txn.result.receipt
+    }
+  };
+}
+
+
+function h3WrittenProductionReviewBindingHashObject_(
+  txn,
+  reviewSha
+) {
+  return {
+    RESULT_SHA256:
+      txn.resultSha256,
+    REVIEW_CONTRACT_ID:
+      H3_WRITTEN_PRODUCTION_REVIEW_CONTRACT_ID_,
+    REVIEW_SHA256:
+      reviewSha,
+    SET_ID:
+      txn.setId,
+    SOURCE_BINDING_SHA256:
+      txn.sourceBindingSha256,
+    STAGE_ID:
+      txn.stageId,
+    TXN_ID:
+      txn.txnId
+  };
+}
+
+
+function h3WrittenProductionReviewValidatePayloadShape_(
+  payload,
+  txn
+) {
+  if (
+    !payload ||
+    payload.schema !==
+      H3_WRITTEN_PRODUCTION_REVIEW_SCHEMA_ ||
+    payload.mode !== 'REVIEW' ||
+    payload.kind !== 'WRITTEN' ||
+    payload.read_only !== true ||
+    payload.persisted !== true ||
+    payload.review_contract_id !==
+      H3_WRITTEN_PRODUCTION_REVIEW_CONTRACT_ID_ ||
+    payload.txn_id !== txn.txnId ||
+    payload.set_id !== txn.setId ||
+    payload.stage_id !== txn.stageId ||
+    payload.source_binding_sha256 !==
+      txn.sourceBindingSha256 ||
+    Number(payload.score) !==
+      Number(txn.result.score) ||
+    Number(payload.total) !== 5 ||
+    !Array.isArray(payload.sections) ||
+    payload.sections.length !== 5
+  ) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_PAYLOAD_IDENTITY_MISMATCH'
+    );
+  }
+
+  payload.sections.forEach(
+    function (part, index) {
+      if (
+        !part ||
+        part.section !==
+          H3_WEB_WRITTEN_SECTIONS[index] ||
+        ['○', '△', '×']
+          .indexOf(part.result) < 0 ||
+        !String(part.script_text || '') ||
+        !part.explanation ||
+        typeof part.explanation !==
+          'object'
+      ) {
+        throw new Error(
+          'WRITTEN_PRODUCTION_REVIEW_SECTION_INVALID:Q' +
+            String(index + 1)
+        );
+      }
+    }
+  );
+}
+
+
+function h3WrittenProductionReviewContextBySet_(
+  spreadsheet,
+  setId
+) {
+  var sheets =
+    h3WrittenProductionReviewRequireSheets_(
+      spreadsheet
+    );
+  var payloadRows =
+    h3WrittenProductionReviewRowsBy_(
+      sheets.payloadTable,
+      'SET_ID',
+      setId
+    );
+  var bindingRows =
+    h3WrittenProductionReviewRowsBy_(
+      sheets.bindingTable,
+      'SET_ID',
+      setId
+    );
+
+  if (
+    payloadRows.length !== 1 ||
+    bindingRows.length !== 1
+  ) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_AUTHORITY_COUNT:' +
+        payloadRows.length +
+        ':' +
+        bindingRows.length
+    );
+  }
+
+  var pr =
+    h3WrittenReviewStoredRowObject_(
+      sheets.payloadTable,
+      payloadRows[0].row
+    );
+  var br =
+    h3WrittenReviewStoredRowObject_(
+      sheets.bindingTable,
+      bindingRows[0].row
+    );
+
+  if (
+    h3WrittenReviewStoredText_(
+      pr,
+      'STATUS'
+    ) !== 'LOCKED' ||
+    h3WrittenReviewStoredText_(
+      br,
+      'STATUS'
+    ) !== 'LOCKED' ||
+    !h3WrittenReviewStoredText_(
+      pr,
+      'LOCKED_AT'
+    ) ||
+    !h3WrittenReviewStoredText_(
+      br,
+      'LOCKED_AT'
+    )
+  ) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_NOT_LOCKED'
+    );
+  }
+
+  var txnId =
+    h3WrittenReviewStoredText_(
+      pr,
+      'TXN_ID'
+    );
+
+  if (
+    !txnId ||
+    h3WrittenReviewStoredText_(
+      br,
+      'TXN_ID'
+    ) !== txnId
+  ) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_TXN_MISMATCH'
+    );
+  }
+
+  var txn =
+    h3WrittenProductionReviewTxnContext_(
+      spreadsheet,
+      txnId
+    );
+
+  [
+    'SET_ID',
+    'STAGE_ID',
+    'MATERIALIZED_AT',
+    'RESULT_SHA256',
+    'SOURCE_BINDING_SHA256',
+    'REVIEW_SHA256',
+    'REVIEW_CONTRACT_ID'
+  ].forEach(function (field) {
+    if (
+      h3WrittenReviewStoredText_(
+        pr,
+        field
+      ) !==
+      h3WrittenReviewStoredText_(
+        br,
+        field
+      )
+    ) {
+      throw new Error(
+        'WRITTEN_PRODUCTION_REVIEW_BINDING_FIELD_MISMATCH:' +
+          field
+      );
+    }
+  });
+
+  if (
+    h3WrittenReviewStoredText_(
+      pr,
+      'SET_ID'
+    ) !== txn.setId ||
+    h3WrittenReviewStoredText_(
+      pr,
+      'STAGE_ID'
+    ) !== txn.stageId ||
+    h3WrittenReviewStoredText_(
+      pr,
+      'RESULT_SHA256'
+    ) !== txn.resultSha256 ||
+    h3WrittenReviewStoredText_(
+      pr,
+      'SOURCE_BINDING_SHA256'
+    ) !== txn.sourceBindingSha256 ||
+    h3WrittenReviewStoredText_(
+      pr,
+      'REVIEW_SCHEMA'
+    ) !==
+      H3_WRITTEN_PRODUCTION_REVIEW_SCHEMA_ ||
+    h3WrittenReviewStoredText_(
+      pr,
+      'REVIEW_CONTRACT_ID'
+    ) !==
+      H3_WRITTEN_PRODUCTION_REVIEW_CONTRACT_ID_
+  ) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_STORED_IDENTITY_MISMATCH'
+    );
+  }
+
+  var review =
+    h3WrittenParseJson_(
+      pr.REVIEW_JSON,
+      'WRITTEN_PRODUCTION_REVIEW_JSON_INVALID'
+    );
+  h3WrittenProductionReviewValidatePayloadShape_(
+    review,
+    txn
+  );
+
+  var reviewSha =
+    h3ReviewHash_(review);
+
+  if (
+    reviewSha !==
+      h3WrittenReviewStoredText_(
+        pr,
+        'REVIEW_SHA256'
+      )
+  ) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_HASH_MISMATCH'
+    );
+  }
+
+  var sourceContext =
+    h3WrittenValidateSourceIdentity_(
+      h3WrittenReadContext_(
+        spreadsheet,
+        txn.setId
+      )
+    );
+  var sourceBinding =
+    h3WrittenSourceBinding_(
+      sourceContext
+    );
+
+  if (
+    sourceBinding.sha256 !==
+      txn.sourceBindingSha256
+  ) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_SOURCE_DRIFT'
+    );
+  }
+
+  var bindingSha =
+    h3ReviewHash_(
+      h3WrittenProductionReviewBindingHashObject_(
+        txn,
+        reviewSha
+      )
+    );
+
+  if (
+    bindingSha !==
+      h3WrittenReviewStoredText_(
+        br,
+        'REVIEW_BINDING_SHA256'
+      )
+  ) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_BINDING_HASH_MISMATCH'
+    );
+  }
+
+  if (
+    review.review_binding_sha256 &&
+    review.review_binding_sha256 !==
+      bindingSha
+  ) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_PAYLOAD_BINDING_MISMATCH'
+    );
+  }
+
+  review.review_binding_sha256 =
+    bindingSha;
+
+  return {
+    txn: txn,
+    payload: review,
+    reviewSha256:
+      reviewSha,
+    reviewBindingSha256:
+      bindingSha,
+    payloadRowNumber:
+      payloadRows[0].rowNumber,
+    bindingRowNumber:
+      bindingRows[0].rowNumber
+  };
+}
+
+
+function h3WrittenProductionReviewHasSet_(
+  spreadsheet,
+  setId
+) {
+  var sheets =
+    h3WrittenProductionReviewRequireSheets_(
+      spreadsheet
+    );
+  var payloadRows =
+    h3WrittenProductionReviewRowsBy_(
+      sheets.payloadTable,
+      'SET_ID',
+      setId
+    );
+  var bindingRows =
+    h3WrittenProductionReviewRowsBy_(
+      sheets.bindingTable,
+      'SET_ID',
+      setId
+    );
+
+  if (
+    payloadRows.length > 1 ||
+    bindingRows.length > 1
+  ) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_DUPLICATE_SET'
+    );
+  }
+
+  return (
+    payloadRows.length === 1 ||
+    bindingRows.length === 1
+  );
+}
+
+
+function h3WrittenProductionReviewEnsure_(
+  txnId
+) {
+  var spreadsheet =
+    SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+  var txn =
+    h3WrittenProductionReviewTxnContext_(
+      spreadsheet,
+      txnId
+    );
+  var sourceContext =
+    h3WrittenValidateSourceIdentity_(
+      h3WrittenReadContext_(
+        spreadsheet,
+        txn.setId
+      )
+    );
+  var sourceBinding =
+    h3WrittenSourceBinding_(
+      sourceContext
+    );
+
+  if (
+    sourceBinding.sha256 !==
+      txn.sourceBindingSha256
+  ) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_SOURCE_BINDING_MISMATCH'
+    );
+  }
+
+  var expected =
+    h3WrittenProductionReviewBuildPayload_(
+      txn,
+      sourceContext
+    );
+  var expectedSha =
+    h3ReviewHash_(expected);
+  var bindingSha =
+    h3ReviewHash_(
+      h3WrittenProductionReviewBindingHashObject_(
+        txn,
+        expectedSha
+      )
+    );
+
+  expected.review_binding_sha256 =
+    bindingSha;
+  expectedSha =
+    h3ReviewHash_(expected);
+  bindingSha =
+    h3ReviewHash_(
+      h3WrittenProductionReviewBindingHashObject_(
+        txn,
+        expectedSha
+      )
+    );
+  expected.review_binding_sha256 =
+    bindingSha;
+
+  var sheets =
+    h3WrittenProductionReviewRequireSheets_(
+      spreadsheet
+    );
+  var payloadRows =
+    h3WrittenProductionReviewRowsBy_(
+      sheets.payloadTable,
+      'TXN_ID',
+      txn.txnId
+    );
+  var bindingRows =
+    h3WrittenProductionReviewRowsBy_(
+      sheets.bindingTable,
+      'TXN_ID',
+      txn.txnId
+    );
+
+  if (
+    payloadRows.length > 1 ||
+    bindingRows.length > 1
+  ) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_DUPLICATE_TXN'
+    );
+  }
+
+  if (
+    payloadRows.length === 1 &&
+    bindingRows.length === 1
+  ) {
+    return h3WrittenProductionReviewContextBySet_(
+      spreadsheet,
+      txn.setId
+    ).payload;
+  }
+
+  if (
+    payloadRows.length === 0 &&
+    bindingRows.length === 1
+  ) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_RECOVERY_REQUIRED_BINDING_ONLY'
+    );
+  }
+
+  var now =
+    h3NowTokyo_();
+
+  if (payloadRows.length === 0) {
+    sheets.payloadSheet.appendRow([
+      txn.txnId,
+      txn.setId,
+      txn.stageId,
+      now,
+      'PREPARED',
+      H3_WRITTEN_PRODUCTION_REVIEW_SCHEMA_,
+      JSON.stringify(expected),
+      expectedSha,
+      txn.sourceBindingSha256,
+      txn.resultSha256,
+      H3_WRITTEN_PRODUCTION_REVIEW_CONTRACT_ID_,
+      ''
+    ]);
+    SpreadsheetApp.flush();
+
+    sheets =
+      h3WrittenProductionReviewRequireSheets_(
+        spreadsheet
+      );
+    payloadRows =
+      h3WrittenProductionReviewRowsBy_(
+        sheets.payloadTable,
+        'TXN_ID',
+        txn.txnId
+      );
+  }
+
+  if (payloadRows.length !== 1) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_PAYLOAD_PREPARE_FAILED'
+    );
+  }
+
+  var prepared =
+    h3WrittenReviewStoredRowObject_(
+      sheets.payloadTable,
+      payloadRows[0].row
+    );
+
+  if (
+    h3WrittenReviewStoredText_(
+      prepared,
+      'SET_ID'
+    ) !== txn.setId ||
+    h3WrittenReviewStoredText_(
+      prepared,
+      'STAGE_ID'
+    ) !== txn.stageId ||
+    h3WrittenReviewStoredText_(
+      prepared,
+      'REVIEW_SHA256'
+    ) !== expectedSha ||
+    h3WrittenReviewStoredText_(
+      prepared,
+      'RESULT_SHA256'
+    ) !== txn.resultSha256 ||
+    h3WrittenReviewStoredText_(
+      prepared,
+      'SOURCE_BINDING_SHA256'
+    ) !== txn.sourceBindingSha256 ||
+    ['PREPARED', 'LOCKED'].indexOf(
+      h3WrittenReviewStoredText_(
+        prepared,
+        'STATUS'
+      )
+    ) < 0
+  ) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_PREPARED_IDENTITY_MISMATCH'
+    );
+  }
+
+  if (bindingRows.length === 0) {
+    sheets.bindingSheet.appendRow([
+      txn.txnId,
+      txn.setId,
+      txn.stageId,
+      now,
+      'LOCKED',
+      txn.resultSha256,
+      txn.sourceBindingSha256,
+      expectedSha,
+      H3_WRITTEN_PRODUCTION_REVIEW_CONTRACT_ID_,
+      bindingSha,
+      now
+    ]);
+    SpreadsheetApp.flush();
+  }
+
+  sheets.payloadSheet
+    .getRange(
+      payloadRows[0].rowNumber,
+      5
+    )
+    .setValue('LOCKED');
+  sheets.payloadSheet
+    .getRange(
+      payloadRows[0].rowNumber,
+      12
+    )
+    .setValue(now);
+  SpreadsheetApp.flush();
+
+  return h3WrittenProductionReviewContextBySet_(
+    spreadsheet,
+    txn.setId
+  ).payload;
+}
+
+
+function h3WrittenProductionReviewHistoryEntries_(
+  spreadsheet
+) {
+  var sheets =
+    h3WrittenProductionReviewRequireSheets_(
+      spreadsheet
+    );
+  var entries = [];
+  var seen = {};
+
+  sheets.bindingTable.rows.forEach(
+    function (row) {
+      var setId =
+        String(
+          row[
+            sheets.bindingTable.map.SET_ID
+          ] || ''
+        );
+      var status =
+        String(
+          row[
+            sheets.bindingTable.map.STATUS
+          ] || ''
+        );
+
+      if (!setId) {
+        return;
+      }
+      if (status !== 'LOCKED') {
+        throw new Error(
+          'WRITTEN_PRODUCTION_REVIEW_HISTORY_NOT_LOCKED:' +
+            setId
+        );
+      }
+      if (seen[setId]) {
+        throw new Error(
+          'WRITTEN_PRODUCTION_REVIEW_HISTORY_DUPLICATE_SET:' +
+            setId
+        );
+      }
+      seen[setId] = true;
+
+      var context =
+        h3WrittenProductionReviewContextBySet_(
+          spreadsheet,
+          setId
+        );
+      var payload =
+        context.payload;
+
+      entries.push({
+        review_kind: 'WRITTEN',
+        set_id:
+          payload.set_id,
+        answered_at:
+          payload.answered_at,
+        score:
+          payload.score,
+        total:
+          payload.total,
+        wrong_count:
+          payload.wrong_count,
+        uncertainty_known:
+          true,
+        uncertain_count:
+          payload.uncertain_count,
+        needs_review:
+          payload.sections.some(
+            function (part) {
+              return (
+                part.result !== '○'
+              );
+            }
+          ),
+        replay_capability:
+          'unavailable',
+        source_mode:
+          'WRITTEN_PRODUCTION_WEB',
+        review_open_validation:
+          'FULL_SOURCE_LOCK_ON_OPEN'
+      });
+    }
+  );
+
+  return entries;
+}
+
+
+function h3WrittenReviewAllHistoryEntries_(
+  spreadsheet
+) {
+  var legacy =
+    h3WrittenReviewPersistentHistoryEntries_(
+      spreadsheet
+    );
+  var production =
+    h3WrittenProductionReviewHistoryEntries_(
+      spreadsheet
+    );
+  var seen = {};
+
+  return legacy
+    .concat(production)
+    .map(function (entry) {
+      if (seen[entry.set_id]) {
+        throw new Error(
+          'WRITTEN_REVIEW_HISTORY_CROSS_SOURCE_DUPLICATE:' +
+            entry.set_id
+        );
+      }
+      seen[entry.set_id] = true;
+      return entry;
+    })
+    .sort(function (a, b) {
+      var at =
+        String(a.answered_at || '');
+      var bt =
+        String(b.answered_at || '');
+      if (at !== bt) {
+        return at < bt ? 1 : -1;
+      }
+      return (
+        String(b.set_id || '') <
+        String(a.set_id || '')
+          ? -1
+          : 1
+      );
+    })
+    .slice(0, 50);
+}
+
+
+function getWrittenProductionPersistentReviewPayload_(
+  setId
+) {
+  var spreadsheet =
+    SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+
+  return h3WrittenProductionReviewContextBySet_(
+    spreadsheet,
+    setId
+  ).payload;
+}
+

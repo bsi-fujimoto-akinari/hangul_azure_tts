@@ -50,6 +50,8 @@ jobs:
               'WebAppReadingProduction.js',
               'WebAppTranslationPilot.js',
               'WebAppTranslationPilotAudit.js',
+              'WebAppTranslationActivation.js',
+              'WebAppTranslationActivationAudit.js',
               'WebAppPreissue.js',
               'WebAppReceipt.js',
               'WebAppReviewCore.js',
@@ -65,6 +67,7 @@ jobs:
               'H3_READING_PRODUCTION_CONTRACT.md',
               'H3_READING_P9_P10_PILOT_CONTRACT.md',
               'H3_TRANSLATION_P11_P12_PILOT_CONTRACT.md',
+              'H3_TRANSLATION_ACTIVATION_CONTRACT.md',
               'Index.html',
               'Stylesheet.html',
               'Client.html',
@@ -4733,6 +4736,7 @@ jobs:
               'listening_web_txn_v1',
               'written_web_txn_v1',
               'reading_web_txn_v1',
+              'translation_web_txn_v1',
           ]:
               if sheet not in common:
                   raise SystemExit(f'Global H3TX allocator missing journal: {sheet}')
@@ -4981,7 +4985,8 @@ jobs:
             listening_web_test_txn_v1:[['H3TX-20260920-000005']],
             listening_web_txn_v1:[['H3TX-20260920-000009']],
             written_web_txn_v1:[['H3TX-20260920-000002']],
-            reading_web_txn_v1:[['H3TX-20260920-000008']]
+            reading_web_txn_v1:[['H3TX-20260920-000008']],
+            translation_web_txn_v1:[['H3TX-20260920-000007']]
           };
           assert(
             run("h3NextWebTxnIdFromRows_('20260920',__journals)") === 'H3TX-20260920-000010',
@@ -6124,6 +6129,9 @@ jobs:
           source = Path('WebAppTranslationPilot.js').read_text(encoding='utf-8')
           audit = Path('WebAppTranslationPilotAudit.js').read_text(encoding='utf-8')
           contract = Path('H3_TRANSLATION_P11_P12_PILOT_CONTRACT.md').read_text(encoding='utf-8')
+          activation = Path('WebAppTranslationActivation.js').read_text(encoding='utf-8')
+          activation_audit = Path('WebAppTranslationActivationAudit.js').read_text(encoding='utf-8')
+          activation_contract = Path('H3_TRANSLATION_ACTIVATION_CONTRACT.md').read_text(encoding='utf-8')
           web = Path('WebApp.js').read_text(encoding='utf-8')
           client = Path('Client.html').read_text(encoding='utf-8')
 
@@ -6164,8 +6172,45 @@ jobs:
               if needle not in contract:
                   raise SystemExit(f'Translation contract invariant missing: {needle}')
 
+          for needle in [
+              "H3-TRANSLATION-ACTIVATION-CORE-20260921-V1",
+              "function h3TranslationAllocateIdentity_(",
+              "function h3TranslationBuildStage_(",
+              "function h3TranslationPreissueValidate_(",
+              "function h3TranslationBuildMaterializationPlan_(",
+              "function h3TranslationBuildTxnPlan_(",
+              "function h3TranslationCurrentLearningCandidate_(",
+              "'translation_stage_v1'",
+              "'translation_web_txn_v1'",
+              "'translation_log_v1'",
+          ]:
+              if needle not in activation:
+                  raise SystemExit(f'Translation activation invariant missing: {needle}')
+
+          for needle in [
+              "function auditTranslationActivationCoreV1_(",
+              "H3_TRANSLATION_ACTIVATION_CORE_AUDIT_V1",
+              "TRANS-P11-20260921-001",
+              "H3-20260921-T001",
+              "TRANS-P12-20260921-002",
+              "H3-20260921-T002",
+          ]:
+              if needle not in activation_audit:
+                  raise SystemExit(f'Translation activation audit invariant missing: {needle}')
+
+          for needle in [
+              'Version: H3-TRANSLATION-ACTIVATION-CORE-20260921-V1',
+              'Status: PREISSUE_CAPABLE_ROUTE_INACTIVE',
+              'SET_ID   = H3-YYYYMMDD-TNNN',
+              'STAGE_ID = TRANS-P11-YYYYMMDD-NNN',
+              'translation_web_txn_v1',
+              'answer_type=MULTIPLE_CHOICE',
+          ]:
+              if needle not in activation_contract:
+                  raise SystemExit(f'Translation activation contract missing: {needle}')
+
           if "request.surface_family ===\n        'TRANSLATION'" in web:
-              raise SystemExit('Translation pilot accidentally reached the server route.')
+              raise SystemExit('Translation activation accidentally reached the server route.')
 
           if "renderTranslationSurface_" in client:
               raise SystemExit('Translation learner renderer must remain inactive in this pilot.')
@@ -6192,7 +6237,9 @@ jobs:
           [
             'WebAppSurfaceCommon.js',
             'WebAppTranslationPilot.js',
-            'WebAppTranslationPilotAudit.js'
+            'WebAppTranslationPilotAudit.js',
+            'WebAppTranslationActivation.js',
+            'WebAppTranslationActivationAudit.js'
           ].forEach(name => {
             vm.runInContext(
               fs.readFileSync(name, 'utf8'),
@@ -6226,9 +6273,41 @@ jobs:
             );
           }
 
+          const activation = vm.runInContext(
+            'auditTranslationActivationCoreV1_()',
+            context
+          );
+
+          if (
+            activation.result !== 'PASS' ||
+            activation.schema !==
+              'H3_TRANSLATION_ACTIVATION_CORE_AUDIT_V1' ||
+            activation.checks !== 12 ||
+            activation.p11_set_id !==
+              'H3-20260921-T001' ||
+            activation.p11_stage_id !==
+              'TRANS-P11-20260921-001' ||
+            activation.p12_set_id !==
+              'H3-20260921-T002' ||
+            activation.p12_stage_id !==
+              'TRANS-P12-20260921-002' ||
+            activation.p11_source_binding_sha256 !==
+              result.p11_source_binding_sha256 ||
+            activation.p12_source_binding_sha256 !==
+              result.p12_source_binding_sha256
+          ) {
+            throw new Error(
+              'Translation activation core audit mismatch: ' +
+              JSON.stringify(activation)
+            );
+          }
+
           console.log(
-            'P11/P12 Translation pilot pure audit: PASS',
-            JSON.stringify(result)
+            'P11/P12 Translation pilot + activation core pure audits: PASS',
+            JSON.stringify({
+              pilot: result,
+              activation: activation
+            })
           );
           NODE
 
@@ -6252,6 +6331,8 @@ jobs:
           node --check WebAppReadingProduction.js
           node --check WebAppTranslationPilot.js
           node --check WebAppTranslationPilotAudit.js
+          node --check WebAppTranslationActivation.js
+          node --check WebAppTranslationActivationAudit.js
           node --check WebAppPreissue.js
           node --check WebAppReceipt.js
           node --check WebAppReviewCore.js

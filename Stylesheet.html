@@ -821,13 +821,29 @@
     font-weight: 800;
   }
 
-  .review-history-filters {
+  .review-controls-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 8;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 10px -2px 0;
+    padding: 8px 2px;
+    background: rgba(255,255,255,.96);
+    backdrop-filter: blur(8px);
+  }
+
+  .review-history-filters,
+  .review-history-sorts {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
   }
 
-  .review-filter-button {
+  .review-filter-button,
+  .review-sort-button {
     border: 1px solid #aaa;
     border-radius: 999px;
     background: #fff;
@@ -835,7 +851,8 @@
     font-weight: 700;
   }
 
-  .review-filter-button.active {
+  .review-filter-button.active,
+  .review-sort-button.active {
     border-color: #222;
     background: #222;
     color: #fff;
@@ -849,12 +866,30 @@
 
   .review-history-item {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     align-items: center;
-    gap: 12px;
+    gap: 8px;
     padding: 12px;
     border: 1px solid #e2e2e2;
     border-radius: 10px;
+    cursor: pointer;
+    transition:
+      border-color .12s ease,
+      background .12s ease;
+  }
+
+  .review-history-item:hover {
+    border-color: #aaa;
+    background: #fafafa;
+  }
+
+  .review-history-item:focus-visible {
+    outline: 3px solid #8ab4f8;
+    outline-offset: 2px;
+  }
+
+  .review-history-item:active {
+    background: #f2f2f2;
   }
 
   .review-history-meta {
@@ -1029,9 +1064,10 @@
 
   .review-footer-actions {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
     margin-top: 12px;
+    width: 100%;
   }
 
   .review-footer-actions button {
@@ -1042,6 +1078,7 @@
   .review-replay-button,
   .review-back-button {
     width: 100%;
+    max-width: none;
     margin: 0;
   }
 
@@ -1067,6 +1104,28 @@
 
     .home-card-head {
       align-items: flex-start;
+    }
+
+    .review-controls-sticky {
+      align-items: stretch;
+      flex-direction: column;
+      gap: 6px;
+      padding-top: 7px;
+      padding-bottom: 7px;
+    }
+
+    .review-history-filters,
+    .review-history-sorts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      width: 100%;
+    }
+
+    .review-filter-button,
+    .review-sort-button {
+      width: 100%;
+      min-height: 40px;
+      padding: 6px 8px;
     }
 
     .review-history-item {

@@ -2985,9 +2985,9 @@ jobs:
               const koreanBody = '본문'+(i+1);
               const body =
                 section === 'D4'
-                  ? '次の文と最も近い意味のものを選んでください。\\n' + koreanBody
+                  ? '次の文と最も近い意味のものを選んでください。\n' + koreanBody
                   : section === 'D5'
-                    ? '2つの（　）に共通して入るものを選んでください。\\n' + koreanBody
+                    ? '2つの（　）に共通して入るものを選んでください。\n' + koreanBody
                     : koreanBody;
               return {
                 section,
@@ -3014,7 +3014,7 @@ jobs:
               source_gate:{
                 body_ko:
                   (part.section === 'D4' || part.section === 'D5')
-                    ? part.question_surface.body.split('\\n').slice(1).join('\\n')
+                    ? part.question_surface.body.split('\n').slice(1).join('\n')
                     : part.question_surface.body,
                 choices_ko:part.question_surface.choices.map(x=>x.text),
                 correct_position:part.correct_answer_position,

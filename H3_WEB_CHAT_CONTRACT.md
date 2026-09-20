@@ -171,18 +171,37 @@ This separation is mandatory for both 5L and future 5W.
 
 ## 8. Learner-facing Web launcher URL
 
-The preferred learner-facing Chat link is the parameterless Apps Script Web App URL.
+Learner-facing URLs are a distinct authority from audio/job execution URLs.
+
+Canonical base:
+
+```text
+https://script.google.com/macros/s/AKfycby8I309RUkfVIsnJks808KA713QLppfrGiAFUTV2tA/dev
+```
+
+For an issued 5L set, Chat MUST return the direct learner URL obtained from the read-only backend helper:
+
+`getListeningLearnerUrl(SET_ID)`
+
+Canonical direct form:
+
+```text
+https://script.google.com/macros/s/AKfycby8I309RUkfVIsnJks808KA713QLppfrGiAFUTV2tA/dev?mode=LISTENING&set_id={LISTENING_SET_ID}
+```
 
 Rules:
 
-1. Chat should not append SET_ID/mode query parameters to the ordinary learner-facing link when the backend has an authorized internal/default target.
-2. Parameterless `/dev` and `/exec` must enter the H3 Web App router.
-3. Query-string `mode=SYSTEM_TEST` / `mode=LISTENING` routes remain available for controlled diagnostics and internal verification.
-4. `ping=1` remains a health-check route.
-5. Other HTTP job execution remains disabled.
-6. The backend, not the visible URL, is responsible for resolving the current authorized set during normal production flow.
+1. After issue succeeds, Chat must resolve the exact issued SET_ID and use `getListeningLearnerUrl(SET_ID)`.
+2. The helper must pass the production render gate before returning a URL; failure is a STOP condition.
+3. The learner-facing host must be exactly `script.google.com`.
+4. Never return a `script.googleusercontent.com` URL, `/macros/echo` URL, `user_content_key`, `lib=`, audio-job endpoint, redirected content URL, or Drive audio URL as the learner launcher.
+5. The parameterless base URL is the HOME URL only. It may be returned when the user explicitly needs HOME, but the normal post-issue 5L handoff uses the direct `mode=LISTENING&set_id=...` URL.
+6. `mode=SYSTEM_TEST`, `mode=REVIEW`, and `mode=REVIEW_REPLAY` remain explicit controlled learner/Web routes.
+7. `ping=1` remains a health-check route.
+8. Other HTTP job execution remains disabled and must never be repurposed as a learner link.
+9. If the canonical learner URL cannot be resolved, do not substitute another Apps Script URL; stop and audit the route/deployment binding.
 
-This avoids unnecessary external-link safety interstitials observed for long query-string links while preserving backend authorization.
+The outer Apps Script router allowlists HOME, LISTENING, SYSTEM_TEST, REVIEW, and REVIEW_REPLAY learner routes. HTTP audio/job execution remains Sheet-queue-only.
 
 ## 9. Script TXT storage
 
@@ -342,3 +361,26 @@ Learner-facing ownership remains:
 - `5Q`: deprecated for new learner requests only.
 
 R3 close does not change normal-live learner semantics. The next `5L` request prepares set no.3 using the persisted scheduler plan, with K4 as the currently scheduled retest slot.
+
+## 17. Post-R3 learner URL authority fix
+
+A post-R3 production incident showed that a redirected Apps Script content URL could be returned to the learner after a K1 -> 5L preparation flow:
+
+```text
+script.googleusercontent.com/macros/echo?...&lib=...
+```
+
+That URL is not a learner launcher. It reaches the disabled HTTP job surface and returns:
+
+```text
+Use the authorized Sheet queue. HTTP job execution is disabled.
+```
+
+The fix establishes one explicit URL authority:
+- `getListeningLearnerUrl(SET_ID)` is the backend read-only URL resolver;
+- it validates the issued production render before returning;
+- it returns only the canonical `script.google.com/macros/s/.../dev?mode=LISTENING&set_id=...` form;
+- Chat must use that result for post-issue 5L handoff;
+- redirected `script.googleusercontent.com` URLs are forbidden as learner-facing output.
+
+This fix changes no learner history, score, counter, pointer, scheduler, K1_READY, payload content, or production transaction.

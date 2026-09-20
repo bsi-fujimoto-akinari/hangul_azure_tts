@@ -45,6 +45,7 @@ jobs:
               'WebAppReviewCore.js',
               'WebAppReviewListeningAdapter.js',
               'WebAppReviewPersistence.js',
+              'WebAppReviewWrittenAdapter.js',
               'H3_WEB_CHAT_CONTRACT.md',
               'H3_REVIEW_ARCHITECTURE.md',
               'Index.html',
@@ -1298,6 +1299,288 @@ jobs:
           );
 
           console.log('Review HOME Core parity audit: PASS');
+          NODE
+
+      - name: Check Written Review projection and provider routing
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          core = Path('WebAppReviewCore.js').read_text(encoding='utf-8')
+          written = Path('WebAppReviewWrittenAdapter.js').read_text(encoding='utf-8')
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+
+          for needle in [
+              'function h3ReviewProviderForRequest_(',
+              'request.review_kind',
+              'request.txn_id',
+              'request.legacy_review_id',
+              "explicitKind !== 'LISTENING'",
+              "'REVIEW_PROVIDER_SELECTOR_CONFLICT'",
+              "'REVIEW_PROVIDER_KIND_INVALID'",
+              "'REVIEW_PROVIDER_ROUTE_AMBIGUOUS'",
+              'h3ReviewProviderForRequest_(\n      request',
+              'var H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ =\n  null;',
+          ]:
+              if needle not in core:
+                  raise SystemExit(f'Written provider routing invariant missing: {needle}')
+
+          for needle in [
+              'function h3WrittenReviewProjectHistorical_(',
+              "'H3_5W_HISTORICAL_RECONSTRUCTION_V1'",
+              "'H3_5W_HISTORICAL_RECONSTRUCTION_V2'",
+              "'H3_REVIEW_WRITTEN_PROJECTION_V1'",
+              "'WRITTEN_QUEUE_LEGACY'",
+              "'WRITTEN_QUEUE_WITH_GENERATION_LOG'",
+              'raw_input: record.raw_input',
+              'function h3WrittenReviewProvider_(',
+              "kind: 'WRITTEN'",
+              "replay_capability:\n      'unavailable'",
+              "'WRITTEN_REVIEW_CAPABILITY_UNAVAILABLE'",
+          ]:
+              if needle not in written:
+                  raise SystemExit(f'Written adapter invariant missing: {needle}')
+
+          for forbidden in [
+              'SpreadsheetApp',
+              'DriveApp',
+              '.getSheetByName(',
+              '.appendRow(',
+              '.setValue(',
+              '.setValues(',
+              'written_web_txn_v1',
+              'listening_web_txn_v1',
+          ]:
+              if forbidden in written:
+                  raise SystemExit(f'Written projection is not storage-pure: {forbidden}')
+
+          for forbidden in [
+              'review_kind',
+              'h3WrittenReview',
+          ]:
+              if forbidden in web:
+                  raise SystemExit(f'WebApp Written route was activated: {forbidden}')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const assert = require('assert');
+
+          const source = [
+            'WebAppReviewCore.js',
+            'WebAppReviewListeningAdapter.js',
+            'WebAppReviewWrittenAdapter.js'
+          ].map(name => fs.readFileSync(name, 'utf8')).join('\n');
+
+          const listeningRoute = name => () => ({provider:'LISTENING', route:name});
+          const context = vm.createContext({
+            console,
+            SpreadsheetApp:{openById:()=>({})},
+            H3_WEB_RUNTIME_SPREADSHEET_ID:'RUNTIME',
+            getPersistentReviewPayload_:listeningRoute('txn-review'),
+            getLegacyPersistentReviewPayload_:listeningRoute('legacy-review'),
+            getPersistentReviewMediaPayload_:listeningRoute('txn-media'),
+            getLegacyPersistentReviewMediaPayload_:listeningRoute('legacy-media'),
+            getReviewReplayPayload_:listeningRoute('replay'),
+            getReviewReplayMediaPayload_:listeningRoute('replay-media'),
+            gradeReviewReplay_:listeningRoute('replay-grade'),
+            h3ReviewHistoryEntries_:()=>[],
+            h3LegacyReviewHistoryEntries_:()=>[]
+          });
+          vm.runInContext(source, context, {filename:'Review providers'});
+
+          const call = expression => JSON.parse(JSON.stringify(
+            vm.runInContext(expression, context)
+          ));
+          const throws = (expression, message) => {
+            assert.throws(
+              () => vm.runInContext(expression, context),
+              error => String(error.message) === message
+            );
+          };
+
+          assert.strictEqual(
+            vm.runInContext('h3ReviewProviders_().length', context),
+            1,
+            'Written provider became active in production.'
+          );
+          assert.deepStrictEqual(
+            call("h3ReviewRenderRequest_({mode:'REVIEW',txn_id:'H3TX-1'})"),
+            {provider:'LISTENING',route:'txn-review'}
+          );
+          assert.deepStrictEqual(
+            call("h3ReviewRenderRequest_({mode:'REVIEW',legacy_review_id:'L02'})"),
+            {provider:'LISTENING',route:'legacy-review'}
+          );
+          assert.deepStrictEqual(
+            call("h3ReviewMediaRequest_({mode:'REVIEW',txn_id:'H3TX-1'})"),
+            {provider:'LISTENING',route:'txn-media'}
+          );
+          assert.deepStrictEqual(
+            call("h3ReviewRenderRequest_({mode:'REVIEW_REPLAY',txn_id:'H3TX-1'})"),
+            {provider:'LISTENING',route:'replay'}
+          );
+          assert.deepStrictEqual(
+            call("h3ReviewSubmitRequest_({mode:'REVIEW_REPLAY',txn_id:'H3TX-1'})"),
+            {provider:'LISTENING',route:'replay-grade'}
+          );
+
+          const question = (qNo, overrides={}) => Object.assign({
+            q_no:qNo,
+            section:'D' + (qNo + 1),
+            question_surface:qNo === 3
+              ? 'Q3 [D4/置換]\n이번 일은 제가 맡을게요.\n① 지킬게요\n② 담당할게요'
+              : 'Q' + qNo + ' 한국어 질문 / 日本語補助',
+            question_body:'stored parsed prompt ' + qNo,
+            choices:[{position:1,symbol:'①',text:'선택지'}],
+            dialogue_components:qNo === 5 ? ['A：질문','B：(　)'] : [],
+            raw_user_answer:qNo === 2 ? '②?' : '①',
+            user_answer:qNo === 2 ? '②' : '①',
+            correct_answer:qNo === 2 ? '③' : '①',
+            mark:qNo === 2 ? '×' : '○',
+            explicit_uncertainty:qNo === 2,
+            explanation_text:'stored explanation ' + qNo,
+            audio_sources:{audio:qNo === 1 ? 'UNKNOWN' : 'N/A'},
+            generation_log:qNo === 1 ? 'UNKNOWN' : {source_row:qNo}
+          }, overrides);
+          const record = (sourceMode, overrides={}) => Object.assign({
+            schema:'H3_5W_HISTORICAL_RECONSTRUCTION_V1',
+            set_id:'H3-20260918-03',
+            source_mode:sourceMode,
+            answered_at:'UNKNOWN',
+            raw_input:'1 2? 4 2 1',
+            score:4,
+            total:5,
+            questions:[1,2,3,4,5].map(qNo => question(qNo))
+          }, overrides);
+
+          for (const sourceMode of [
+            'WRITTEN_QUEUE_LEGACY',
+            'WRITTEN_QUEUE_WITH_GENERATION_LOG'
+          ]) {
+            context.__record = record(sourceMode);
+            const projection = call('h3WrittenReviewProjectHistorical_(__record)');
+            assert.strictEqual(projection.source_mode, sourceMode);
+            assert.strictEqual(projection.answered_at, 'UNKNOWN');
+            assert.strictEqual(projection.raw_input, '1 2? 4 2 1');
+            assert.strictEqual(projection.score, 4);
+            assert.strictEqual(projection.total, 5);
+            assert.strictEqual(projection.wrong_count, 1);
+            assert.strictEqual(projection.uncertainty_known, true);
+            assert.strictEqual(projection.uncertain_count, 1);
+            assert.deepStrictEqual(projection.questions, context.__record.questions);
+            assert.strictEqual(projection.questions[2].question_surface,
+              'Q3 [D4/置換]\n이번 일은 제가 맡을게요.\n① 지킬게요\n② 담당할게요');
+            assert.strictEqual(Object.hasOwn(projection, 'txn_id'), false);
+          }
+
+          const unknownRecord = record('WRITTEN_QUEUE_LEGACY');
+          unknownRecord.questions[0].explicit_uncertainty = 'UNKNOWN';
+          delete unknownRecord.questions[0].explanation_text;
+          context.__unknownRecord = unknownRecord;
+          const unknownProjection = call(
+            'h3WrittenReviewProjectHistorical_(__unknownRecord)'
+          );
+          assert.strictEqual(unknownProjection.uncertainty_known, false);
+          assert.strictEqual(unknownProjection.uncertain_count, null);
+          assert.strictEqual(
+            Object.hasOwn(unknownProjection.questions[0], 'explanation_text'),
+            false
+          );
+          assert.strictEqual(unknownProjection.questions[0].audio_sources.audio, 'UNKNOWN');
+          assert.strictEqual(unknownProjection.questions[0].generation_log, 'UNKNOWN');
+
+          const corrected = record('WRITTEN_QUEUE_WITH_GENERATION_LOG', {
+            set_id:'H3-20260917-02',
+            raw_input:'4? 2? 4? 3 4',
+            score:4,
+            questions:[
+              question(1,{raw_user_answer:'④?',user_answer:'④',correct_answer:'③',mark:'×',explicit_uncertainty:true}),
+              question(2,{raw_user_answer:'②?',user_answer:'②',correct_answer:'②',mark:'△',explicit_uncertainty:true}),
+              question(3,{raw_user_answer:'④?',user_answer:'④',correct_answer:'④',mark:'△',explicit_uncertainty:true}),
+              question(4,{raw_user_answer:'③',user_answer:'③',correct_answer:'③',mark:'○',explicit_uncertainty:false}),
+              question(5,{raw_user_answer:'④',user_answer:'④',correct_answer:'④',mark:'○',explicit_uncertainty:false})
+            ]
+          });
+          context.__corrected = corrected;
+          const correctedProjection = call(
+            'h3WrittenReviewProjectHistorical_(__corrected)'
+          );
+          assert.strictEqual(correctedProjection.raw_input, '4? 2? 4? 3 4');
+          assert.deepStrictEqual(
+            correctedProjection.questions.slice(0,3).map(q => [
+              q.raw_user_answer,
+              q.mark,
+              q.explicit_uncertainty
+            ]),
+            [['④?','×',true],['②?','△',true],['④?','△',true]]
+          );
+
+          vm.runInContext(
+            'H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ = h3WrittenReviewProvider_;',
+            context
+          );
+          assert.strictEqual(
+            vm.runInContext('h3ReviewProviders_().length', context),
+            2
+          );
+          assert.strictEqual(
+            vm.runInContext(
+              "h3ReviewProviderForRequest_({review_kind:'WRITTEN'}).kind",
+              context
+            ),
+            'WRITTEN'
+          );
+          assert.strictEqual(
+            vm.runInContext(
+              "h3ReviewProviderForRequest_({review_kind:'LISTENING'}).kind",
+              context
+            ),
+            'LISTENING'
+          );
+          assert.strictEqual(
+            vm.runInContext(
+              "h3ReviewProviderForRequest_({txn_id:'H3TX-1'}).kind",
+              context
+            ),
+            'LISTENING'
+          );
+          assert.strictEqual(
+            vm.runInContext(
+              "h3ReviewProviderForRequest_({legacy_review_id:'L02'}).kind",
+              context
+            ),
+            'LISTENING'
+          );
+          throws(
+            'h3ReviewProviderForRequest_({})',
+            'REVIEW_PROVIDER_ROUTE_AMBIGUOUS'
+          );
+          throws(
+            "h3ReviewProviderForRequest_({review_kind:'OTHER'})",
+            'REVIEW_PROVIDER_KIND_INVALID'
+          );
+          throws(
+            "h3ReviewProviderForRequest_({review_kind:'WRITTEN',txn_id:'H3TX-1'})",
+            'REVIEW_PROVIDER_SELECTOR_CONFLICT'
+          );
+
+          context.__writtenRecord = record('WRITTEN_QUEUE_WITH_GENERATION_LOG', {
+            answered_at:'2026-09-19T00:12:42+09:00'
+          });
+          const routed = call(
+            "h3ReviewRenderRequest_({mode:'REVIEW',review_kind:'WRITTEN',materialized_record:__writtenRecord})"
+          );
+          assert.strictEqual(routed.kind, 'WRITTEN');
+          assert.strictEqual(routed.read_only, true);
+          throws(
+            "h3ReviewMediaRequest_({mode:'REVIEW',review_kind:'WRITTEN'})",
+            'WRITTEN_REVIEW_CAPABILITY_UNAVAILABLE'
+          );
+
+          console.log('Written Review projection and routing: PASS');
           NODE
 
       - name: Check persistent Review routes and Web UI
@@ -3782,6 +4065,7 @@ jobs:
           node --check WebAppReviewCore.js
           node --check WebAppReviewListeningAdapter.js
           node --check WebAppReviewPersistence.js
+          node --check WebAppReviewWrittenAdapter.js
           python3 - <<'PY'
           from pathlib import Path
           text = Path('Client.html').read_text(encoding='utf-8').strip()

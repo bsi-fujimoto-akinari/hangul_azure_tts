@@ -130,9 +130,76 @@ function h3ReviewProviders_() {
 }
 
 
-function h3ReviewProviderForRequest_() {
+function h3ReviewProviderForRequest_(
+  request
+) {
   var providers =
     h3ReviewProviders_();
+
+  var explicitKind = String(
+    request &&
+    request.review_kind ||
+    ''
+  );
+  var hasListeningIdentity = Boolean(
+    request &&
+    (
+      request.txn_id ||
+      request.legacy_review_id
+    )
+  );
+
+  if (
+    explicitKind &&
+    hasListeningIdentity &&
+    explicitKind !== 'LISTENING'
+  ) {
+    throw new Error(
+      'REVIEW_PROVIDER_SELECTOR_CONFLICT'
+    );
+  }
+
+  if (explicitKind) {
+    var explicitMatches =
+      providers.filter(
+        function (provider) {
+          return provider.kind ===
+            explicitKind;
+        }
+      );
+
+    if (explicitMatches.length === 1) {
+      return explicitMatches[0];
+    }
+
+    if (!explicitMatches.length) {
+      throw new Error(
+        'REVIEW_PROVIDER_KIND_INVALID'
+      );
+    }
+
+    throw new Error(
+      'REVIEW_PROVIDER_ROUTE_AMBIGUOUS'
+    );
+  }
+
+  if (hasListeningIdentity) {
+    var listeningMatches =
+      providers.filter(
+        function (provider) {
+          return provider.kind ===
+            'LISTENING';
+        }
+      );
+
+    if (listeningMatches.length === 1) {
+      return listeningMatches[0];
+    }
+
+    throw new Error(
+      'REVIEW_PROVIDER_ROUTE_AMBIGUOUS'
+    );
+  }
 
   if (providers.length !== 1) {
     throw new Error(
@@ -310,7 +377,9 @@ function h3ReviewRenderRequest_(request) {
   }
 
   var provider =
-    h3ReviewProviderForRequest_();
+    h3ReviewProviderForRequest_(
+      request
+    );
 
   if (
     request &&
@@ -334,7 +403,9 @@ function h3ReviewRenderRequest_(request) {
 
 function h3ReviewMediaRequest_(request) {
   var provider =
-    h3ReviewProviderForRequest_();
+    h3ReviewProviderForRequest_(
+      request
+    );
 
   if (
     request &&
@@ -368,6 +439,8 @@ function h3ReviewSubmitRequest_(request) {
     );
   }
 
-  return h3ReviewProviderForRequest_()
+  return h3ReviewProviderForRequest_(
+    request
+  )
     .gradeReplay(request);
 }

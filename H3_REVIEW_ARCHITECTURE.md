@@ -168,4 +168,8 @@ Review/media/replay use internal `legacy_review_id` routing without learner URL 
 
 The internal provider contract exposes history, current learning, Review/media, and replay operations without changing any learner-facing payload. The Written provider factory remains `null`: this is only a future adapter slot and does not enable a Written route, schema, transaction, history entry, or HOME card.
 
+`WebAppReviewWrittenAdapter.js` adds a storage-independent, read-only projection from `H3_5W_HISTORICAL_RECONSTRUCTION_V1` and its uncertainty-corrected V2 successor. It preserves source question surfaces, parsed prompts, choices, dialogue, answers, marks, uncertainty, explanations, audio, generation provenance, and raw input without filling `UNKNOWN` or generating transaction identities. Its provider factory exists only as an unregistered seam; Written HOME, media, replay, submission, and production routing remain inactive.
+
+Provider dispatch is explicit when more than one provider is present. `review_kind` selects an exact provider, while existing `txn_id` and `legacy_review_id` identities continue to select Listening. A selector conflict, an unknown kind, or a selector-free multi-provider request fails closed.
+
 One-shot migration helpers are absent from active code. Detailed migration and validation evidence remains recoverable from Git history and Drive `06_AUDIT`.

@@ -1,6 +1,6 @@
 # H3 Review Architecture
 
-Version: H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V1
+Version: H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V2
 Status: R3_CLOSED_NORMAL_LIVE
 
 This document defines the current durable Review contract. Completed R3 phase chronology and device-validation evidence remain in Git history and Drive `06_AUDIT`.
@@ -232,3 +232,16 @@ capability. Those routes remain fail-closed with
 tables remain immutable/read-only source material; provider activation does
 not create `written_web_txn_v1` or mutate learner history, scheduler state,
 or generation state.
+
+## 29. Learner-facing explanation and script ownership
+
+The Web App Review surface is the sole learner-facing authority for postgrade explanation and semantic script content for both Listening (5L) and Written (5W).
+
+- Immediate Review and Review history may show translations, rationale, vocabulary/grammar notes, pronunciation/Hanja notes where applicable, and the exact source-bound semantic script.
+- Chat must not duplicate those explanation or script contents after grading and must not provide a Daily TXT as a learner-facing substitute.
+- Stored script TXT files remain noncanonical internal/audit conveniences only. Their presence or absence must not change learner state, and they are never the fallback presentation surface.
+- Listening Review must derive the displayed script from the locked/bound Review sources, not from chat-local text.
+- Written production Review must persist or reconstruct the exact committed set's learner-facing explanation and script content under full source-lock and make it reopenable from HOME.
+- Failure to materialize or open a production Written Review is a persistence/rendering defect. It does not authorize Chat or TXT fallback disclosure.
+- Review history must reopen the same source-bound learner-facing content for the exact committed set without mutating score, history, scheduler, retest state, counters, or pointers.
+

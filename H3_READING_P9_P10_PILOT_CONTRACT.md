@@ -129,6 +129,10 @@ This phase does not:
 - mutate historical 5W Review/content data;
 - change Translation or 準2級.
 
-## 9. Next family step
+## 9. Section-aware activation status
 
-After source-lock parity is proven for P8/P9/P10, the next Reading-family design step is to generalize stage allocation and activation from the current P8-only stage contract to an explicit section-aware Reading stage contract. That generalization must preserve the existing P8 identity and hashes and must not materialize new P9/P10 live rows until separately authorized by the activation gate.
+Section-aware allocation is now defined by `H3-READING-ACTIVATION-CORE-20260921-V3`.
+
+The Reading SET_ID serial is shared across P8/P9/P10, while STAGE_ID carries the exact section. P8 remains backward compatible through its wrapper and live PREISSUE_READY identity.
+
+P9/P10 remain repository-only pilots. No P9/P10 live row may be materialized until a later explicit activation gate.

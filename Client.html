@@ -177,7 +177,22 @@
       mode: 'REVIEW',
       set_id: null,
       txn_id:
-        String(txnId)
+        String(txnId),
+      legacy_review_id: null
+    });
+  }
+
+  function loadLegacyReview(
+    legacyReviewId
+  ) {
+    loadSet({
+      schema:
+        'H3_WEB_RENDER_REQUEST_V1',
+      mode: 'REVIEW',
+      set_id: null,
+      txn_id: null,
+      legacy_review_id:
+        String(legacyReviewId)
     });
   }
 
@@ -189,7 +204,23 @@
         'REVIEW_REPLAY',
       set_id: null,
       txn_id:
-        String(txnId)
+        String(txnId),
+      legacy_review_id: null
+    });
+  }
+
+  function loadLegacyReplay(
+    legacyReviewId
+  ) {
+    loadSet({
+      schema:
+        'H3_WEB_RENDER_REQUEST_V1',
+      mode:
+        'REVIEW_REPLAY',
+      set_id: null,
+      txn_id: null,
+      legacy_review_id:
+        String(legacyReviewId)
     });
   }
 
@@ -517,7 +548,8 @@
             'review-history-date';
           date.textContent =
             formatHistoryDate(
-              entry.committed_at
+              entry.committed_at ||
+              entry.answered_at
             );
           meta.appendChild(date);
 
@@ -528,8 +560,16 @@
           summary.textContent =
             '×' +
             entry.wrong_count +
-            '　?' +
-            entry.uncertain_count;
+            '　' +
+            (
+              entry.uncertainty_known ===
+                false
+                ? '?—'
+                : (
+                    '?' +
+                    entry.uncertain_count
+                  )
+            );
           meta.appendChild(
             summary
           );
@@ -553,9 +593,17 @@
           open.addEventListener(
             'click',
             function () {
-              loadReviewTxn(
-                entry.txn_id
-              );
+              if (
+                entry.legacy_review_id
+              ) {
+                loadLegacyReview(
+                  entry.legacy_review_id
+                );
+              } else {
+                loadReviewTxn(
+                  entry.txn_id
+                );
+              }
             }
           );
           actions.appendChild(open);
@@ -571,9 +619,17 @@
           replay.addEventListener(
             'click',
             function () {
-              loadReplayTxn(
-                entry.txn_id
-              );
+              if (
+                entry.legacy_review_id
+              ) {
+                loadLegacyReplay(
+                  entry.legacy_review_id
+                );
+              } else {
+                loadReplayTxn(
+                  entry.txn_id
+                );
+              }
             }
           );
           actions.appendChild(replay);
@@ -965,6 +1021,9 @@
         set_id: app.payload.set_id,
         txn_id:
           app.payload.txn_id || null,
+        legacy_review_id:
+          app.payload
+            .legacy_review_id || null,
         asset_key: assetKey
       });
   }
@@ -1208,6 +1267,9 @@
       set_id: app.payload.set_id,
       txn_id:
         app.payload.txn_id || null,
+      legacy_review_id:
+        app.payload
+          .legacy_review_id || null,
       answers: sections.map(function (section) {
         return {
           section: section,
@@ -1267,8 +1329,12 @@
       result.mode ===
         'REVIEW_REPLAY' &&
       result.after_replay &&
-      result.after_replay.schema ===
-        'H3_PERSISTENT_REVIEW_PAYLOAD_V1'
+      (
+        result.after_replay.schema ===
+          'H3_PERSISTENT_REVIEW_PAYLOAD_V1' ||
+        result.after_replay.schema ===
+          'H3_LEGACY_PERSISTENT_REVIEW_PAYLOAD_V1'
+      )
     ) {
       renderPersistentReview(
         result.after_replay
@@ -1518,8 +1584,17 @@
     ids.textContent =
       'SET_ID=' +
       review.set_id +
-      '\nTXN_ID=' +
-      review.txn_id;
+      (
+        review.legacy_review_id
+          ? (
+              '\nLEGACY_REVIEW_ID=' +
+              review.legacy_review_id
+            )
+          : (
+              '\nTXN_ID=' +
+              review.txn_id
+            )
+      );
     ids.className =
       'review-technical-ids';
     technical.appendChild(ids);
@@ -1578,9 +1653,17 @@
     replay.addEventListener(
       'click',
       function () {
-        loadReplayTxn(
-          review.txn_id
-        );
+        if (
+          review.legacy_review_id
+        ) {
+          loadLegacyReplay(
+            review.legacy_review_id
+          );
+        } else {
+          loadReplayTxn(
+            review.txn_id
+          );
+        }
       }
     );
     actions.appendChild(replay);
@@ -1744,9 +1827,14 @@
         part.user_answer - 1
       ] +
       (
-        part.uncertain
-          ? ' ?'
-          : ''
+        part.uncertain_known ===
+          false
+          ? ' ?—'
+          : (
+              part.uncertain
+                ? ' ?'
+                : ''
+            )
       );
     answerRow.appendChild(user);
 

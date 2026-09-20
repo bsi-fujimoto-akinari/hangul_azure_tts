@@ -161,8 +161,11 @@ const HQ_LISTENING_NOTE =
 const HQ_LISTENING_AUDIO_VERSION_LEADING5S =
   'azure-listening-v1-24k160k-leading5s-segments';
 
-const HQ_LISTENING_AUDIO_VERSION =
+const HQ_LISTENING_AUDIO_VERSION_V2 =
   'azure-listening-v2-24k160k-no-leading-segments';
+
+const HQ_LISTENING_AUDIO_VERSION =
+  'azure-listening-v3-official-parity-number-dual-jp-cue';
 
 const HQ_K1_NUMBER_VOICE = {
   label: 'Nanami',
@@ -177,7 +180,17 @@ const HQ_K1_NUMBER_TEXTS = {
   choice_number4: 'マルヨン'
 };
 
-const HQ_LISTENING_MAX_SEGMENTS = 12;
+const HQ_LISTENING_REPLAY_CUE_TEXT =
+  'もう一度読みます';
+
+const HQ_LISTENING_DIALOGUE_VOICE_PAIRS = {
+  Hyunsu: 'JiMin',
+  InJoon: 'YuJin',
+  JiMin: 'Hyunsu',
+  YuJin: 'InJoon'
+};
+
+const HQ_LISTENING_MAX_SEGMENTS = 16;
 const HQ_LISTENING_MAX_PAUSE_MS = 6000;
 const HQ_LISTENING_MAX_TOTAL_CHARS = 12000;
 
@@ -2907,6 +2920,8 @@ function runListeningJob_(
       state.audioVersion !==
         HQ_LISTENING_AUDIO_VERSION &&
       state.audioVersion !==
+        HQ_LISTENING_AUDIO_VERSION_V2 &&
+      state.audioVersion !==
         HQ_LISTENING_AUDIO_VERSION_LEADING5S
     ) {
       throw new Error(
@@ -3199,6 +3214,34 @@ function runListeningJob_(
 }
 
 
+function listeningDialogueVoice_(
+  primaryVoice
+) {
+  const pairedLabel =
+    HQ_LISTENING_DIALOGUE_VOICE_PAIRS[
+      primaryVoice.label
+    ];
+
+  const paired =
+    HQ_VOICES.find(
+      v =>
+        v.label === pairedLabel
+    );
+
+  if (
+    !paired ||
+    paired.label ===
+      primaryVoice.label
+  ) {
+    throw new Error(
+      'Listening dialogue voice pair is invalid.'
+    );
+  }
+
+  return paired;
+}
+
+
 function listeningAudioSpec_(
   j,
   state
@@ -3220,12 +3263,26 @@ function listeningAudioSpec_(
     state.audioVersion !==
       HQ_LISTENING_AUDIO_VERSION &&
     state.audioVersion !==
+      HQ_LISTENING_AUDIO_VERSION_V2 &&
+    state.audioVersion !==
       HQ_LISTENING_AUDIO_VERSION_LEADING5S
   ) {
     throw new Error(
       'Unknown persisted Listening audio version.'
     );
   }
+
+  const isOfficialParity =
+    state.audioVersion ===
+      HQ_LISTENING_AUDIO_VERSION;
+
+  const responseVoice =
+    j.section === 'K3' &&
+    isOfficialParity
+      ? listeningDialogueVoice_(
+          voice
+        )
+      : voice;
 
   const hasNumberVoice =
     j.plan.some(
@@ -3237,19 +3294,43 @@ function listeningAudioSpec_(
           )
     );
 
+  const hasReplayCue =
+    j.plan.some(
+      segment =>
+        segment.role ===
+          'replay_cue'
+    );
+
   let body = '';
   let first = true;
 
   j.plan.forEach(
     segment => {
-      const segmentVoice =
+      const isNumber =
         Object.prototype
           .hasOwnProperty.call(
             HQ_K1_NUMBER_TEXTS,
             segment.role
-          )
+          );
+
+      const isReplayCue =
+        segment.role ===
+          'replay_cue';
+
+      const isK3Response =
+        j.section === 'K3' &&
+        /^choice[1-4]$/.test(
+          segment.role
+        ) &&
+        isOfficialParity;
+
+      const segmentVoice =
+        isNumber ||
+        isReplayCue
           ? HQ_K1_NUMBER_VOICE
-          : voice;
+          : isK3Response
+            ? responseVoice
+            : voice;
 
       for (
         let n = 0;
@@ -3299,30 +3380,43 @@ function listeningAudioSpec_(
       ssml
     );
 
+  let assignment =
+    'VOICE=' +
+    state.voice;
+
+  if (
+    j.section === 'K3' &&
+    isOfficialParity
+  ) {
+    assignment +=
+      ';RESPONSE_VOICE=' +
+      responseVoice.label;
+  }
+
+  if (hasNumberVoice) {
+    assignment +=
+      ';NUMBER_VOICE=' +
+      HQ_K1_NUMBER_VOICE.label;
+  }
+
+  if (hasReplayCue) {
+    assignment +=
+      ';CUE_VOICE=' +
+      HQ_K1_NUMBER_VOICE.label;
+  }
+
   return {
     ssml: ssml,
-
-    assignment:
-      'VOICE=' +
-      state.voice +
-      (
-        hasNumberVoice
-          ? ';NUMBER_VOICE=' +
-            HQ_K1_NUMBER_VOICE.label
-          : ''
-      ),
-
+    assignment: assignment,
     fingerprint:
       fingerprint,
-
     tempName:
       j.id +
       '.' +
       fingerprint +
       '.mp3',
-
     description:
-      'HANGUL_LISTENING_AUDIO_V1:' +
+      'HANGUL_LISTENING_AUDIO_V2:' +
       fingerprint
   };
 }

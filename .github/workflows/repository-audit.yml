@@ -3011,7 +3011,9 @@ jobs:
               'background === true',
               'retries < 1',
               'function resetAudioAsset(',
-              'playAudioAssetNow(nextSection, true)',
+              'function audioKeyForIndex_(',
+              'playAudioAssetNow(',
+              'audioKeyForIndex_(',
               'setActiveIndex(nextIndex, true)',
               'pauseOtherAudio(null);',
           ]:

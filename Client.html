@@ -894,6 +894,15 @@
     questions.forEach(function (q, index) {
       var qNo = index + 1;
       var card = el('section', 'question-card');
+      if (
+        app.payload &&
+        app.payload.mode ===
+          'WRITTEN'
+      ) {
+        card.classList.add(
+          'written-question'
+        );
+      }
       card.dataset.section = q.section;
       card.dataset.index = String(index);
       card.dataset.audioKey = q.audio_asset_key || '';

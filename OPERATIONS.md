@@ -1275,3 +1275,38 @@ Phase 3 remains required before learner exposure:
 5. validate on iPhone ChatGPT in-app browser.
 
 Until Phase 3 PASS, the L02 legacy registry is backend-only.
+
+## 29. 5L #1 legacy Review phase-3 device gate
+
+Implementation status: `IMPLEMENTED_DEVICE_VALIDATION_PENDING`.
+
+Code and backend activation:
+- PR #59 merged;
+- repository audit PASS;
+- Apps Script HEAD synchronized;
+- HOME legacy history merge active;
+- legacy Review/media/replay routes active;
+- parameterized legacy learner URL is not introduced.
+
+Normal learner handoff remains the parameterless URL defined in the learner URL authority section.
+
+Before Phase 3 may be marked closed, perform one iPhone ChatGPT in-app browser validation against the parameterless learner URL.
+
+Pass criteria:
+- HOME opens without treating L02 as current learning;
+- Review list order is 5L #3, #2, #1;
+- 5L #1 card shows `1/5`, `×4`, and `?—`;
+- Review opens and K1 image is visible;
+- K1-K5 audio can each be loaded/played;
+- Review source shows original answers `3,1,3,2,2` and original results `○,×,×,×,×`;
+- leaving and reopening 5L #1 reproduces the same content;
+- Replay uses the same five source-locked items and returns a transient result only;
+- after Replay, `listening_web_txn_v1`, `listening_log_v1`, `listening_state_v1`, counters, pointers, scheduler, K1_READY and payload rows remain unchanged.
+
+Failure handling:
+- do not rewrite L02 history;
+- do not synthesize a Web transaction;
+- do not fall back to a parameterized learner link;
+- keep the legacy entry registered but stop Phase-3 close until the routing/media issue is corrected.
+
+The Coordinator may perform all automated gates, but actual iPhone interaction must be confirmed from the learner device before close.

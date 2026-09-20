@@ -1177,3 +1177,48 @@ Phase-2 validation:
 - learner runtime state, score, counters, pointer, scheduler, K1_READY, payload and audio are unchanged.
 
 Phase 2 does not expose the legacy entry in HOME. Phase 3 owns learner-visible history merge, Review/Replay routing, and device validation.
+
+## 28. 5L #1 legacy Review phase-3 staged activation
+
+Phase 3 learner-facing implementation is active in Apps Script HEAD for `H3-20260919-L02` / 5L #1.
+
+Implemented:
+- HOME merges transaction-backed Review history and the LOCKED `LEGACY_PRE_WEB` entry;
+- the normal learner entry point remains the parameterless HOME/launcher URL;
+- no legacy ID is accepted as a learner boot query parameter;
+- 5L #1 Review uses `legacy_review_id` only as an internal Apps Script client/server reference;
+- legacy Review media resolves the original K1 image and existing K1-K5 audio bindings;
+- legacy REVIEW_REPLAY is nonlearning, `persisted=false`, and returns `runtime_write_count=0`;
+- historical uncertainty unavailable in L02 is rendered as unknown (`?—`), never as zero;
+- ordinary transaction-backed Review/Replay remains unchanged.
+
+Expected HOME history order from current live timestamps:
+
+```text
+5L #3
+5L #2
+5L #1
+```
+
+Current-learning resolution:
+- L02 is the only historical ISSUED set without a COMMITTED Web transaction;
+- its LOCKED `LEGACY_PRE_WEB` registration explicitly excludes it from current-learning resolution;
+- with no newer ISSUED/uncommitted production set, parameterless boot therefore resolves HOME.
+
+Automated gates completed:
+- PR #59 repository audit PASS;
+- main merged at `5e60887b6472f9172de1faafe2e2e7a4b3efd02e`;
+- Apps Script HEAD sync confirmed by project modified-time readback;
+- live legacy registry cardinality remains 1;
+- L02 synthetic Web transaction count remains 0;
+- L02 transaction-backed Review binding count remains 0;
+- Listening scheduler/state sentinel values remain unchanged.
+
+Phase 3 is not closed until iPhone device validation is completed. Required device checks:
+1. parameterless learner URL opens HOME when no current uncommitted set exists;
+2. HOME lists 5L #1 after #3 and #2 and shows score 1/5, ×4, ?—;
+3. 5L #1 Review opens all five exact items, K1 image, and all five audio assets;
+4. Home -> Review -> Home -> Review reconstructs the same source-locked payload;
+5. legacy Replay accepts five transient answers, grades them, returns to the exact legacy Review, and creates no learner-runtime writes.
+
+Until those checks are confirmed, status is `IMPLEMENTED_DEVICE_VALIDATION_PENDING`, not Phase-3 closed.

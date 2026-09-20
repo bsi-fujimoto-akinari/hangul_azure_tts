@@ -106,8 +106,8 @@ Implemented and staged on the feature branch:
 
 Still intentionally inactive:
 
-- Reading learner transaction persistence, live stage/log sheets, server route, HOME/Review persistence, and scheduler activation;
-- Translation learner renderers and schedulers;
+- Reading learner issue, HOME/Review persistence, and scheduler activation;
+- Translation learner route/issue, live stage/log sheets, HOME/Review persistence, and scheduler activation;
 - 準2級 taxonomy/queue activation;
 - live HOME V2 migration;
 - merge / Apps Script sync while the parallel Review reconstruction read-only investigation is still open.
@@ -119,4 +119,14 @@ The repository now stages `H3-READING-ACTIVATION-CORE-20260921-V2` as the next c
 It defines Reading-owned ISSUE_NO/STAGE_ID/SET_ID semantics, deterministic `H3-YYYYMMDD-RNNN` allocation, the `reading_stage_v1 / reading_web_txn_v1 / reading_log_v1` authorities, persisted locked-bundle JSON, question-key submission normalization, source-bound preissue validation, transaction planning, committed-result projection, and a pure current-learning candidate.
 
 These primitives are not yet wired into `WebApp.js`, HOME, Review persistence, or any live Sheet. Current 5W D2-D6 scheduler/Answer Sync behavior is unchanged.
+
+## 11. Translation activation-core staging
+
+The repository now stages `H3-TRANSLATION-ACTIVATION-CORE-20260921-V1`.
+
+It defines Translation-owned ISSUE_NO/STAGE_ID/SET_ID allocation across P11/P12, explicit translation_direction and answer_type binding, source/hash-bound preissue validation, question_key submission normalization, transaction planning, committed-result projection, and a pure current-learning candidate.
+
+The global H3TX allocator reserves `translation_web_txn_v1`. No Translation physical Sheet, server route, learner issue, HOME/Review persistence, or scheduler activation is created by this phase.
+
+Initial learner-answer scope remains `answer_type=MULTIPLE_CHOICE`; free-text Translation and LLM grading remain out of scope.
 

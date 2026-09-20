@@ -32,13 +32,25 @@ function h3LevelAuditExpectThrow_(
 }
 
 
-function auditLevelRuntimeV1_() {
+function auditLevelRuntimeV2_() {
   h3LevelAuditAssert_(
     h3LevelNormalize_('3級') ===
       '3級' &&
       h3LevelNormalize_('準2級') ===
         '準2級',
     'LEVELS'
+  );
+
+  h3LevelAuditAssert_(
+    h3LevelMasterAuthority_(
+      '3級'
+    ) ===
+      'skill_master_v1' &&
+      h3LevelMasterAuthority_(
+        '準2級'
+      ) ===
+        'jun2_skill_master_v1',
+    'MASTER_AUTHORITIES'
   );
 
   h3LevelAuditAssert_(
@@ -211,17 +223,48 @@ function auditLevelRuntimeV1_() {
     blocked.ready === false &&
       blocked.status ===
         'BLOCKED_NO_JUN2_TAXONOMY' &&
+      blocked.master_sheet ===
+        'jun2_skill_master_v1' &&
       blocked.skill_count === 0,
     'ACTIVATION_BLOCKED'
   );
 
+  var jun2Present =
+    h3LevelActivationReadiness_(
+      [
+        {
+          SKILL_ID:
+            'JUN2-D5-SK001',
+          LEVEL:
+            '準2級'
+        },
+        {
+          SKILL_ID:
+            'JUN2-D12-SK001',
+          LEVEL:
+            '準2級'
+        }
+      ],
+      '準2級'
+    );
+
+  h3LevelAuditAssert_(
+    jun2Present.ready === true &&
+      jun2Present.status ===
+        'TAXONOMY_PRESENT_NOT_RUNTIME_ACTIVATED' &&
+      jun2Present.master_sheet ===
+        'jun2_skill_master_v1' &&
+      jun2Present.skill_count === 2,
+    'JUN2_TAXONOMY_PRESENT'
+  );
+
   return {
     schema:
-      'H3_LEVEL_RUNTIME_AUDIT_V1',
+      'H3_LEVEL_RUNTIME_AUDIT_V2',
     result:
       'PASS',
     checks:
-      14,
+      16,
     contract_id:
       H3_LEVEL_RUNTIME_CONTRACT_ID_
   };

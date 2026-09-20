@@ -1,11 +1,11 @@
 # H3 Level Runtime Contract
 
-Version: H3-LEVEL-RUNTIME-20260921-V1
-Status: STAGED_NO_JUN2_TAXONOMY
+Version: H3-LEVEL-RUNTIME-20260921-V2
+Status: JUN2_TAXONOMY_READY_QUEUE_INACTIVE
 
 ## 1. Purpose
 
-This contract defines level as an independent runtime axis before any 準2級 taxonomy or queue rows are activated.
+This contract defines level as an independent runtime axis. A source-bound targeted 準2級 taxonomy now exists, while 準2級 queue/scheduler activation remains disabled.
 
 Current live learning remains 3級 only. The active 5W, 5L, Reading and Translation learner states are not changed by this contract.
 
@@ -41,11 +41,20 @@ Cross-level relations are advisory selection metadata only.
 
 ## 4. Skill-ID requirement
 
-Before 準2級 activation, every active skill ID must resolve to exactly one `skill_master_v1` row and exactly one canonical LEVEL.
+Before learner activation, every active skill ID must resolve to exactly one canonical level master row and exactly one canonical LEVEL. The current authorities are `skill_master_v1` for 3級 and `jun2_skill_master_v1` for 準2級.
 
 A skill ID may not be reused for two different LEVEL values in active runtime state.
 
 If a future taxonomy needs to relate a 3級 skill and a 準2級 skill, it must use distinct skill IDs plus an explicit relation; it must not alias the IDs or transfer state.
+
+### Canonical master authorities
+
+```text
+3級   -> skill_master_v1
+準2級 -> jun2_skill_master_v1
+```
+
+`jun2_skill_master_v1` is deliberately separate so existing 3級 array formulas, queue state, and history are not rewritten.
 
 ## 5. Queue compatibility
 
@@ -58,7 +67,7 @@ master.LEVEL = target scheduler level
 
 Missing master rows, duplicate master rows, or level mismatch fail closed.
 
-This contract does not migrate or rewrite `skill_queue_v1`.
+This contract does not migrate or rewrite `skill_queue_v1`. No 準2級 queue authority is activated in this phase.
 
 ## 6. Review compatibility
 
@@ -80,7 +89,7 @@ The common learning surface contract already accepts:
 level = 3級 | 準2級
 ```
 
-5W/5L remain current-level 3級. Reading and Translation pilots also remain 3級 until explicit 準2級 sources are introduced.
+5W/5L learner production remains current-level 3級. Source-bound 準2級 D5 and D12 taxonomy rows exist, but no 準2級 learner route is activated.
 
 ## 8. Promotion policy
 
@@ -99,9 +108,9 @@ This is a planning/action contract only. It does not create a 準2級 question o
 
 ## 9. Activation readiness
 
-`準2級` activation is fail-closed until all of the following exist and pass audit:
+`準2級` learner activation remains fail-closed until all of the following exist and pass audit:
 
-- at least one authoritative 準2級 taxonomy/master row;
+- authoritative source-bound 準2級 taxonomy/master rows;
 - distinct 準2級 skill IDs with canonical LEVEL=準2級;
 - a level-aware queue projection or successor queue schema;
 - source/provenance for each active skill;
@@ -110,10 +119,10 @@ This is a planning/action contract only. It does not create a 準2級 question o
 - no cross-level state transfer;
 - regression proof that current 3級 5W/5L behavior is unchanged.
 
-As of this contract version, the live master contains no independent 準2級 taxonomy rows. Therefore activation status is:
+As of this contract version, `jun2_skill_master_v1` is the 準2級 master authority for the currently source-bound D5/D12 target scope. Queue/scheduler activation is still absent. Therefore activation status is:
 
 ```text
-BLOCKED_NO_JUN2_TAXONOMY
+TAXONOMY_PRESENT_NOT_RUNTIME_ACTIVATED
 ```
 
 ## 10. New-format isolation
@@ -126,9 +135,9 @@ Future new-format families, including 準2級 D5 or D12 formats, must declare th
 
 This phase does not:
 
-- add or infer 準2級 skills;
+- infer 準2級 skills beyond the source-bound targeted taxonomy;
 - relabel any 3級 skill;
-- modify `skill_master_v1` or `skill_queue_v1`;
+- modify 3級 `skill_master_v1` or `skill_queue_v1`;
 - activate 準2級 scheduling;
 - copy 3級 results into 準2級;
 - change 5W/5L ratios, pointers, history or retest state;

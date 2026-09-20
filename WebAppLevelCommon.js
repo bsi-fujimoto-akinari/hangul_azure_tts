@@ -5,12 +5,43 @@
  */
 
 var H3_LEVEL_RUNTIME_CONTRACT_ID_ =
-  'H3-LEVEL-RUNTIME-20260921-V1';
+  'H3-LEVEL-RUNTIME-20260921-V2';
 
 var H3_RUNTIME_LEVELS_ = [
   '3級',
   '準2級'
 ];
+
+var H3_LEVEL_MASTER_AUTHORITIES_ = {
+  '3級':
+    'skill_master_v1',
+  '準2級':
+    'jun2_skill_master_v1'
+};
+
+
+function h3LevelMasterAuthority_(
+  level
+) {
+  var normalized =
+    h3LevelNormalize_(
+      level
+    );
+
+  var authority =
+    H3_LEVEL_MASTER_AUTHORITIES_[
+      normalized
+    ];
+
+  if (!authority) {
+    throw new Error(
+      'LEVEL_RUNTIME_MASTER_AUTHORITY_MISSING'
+    );
+  }
+
+  return authority;
+}
+
 
 
 function h3LevelNormalize_(
@@ -308,6 +339,10 @@ function h3LevelActivationReadiness_(
         target === '準2級'
           ? 'BLOCKED_NO_JUN2_TAXONOMY'
           : 'BLOCKED_NO_LEVEL_TAXONOMY',
+      master_sheet:
+        h3LevelMasterAuthority_(
+          target
+        ),
       skill_count:
         0
     };
@@ -327,6 +362,10 @@ function h3LevelActivationReadiness_(
       true,
     status:
       'TAXONOMY_PRESENT_NOT_RUNTIME_ACTIVATED',
+    master_sheet:
+      h3LevelMasterAuthority_(
+        target
+      ),
     skill_count:
       Object.keys(index).length
   };

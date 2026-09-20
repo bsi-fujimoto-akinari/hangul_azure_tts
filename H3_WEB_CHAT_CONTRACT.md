@@ -438,3 +438,13 @@ For every newly authored/unissued 5L after V21:
 The semantic Review script continues to omit control audio such as choice-number announcements and replay cues.
 
 V21 applies prospectively only. Existing issued/committed L04 audio and history remain immutable.
+
+## 20. Listening overload recovery V8
+
+The learner-facing 5L remains exactly five section slots (K1-K5).
+
+Outside overload, at most one section slot per normal 5L is a retest. When the canonical Listening state is in overload (`ACTIVE_WRONG_COUNT > ACTIVE_WRONG_CAP`), up to two different section slots may be retests in the same normal 5L. Each retest must remain in its matching section and use a new valid surface.
+
+The preissue contract requires `H3_LISTENING_OVERLOAD_PLAN_V3` and exact agreement between the persisted `normal_retest_per_set_cap`, the planned retest sections, and the locked set payload. Any blocking overflow remains a STOP.
+
+This is scheduler recovery only; it does not create a sixth learner-facing 5L item and does not permit Chat to issue a supplemental or normal 5L outside the dedicated learner workflow.

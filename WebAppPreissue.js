@@ -490,12 +490,39 @@ function h3PreissueRequireProvenance_(
       }
     });
 
-  var cap =
+  var activeWrongCount =
     Number(
-      policyMap
-        .LISTENING_RETEST_PER_SET_CAP ||
-      1
+      stateMap.ACTIVE_WRONG_COUNT &&
+      stateMap.ACTIVE_WRONG_COUNT.value ||
+      0
     );
+  var activeWrongCap =
+    Number(
+      policyMap.ACTIVE_WRONG_CAP ||
+      3
+    );
+  var cap =
+    activeWrongCount > activeWrongCap
+      ? Number(
+          policyMap
+            .OVERLOAD_RETEST_PER_SET_CAP ||
+          2
+        )
+      : Number(
+          policyMap
+            .LISTENING_RETEST_PER_SET_CAP ||
+          1
+        );
+
+  if (
+    !Number.isInteger(cap) ||
+    cap < 1 ||
+    cap > 5
+  ) {
+    throw new Error(
+      'PREISSUE_RETEST_CAP_POLICY_INVALID'
+    );
+  }
 
   if (
     retests.length > cap
@@ -524,9 +551,12 @@ function h3PreissueRequireProvenance_(
 
     if (
       String(overload.schema || '') !==
-        'H3_LISTENING_OVERLOAD_PLAN_V2' ||
+        'H3_LISTENING_OVERLOAD_PLAN_V3' ||
       Number(overload.next_set_no) !==
-        Number(setNo)
+        Number(setNo) ||
+      Number(
+        overload.normal_retest_per_set_cap
+      ) !== cap
     ) {
       throw new Error(
         'PREISSUE_OVERLOAD_PLAN_STALE'
@@ -553,21 +583,37 @@ function h3PreissueRequireProvenance_(
           Number(setNo);
       });
 
-    if (planned.length > 1) {
+    if (planned.length > cap) {
       throw new Error(
         'PREISSUE_OVERLOAD_PLAN_CARDINALITY'
       );
     }
 
+    var actualRetestKeys =
+      retests
+        .map(function (x) {
+          return (
+            String(x.section) +
+            ':' +
+            String(x.skill_id)
+          );
+        })
+        .sort();
+
+    var plannedRetestKeys =
+      planned
+        .map(function (x) {
+          return (
+            String(x.section) +
+            ':' +
+            String(x.skill_id)
+          );
+        })
+        .sort();
+
     if (
-      planned.length === 1 &&
-      (
-        retests.length !== 1 ||
-        retests[0].section !==
-          String(planned[0].section) ||
-        retests[0].skill_id !==
-          String(planned[0].skill_id)
-      )
+      JSON.stringify(actualRetestKeys) !==
+      JSON.stringify(plannedRetestKeys)
     ) {
       throw new Error(
         'PREISSUE_RETEST_PLAN_MISMATCH'

@@ -1154,3 +1154,31 @@ Before issue:
 - any missing number cue, same-speaker K3, or non-Japanese K4/K5 replay cue blocks issue.
 
 Canonical render contract: `H3-LISTENING-RENDER-RULES-20260920-V21`.
+
+## 26. Listening overload recovery V8
+
+The post-L04 score can produce five simultaneous active Listening retest obligations. The previous runtime allowed only one normal retest per future 5L set and one supplemental reservation, which left the fifth obligation in blocking overflow.
+
+Current recovery policy:
+
+- normal mode remains `LISTENING_RETEST_PER_SET_CAP=1`;
+- when `ACTIVE_WRONG_COUNT > ACTIVE_WRONG_CAP`, overload mode uses `OVERLOAD_RETEST_PER_SET_CAP=2`;
+- every retest still replaces only its own K1-K5 section slot;
+- no normal 5L ever contains more than one K1, one K2, one K3, one K4, or one K5;
+- planner schema is `H3_LISTENING_OVERLOAD_PLAN_V3`;
+- V3 persists `normal_retest_per_set_cap` and preissue must match it exactly;
+- supplemental remains a fallback only if V3 still cannot fit all obligations inside their due windows;
+- supplemental never advances the normal 5L counter or primary coverage;
+- a blocking overflow remains a hard preissue STOP.
+
+For the committed L04 state, the deterministic V3 plan is:
+
+```text
+set 4: K1 RETEST + K2 RETEST
+set 5: K3 RETEST + K4 RETEST
+set 6: K5 RETEST
+supplemental: none
+blocking_overflow: none
+```
+
+This migration changes scheduler policy/state only. It does not rewrite L04, learner answers, score, history, counters, pointers, Review bindings, audio, payloads, or K1_READY records.

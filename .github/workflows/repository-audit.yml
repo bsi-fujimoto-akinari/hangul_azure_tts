@@ -417,7 +417,7 @@ jobs:
             plan.stateValues.OVERLOAD_PLAN_JSON
           );
           assert(
-            syntheticSchedulerPlan.schema === 'H3_LISTENING_OVERLOAD_PLAN_V2',
+            syntheticSchedulerPlan.schema === 'H3_LISTENING_OVERLOAD_PLAN_V3',
             'Synthetic L02 scheduler schema mismatch.'
           );
           assert(
@@ -427,6 +427,10 @@ jobs:
           assert(
             syntheticSchedulerPlan.blocking_overflow.length === 0,
             'Synthetic L02 scheduler should be feasible.'
+          );
+          assert(
+            syntheticSchedulerPlan.normal_retest_per_set_cap === 2,
+            'Synthetic L02 overload retest cap must be 2.'
           );
           assert(plan.stateValues.NEXT_LISTENING_SET_NO === '2',
                  'Synthetic L02 next set must be 2.');
@@ -1792,11 +1796,16 @@ jobs:
           const plan = context.h3ProdBuildOverloadPlan_(
             history,
             3,
-            {SUPPLEMENTAL_MAX:'1'}
+            {
+              SUPPLEMENTAL_MAX:'1',
+              ACTIVE_WRONG_CAP:'3',
+              LISTENING_RETEST_PER_SET_CAP:'1',
+              OVERLOAD_RETEST_PER_SET_CAP:'2'
+            }
           );
 
           const expectedOrder = 'K4,K1,K3,K2,K5';
-          if (plan.schema !== 'H3_LISTENING_OVERLOAD_PLAN_V2') {
+          if (plan.schema !== 'H3_LISTENING_OVERLOAD_PLAN_V3') {
             throw new Error('R3-10B planner schema mismatch');
           }
           if (plan.next_set_no !== 3) {
@@ -1804,6 +1813,9 @@ jobs:
           }
           if (plan.active_wrong_count !== 5) {
             throw new Error('R3-10B active count mismatch');
+          }
+          if (plan.normal_retest_per_set_cap !== 2) {
+            throw new Error('R3-10B overload retest cap mismatch');
           }
           if (plan.ordered_due.join(',') !== expectedOrder) {
             throw new Error(
@@ -1817,7 +1829,7 @@ jobs:
             .join(',');
           if (
             scheduled !==
-            '3:K4,4:K1,5:K3,6:K2,7:K5'
+            '3:K4,3:K1,4:K3,4:K2,5:K5'
           ) {
             throw new Error(
               'R3-10B normal schedule mismatch: ' +
@@ -1836,7 +1848,7 @@ jobs:
             'utf8'
           );
           for (const needle of [
-            'H3_LISTENING_OVERLOAD_PLAN_V2',
+            'H3_LISTENING_OVERLOAD_PLAN_V3',
             'PREISSUE_OVERLOAD_PLAN_MISSING',
             'PREISSUE_OVERLOAD_PLAN_STALE',
             'PREISSUE_OVERLOAD_PLAN_BLOCKED'
@@ -1892,7 +1904,7 @@ jobs:
                   raise SystemExit(f'R3-10 device policy evidence missing: {needle}')
 
           for needle in [
-              'H3_LISTENING_OVERLOAD_PLAN_V2',
+              'H3_LISTENING_OVERLOAD_PLAN_V3',
               'function h3ProdBuildOverloadPlan_(',
               "'OVERLOAD_PLAN_JSON'",
           ]:

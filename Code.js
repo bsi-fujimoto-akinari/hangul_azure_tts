@@ -4470,8 +4470,8 @@ function runListeningJob_(
         folderId:
           audioTargetFolderId_(
             c,
-            '5L',
-            j.parentSetId
+            '5W',
+            j.id
           ),
         voice:
           voice.label,

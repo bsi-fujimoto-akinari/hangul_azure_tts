@@ -402,29 +402,8 @@ function h3RequireTestTxnSheet_(spreadsheet) {
   return sheet;
 }
 
-function h3NextTestTxnId_(rows) {
-  var datePart = Utilities.formatDate(
-    new Date(),
-    'Asia/Tokyo',
-    'yyyyMMdd'
-  );
-  var prefix = 'H3TX-' + datePart + '-';
-  var max = 0;
-
-  rows.forEach(function (row) {
-    var value = String(row[0] || '');
-    if (value.indexOf(prefix) !== 0) return;
-
-    var suffix = value.slice(prefix.length);
-    if (!/^\d{6}$/.test(suffix)) return;
-
-    max = Math.max(max, Number(suffix));
-  });
-
-  var next = String(max + 1);
-  while (next.length < 6) next = '0' + next;
-
-  return prefix + next;
+function h3NextTestTxnId_(spreadsheet) {
+  return h3NextWebTxnId_(spreadsheet);
 }
 
 function h3BuildTestRequestFingerprint_(setId, answers) {
@@ -626,7 +605,7 @@ function h3CommitSystemTestTransaction_(
     var prestate =
       h3CaptureLearnerRuntimeSentinel_(spreadsheet);
 
-    var txnId = h3NextTestTxnId_(rows);
+    var txnId = h3NextTestTxnId_(spreadsheet);
     var createdAt = h3NowTokyo_();
 
     sheet.appendRow([

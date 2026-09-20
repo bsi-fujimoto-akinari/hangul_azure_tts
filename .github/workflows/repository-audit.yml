@@ -714,7 +714,10 @@ jobs:
               if needle in code:
                   raise SystemExit(f'Legacy combined-audio code remains: {needle}')
 
-          if "'5W',\n            j.id" in code:
+          listening_start = code.index('function runListeningJob_(')
+          listening_end = code.index('\nfunction ', listening_start + 1)
+          listening_job = code[listening_start:listening_end]
+          if "'5W'," in listening_job:
               raise SystemExit('Listening checkpoint is incorrectly routed to the 5W folder.')
 
           PY

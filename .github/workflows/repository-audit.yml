@@ -2894,6 +2894,213 @@ jobs:
               raise SystemExit('Web/Chat contract lacks the current HOME priority contract.')
           PY
 
+      - name: Check Written 5W explanation overlay boundary
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          persistence = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          client = Path('Client.html').read_text(encoding='utf-8')
+          style = Path('Stylesheet.html').read_text(encoding='utf-8')
+          architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
+
+          for needle in [
+              "'written_review_explanation_overlay_v1'",
+              "'written_review_explanation_binding_v1'",
+              "'H3-WRITTEN-REVIEW-EXPLANATION-OVERLAY-20260921-V1'",
+              "'H3_5W_REVIEW_EXPLANATION_DISPLAY_V1'",
+              "'9b13effe68f565a1ef1fea5c13441dddf7ef3bed5296050c3e62931db48a670f'",
+              'function h3WrittenReviewApplyExplanationOverlay_(',
+              'function h3WrittenReviewExplanationValidateDisplay_(',
+              "'HISTORICAL_REFORMAT'",
+              "'HISTORICAL_WHY_EXPAND'",
+              "'SOURCE_LINKED_REBUILD'",
+              "'CURRENT_REGENERATED_FROM_VERIFIED_SOURCES'",
+              "'CURRENT_NATIVE_STRICT'",
+          ]:
+              if needle not in persistence:
+                  raise SystemExit(f'Written explanation overlay invariant missing: {needle}')
+
+          if "review-translation-written" not in client:
+              raise SystemExit('Written translation newline class missing.')
+          if ".review-translation-written p" not in style or "white-space: pre-line;" not in style:
+              raise SystemExit('Written translation newlines are not preserved.')
+
+          for needle in [
+              '## 34. Written 5W approved explanation overlay',
+              'sections[].explanation',
+              'must not alter score',
+              'Listening Review retains its existing disclosure',
+          ]:
+              if needle not in architecture:
+                  raise SystemExit(f'Explanation overlay architecture invariant missing: {needle}')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+          const context = vm.createContext({
+            console,
+            Utilities:{
+              DigestAlgorithm:{SHA_256:'SHA_256'},
+              Charset:{UTF_8:'UTF_8'},
+              computeDigest:(_a,text)=>Array.from(
+                crypto.createHash('sha256').update(String(text),'utf8').digest()
+              )
+            }
+          });
+
+          [
+            'WebAppReviewCore.js',
+            'WebAppReviewWrittenAdapter.js',
+            'WebAppReviewPersistence.js'
+          ].forEach(name => vm.runInContext(
+            fs.readFileSync(name,'utf8'),
+            context,
+            {filename:name}
+          ));
+
+          context.h3ReviewRequireExactHeader_ = () => {};
+          context.h3ReviewTable_ = sheet => sheet;
+
+          const base = {
+            schema:'BASE',
+            mode:'REVIEW',
+            kind:'WRITTEN',
+            set_id:'H3-20260913-01',
+            score:4,
+            total:5,
+            answered_at:'UNKNOWN',
+            raw_input:'2 3 1 1 1',
+            sections:Array.from({length:5},(_,i)=>({
+              result:i===2?'×':'○',
+              correct_answer_position:i===2?2:1,
+              question_surface:{
+                body:'본문'+(i+1),
+                choices:[1,2,3,4].map(n=>({text:'선택'+(i+1)+'-'+n}))
+              },
+              explanation:{text:'old'+(i+1)}
+            })),
+            technical:{base:true}
+          };
+
+          const display = {
+            schema:'H3_5W_REVIEW_EXPLANATION_DISPLAY_V1',
+            set_id:base.set_id,
+            approved_text_sha256:
+              '9b13effe68f565a1ef1fea5c13441dddf7ef3bed5296050c3e62931db48a670f',
+            questions:base.sections.map((part,i)=>({
+              q_no:i+1,
+              provenance_mode:'HISTORICAL_REFORMAT',
+              source_gate:{
+                body_ko:part.question_surface.body,
+                choices_ko:part.question_surface.choices.map(x=>x.text),
+                correct_position:part.correct_answer_position,
+                mark:part.result
+              },
+              explanation:{
+                body_ja:'訳'+(i+1),
+                choices:part.question_surface.choices.map(x=>({ko:x.text,ja:'訳'})),
+                reason:'reason'+(i+1),
+                learning_blocks:[{usage:'block'+(i+1)}]
+              }
+            }))
+          };
+
+          const provenance = {
+            schema:'H3_5W_REVIEW_EXPLANATION_PROVENANCE_V1',
+            set_id:base.set_id,
+            approved_text_sha256:display.approved_text_sha256,
+            questions:display.questions.map(q=>({
+              q_no:q.q_no,
+              provenance_mode:q.provenance_mode
+            }))
+          };
+
+          const displaySha = context.h3ReviewHash_(display);
+          const baseSha = 'a'.repeat(64);
+          const bindingObject =
+            context.h3WrittenReviewExplanationOverlayBindingObject_(
+              base.set_id,
+              'WRITTEN_QUEUE_LEGACY',
+              baseSha,
+              displaySha
+            );
+          const bindingSha = context.h3ReviewHash_(bindingObject);
+
+          const payloadMap = {
+            SET_ID:0,BASE_SOURCE_MODE:1,BASE_AUTHORITY_SHA256:2,DISPLAY_SCHEMA:3,
+            DISPLAY_JSON:4,DISPLAY_SHA256:5,PROVENANCE_JSON:6,STATUS:7,
+            OVERLAY_CONTRACT_ID:8,LOCKED_AT:9
+          };
+          const bindingMap = {
+            SET_ID:0,BASE_SOURCE_MODE:1,BASE_AUTHORITY_SHA256:2,DISPLAY_SHA256:3,
+            OVERLAY_CONTRACT_ID:4,OVERLAY_BINDING_SHA256:5,STATUS:6,LOCKED_AT:7
+          };
+          const payloadSheet = {map:payloadMap,rows:[[
+            base.set_id,'WRITTEN_QUEUE_LEGACY',baseSha,display.schema,
+            JSON.stringify(display),displaySha,JSON.stringify(provenance),'LOCKED',
+            'H3-WRITTEN-REVIEW-EXPLANATION-OVERLAY-20260921-V1','2026-09-21T00:00:00+09:00'
+          ]]};
+          const bindingSheet = {map:bindingMap,rows:[[
+            base.set_id,'WRITTEN_QUEUE_LEGACY',baseSha,displaySha,
+            'H3-WRITTEN-REVIEW-EXPLANATION-OVERLAY-20260921-V1',bindingSha,
+            'LOCKED','2026-09-21T00:00:00+09:00'
+          ]]};
+          const spreadsheet = {
+            getSheetByName:name =>
+              name === 'written_review_explanation_overlay_v1' ? payloadSheet :
+              name === 'written_review_explanation_binding_v1' ? bindingSheet :
+              null
+          };
+
+          const result = context.h3WrittenReviewApplyExplanationOverlay_(
+            spreadsheet,
+            base,
+            'WRITTEN_QUEUE_LEGACY',
+            baseSha
+          );
+
+          if (
+            result.score !== 4 ||
+            result.answered_at !== 'UNKNOWN' ||
+            result.raw_input !== base.raw_input ||
+            result.sections[0].explanation.reason !== 'reason1' ||
+            !result.technical.explanation_overlay
+          ) {
+            throw new Error('Written explanation overlay mutated identity or failed projection.');
+          }
+
+          const absent = context.h3WrittenReviewApplyExplanationOverlay_(
+            {getSheetByName:()=>null},
+            base,
+            'WRITTEN_QUEUE_LEGACY',
+            baseSha
+          );
+          if (absent !== base) {
+            throw new Error('Absent overlay did not preserve base Review.');
+          }
+
+          let threw = false;
+          try {
+            context.h3WrittenReviewApplyExplanationOverlay_(
+              spreadsheet,
+              base,
+              'WRITTEN_QUEUE_LEGACY',
+              'b'.repeat(64)
+            );
+          } catch (_error) {
+            threw = true;
+          }
+          if (!threw) {
+            throw new Error('Overlay base-hash mismatch did not fail closed.');
+          }
+
+          console.log('Written 5W explanation overlay audit: PASS');
+          NODE
+
       - name: Check scheduler overload V3 behavior
         shell: bash
         run: |

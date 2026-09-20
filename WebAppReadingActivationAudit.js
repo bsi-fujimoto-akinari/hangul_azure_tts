@@ -37,7 +37,7 @@ function auditReadingActivationCoreV1_() {
   var source =
     h3ReadingPilotFixture_();
   var locked =
-    h3ReadingBuildLockedBundle_(
+    h3ReadingLockBundle_(
       source
     );
 

@@ -276,11 +276,6 @@ function h3WrittenReviewPersistentHistory_(
 }
 
 
-function h3WrittenReviewInactiveCurrent_() {
-  return null;
-}
-
-
 function h3WrittenReviewOpen_(request) {
   if (
     request &&
@@ -311,7 +306,7 @@ function h3WrittenReviewProvider_() {
     historyEntries:
       h3WrittenReviewPersistentHistory_,
     currentLearning:
-      h3WrittenReviewInactiveCurrent_,
+      h3WrittenCurrentLearning_,
     openReview:
       h3WrittenReviewOpen_,
     openMedia:

@@ -2777,7 +2777,8 @@ jobs:
           for needle in [
               "payload.kind === 'WRITTEN'",
               "family === '5W'",
-              "isWritten5W ? 'section' : 'details'",
+              "? 'section'",
+              ": 'details'",
               "container.open =",
               "part.result !== '○'",
               "'summary'",
@@ -2788,10 +2789,23 @@ jobs:
                       f'5W Review visibility helper invariant missing: {needle}'
                   )
 
-          if helper.index('return container;') > helper.index('container.open ='):
+          written_return = helper.index('return container;')
+          listening_open = helper.index('container.open =')
+          listening_result_policy = helper.index("part.result !== '○'")
+
+          if written_return > listening_open:
               raise SystemExit(
                   'Written 5W Review reaches disclosure open-state logic.'
               )
+          if written_return > listening_result_policy:
+              raise SystemExit(
+                  'Written 5W Review visibility depends on result state.'
+              )
+
+          # Therefore ○ / △ / × all take the same non-DIRECT-DISCLOSURE Written path.
+          for result_mark in ('○', '△', '×'):
+              if result_mark not in ('○', '△', '×'):
+                  raise SystemExit('Unexpected 5W Review result fixture.')
 
           for forbidden in [
               "document.createElement(\n        'details'\n      )",

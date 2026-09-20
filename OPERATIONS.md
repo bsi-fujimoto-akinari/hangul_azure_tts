@@ -108,15 +108,36 @@ allocates from the global H3TX namespace, writes a PREPARED journal row, writes
 only the exact queue `ANSWERS_LOG` cell, verifies the poststate hash, and then
 promotes the journal row to COMMITTED.
 
-At D3 the mutation boundary intentionally ends at queue `ANSWERS_LOG`.
-`generation_log_v1`, `skill_queue_v1`, scheduler/retest state,
-`generation_state_v1`, and next-issue progression remain a later Answer Sync
-phase. A successful D3 transaction must never advance those surfaces.
+At the D3 transaction boundary, the transaction itself ends at queue
+`ANSWERS_LOG`. The production Web route then immediately invokes
+`h3WrittenAnswerSync_(TXN_ID)`.
+
+Answer Sync uses `written_answer_sync_v1` as a recovery journal and requires
+the committed Written transaction plus exact queue-E poststate hash before any
+scheduler/runtime write. Its bounded transaction updates exactly
+`generation_log_v1`, affected `skill_queue_v1` rows, ratio-safe unissued
+`source_block_plan_v1` slots when necessary, the next
+`written_set_stage_v1` READY_TO_PATCH plan, and the corresponding
+`generation_state_v1` pointer/state keys. × schedules +1..3, △ schedules
++2..5, ○ uses two different-set/different-surface evidence for STABLE, normal
+retest cap is 2, deadline-risk cap is 3, active wrong cap is 5, and the
+20-question primary-source ratio remains 11/6/2/1.
+
+Answer Sync snapshots every exact target row before mutation. A successful
+poststate hash promotes the sync journal to COMMITTED/CORE_COMPLETE. Verified
+prestate may be safely replayed; verified poststate may be promoted; mixed
+runtime state becomes RECOVERY_REQUIRED. The queue history row itself is never
+rewritten by Answer Sync.
+
+R9 DAILY_TXT remains Chat-owned until the canonical backend migration specified
+by `hangul_quiz_rules_v4`. Scheduler continuity therefore closes at
+CORE_COMPLETE before learner handoff; DAILY_TXT is noncanonical artifact
+finalization.
 
 Current-learning discovery/rendering for a new 5W set and automatic persistent
-Review materialization for newly committed 5W transactions are separate later
-phases. Historical Written Review remains independently available through the
-existing locked backfill provider.
+Review materialization for newly committed 5W transactions remain separate
+later phases. Historical Written Review remains independently available through
+the existing locked backfill provider.
 
 ## 8. Drive and hot canonical policy
 

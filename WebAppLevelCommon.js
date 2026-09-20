@@ -339,6 +339,10 @@ function h3LevelActivationReadiness_(
         target === '準2級'
           ? 'BLOCKED_NO_JUN2_TAXONOMY'
           : 'BLOCKED_NO_LEVEL_TAXONOMY',
+      master_sheet:
+        h3LevelMasterAuthority_(
+          target
+        ),
       skill_count:
         0
     };

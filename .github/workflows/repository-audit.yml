@@ -2718,7 +2718,7 @@ jobs:
               'function loadLegacyReview(',
               'function loadLegacyReplay(',
               'entry.legacy_review_id',
-              'app.payload.legacy_review_id',
+              'legacy_review_id:',
               "'?—'",
               "'H3_LEGACY_PERSISTENT_REVIEW_PAYLOAD_V1'",
           ]:

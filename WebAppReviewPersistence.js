@@ -4960,16 +4960,6 @@ function h3WrittenProductionReviewEnsure_(
   }
 
   if (
-    payloadRows.length === 1 &&
-    bindingRows.length === 1
-  ) {
-    return h3WrittenProductionReviewContextBySet_(
-      spreadsheet,
-      txn.setId
-    ).payload;
-  }
-
-  if (
     payloadRows.length === 0 &&
     bindingRows.length === 1
   ) {
@@ -5021,6 +5011,17 @@ function h3WrittenProductionReviewEnsure_(
       sheets.payloadTable,
       payloadRows[0].row
     );
+  var materializedAt =
+    h3WrittenReviewStoredText_(
+      prepared,
+      'MATERIALIZED_AT'
+    );
+
+  if (!materializedAt) {
+    throw new Error(
+      'WRITTEN_PRODUCTION_REVIEW_MATERIALIZED_AT_MISSING'
+    );
+  }
 
   if (
     h3WrittenReviewStoredText_(
@@ -5055,12 +5056,55 @@ function h3WrittenProductionReviewEnsure_(
     );
   }
 
+  if (bindingRows.length === 1) {
+    var existingBinding =
+      h3WrittenReviewStoredRowObject_(
+        sheets.bindingTable,
+        bindingRows[0].row
+      );
+
+    if (
+      h3WrittenReviewStoredText_(
+        existingBinding,
+        'STATUS'
+      ) !== 'LOCKED' ||
+      h3WrittenReviewStoredText_(
+        existingBinding,
+        'SET_ID'
+      ) !== txn.setId ||
+      h3WrittenReviewStoredText_(
+        existingBinding,
+        'STAGE_ID'
+      ) !== txn.stageId ||
+      h3WrittenReviewStoredText_(
+        existingBinding,
+        'RESULT_SHA256'
+      ) !== txn.resultSha256 ||
+      h3WrittenReviewStoredText_(
+        existingBinding,
+        'SOURCE_BINDING_SHA256'
+      ) !== txn.sourceBindingSha256 ||
+      h3WrittenReviewStoredText_(
+        existingBinding,
+        'REVIEW_SHA256'
+      ) !== expectedSha ||
+      h3WrittenReviewStoredText_(
+        existingBinding,
+        'REVIEW_BINDING_SHA256'
+      ) !== bindingSha
+    ) {
+      throw new Error(
+        'WRITTEN_PRODUCTION_REVIEW_EXISTING_BINDING_MISMATCH'
+      );
+    }
+  }
+
   if (bindingRows.length === 0) {
     sheets.bindingSheet.appendRow([
       txn.txnId,
       txn.setId,
       txn.stageId,
-      now,
+      materializedAt,
       'LOCKED',
       txn.resultSha256,
       txn.sourceBindingSha256,
@@ -5135,13 +5179,92 @@ function h3WrittenProductionReviewHistoryEntries_(
       }
       seen[setId] = true;
 
-      var context =
-        h3WrittenProductionReviewContextBySet_(
-          spreadsheet,
+      var payloadRows =
+        h3WrittenProductionReviewRowsBy_(
+          sheets.payloadTable,
+          'SET_ID',
           setId
         );
+
+      if (payloadRows.length !== 1) {
+        throw new Error(
+          'WRITTEN_PRODUCTION_REVIEW_HISTORY_PAYLOAD_COUNT:' +
+            setId +
+            ':' +
+            payloadRows.length
+        );
+      }
+
+      var pr =
+        h3WrittenReviewStoredRowObject_(
+          sheets.payloadTable,
+          payloadRows[0].row
+        );
+      var br =
+        h3WrittenReviewStoredRowObject_(
+          sheets.bindingTable,
+          row
+        );
+
+      if (
+        h3WrittenReviewStoredText_(
+          pr,
+          'STATUS'
+        ) !== 'LOCKED' ||
+        h3WrittenReviewStoredText_(
+          pr,
+          'TXN_ID'
+        ) !==
+          h3WrittenReviewStoredText_(
+            br,
+            'TXN_ID'
+          ) ||
+        h3WrittenReviewStoredText_(
+          pr,
+          'REVIEW_SHA256'
+        ) !==
+          h3WrittenReviewStoredText_(
+            br,
+            'REVIEW_SHA256'
+          ) ||
+        h3WrittenReviewStoredText_(
+          pr,
+          'REVIEW_CONTRACT_ID'
+        ) !==
+          H3_WRITTEN_PRODUCTION_REVIEW_CONTRACT_ID_
+      ) {
+        throw new Error(
+          'WRITTEN_PRODUCTION_REVIEW_HISTORY_IDENTITY_MISMATCH:' +
+            setId
+        );
+      }
+
       var payload =
-        context.payload;
+        h3WrittenParseJson_(
+          pr.REVIEW_JSON,
+          'WRITTEN_PRODUCTION_REVIEW_HISTORY_JSON_INVALID'
+        );
+      var reviewSha =
+        h3ReviewHash_(payload);
+
+      if (
+        reviewSha !==
+          h3WrittenReviewStoredText_(
+            pr,
+            'REVIEW_SHA256'
+          ) ||
+        payload.schema !==
+          H3_WRITTEN_PRODUCTION_REVIEW_SCHEMA_ ||
+        payload.kind !== 'WRITTEN' ||
+        payload.set_id !== setId ||
+        !Array.isArray(payload.sections) ||
+        payload.sections.length !== 5
+      ) {
+        throw new Error(
+          'WRITTEN_PRODUCTION_REVIEW_HISTORY_HASH_MISMATCH:' +
+            setId
+        );
+      }
 
       entries.push({
         review_kind: 'WRITTEN',
@@ -5179,7 +5302,6 @@ function h3WrittenProductionReviewHistoryEntries_(
 
   return entries;
 }
-
 
 function h3WrittenReviewAllHistoryEntries_(
   spreadsheet

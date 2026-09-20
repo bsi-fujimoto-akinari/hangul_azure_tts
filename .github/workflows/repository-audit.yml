@@ -61,6 +61,7 @@ jobs:
               'H3_READING_P8_PILOT_CONTRACT.md',
               'H3_READING_ACTIVATION_CONTRACT.md',
               'H3_READING_PRODUCTION_CONTRACT.md',
+              'H3_READING_P9_P10_PILOT_CONTRACT.md',
               'Index.html',
               'Stylesheet.html',
               'Client.html',
@@ -5814,6 +5815,7 @@ jobs:
           activation_contract = Path('H3_READING_ACTIVATION_CONTRACT.md').read_text(encoding='utf-8')
           production = Path('WebAppReadingProduction.js').read_text(encoding='utf-8')
           production_contract = Path('H3_READING_PRODUCTION_CONTRACT.md').read_text(encoding='utf-8')
+          p9p10_contract = Path('H3_READING_P9_P10_PILOT_CONTRACT.md').read_text(encoding='utf-8')
 
           for needle in [
               "H3-READING-P8-PILOT-20260920-V1",
@@ -5824,6 +5826,9 @@ jobs:
               "function h3ReadingBuildReviewProjection_(",
               "'SHARED_READING_PASSAGE'",
               "'READING_PILOT_NOT_ACTIVE'",
+              "'H3-P9'",
+              "'H3-P10'",
+              "/^H3-P(?:8|9|10)-SK",
           ]:
               if needle not in reading:
                   raise SystemExit(f'Reading pilot invariant missing: {needle}')
@@ -5904,7 +5909,20 @@ jobs:
               if needle not in production_contract:
                   raise SystemExit(f'Reading production contract missing: {needle}')
 
-          print('P8 Reading staged static boundary: PASS')
+          for needle in [
+              'Version: H3-READING-P9P10-PILOT-20260921-V1',
+              'site_group_id=1293',
+              'site_group_id=706',
+              'OFF-H3-P9-001 answer=4 skill=H3-P9-SK001',
+              'OFF-H3-P9-002 answer=3 skill=H3-P8-SK003',
+              'OFF-H3-P10-001 answer=3 skill=H3-P8-SK001',
+              'OFF-H3-P10-002 answer=3 skill=H3-P8-SK003',
+              'must not change either value',
+          ]:
+              if needle not in p9p10_contract:
+                  raise SystemExit(f'Reading P9/P10 pilot contract missing: {needle}')
+
+          print('P8-P10 Reading staged static boundary: PASS')
           PY
 
           node <<'NODE'
@@ -5951,6 +5969,31 @@ jobs:
             throw new Error(
               'P8 Reading pilot pure audit mismatch: ' +
               JSON.stringify(result)
+            );
+          }
+
+          const family = vm.runInContext(
+            'auditReadingP9P10PilotV1_()',
+            context
+          );
+
+          if (
+            family.result !== 'PASS' ||
+            family.checks !== 11 ||
+            family.p8_source_binding_sha256 !==
+              'a8c3a7c038fa251e195463a13157fb3683882ddef30d677d9962c58ff120761e' ||
+            family.p9_group_id !== '1293' ||
+            family.p10_group_id !== '706' ||
+            !/^[0-9a-f]{64}$/.test(
+              family.p9_source_binding_sha256
+            ) ||
+            !/^[0-9a-f]{64}$/.test(
+              family.p10_source_binding_sha256
+            )
+          ) {
+            throw new Error(
+              'Reading P9/P10 pilot audit mismatch: ' +
+              JSON.stringify(family)
             );
           }
 
@@ -6051,6 +6094,7 @@ jobs:
             'P8 Reading pilot + activation + production pure audits: PASS',
             JSON.stringify({
               pilot: result,
+              family: family,
               activation: activation,
               production_commit_enabled: false
             })

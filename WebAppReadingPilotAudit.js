@@ -291,3 +291,407 @@ function auditReadingP8PilotV1_() {
     checks: 12
   };
 }
+
+function h3ReadingP9PilotFixture_() {
+  return {
+    schema:
+      'H3_READING_SOURCE_BUNDLE_V1',
+    provider_kind:
+      'WRITTEN',
+    surface_family:
+      'READING',
+    level:
+      '3級',
+    section_key:
+      'H3-P9',
+    source_file:
+      'hangul-api-batch-G30-h9-20260916-112344.json',
+    passage: {
+      passage_id:
+        'H3-P9-G1293',
+      site_group_id:
+        '1293',
+      group_role:
+        'SHARED_READING_PASSAGE',
+      passage_ko:
+        '박 과장: 김 부장님, 업무가 너무 많아져서 아무래도 직원을 더 뽑아야 할 거 같은데요.\n김 부장: 다들 처리해야 할 일이 너무 많아 힘들어하는 거 같으니까 그렇게 하죠.\n박 과장: 감사합니다. 우선 자막을 만드는 팀에 사람을 추가하는 게 좋을 거 같습니다.\n김 부장: 그 부분은 (　　　　　　　　) 박 과장이 전부 맡아서 해 주세요.\n박 과장: 알겠습니다. 단기간 아르바이트로 뽑는 게 좋겠죠?\n김 부장: 앞으로 얼마나 더 주문이 들어올지 모르니까 그게 낫겠네요.\n박 과장: 네. 그럼 지금 말씀 드린 내용을 정리해서 다시 보고 드리겠습니다.\n김 부장: 고마워요. 그럼 수고 좀 해 줘요.',
+      passage_ja:
+        'パク課長：キム部長、業務があまりにも増えたので、どうしても職員を増やさないといけないようです。\nキム部長：皆、やらなきゃいけないことが多すぎて大変そうなのでそうしましょう。\nパク課長：ありがとうございます。まず字幕を作るチームに人を追加するのが良さそうです。\nキム部長：その部分は(　　　　　　　　　　)パク課長にすべて任せます。\nパク課長：分かりました。短期のアルバイトを雇ったほうがいいですよね？\nキム部長：この先どのくらい注文が入るかわからないのでその方が良さそうです。\nパク課長：はい。では、今申し上げた内容をまとめてまたご報告します。\nキム部長：ありがとう。ではよろしく頼みます。',
+      source_site_item_id:
+        '4415',
+      source_batch_id:
+        'd8da720b-9110-43c0-bc95-5b5d6f348cfa'
+    },
+    items: [
+      {
+        item_id:
+          'OFF-H3-P9-001',
+        question_key:
+          'OFF-H3-P9-001',
+        site_item_id:
+          '4415',
+        q_no: 1,
+        section:
+          'P9',
+        display:
+          '筆9／読解',
+        skill_id:
+          'H3-P9-SK001',
+        question_text:
+          '【問1】（　  　）に入れるのに最も適切なものを①〜④の中から１つ選びなさい。',
+        choices_ko: [
+          '없던 일로 하기로 했으니까',
+          '내가 사장님과 의논을 해 봐야 하니',
+          '지금까지 자막을 만드는 팀이 없었으니까',
+          '나보다는 박 과장이 사정을 잘 알 테니'
+        ],
+        choices_ja: [
+          'なかったことにすることにしたから',
+          '私が社長と話し合ってみなければならないので',
+          '今まで字幕を作るチームがなかったので',
+          '私よりはパク課長の方が事情をよく知っているだろうから'
+        ],
+        correct_answer_position:
+          4
+      },
+      {
+        item_id:
+          'OFF-H3-P9-002',
+        question_key:
+          'OFF-H3-P9-002',
+        site_item_id:
+          '4416',
+        q_no: 2,
+        section:
+          'P9',
+        display:
+          '筆9／読解',
+        skill_id:
+          'H3-P8-SK003',
+        question_text:
+          '【問2】対話文の内容と一致するものを①〜④の中から１つ選びなさい。',
+        choices_ko: [
+          '두 사람은 새로운 사업에 대해 의논하고 있다.',
+          '박 과장은 업무가 너무 많아 일을 그만둘 생각이다.',
+          '이 회사는 추가로 사람을 더 뽑으려고 한다.',
+          '현재 직원들만으로도 충분히 일 처리가 가능하다.'
+        ],
+        choices_ja: [
+          '二人は新しい事業について話し合っている。',
+          'パク課長は業務が多すぎて仕事を辞めようと思っている。',
+          'この会社は追加で人を採用しようとしている。',
+          '現在の職員だけでも十分に仕事の処理が可能だ。'
+        ],
+        correct_answer_position:
+          3
+      }
+    ]
+  };
+}
+
+
+function h3ReadingP10PilotFixture_() {
+  return {
+    schema:
+      'H3_READING_SOURCE_BUNDLE_V1',
+    provider_kind:
+      'WRITTEN',
+    surface_family:
+      'READING',
+    level:
+      '3級',
+    section_key:
+      'H3-P10',
+    source_file:
+      'hangul-api-batch-G30-h10-20260916-112415.json',
+    passage: {
+      passage_id:
+        'H3-P10-G706',
+      site_group_id:
+        '706',
+      group_role:
+        'SHARED_READING_PASSAGE',
+      passage_ko:
+        '재작년 여름부터 에어컨 상태가 좋지 않았는데 그냥 참고 사용했었다. (                    ) 것 같아서 여름이 오기 전에 서둘러 샀다. 먼저 큰 전자 제품 매장*에 가서 마음에 드는 것이 있는지 가격은 어느 정도인지 알아봤다. 그리고 집에 돌아와서 그동안 모아 둔 포인트를 사용하려고 언제나 이용하는 인터넷 사이트에서 주문했다. 마음에 드는 제품을 매장보다 싸게 살 수 있었다. 사흘 후 에어컨이 도착했다. 이제 올해 여름은 안심하고 시원하게 보낼 수 있을 것이다.  ＊）매장：売り',
+      passage_ja:
+        '一昨年の夏からエアコンの状態が良くなかったが、そのまま我慢して使用してきた。(×インターネットではいつでも安く買え)そうなので、夏が来る前に急いで買った。まず大きな電気製品売り場に行って、気に入るものがあるか、価格はどの程度なのか調べてみた。それから家に帰って、今までためておいたポイントを使用しようと、いつも利用しているインターネットサイトで注文した。気に入った製品を売り場より安く買うことができた。三日後エアコンが届いた。もう今年の夏は安心して涼しく過ごすことができるだろう。',
+      source_site_item_id:
+        '2463',
+      source_batch_id:
+        '392f64a1-f584-44ab-a333-8821b328423f'
+    },
+    items: [
+      {
+        item_id:
+          'OFF-H3-P10-001',
+        question_key:
+          'OFF-H3-P10-001',
+        site_item_id:
+          '2463',
+        q_no: 1,
+        section:
+          'P10',
+        display:
+          '筆10／読解',
+        skill_id:
+          'H3-P8-SK001',
+        question_text:
+          '【問1】（　  　）に入れるのに<u>適切ではないもの</u>を①〜④の中から１つ選びなさい。',
+        choices_ko: [
+          '금년 여름도 아주 더울',
+          '여름이 되면 에어컨이 비싸질',
+          '인터넷으로는 언제든지 싸게 살 수 있을',
+          '그대로 계속 사용하면 에어컨이 멈춰 버릴'
+        ],
+        choices_ja: [
+          '今年の夏もとても暑くなり',
+          '夏になるとエアコンが高くなり',
+          'インターネットではいつでも安く買え',
+          'そのままずっと使うとエアコンが止まり'
+        ],
+        correct_answer_position:
+          3
+      },
+      {
+        item_id:
+          'OFF-H3-P10-002',
+        question_key:
+          'OFF-H3-P10-002',
+        site_item_id:
+          '2464',
+        q_no: 2,
+        section:
+          'P10',
+        display:
+          '筆10／読解',
+        skill_id:
+          'H3-P8-SK003',
+        question_text:
+          '【問2】本文の内容と一致するものを①〜④の中から１つ選びなさい。',
+        choices_ko: [
+          '매장에서 현금으로 에어컨을 샀다.',
+          '포인트를 모으기 위해 인터넷 사이트에서 에어컨을 샀다.',
+          '에어컨 상태가 나빠진 것은 약 2년 전부터이다.',
+          '에어컨을 주문한 다음날 에어컨이 도착했다.'
+        ],
+        choices_ja: [
+          '売り場で現金でエアコンを買った。',
+          'ポイントをためるためインターネットサイトでエアコンを買った。',
+          'エアコンの状態が悪くなったのは約2年前からだ。',
+          'エアコンを注文した翌日エアコンが届いた。'
+        ],
+        correct_answer_position:
+          3
+      }
+    ]
+  };
+}
+
+
+function auditReadingP9P10PilotV1_() {
+  var p8 =
+    h3ReadingLockBundle_(
+      h3ReadingPilotFixture_()
+    );
+  var p9 =
+    h3ReadingLockBundle_(
+      h3ReadingP9PilotFixture_()
+    );
+  var p10 =
+    h3ReadingLockBundle_(
+      h3ReadingP10PilotFixture_()
+    );
+
+  h3ReadingPilotAuditAssert_(
+    p8.source_binding_sha256 ===
+      'a8c3a7c038fa251e195463a13157fb3683882ddef30d677d9962c58ff120761e' &&
+      h3ReadingHash_(p8) ===
+        'df49acc7d2495bdbf786020e0e462786d42fc8aa30deba30d73d30b0c6a03f08',
+    'P8_HASH_BACKWARD_COMPAT'
+  );
+
+  h3ReadingPilotAuditAssert_(
+    p9.section_key === 'H3-P9' &&
+      p9.passage.site_group_id ===
+        '1293' &&
+      p9.items.length === 2 &&
+      p9.items[0].correct_answer_position ===
+        4 &&
+      p9.items[1].correct_answer_position ===
+        3,
+    'P9_SOURCE_LOCK'
+  );
+
+  h3ReadingPilotAuditAssert_(
+    p10.section_key === 'H3-P10' &&
+      p10.passage.site_group_id ===
+        '706' &&
+      p10.items.length === 2 &&
+      p10.items[0].correct_answer_position ===
+        3 &&
+      p10.items[1].correct_answer_position ===
+        3,
+    'P10_SOURCE_LOCK'
+  );
+
+  h3ReadingPilotAuditAssert_(
+    p9.items[1].skill_id ===
+      'H3-P8-SK003' &&
+      p10.items[0].skill_id ===
+        'H3-P8-SK001' &&
+      p10.items[1].skill_id ===
+        'H3-P8-SK003',
+    'CROSS_SECTION_SKILL_REUSE'
+  );
+
+  var p9Render =
+    h3ReadingBuildRenderPayload_(
+      p9
+    );
+  var p10Render =
+    h3ReadingBuildRenderPayload_(
+      p10
+    );
+
+  h3ReadingPilotAuditAssert_(
+    p9Render.set_id ===
+      'READING-PILOT-H3-P9' &&
+      p9Render.section_key ===
+        'H3-P9' &&
+      p9Render.questions.every(
+        function (question) {
+          return question.section ===
+            'P9';
+        }
+      ),
+    'P9_RENDER'
+  );
+
+  h3ReadingPilotAuditAssert_(
+    p10Render.set_id ===
+      'READING-PILOT-H3-P10' &&
+      p10Render.section_key ===
+        'H3-P10' &&
+      p10Render.questions.every(
+        function (question) {
+          return question.section ===
+            'P10';
+        }
+      ),
+    'P10_RENDER'
+  );
+
+  var p9Grade =
+    h3ReadingGrade_(
+      p9,
+      [
+        {
+          question_key:
+            'OFF-H3-P9-001',
+          answer: 4,
+          uncertain: false
+        },
+        {
+          question_key:
+            'OFF-H3-P9-002',
+          answer: 2,
+          uncertain: true
+        }
+      ]
+    );
+
+  h3ReadingPilotAuditAssert_(
+    p9Grade.score === 1 &&
+      p9Grade.graded[0].mark ===
+        '○' &&
+      p9Grade.graded[1].mark ===
+        '×',
+    'P9_GRADE'
+  );
+
+  var p9Retest =
+    h3ReadingBuildRetestEvents_(
+      p9Grade
+    );
+
+  h3ReadingPilotAuditAssert_(
+    p9Retest.length === 1 &&
+      p9Retest[0].skill_id ===
+        'H3-P8-SK003' &&
+      p9Retest[0].passage_id ===
+        'H3-P9-G1293',
+    'P9_RETEST_PROVENANCE'
+  );
+
+  var p10Grade =
+    h3ReadingGrade_(
+      p10,
+      [
+        {
+          question_key:
+            'OFF-H3-P10-001',
+          answer: 3,
+          uncertain: true
+        },
+        {
+          question_key:
+            'OFF-H3-P10-002',
+          answer: 3,
+          uncertain: false
+        }
+      ]
+    );
+
+  h3ReadingPilotAuditAssert_(
+    p10Grade.score === 2 &&
+      p10Grade.graded[0].mark ===
+        '△' &&
+      p10Grade.graded[1].mark ===
+        '○',
+    'P10_GRADE'
+  );
+
+  var p10Retest =
+    h3ReadingBuildRetestEvents_(
+      p10Grade
+    );
+
+  h3ReadingPilotAuditAssert_(
+    p10Retest.length === 1 &&
+      p10Retest[0].result ===
+        '△' &&
+      p10Retest[0].skill_id ===
+        'H3-P8-SK001',
+    'P10_RETEST_PROVENANCE'
+  );
+
+  h3ReadingPilotAuditAssert_(
+    p8.source_binding_sha256 !==
+      p9.source_binding_sha256 &&
+      p9.source_binding_sha256 !==
+        p10.source_binding_sha256 &&
+      p8.source_binding_sha256 !==
+        p10.source_binding_sha256,
+    'SOURCE_BINDING_ISOLATION'
+  );
+
+  return {
+    schema:
+      'H3_READING_P9_P10_PILOT_AUDIT_V1',
+    result:
+      'PASS',
+    checks:
+      11,
+    p8_source_binding_sha256:
+      p8.source_binding_sha256,
+    p9_group_id:
+      p9.passage.site_group_id,
+    p9_source_binding_sha256:
+      p9.source_binding_sha256,
+    p10_group_id:
+      p10.passage.site_group_id,
+    p10_source_binding_sha256:
+      p10.source_binding_sha256
+  };
+}
+

@@ -2,12 +2,18 @@
  * Review / HOME common core.
  *
  * This file owns only provider-neutral primitives, history aggregation,
- * current-learning arbitration, and request dispatch. The only active
- * provider remains Listening. Written is an intentionally inactive slot.
+ * current-learning arbitration, and request dispatch. Listening and
+ * historical Written Review are active providers; explicit request routing
+ * keeps Listening transaction identities unambiguous.
  */
 
+function h3ReviewWrittenProviderFactory_() {
+  return h3WrittenReviewProvider_();
+}
+
+
 var H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ =
-  null;
+  h3ReviewWrittenProviderFactory_;
 
 
 function h3ReviewCanonicalizeValue_(

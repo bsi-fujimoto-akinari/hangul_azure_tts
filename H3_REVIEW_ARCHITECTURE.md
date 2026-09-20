@@ -173,3 +173,21 @@ The internal provider contract exposes history, current learning, Review/media, 
 Provider dispatch is explicit when more than one provider is present. `review_kind` selects an exact provider, while existing `txn_id` and `legacy_review_id` identities continue to select Listening. A selector conflict, an unknown kind, or a selector-free multi-provider request fails closed.
 
 One-shot migration helpers are absent from active code. Detailed migration and validation evidence remains recoverable from Git history and Drive `06_AUDIT`.
+
+
+## 27. Written historical Review staging
+
+Historical 5W Review storage is materialized in the isolated read-only tables
+`written_legacy_review_payload_v1` and
+`written_legacy_review_binding_v1`.
+
+The repository contains a fail-closed loader that requires exact headers,
+`LOCKED` status, matching set/source identities, the V2 reconstruction
+schema, the frozen Written legacy Review contract, canonical reconstruction
+SHA-256, and canonical binding SHA-256 before returning a normalized
+`H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1`.
+
+This stage does not register the Written provider, expose Written entries in
+HOME, add a learner Web route, enable media, or enable replay/submission.
+`H3_REVIEW_WRITTEN_PROVIDER_FACTORY_` remains `null` until a later,
+separately audited activation stage.

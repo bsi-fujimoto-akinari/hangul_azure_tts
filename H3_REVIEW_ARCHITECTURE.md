@@ -212,3 +212,23 @@ key exists, and omit both HOME and Review replay controls for Written.
 Production activation remains separate: the factory stays `null`, direct Web
 boot routing is unchanged, and Written media/replay/grade capabilities remain
 fail-closed until a later phase.
+
+
+## 29. Written provider production activation
+
+The historical Written Review provider is active in the common Review/HOME
+provider registry through `h3ReviewWrittenProviderFactory_`.
+
+Production HOME now aggregates Listening and Written history. Written entries
+remain read-only and are opened only by the explicit selector
+`review_kind=WRITTEN` plus `set_id`; Listening transaction and legacy
+identities continue to route to the Listening provider. Requests without a
+selector or Listening identity remain fail-closed when routing would be
+ambiguous.
+
+Written Review continues to expose no media, replay, replay media, or grading
+capability. Those routes remain fail-closed with
+`WRITTEN_REVIEW_CAPABILITY_UNAVAILABLE`. The historical payload/binding
+tables remain immutable/read-only source material; provider activation does
+not create `written_web_txn_v1` or mutate learner history, scheduler state,
+or generation state.

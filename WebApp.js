@@ -79,7 +79,15 @@ function submitListeningWebAnswers(request) {
   }
 
   if (request && request.mode === 'WRITTEN') {
-    return h3WrittenSubmit_(request);
+    var writtenResult =
+      h3WrittenSubmit_(request);
+
+    writtenResult.answer_sync =
+      h3WrittenAnswerSync_(
+        writtenResult.txn_id
+      );
+
+    return writtenResult;
   }
 
   if (

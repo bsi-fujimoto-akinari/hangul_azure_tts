@@ -2942,7 +2942,12 @@
     var translation =
       el(
         'div',
-        'review-translation'
+        'review-translation' +
+          (
+            isWritten5WReview_()
+              ? ' review-translation-written'
+              : ''
+          )
       );
 
     if (hasBody) {

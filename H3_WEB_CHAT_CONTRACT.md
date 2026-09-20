@@ -173,35 +173,33 @@ This separation is mandatory for both 5L and future 5W.
 
 Learner-facing URLs are a distinct authority from audio/job execution URLs.
 
-Canonical base:
+Canonical Chat handoff URL:
 
 ```text
 https://script.google.com/macros/s/AKfycby8I309RUkfVIsnJks808KA713QLppfrGiAFUTV2tA/dev
 ```
 
-For an issued 5L set, Chat MUST return the direct learner URL obtained from the read-only backend helper:
+The normal 5L handoff is parameterless HOME. HOME resolves the current authorized uncommitted `ISSUED` set from canonical backend state and exposes it as `現在の5L` with an `開く` action.
+
+After issue succeeds, Chat MUST obtain the URL authority through:
 
 `getListeningLearnerUrl(SET_ID)`
 
-Canonical direct form:
-
-```text
-https://script.google.com/macros/s/AKfycby8I309RUkfVIsnJks808KA713QLppfrGiAFUTV2tA/dev?mode=LISTENING&set_id={LISTENING_SET_ID}
-```
+The resolver validates the exact target set through the production render gate, but its learner-facing `url` field is always the parameterless HOME URL.
 
 Rules:
 
-1. After issue succeeds, Chat must resolve the exact issued SET_ID and use `getListeningLearnerUrl(SET_ID)`.
-2. The helper must pass the production render gate before returning a URL; failure is a STOP condition.
-3. The learner-facing host must be exactly `script.google.com`.
-4. Never return a `script.googleusercontent.com` URL, `/macros/echo` URL, `user_content_key`, `lib=`, audio-job endpoint, redirected content URL, or Drive audio URL as the learner launcher.
-5. The parameterless base URL is the HOME URL only. It may be returned when the user explicitly needs HOME, but the normal post-issue 5L handoff uses the direct `mode=LISTENING&set_id=...` URL.
-6. `mode=SYSTEM_TEST`, `mode=REVIEW`, and `mode=REVIEW_REPLAY` remain explicit controlled learner/Web routes.
+1. Chat must return the resolver's `url` field, not `direct_url`.
+2. `url` must equal the parameterless canonical base exactly.
+3. `direct_url` may exist for internal diagnostics only and must not be emitted as the normal Chat learner link.
+4. Never return a learner link containing `?mode=`, `set_id=`, `txn_id=`, `script.googleusercontent.com`, `/macros/echo`, `user_content_key`, or `lib=`.
+5. HOME must resolve the latest renderable `ISSUED`, uncommitted Listening set and let the learner open it without changing the browser URL.
+6. `mode=SYSTEM_TEST`, `mode=LISTENING`, `mode=REVIEW`, and `mode=REVIEW_REPLAY` remain controlled internal/diagnostic Web routes.
 7. `ping=1` remains a health-check route.
 8. Other HTTP job execution remains disabled and must never be repurposed as a learner link.
-9. If the canonical learner URL cannot be resolved, do not substitute another Apps Script URL; stop and audit the route/deployment binding.
+9. If HOME cannot resolve the just-issued target, stop and audit the backend state instead of falling back to a query-string link.
 
-The outer Apps Script router allowlists HOME, LISTENING, SYSTEM_TEST, REVIEW, and REVIEW_REPLAY learner routes. HTTP audio/job execution remains Sheet-queue-only.
+This parameterless handoff avoids the ChatGPT iOS external-link safety confirmation observed for long query-string Apps Script links while preserving exact backend authorization.
 
 ## 9. Script TXT storage
 
@@ -384,3 +382,16 @@ The fix establishes one explicit URL authority:
 - redirected `script.googleusercontent.com` URLs are forbidden as learner-facing output.
 
 This fix changes no learner history, score, counter, pointer, scheduler, K1_READY, payload content, or production transaction.
+
+### Parameterless handoff refinement
+
+After iPhone validation showed the ChatGPT `Check this link is safe` interstitial for the direct `?mode=LISTENING&set_id=...` URL, the canonical Chat handoff was refined to parameterless HOME.
+
+`getListeningLearnerUrl(SET_ID)` now returns:
+- `url` = parameterless HOME URL;
+- `handoff_mode=HOME_PARAMETERLESS`;
+- `direct_url` = exact set route for internal diagnostics only.
+
+HOME already validates and exposes the current `ISSUED`, uncommitted set through `h3ReviewCurrentLearning_()`, and the `開く` button loads that exact set client-side.
+
+No learner state, score, history, scheduler, K1_READY, payload, or production transaction semantics change.

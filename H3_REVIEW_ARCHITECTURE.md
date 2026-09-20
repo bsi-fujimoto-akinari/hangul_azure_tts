@@ -1,6 +1,6 @@
 # H3 Review Architecture
 
-Version: H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V3
+Version: H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V4
 Status: R3_CLOSED_NORMAL_LIVE
 
 This document defines the current durable Review contract. Completed R3 phase chronology and device-validation evidence remain in Git history and Drive `06_AUDIT`.
@@ -81,42 +81,37 @@ Controlled internal routes remain available for diagnostics and in-app navigatio
 ```text
 mode=SYSTEM_TEST&set_id={SET_ID}
 mode=LISTENING&set_id={SET_ID}
+mode=WRITTEN&set_id={SET_ID}
 mode=REVIEW&txn_id={TXN_ID}
-mode=REVIEW_REPLAY&txn_id={TXN_ID}
 ```
 
-These routes are not the normal Chat handoff URL.
+`REVIEW_REPLAY` is retired and is not an active learner boot route. These routes are not the normal Chat handoff URL.
 
 ## 7. Persistent Review UI
 
-After grading, the Web App opens the persistent Review immediately. The learner sees one question card at a time, compact progress such as `Q1 ×`, source-bound media, the learner answer, the correct answer, translation, and explanation.
+After grading, the Web App opens the persistent Review immediately. The learner sees one question card at a time, compact progress such as `Q1 ×`, source-bound media where applicable, the learner answer, the correct answer, translation, and explanation.
 
-Exactly one Review card is visible at a time. Navigation is provided by compact progress controls plus `再挑戦` and `ホーム`. Technical receipt/hash details remain collapsed by default.
+Exactly one Review card is visible at a time. Navigation is provided by compact progress controls plus a full-width `ホーム` action. Learner-facing replay/retry controls are absent. Technical receipt/hash details remain collapsed by default.
 
 Audio and images are loaded from the original bound artifacts. Review must not generate or replace media.
 
 ## 8. Review history library
 
-The parameterless HOME provides read-only access to committed Review entries. Selecting an entry opens its exact persistent Review. No learner-facing delete or edit operation exists.
+The parameterless HOME provides read-only access to committed Review entries. HOME itself has no unanswered/current-learning header; active issued learning is resolved before HOME through parameterless boot.
 
-Chat receipt submission is optional for ordinary learning because the Web App owns postgrade Review. Chat may verify receipts for audit/troubleshooting but must never repeat the backend mutation.
+Each history card is the navigation target for its exact persistent Review. Separate `復習` and `再挑戦` buttons are removed. Listening keeps its canonical `5L #N` sequence. Written history receives a stable chronological `5W #N` ordinal derived from answered Written SET_ID order.
 
-## 9. REVIEW_REPLAY
+HOME filters are provider filters `聞きとり` and `筆記` (both enabled by default). Sorting supports newest-first and descending Review level. The filter/sort control block is sticky while the history list scrolls.
 
-REVIEW_REPLAY reuses the original locked set and media for transient, nonlearning practice.
+Review priority is `H3_REVIEW_LEVEL_V1` on a 0–100 scale. For each item, result severity contributes `×=12 / △=6 / ○=0`; same-skill historical weakness adds `min(8, 2×wrong_count + uncertain_count)`. Missing skill identity contributes no skill bonus. Higher values mean higher review priority. This score changes display order only and must not mutate scheduler/retest state.
 
-Before local replay grading it hides the correct answer, prior answer, explanation, and protected Listening script content. After all local answers are supplied, it may reveal the already-persisted Review.
+No learner-facing delete or edit operation exists. Chat receipt submission is optional for ordinary learning because the Web App owns postgrade Review. Chat may verify receipts for audit/troubleshooting but must never repeat the backend mutation.
 
-Required result contract:
+## 9. Retired REVIEW_REPLAY
 
-```text
-SCHEMA=H3_REVIEW_REPLAY_RESULT_V1
-NONLEARNING=true
-PERSISTED=false
-RUNTIME_WRITE_COUNT=0
-```
+`REVIEW_REPLAY` is no longer a learner capability. HOME and persistent Review expose no replay/retry action, direct parameter boot is not allowlisted, and the active Listening provider routes replay/render/media/grade requests to a fail-closed `REVIEW_REPLAY_RETIRED` guard.
 
-Replay must not write learner history, `listening_state_v1`, scheduler/retest state, counters, pointers, production journals, K1_READY, payloads, or audio. It must never be interpreted as a formal retest.
+Legacy replay helper code may remain temporarily as unreachable compatibility/audit history, but it is not an active learner surface and must not become reachable without a separately reviewed contract change.
 
 ## 10. Failure policy
 
@@ -144,7 +139,7 @@ The active implementation includes:
 - parameterless HOME/current-learning resolution;
 - persistent Review media retrieval;
 - read-only Review history;
-- zero-write REVIEW_REPLAY;
+- retired REVIEW_REPLAY fail-closed guard;
 - normal-live production with no fixed-set arm;
 - fail-closed preissue for recovery, overload scheduling, and audio parity.
 
@@ -152,7 +147,7 @@ Current production behavior is audited directly from runtime code. Completed pha
 
 ## 13. Current learner UI contract
 
-HOME shows the current 5L when safe and a compact Review list; exactly one Review card is visible at a time. The standalone `再挑戦` explanatory block above the questions is removed. Replay uses the same compact question surface and reveals persistent Review only after local completion.
+HOME shows only the compact Review library; active learning is resolved before HOME. History cards are directly tappable, provider filters and sort controls are sticky, Written uses stable `5W #N`, and exactly one Review card is visible at a time. The Review footer contains only a full-width `ホーム` action.
 
 ## 26. Legacy pre-Web Review compatibility
 
@@ -170,7 +165,7 @@ UNCERTAINTY_KNOWN=false
 
 `listening_legacy_review_v1` stores its immutable binding. The original result is reconstructed from canonical `listening_log_v1`; no synthetic Web transaction or TXN_ID is created. HOME merges the entry with transaction-backed history and excludes the set from current-learning resolution.
 
-Review/media/replay use internal `legacy_review_id` routing without learner URL parameters. Unknown historical uncertainty is rendered as `?—`. Replay is transient and must not mutate learner history, score, counters, pointers, scheduler, K1_READY, payload, or audio.
+Review/media use internal `legacy_review_id` routing without learner URL parameters. Unknown historical uncertainty is rendered as `?—`. Replay is retired; legacy history remains Review-only and must not mutate learner history, score, counters, pointers, scheduler, K1_READY, payload, or audio.
 
 ## 28. Review / HOME provider core
 

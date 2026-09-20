@@ -2629,7 +2629,7 @@ jobs:
                   raise SystemExit(f'Legacy Review phase-2 implementation missing: {needle}')
 
           m = re.search(
-              r"function buildReviewHomePayload_\(\) \{(?P<body>.*?)\n\}\n\nfunction h3ReviewReplayValidateLegacyId_",
+              r"function buildReviewHomePayload_\(\) \{(?P<body>.*?)\n\}\n\s*function h3ReviewReplayValidateLegacyId_",
               review,
               re.S,
           )
@@ -2700,7 +2700,7 @@ jobs:
               raise SystemExit('Legacy Review must not create a parameterized learner boot URL.')
 
           home = re.search(
-              r"function buildReviewHomePayload_\(\) \{(?P<body>.*?)\n\}\n\nfunction h3ReviewReplayValidateLegacyId_",
+              r"function buildReviewHomePayload_\(\) \{(?P<body>.*?)\n\}\n\s*function h3ReviewReplayValidateLegacyId_",
               review,
               re.S,
           )

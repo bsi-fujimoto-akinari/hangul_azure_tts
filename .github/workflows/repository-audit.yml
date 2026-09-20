@@ -1153,7 +1153,7 @@ jobs:
 
           required_web = [
               "var mode = 'HOME';",
-              "e.parameter.mode === 'REVIEW'",
+              "params.mode === 'REVIEW'",
               "txnId = String(",
               "request && request.mode === 'HOME'",
               "request && request.mode === 'REVIEW'",
@@ -1240,7 +1240,11 @@ jobs:
             console,
             H3_WEB_SYSTEM_TEST_R3_06_SET_ID: 'SYSTEM_TEST-H3-L5E2E-R3-06-20260919-01',
             h3SystemTestSetIdAllowed_: value =>
-              value === 'SYSTEM_TEST-H3-L5E2E-R3-06-20260919-01'
+              value === 'SYSTEM_TEST-H3-L5E2E-R3-06-20260919-01',
+            SpreadsheetApp: {
+              openById: () => ({})
+            },
+            h3ReviewCurrentLearning_: () => null
           });
           vm.runInContext(source, ctx, {filename: 'WebApp.js'});
 

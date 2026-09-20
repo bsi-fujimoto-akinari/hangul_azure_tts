@@ -114,11 +114,11 @@ Still intentionally inactive:
 
 ## 10. Reading activation-core staging
 
-The repository now stages `H3-READING-ACTIVATION-CORE-20260921-V2` as the next compatibility layer for Reading.
+The repository now stages `H3-READING-ACTIVATION-CORE-20260921-V3` as the next compatibility layer for Reading.
 
-It defines Reading-owned ISSUE_NO/STAGE_ID/SET_ID semantics, deterministic `H3-YYYYMMDD-RNNN` allocation, the `reading_stage_v1 / reading_web_txn_v1 / reading_log_v1` authorities, persisted locked-bundle JSON, question-key submission normalization, source-bound preissue validation, transaction planning, committed-result projection, and a pure current-learning candidate.
+It defines Reading-owned ISSUE_NO/STAGE_ID/SET_ID semantics across P8/P9/P10, deterministic `H3-YYYYMMDD-RNNN` allocation, the live `reading_stage_v1 / reading_web_txn_v1 / reading_log_v1` authorities, persisted locked-bundle JSON, question-key submission normalization, source-bound preissue validation, transaction planning, committed-result projection, and a pure current-learning candidate.
 
-These primitives are not yet wired into `WebApp.js`, HOME, Review persistence, or any live Sheet. Current 5W D2-D6 scheduler/Answer Sync behavior is unchanged.
+The explicit Reading server route and transaction persistence code are staged, but learner issue, Client submission, HOME/Review persistence, and scheduler activation remain disabled. The only live Reading stage is the P8 `PREISSUE_READY` pilot; P9/P10 remain repository-only. Current 5W D2-D6 scheduler/Answer Sync behavior is unchanged.
 
 ## 11. Translation activation-core staging
 

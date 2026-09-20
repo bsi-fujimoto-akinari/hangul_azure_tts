@@ -966,3 +966,172 @@ R3-12 close duties:
 - leave historical SYSTEM_TEST fixtures, status snapshots, learner history, and production artifacts intact.
 
 The next ordinary learner action is a `5L` request for set no.3 under the already-active normal-live path.
+
+## 26. 5L #1 legacy pre-Web Review phase-1 freeze
+
+Phase 1 freezes a review-only compatibility path for the first valid Listening set:
+
+```text
+SET_ID=H3-20260919-L02
+LISTENING_SET_NO=1
+LEGACY_MODE=LEGACY_PRE_WEB
+ORIGINAL_SCORE=1/5
+ORIGINAL_RESULTS=K1○,K2×,K3×,K4×,K5×
+ORIGINAL_ANSWERS=K1:3,K2:1,K3:3,K4:2,K5:2
+UNCERTAINTY=UNKNOWN_NOT_RECORDED
+```
+
+### 26.1 Verified source inventory
+
+The following canonical source evidence exists and may be used by the legacy Review adapter:
+
+- one exact `listening_set_payload_v1` row for `H3-20260919-L02`;
+- five exact `listening_log_v1` rows for K1-K5;
+- exact original answers, answer keys, and per-section results in those log/provenance rows;
+- the bound K1_READY record `H3-K1R-20260919-001`, including image file ID and image SHA256;
+- five individual source-locked audio bindings in the set payload;
+- the exact K2-K5 item payloads and answer key.
+
+The following do not exist for L02 and must never be fabricated:
+
+- a `listening_web_txn_v1` transaction for L02;
+- a COMMITTED TXN_ID;
+- `listening_explanation_payload_v1` rows for L02;
+- a `listening_review_binding_v1` row for L02;
+- recorded uncertainty flags compatible with current Web submissions.
+
+### 26.2 No fake transaction rule
+
+L02 predates Web transaction ownership. Phase 2 must not create a synthetic or retroactive row in `listening_web_txn_v1`, and must not place a fake TXN_ID into `listening_review_binding_v1`.
+
+The current transaction-backed path remains unchanged:
+
+```text
+COMMITTED TXN_ID
+ -> listening_review_binding_v1 LOCKED
+ -> buildPersistentReviewPayload_(txn_id)
+```
+
+L02 uses a separate read-only legacy path:
+
+```text
+LEGACY_REVIEW_ID
+ -> listening_legacy_review_v1 LOCKED
+ -> exact L02 set/log/K1/audio sources
+ -> buildLegacyPersistentReviewPayload_(legacy_review_id)
+```
+
+### 26.3 Phase-2 legacy registry schema
+
+Phase 2 may add exactly one new lightweight registry sheet:
+
+`listening_legacy_review_v1`
+
+Required columns:
+
+```text
+LEGACY_REVIEW_ID
+LISTENING_SET_ID
+LISTENING_SET_NO
+ANSWERED_AT
+STATUS
+SOURCE_MODE
+RESULT_JSON
+RESULT_SHA256
+ITEM_PAYLOAD_SHA256
+EXPLANATION_SET_SHA256
+AUDIO_BINDING_SHA256
+K1_IMAGE_SHA256
+REVIEW_CONTRACT_ID
+LEGACY_REVIEW_BINDING_SHA256
+LOCKED_AT
+```
+
+Required values for the first row:
+
+```text
+SOURCE_MODE=LEGACY_PRE_WEB
+STATUS=LOCKED
+LISTENING_SET_ID=H3-20260919-L02
+LISTENING_SET_NO=1
+```
+
+`RESULT_JSON` is a review metadata object derived only from the five canonical L02 log/provenance rows. It is not a production transaction and must never be treated as one.
+
+### 26.4 Explanation compatibility
+
+Phase 2 may add five L02 explanation rows to `listening_explanation_payload_v1` only after exact L02 source readback.
+
+Each row must:
+
+- use the exact original L02 item surface and answer key;
+- use provenance `LEGACY_PRE_WEB_BACKFILL`;
+- be review metadata only;
+- never alter original answers, results, retest evidence, history, counters, pointers, scheduler, K1_READY, audio, or set payload;
+- fail closed if the item payload SHA or source surface cannot be verified.
+
+New explanations may explain the already-locked source; they may not invent a different historical question or claim to reproduce an explanation that did not exist at answer time.
+
+### 26.5 History and uncertainty semantics
+
+HOME review history may merge transaction-backed entries and legacy entries, then sort by the original answer/commit timestamp.
+
+For L02:
+
+```text
+score=1
+total=5
+wrong_count=4
+needs_review=true
+uncertainty_known=false
+uncertain_count=null
+```
+
+The UI must render the unknown uncertainty count as an unknown marker such as `?—`, never `?0`.
+
+### 26.6 Review / replay boundaries
+
+Legacy Review is read-only.
+
+Legacy REVIEW_REPLAY, if implemented in Phase 2 and exposed in Phase 3, must use the exact original L02 set, K1 image, and five existing audio bindings. It must remain nonlearning and nonpersistent:
+
+- no production transaction write;
+- no learner-history write;
+- no scheduler/retest write;
+- no counter/pointer write;
+- no K1_READY mutation;
+- no set-payload mutation;
+- no audio regeneration.
+
+The replay may compare the transient replay score with the stored original score 1/5. It must not invent historical uncertainty flags.
+
+### 26.7 Current-learning exclusion
+
+Because the historical L02 set payload remains `ISSUED` and has no COMMITTED Web transaction, Phase 2 must explicitly exclude every `LEGACY_PRE_WEB` registered set from `h3ReviewCurrentLearning_()`. Registration as legacy Review must never make L02 appear as an active uncommitted learning set.
+
+### 26.8 Fail-closed rules
+
+A legacy Review entry is not renderable if any of the following occurs:
+
+- duplicate or missing legacy registry row;
+- SET_ID / set number mismatch;
+- missing or non-VALID K1-K5 source log rows;
+- original answer/result mismatch across log/provenance and answer key;
+- item payload hash mismatch;
+- audio binding mismatch;
+- K1 image hash mismatch;
+- missing or unlocked explanation row after Phase 2;
+- legacy binding hash mismatch;
+- cross-set source mixing.
+
+No fallback to another transaction, another set, regenerated image/audio, or inferred uncertainty is permitted.
+
+### 26.9 Three-phase boundary
+
+```text
+Phase 1 = source audit + compatibility contract freeze
+Phase 2 = code/schema implementation + L02 review-metadata backfill
+Phase 3 = HOME history exposure + Review/Replay device validation
+```
+
+Phase 1 performs documentation/audit writes only and changes no learner runtime data.

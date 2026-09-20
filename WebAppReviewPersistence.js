@@ -3957,9 +3957,31 @@ function h3WrittenReviewValidateRequest_(
 function getWrittenPersistentReviewPayload_(
   request
 ) {
-  return buildWrittenPersistentReviewPayload_(
+  var setId =
     h3WrittenReviewValidateRequest_(
       request
+    );
+  var spreadsheet =
+    SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+
+  if (
+    h3WrittenProductionReviewHasSet_(
+      spreadsheet,
+      setId
+    )
+  ) {
+    return h3WrittenProductionReviewContextBySet_(
+      spreadsheet,
+      setId
+    ).payload;
+  }
+
+  return h3WrittenReviewNormalizePersistent_(
+    h3WrittenReviewPersistentContext_(
+      spreadsheet,
+      setId
     )
   );
 }

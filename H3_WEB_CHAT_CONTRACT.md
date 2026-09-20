@@ -529,3 +529,31 @@ After exact four-line receipt parsing, Chat resolves the exact TXN_ID/SET_ID and
 
 This contract changes read scheduling only. It does not authorize live writes, relaxed validation, inferred state, or cached-state substitution for an authoritative required readback.
 
+## 24. K1_READY_ONE_SHOT_V1
+
+`K1_READY_ONE_SHOT_V1` defines the fail-closed K1 persist/bind readback contract.
+
+### New K1_READY persist
+
+- Write exactly one complete K1_READY row atomically with all required A:M fields.
+- Perform exactly one immediate exact A:M readback for that new row.
+- Use that same readback to verify the exact header/schema, literal-value requirement, persisted values, K1_READY_ID, required JSON/hash fields, `STATUS=READY`, blank `BOUND_LISTENING_SET_ID`, and blank `CONSUMED_AT`.
+- Do not perform duplicate same-content readbacks merely to reconfirm fields already verified by that exact A:M readback.
+- A mismatch remains a hard STOP; do not infer or repair the row from chat-local cache.
+
+### K1_READY bind
+
+Before binding, retain the full persistent payload validation, including image-file existence and exact image SHA256 verification. Bind may write only column L (`BOUND_LISTENING_SET_ID`).
+
+After the column-L write, perform one exact same-row A:M readback and require:
+
+- the same K1_READY_ID;
+- `STATUS=READY`;
+- exact target `BOUND_LISTENING_SET_ID`;
+- blank `CONSUMED_AT`;
+- every column other than L exactly unchanged from the already-validated prebind row.
+
+When all of those conditions pass, the post-bind readback proves that the validated immutable payload was not changed by bind. A second Drive blob read / image SHA256 recomputation is therefore not required after bind.
+
+`consumeK1ReadyAfterIssue_()` keeps its existing post-write readback semantics. This optimization does not relax consume eligibility, source-lock, audio-start validation, or fail-closed behavior.
+

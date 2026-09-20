@@ -1,14 +1,15 @@
 /**
  * Shared H3 Web transaction helpers.
  *
- * H3TX IDs form one global namespace across SYSTEM_TEST, 5L and staged 5W.
+ * H3TX IDs form one global namespace across SYSTEM_TEST, 5L, 5W and staged Reading.
  * Call h3NextWebTxnId_ only while the caller holds ScriptLock.
  */
 
 var H3_WEB_TXN_JOURNAL_SHEETS = [
   'listening_web_test_txn_v1',
   'listening_web_txn_v1',
-  'written_web_txn_v1'
+  'written_web_txn_v1',
+  'reading_web_txn_v1'
 ];
 
 function h3NextWebTxnIdFromRows_(datePart, journalRows) {

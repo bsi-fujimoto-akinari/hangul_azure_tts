@@ -106,7 +106,17 @@ Implemented and staged on the feature branch:
 
 Still intentionally inactive:
 
-- Reading / Translation learner renderers and schedulers;
+- Reading learner transaction persistence, live stage/log sheets, server route, HOME/Review persistence, and scheduler activation;
+- Translation learner renderers and schedulers;
 - 準2級 taxonomy/queue activation;
 - live HOME V2 migration;
 - merge / Apps Script sync while the parallel Review reconstruction read-only investigation is still open.
+
+## 10. Reading activation-core staging
+
+The repository now stages `H3-READING-ACTIVATION-CORE-20260920-V1` as the next compatibility layer for Reading.
+
+It defines Reading-owned ISSUE_NO/STAGE_ID/SET_ID semantics, future `reading_stage_v1 / reading_web_txn_v1 / reading_log_v1` authorities, question-key submission normalization, source-bound preissue validation, transaction planning, committed-result projection, and a pure current-learning candidate.
+
+These primitives are not yet wired into `WebApp.js`, HOME, Review persistence, or any live Sheet. Current 5W D2-D6 scheduler/Answer Sync behavior is unchanged.
+

@@ -362,7 +362,7 @@ function h3TranslationAllocateIdentity_(
       datePart
     );
   var maxIssue = 0;
-  var usedSerial = {};
+  var maxDateSerial = 0;
   var seenStage = {};
   var seenSet = {};
 
@@ -415,19 +415,17 @@ function h3TranslationAllocateIdentity_(
       if (
         identity.date_part === date
       ) {
-        usedSerial[
-          identity.serial
-        ] = true;
+        maxDateSerial =
+          Math.max(
+            maxDateSerial,
+            identity.serial
+          );
       }
     }
   );
 
-  var serial = 1;
-  while (
-    usedSerial[serial]
-  ) {
-    serial += 1;
-  }
+  var serial =
+    maxDateSerial + 1;
 
   if (serial > 999) {
     throw new Error(
@@ -451,6 +449,61 @@ function h3TranslationAllocateIdentity_(
     ),
     section
   );
+}
+
+
+function h3TranslationLockedBundleJson_(
+  locked
+) {
+  if (
+    !locked ||
+    locked.schema !==
+      H3_TRANSLATION_LOCKED_SCHEMA_
+  ) {
+    throw new Error(
+      'TRANSLATION_LOCKED_BUNDLE_INVALID'
+    );
+  }
+
+  return h3TranslationCanonicalJson_(
+    locked
+  );
+}
+
+
+function h3TranslationParseLockedBundleJson_(
+  value
+) {
+  var text =
+    String(value || '');
+
+  if (!text) {
+    throw new Error(
+      'TRANSLATION_LOCKED_BUNDLE_JSON_MISSING'
+    );
+  }
+
+  var parsed;
+  try {
+    parsed =
+      JSON.parse(text);
+  } catch (_err) {
+    throw new Error(
+      'TRANSLATION_LOCKED_BUNDLE_JSON_INVALID'
+    );
+  }
+
+  if (
+    !parsed ||
+    parsed.schema !==
+      H3_TRANSLATION_LOCKED_SCHEMA_
+  ) {
+    throw new Error(
+      'TRANSLATION_LOCKED_BUNDLE_JSON_SCHEMA_INVALID'
+    );
+  }
+
+  return parsed;
 }
 
 
@@ -525,6 +578,12 @@ function h3TranslationBuildStage_(
     );
   }
 
+  var normalizedCreatedAt =
+    h3TranslationActivationRequireId_(
+      createdAt,
+      'TRANSLATION_STAGE_CREATED_AT_INVALID'
+    );
+
   return {
     schema:
       H3_TRANSLATION_STAGE_SCHEMA_,
@@ -559,11 +618,13 @@ function h3TranslationBuildStage_(
         locked
       ),
     locked_bundle_json:
-      JSON.stringify(locked),
+      h3TranslationLockedBundleJson_(
+        locked
+      ),
     created_at:
-      String(createdAt || ''),
+      normalizedCreatedAt,
     locked_at:
-      String(createdAt || ''),
+      normalizedCreatedAt,
     issued_at: '',
     committed_at: ''
   };
@@ -603,6 +664,11 @@ function h3TranslationValidateStageLock_(
     );
   }
 
+  var storedLocked =
+    h3TranslationParseLockedBundleJson_(
+      stage.locked_bundle_json
+    );
+
   if (
     stage.provider_kind !==
       'WRITTEN' ||
@@ -629,7 +695,17 @@ function h3TranslationValidateStageLock_(
     stage.locked_bundle_sha256 !==
       h3TranslationLockedBundleHash_(
         locked
-      )
+      ) ||
+    h3TranslationCanonicalJson_(
+      storedLocked
+    ) !==
+      h3TranslationCanonicalJson_(
+        locked
+      ) ||
+    h3TranslationHash_(
+      storedLocked
+    ) !==
+      stage.locked_bundle_sha256
   ) {
     throw new Error(
       'TRANSLATION_STAGE_SOURCE_BINDING_MISMATCH'

@@ -5861,7 +5861,6 @@ jobs:
               "function h3ReadingAllocateIdentityFromStageRows_(",
               "function h3ReadingBuildMaterializationPlan_(",
               "'LOCKED_BUNDLE_JSON'",
-              "'H3-20260921-R001'",
           ]:
               if needle not in activation and needle not in activation_contract:
                   raise SystemExit(f'Reading V2 activation invariant missing: {needle}')

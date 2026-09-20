@@ -368,3 +368,21 @@ ACTIVE_RUNTIME_IDENTITY_CONTRACT=H3_RUNTIME_IDENTITY_V1
 LEARNER_CONTENT_AUTHORITY=WEB_APP_REVIEW_ONLY
 ```
 
+## 34. Reading P8 activation staging
+
+Reading P8 is isolated from 5W. Its current live preparation identity is owned by `reading_stage_v1`; answer transactions and question-level answer logs are reserved to `reading_web_txn_v1` and `reading_log_v1`.
+
+The first Reading allocation uses the Reading allocator contract, not a 5W/5L suffix convention:
+
+```text
+ISSUE_NO=1
+STAGE_ID=READ-P8-20260921-001
+SET_ID=H3-20260921-R001
+```
+
+The SET_ID numeric suffix is a date-local Reading allocation serial and is never ISSUE_NO semantics.
+
+The P8 group 245 stage is permitted to reach `PREISSUE_READY` only with exact stored locked-bundle JSON plus source-binding and locked-bundle hash parity. `PREISSUE_READY` is not `ISSUED` and must not appear as current learning.
+
+`WebAppReadingProduction.js` owns the staged Reading render/transaction path. Render requires `ISSUED`; commit remains disabled until Review/HOME integration and explicit issue gating are complete. No 5W Answer Sync, 5W source ratio, or 5W scheduler state is reused.
+

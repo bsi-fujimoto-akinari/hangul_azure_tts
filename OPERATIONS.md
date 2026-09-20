@@ -1183,130 +1183,44 @@ blocking_overflow: none
 
 This migration changes scheduler policy/state only. It does not rewrite L04, learner answers, score, history, counters, pointers, Review bindings, audio, payloads, or K1_READY records.
 
-## 27. 5L #1 legacy Review three-phase migration
+## 27. Legacy pre-Web Review runtime
 
-Target:
+The 5L #1 migration is complete. Only the compatibility runtime remains active.
 
-```text
-H3-20260919-L02
-5L #1
-original score = 1/5
-```
+Current durable contract:
+- legacy registry: `listening_legacy_review_v1`;
+- locked historical set: `H3-20260919-L02`;
+- internal identifier: `H3LEG-20260919-L02-R1`;
+- HOME history includes this entry alongside normal transaction-backed Review entries;
+- `h3ReviewCurrentLearning_()` excludes registered legacy sets;
+- normal learner URL remains parameterless;
+- legacy Review/media/replay are routed internally by `legacy_review_id`;
+- historical uncertainty remains unknown and displays as `?—`;
+- Replay is nonlearning and zero-write.
 
-Migration is deliberately split into three independent gates.
+Do not:
+- synthesize a historical Web transaction;
+- insert L02 into transaction-backed Review binding;
+- rewrite learner history to modernize the old set;
+- alter score/counters/valid-count/pointer/scheduler to support Review;
+- expose `legacy_review_id` in normal learner URLs.
 
-### Phase 1 — audit / freeze
+Maintenance rule:
+- keep functions referenced by HOME/Review/media/replay/current-learning;
+- remove one-shot migration helpers after repository-wide refcount reaches zero;
+- preserve removed code through Git history and Drive audit evidence rather than keeping dead functions in active Apps Script;
+- keep one durable repository audit for this compatibility surface rather than phase-specific audits.
 
-Status after this change: `PASS`.
+## 28. Legacy 5L #1 migration close
 
-Verified:
+Status: `CLOSED`.
 
-- exact L02 locked/issued set payload exists;
-- five L02 canonical learner-log rows exist;
-- original answer vector is `3,1,3,2,2`;
-- original results are `○,×,×,×,×`;
-- exact K1 image source and SHA exist;
-- five individual audio bindings exist;
-- no L02 Web transaction exists;
-- no L02 explanation payload exists;
-- no L02 persistent Review binding exists;
-- current-style uncertainty flags are not historically recorded.
+Device evidence supplied by the learner confirms the parameterless app HOME renders:
+- current 5L: no pending answer;
+- Review count: 3;
+- order: 5L #3, 5L #2, 5L #1;
+- 5L #1: `1/5`, `×4`, `?—`.
 
-Phase 1 writes documentation/audit evidence only.
+Closure uses that device evidence together with existing source-lock/hash checks and the durable static/runtime gates. Separate physical-device replay/audio operation is no longer a blocking migration gate after the learner explicitly requested closure; media bindings and zero-write replay remain protected by the durable runtime audit and normal defect handling.
 
-### Phase 2 — implementation / backfill metadata
-
-Phase 2 may:
-
-1. add `listening_legacy_review_v1`;
-2. implement a dedicated legacy Review source/builder;
-3. author five source-locked L02 explanation rows with `LEGACY_PRE_WEB_BACKFILL`;
-4. create one LOCKED legacy review metadata binding;
-5. merge legacy history data server-side without exposing it to the learner yet;
-6. explicitly exclude legacy registered sets from current-learning resolution.
-
-Phase 2 must not mutate the original L02 learner history, score, answer rows, retest evidence, set counter, valid counts, pointers, scheduler, K1_READY, original payload, image, or audio.
-
-### Phase 3 — learner exposure / validation
-
-Phase 3 may activate the 5L #1 HOME history entry only after backend source-lock validation passes.
-
-Required validation:
-
-- HOME shows 5L #1 in chronological position;
-- score = 1/5;
-- wrong count = 4;
-- uncertainty is shown as unknown, not zero;
-- Review opens all five exact source-bound items;
-- K1 image and all five original audio assets resolve;
-- optional replay creates zero learner-runtime writes;
-- closing and reopening the browser reconstructs the same Review;
-- iPhone ChatGPT in-app browser validation passes.
-
-Any failed gate leaves the legacy entry hidden and does not affect ordinary 5L production.
-
-## 28. 5L #1 legacy Review phase-2 close
-
-Status: `PASS`.
-
-Runtime/source changes completed:
-- GitHub PR #57 merged;
-- Apps Script source synchronized from audited main;
-- `listening_legacy_review_v1` created with one LOCKED L02 row;
-- five L02 explanation rows appended to `listening_explanation_payload_v1`;
-- `h3ReviewCurrentLearning_()` excludes registered `LEGACY_PRE_WEB` sets;
-- legacy history preview exists server-side but is not returned by HOME.
-
-No-write invariants preserved:
-- no synthetic `listening_web_txn_v1` row;
-- no L02 row in `listening_review_binding_v1`;
-- no learner-history rewrite;
-- no score rewrite;
-- no Listening set counter / valid-count / pointer change;
-- no scheduler/retest mutation;
-- no K1_READY mutation;
-- no payload/image/audio regeneration.
-
-Phase 3 remains required before learner exposure:
-1. merge legacy entries into HOME history;
-2. add legacy Review route/media/replay routing;
-3. show unknown historical uncertainty as unknown rather than zero;
-4. validate exact Review reopen/replay zero-mutation;
-5. validate on iPhone ChatGPT in-app browser.
-
-Until Phase 3 PASS, the L02 legacy registry is backend-only.
-
-## 29. 5L #1 legacy Review phase-3 device gate
-
-Implementation status: `IMPLEMENTED_DEVICE_VALIDATION_PENDING`.
-
-Code and backend activation:
-- PR #59 merged;
-- repository audit PASS;
-- Apps Script HEAD synchronized;
-- HOME legacy history merge active;
-- legacy Review/media/replay routes active;
-- parameterized legacy learner URL is not introduced.
-
-Normal learner handoff remains the parameterless URL defined in the learner URL authority section.
-
-Before Phase 3 may be marked closed, perform one iPhone ChatGPT in-app browser validation against the parameterless learner URL.
-
-Pass criteria:
-- HOME opens without treating L02 as current learning;
-- Review list order is 5L #3, #2, #1;
-- 5L #1 card shows `1/5`, `×4`, and `?—`;
-- Review opens and K1 image is visible;
-- K1-K5 audio can each be loaded/played;
-- Review source shows original answers `3,1,3,2,2` and original results `○,×,×,×,×`;
-- leaving and reopening 5L #1 reproduces the same content;
-- Replay uses the same five source-locked items and returns a transient result only;
-- after Replay, `listening_web_txn_v1`, `listening_log_v1`, `listening_state_v1`, counters, pointers, scheduler, K1_READY and payload rows remain unchanged.
-
-Failure handling:
-- do not rewrite L02 history;
-- do not synthesize a Web transaction;
-- do not fall back to a parameterized learner link;
-- keep the legacy entry registered but stop Phase-3 close until the routing/media issue is corrected.
-
-The Coordinator may perform all automated gates, but actual iPhone interaction must be confirmed from the learner device before close.
+This closure does not remove the legacy compatibility layer itself. It removes only migration-only helpers, phase-specific CI, and migration-stage detail from hot canonical documentation.

@@ -2124,31 +2124,6 @@ function buildLegacyPersistentReviewPayload_(
   };
 }
 
-function validateLegacyPersistentReviewBinding_(
-  legacyReviewId
-) {
-  var payload =
-    buildLegacyPersistentReviewPayload_(
-      legacyReviewId
-    );
-
-  return {
-    schema:
-      'H3_LEGACY_REVIEW_PERSISTENCE_GATE_V1',
-    status: 'PASS',
-    read_only: true,
-    legacy_review_id:
-      payload.legacy_review_id,
-    set_id:
-      payload.set_id,
-    review_binding_sha256:
-      payload
-        .legacy_review_binding_sha256,
-    section_count:
-      payload.sections.length
-  };
-}
-
 function h3LegacyReviewHistoryEntries_(
   spreadsheet
 ) {
@@ -2307,24 +2282,6 @@ function h3LegacyReviewRegisteredSetIds_(
   );
 
   return out;
-}
-
-function h3LegacyReviewPhase2Preview_() {
-  var spreadsheet =
-    SpreadsheetApp.openById(
-      H3_WEB_RUNTIME_SPREADSHEET_ID
-    );
-
-  return {
-    schema:
-      'H3_LEGACY_REVIEW_PHASE2_PREVIEW_V1',
-    read_only: true,
-    learner_visible: false,
-    entries:
-      h3LegacyReviewHistoryEntries_(
-        spreadsheet
-      )
-  };
 }
 
 function h3ReviewHistoryEntries_(

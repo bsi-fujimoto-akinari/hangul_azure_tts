@@ -3809,6 +3809,162 @@ function validateWrittenPersistentReviewBinding_(
 }
 
 
+
+function h3WrittenReviewPersistentHistoryEntries_(
+  spreadsheet
+) {
+  var bindingSheet =
+    spreadsheet.getSheetByName(
+      H3_WRITTEN_LEGACY_REVIEW_BINDING_SHEET_
+    );
+
+  h3ReviewRequireExactHeader_(
+    bindingSheet,
+    H3_WRITTEN_LEGACY_REVIEW_BINDING_HEADERS_,
+    'WRITTEN_REVIEW_BINDING'
+  );
+
+  var table =
+    h3ReviewTable_(
+      bindingSheet
+    );
+  var seen = {};
+  var entries = [];
+
+  table.rows.forEach(
+    function (row) {
+      var setId = String(
+        row[
+          table.map.SET_ID
+        ] || ''
+      );
+
+      if (!setId) {
+        return;
+      }
+
+      if (seen[setId]) {
+        throw new Error(
+          'WRITTEN_REVIEW_HISTORY_DUPLICATE_SET_ID:' +
+            setId
+        );
+      }
+      seen[setId] = true;
+
+      var context =
+        h3WrittenReviewPersistentContext_(
+          spreadsheet,
+          setId
+        );
+      var payload =
+        h3WrittenReviewNormalizePersistent_(
+          context
+        );
+
+      entries.push({
+        review_kind: 'WRITTEN',
+        set_id:
+          payload.set_id,
+        answered_at:
+          payload.answered_at,
+        score:
+          payload.score,
+        total:
+          payload.total,
+        wrong_count:
+          payload.wrong_count,
+        uncertainty_known:
+          payload.uncertainty_known,
+        uncertain_count:
+          payload.uncertain_count,
+        needs_review:
+          payload.sections.some(
+            function (part) {
+              return (
+                part.result !== '○'
+              );
+            }
+          ),
+        replay_capability:
+          'unavailable',
+        source_mode:
+          context.sourceMode,
+        review_open_validation:
+          'FULL_SOURCE_LOCK_ON_OPEN'
+      });
+    }
+  );
+
+  entries.sort(function (a, b) {
+    var at =
+      String(a.answered_at || '');
+    var bt =
+      String(b.answered_at || '');
+
+    if (at !== bt) {
+      return at < bt ? 1 : -1;
+    }
+
+    return (
+      String(b.set_id || '') <
+      String(a.set_id || '')
+        ? -1
+        : 1
+    );
+  });
+
+  return entries.slice(0, 50);
+}
+
+
+function h3WrittenReviewValidateRequest_(
+  request
+) {
+  if (
+    !request ||
+    request.schema !==
+      'H3_WEB_RENDER_REQUEST_V1' ||
+    request.mode !== 'REVIEW' ||
+    request.review_kind !== 'WRITTEN' ||
+    !request.set_id ||
+    request.txn_id ||
+    request.legacy_review_id
+  ) {
+    throw new Error(
+      'INVALID_WRITTEN_REVIEW_REQUEST'
+    );
+  }
+
+  var setId = String(
+    request.set_id
+  );
+
+  if (
+    setId.length > 128 ||
+    !/^H3-\d{8}-\d{2,3}$/.test(
+      setId
+    )
+  ) {
+    throw new Error(
+      'INVALID_WRITTEN_REVIEW_SET_ID'
+    );
+  }
+
+  return setId;
+}
+
+
+function getWrittenPersistentReviewPayload_(
+  request
+) {
+  return buildWrittenPersistentReviewPayload_(
+    h3WrittenReviewValidateRequest_(
+      request
+    )
+  );
+}
+
+
 function validateWrittenPersistentReviewBackfill_() {
   var spreadsheet =
     SpreadsheetApp.openById(

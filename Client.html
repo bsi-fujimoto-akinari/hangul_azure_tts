@@ -196,6 +196,22 @@
     });
   }
 
+  function loadWrittenReview(
+    setId
+  ) {
+    loadSet({
+      schema:
+        'H3_WEB_RENDER_REQUEST_V1',
+      mode: 'REVIEW',
+      review_kind:
+        'WRITTEN',
+      set_id:
+        String(setId),
+      txn_id: null,
+      legacy_review_id: null
+    });
+  }
+
   function loadReplayTxn(txnId) {
     loadSet({
       schema:
@@ -503,6 +519,11 @@
             String(
               !!entry.needs_review
             );
+          item.dataset.reviewKind =
+            String(
+              entry.review_kind ||
+              'LISTENING'
+            );
 
           var meta =
             el(
@@ -519,8 +540,16 @@
           var heading =
             document.createElement('h4');
           heading.textContent =
-            '5L #' +
-            entry.listening_set_no;
+            entry.review_kind ===
+              'WRITTEN'
+              ? (
+                  '5W · ' +
+                  entry.set_id
+                )
+              : (
+                  '5L #' +
+                  entry.listening_set_no
+                );
           headingRow.appendChild(
             heading
           );
@@ -594,6 +623,13 @@
             'click',
             function () {
               if (
+                entry.review_kind ===
+                'WRITTEN'
+              ) {
+                loadWrittenReview(
+                  entry.set_id
+                );
+              } else if (
                 entry.legacy_review_id
               ) {
                 loadLegacyReview(
@@ -608,31 +644,38 @@
           );
           actions.appendChild(open);
 
-          var replay =
-            el(
-              'button',
-              'secondary review-replay-open-button'
-            );
-          replay.type = 'button';
-          replay.textContent =
-            '再挑戦';
-          replay.addEventListener(
-            'click',
-            function () {
-              if (
-                entry.legacy_review_id
-              ) {
-                loadLegacyReplay(
+          if (
+            entry.review_kind !==
+              'WRITTEN' &&
+            entry.replay_capability !==
+              'unavailable'
+          ) {
+            var replay =
+              el(
+                'button',
+                'secondary review-replay-open-button'
+              );
+            replay.type = 'button';
+            replay.textContent =
+              '再挑戦';
+            replay.addEventListener(
+              'click',
+              function () {
+                if (
                   entry.legacy_review_id
-                );
-              } else {
-                loadReplayTxn(
-                  entry.txn_id
-                );
+                ) {
+                  loadLegacyReplay(
+                    entry.legacy_review_id
+                  );
+                } else {
+                  loadReplayTxn(
+                    entry.txn_id
+                  );
+                }
               }
-            }
-          );
-          actions.appendChild(replay);
+            );
+            actions.appendChild(replay);
+          }
 
           item.appendChild(
             actions
@@ -1585,14 +1628,19 @@
       'SET_ID=' +
       review.set_id +
       (
-        review.legacy_review_id
-          ? (
-              '\nLEGACY_REVIEW_ID=' +
-              review.legacy_review_id
-            )
+        review.kind ===
+          'WRITTEN'
+          ? '\nREVIEW_KIND=WRITTEN'
           : (
-              '\nTXN_ID=' +
-              review.txn_id
+              review.legacy_review_id
+                ? (
+                    '\nLEGACY_REVIEW_ID=' +
+                    review.legacy_review_id
+                  )
+                : (
+                    '\nTXN_ID=' +
+                    review.txn_id
+                  )
             )
       );
     ids.className =
@@ -1642,31 +1690,37 @@
         'review-footer-actions'
       );
 
-    var replay =
-      el(
-        'button',
-        'primary review-replay-button'
-      );
-    replay.type = 'button';
-    replay.textContent =
-      '再挑戦';
-    replay.addEventListener(
-      'click',
-      function () {
-        if (
-          review.legacy_review_id
-        ) {
-          loadLegacyReplay(
+    if (
+      review.kind !== 'WRITTEN' &&
+      review.replay_capability !==
+        'unavailable'
+    ) {
+      var replay =
+        el(
+          'button',
+          'primary review-replay-button'
+        );
+      replay.type = 'button';
+      replay.textContent =
+        '再挑戦';
+      replay.addEventListener(
+        'click',
+        function () {
+          if (
             review.legacy_review_id
-          );
-        } else {
-          loadReplayTxn(
-            review.txn_id
-          );
+          ) {
+            loadLegacyReplay(
+              review.legacy_review_id
+            );
+          } else {
+            loadReplayTxn(
+              review.txn_id
+            );
+          }
         }
-      }
-    );
-    actions.appendChild(replay);
+      );
+      actions.appendChild(replay);
+    }
 
     var back =
       el(
@@ -1750,7 +1804,10 @@
         app.activeIndex
       ];
 
-    if (section) {
+    if (
+      section &&
+      section.audio_asset_key
+    ) {
       ensureAudioLoaded(
         section.audio_asset_key
       );
@@ -1802,14 +1859,16 @@
       part.result;
     head.appendChild(title);
 
-    head.appendChild(
-      buildAudioBlock(
-        part.audio_asset_key,
-        part.audio_fallback_url,
-        '',
-        true
-      )
-    );
+    if (part.audio_asset_key) {
+      head.appendChild(
+        buildAudioBlock(
+          part.audio_asset_key,
+          part.audio_fallback_url,
+          '',
+          true
+        )
+      );
+    }
 
     card.appendChild(head);
 
@@ -1821,11 +1880,24 @@
 
     var user =
       document.createElement('p');
+    var userAnswerText =
+      part.user_answer_position
+        ? circled[
+            part.user_answer_position - 1
+          ]
+        : (
+            typeof part.user_answer ===
+              'number'
+              ? circled[
+                  part.user_answer - 1
+                ]
+              : String(
+                  part.user_answer || ''
+                )
+          );
     user.textContent =
       'あなた　' +
-      circled[
-        part.user_answer - 1
-      ] +
+      userAnswerText +
       (
         part.uncertain_known ===
           false
@@ -1840,11 +1912,24 @@
 
     var correct =
       document.createElement('p');
+    var correctAnswerText =
+      part.correct_answer_position
+        ? circled[
+            part.correct_answer_position - 1
+          ]
+        : (
+            typeof part.correct_answer ===
+              'number'
+              ? circled[
+                  part.correct_answer - 1
+                ]
+              : String(
+                  part.correct_answer || ''
+                )
+          );
     correct.textContent =
       '正答　　' +
-      circled[
-        part.correct_answer - 1
-      ];
+      correctAnswerText;
     answerRow.appendChild(
       correct
     );
@@ -1929,6 +2014,40 @@
       reason.textContent =
         part.explanation.reason;
       body.appendChild(reason);
+    } else if (
+      part.explanation &&
+      part.explanation.text &&
+      part.explanation.text !==
+        'UNKNOWN'
+    ) {
+      var writtenExplanation =
+        document.createElement('p');
+      writtenExplanation.className =
+        'review-reason';
+      writtenExplanation.textContent =
+        part.explanation.text;
+      body.appendChild(
+        writtenExplanation
+      );
+
+      if (
+        part.explanation
+          .key_expression &&
+        part.explanation
+          .key_expression !==
+          'UNKNOWN'
+      ) {
+        var keyExpression =
+          document.createElement('p');
+        keyExpression.className =
+          'review-key-expression';
+        keyExpression.textContent =
+          part.explanation
+            .key_expression;
+        body.appendChild(
+          keyExpression
+        );
+      }
     }
 
     (

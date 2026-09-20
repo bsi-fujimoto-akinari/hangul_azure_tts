@@ -267,8 +267,12 @@ function h3WrittenReviewProjectHistorical_(
 }
 
 
-function h3WrittenReviewInactiveHistory_() {
-  return [];
+function h3WrittenReviewPersistentHistory_(
+  spreadsheet
+) {
+  return h3WrittenReviewPersistentHistoryEntries_(
+    spreadsheet
+  );
 }
 
 
@@ -279,16 +283,16 @@ function h3WrittenReviewInactiveCurrent_() {
 
 function h3WrittenReviewOpen_(request) {
   if (
-    !request ||
-    !request.materialized_record
+    request &&
+    request.materialized_record
   ) {
-    throw new Error(
-      'WRITTEN_REVIEW_MATERIALIZED_RECORD_REQUIRED'
+    return h3WrittenReviewProjectHistorical_(
+      request.materialized_record
     );
   }
 
-  return h3WrittenReviewProjectHistorical_(
-    request.materialized_record
+  return getWrittenPersistentReviewPayload_(
+    request
   );
 }
 
@@ -305,7 +309,7 @@ function h3WrittenReviewProvider_() {
     kind: 'WRITTEN',
     order: 1,
     historyEntries:
-      h3WrittenReviewInactiveHistory_,
+      h3WrittenReviewPersistentHistory_,
     currentLearning:
       h3WrittenReviewInactiveCurrent_,
     openReview:

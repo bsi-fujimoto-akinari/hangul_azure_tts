@@ -424,3 +424,17 @@ For learner-facing 5L audio:
 - a K2/K3 prompt omission or reordered/mismatched projection is a preissue STOP.
 
 A live L04 K3 audit established that its generated source includes the prompt segments, so the current issued learner set is preserved rather than regenerated.
+
+## 19. Official Listening audio parity V21
+
+For every newly authored/unissued 5L after V21:
+
+- K2 and K3 must announce ①–④ as `マルイチ / マルニ / マルサン / マルヨン` with Nanami immediately before each Korean choice;
+- K3 prompt and response-choice voices must differ; the response voice is the canonical paired Korean voice;
+- K4 and K5 must use Japanese `もう一度読みます` with Nanami between the two passage readings;
+- Korean replay cue text is not allowed in new V21 audio;
+- preissue must reject any violation before learner exposure.
+
+The semantic Review script continues to omit control audio such as choice-number announcements and replay cues.
+
+V21 applies prospectively only. Existing issued/committed L04 audio and history remain immutable.

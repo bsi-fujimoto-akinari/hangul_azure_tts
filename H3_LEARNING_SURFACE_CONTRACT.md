@@ -130,3 +130,13 @@ The global H3TX allocator reserves `translation_web_txn_v1`. No Translation phys
 
 Initial learner-answer scope remains `answer_type=MULTIPLE_CHOICE`; free-text Translation and LLM grading remain out of scope.
 
+## 12. Independent level-runtime boundary
+
+`H3-LEVEL-RUNTIME-20260921-V1` makes `level` an explicit state identity before any 準2級 taxonomy is activated.
+
+The state key is `level|skill_id`; cross-level wrong/uncertain/correct, stability, retest due state, and scheduler state must not transfer automatically.
+
+The existing common surface and Review envelopes already accept `3級 | 準2級`. Current learner/runtime sources remain 3級 only because no independent 準2級 taxonomy rows exist yet.
+
+Any future queue selection for 準2級 must resolve its SKILL_ID back to exactly one canonical master row with `LEVEL=準2級`. The current 3級 5W/5L scheduler remains unchanged in this staging phase.
+

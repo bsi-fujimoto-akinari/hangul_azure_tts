@@ -5454,29 +5454,73 @@ function h3ReviewHomeIndexFind_(
 
 
 function h3ReviewHomeIndexRawRow_(
-  entry
+  entry,
+  table
 ) {
-  return [
-    entry.kind,
-    entry.set_id,
-    entry.set_no,
-    entry.answered_at,
-    entry.score,
-    entry.total,
-    entry.wrong_count,
-    entry.uncertainty_known
-      ? 'TRUE'
-      : 'FALSE',
-    entry.uncertainty_known
-      ? entry.uncertain_count
-      : '',
-    Number(
-      entry.base_priority || 0
-    ),
-    entry.review_source_id,
-    entry.source_mode,
-    'ACTIVE'
-  ];
+  if (
+    !table ||
+    !Array.isArray(table.header)
+  ) {
+    throw new Error(
+      'REVIEW_HOME_INDEX_TABLE_REQUIRED'
+    );
+  }
+
+  var values = {
+    KIND:
+      entry.kind,
+    SET_ID:
+      entry.set_id,
+    SET_NO:
+      entry.set_no,
+    ANSWERED_AT:
+      entry.answered_at,
+    SCORE:
+      entry.score,
+    TOTAL:
+      entry.total,
+    WRONG_COUNT:
+      entry.wrong_count,
+    UNCERTAINTY_KNOWN:
+      entry.uncertainty_known
+        ? 'TRUE'
+        : 'FALSE',
+    UNCERTAIN_COUNT:
+      entry.uncertainty_known
+        ? entry.uncertain_count
+        : '',
+    BASE_PRIORITY:
+      Number(
+        entry.base_priority || 0
+      ),
+    REVIEW_SOURCE_ID:
+      entry.review_source_id,
+    SOURCE_MODE:
+      entry.source_mode,
+    STATUS:
+      'ACTIVE',
+    SURFACE_FAMILY:
+      entry.surface_family,
+    LEVEL:
+      entry.level
+  };
+
+  return table.header.map(
+    function (name) {
+      if (
+        !Object.prototype.hasOwnProperty.call(
+          values,
+          name
+        )
+      ) {
+        throw new Error(
+          'REVIEW_HOME_INDEX_RAW_FIELD_UNSUPPORTED:' +
+            name
+        );
+      }
+      return values[name];
+    }
+  );
 }
 
 
@@ -5551,6 +5595,123 @@ function h3ReviewHomeIndexRefreshBasePriorities_(
 }
 
 
+function migrateReviewHomeIndexV2() {
+  var lock =
+    LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    var spreadsheet =
+      SpreadsheetApp.openById(
+        H3_WEB_RUNTIME_SPREADSHEET_ID
+      );
+    var indexed =
+      h3ReviewHomeIndexTable_(
+        spreadsheet
+      );
+
+    if (
+      indexed.schema_version ===
+        'H3_REVIEW_HOME_INDEX_V2'
+    ) {
+      return {
+        schema:
+          'H3_REVIEW_HOME_INDEX_MIGRATION_V2',
+        status: 'ALREADY_V2',
+        rows:
+          indexed.table.rows.length
+      };
+    }
+
+    if (
+      indexed.schema_version !==
+        'H3_REVIEW_HOME_INDEX_V1'
+    ) {
+      throw new Error(
+        'REVIEW_HOME_INDEX_MIGRATION_SOURCE_INVALID'
+      );
+    }
+
+    var surfaceValues =
+      indexed.table.rows.map(
+        function (row) {
+          var kind =
+            String(
+              row[
+                indexed.table.map.KIND
+              ] || ''
+            );
+          var metadata =
+            h3ReviewSurfaceMetadata_(
+              kind,
+              '',
+              ''
+            );
+          return [
+            metadata.surface_family,
+            metadata.level
+          ];
+        }
+      );
+
+    indexed.sheet
+      .getRange(
+        1,
+        H3_REVIEW_HOME_INDEX_HEADERS_V1_
+          .length + 1,
+        1,
+        2
+      )
+      .setValues([
+        ['SURFACE_FAMILY', 'LEVEL']
+      ]);
+
+    if (surfaceValues.length) {
+      indexed.sheet
+        .getRange(
+          2,
+          H3_REVIEW_HOME_INDEX_HEADERS_V1_
+            .length + 1,
+          surfaceValues.length,
+          2
+        )
+        .setValues(surfaceValues);
+    }
+
+    SpreadsheetApp.flush();
+
+    var readback =
+      h3ReviewHomeIndexTable_(
+        spreadsheet
+      );
+
+    if (
+      readback.schema_version !==
+        'H3_REVIEW_HOME_INDEX_V2'
+    ) {
+      throw new Error(
+        'REVIEW_HOME_INDEX_MIGRATION_READBACK_INVALID'
+      );
+    }
+
+    h3ReviewHomeIndexRefreshBasePriorities_(
+      spreadsheet
+    );
+    SpreadsheetApp.flush();
+
+    return {
+      schema:
+        'H3_REVIEW_HOME_INDEX_MIGRATION_V2',
+      status: 'PASS',
+      rows:
+        readback.table.rows.length
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
 function h3ReviewHomeIndexUpsertAfterCommit_(
   result,
   reviewPayload
@@ -5585,6 +5746,44 @@ function h3ReviewHomeIndexUpsertAfterCommit_(
       String(result.mode);
     var setId =
       String(result.set_id || '');
+    var surface =
+      h3ReviewSurfaceMetadata_(
+        kind,
+        result.surface_family ||
+          (
+            reviewPayload &&
+            reviewPayload.surface_family
+          ) ||
+          '',
+        result.level ||
+          (
+            reviewPayload &&
+            reviewPayload.level
+          ) ||
+          ''
+      );
+
+    if (
+      result.provider_kind &&
+      String(result.provider_kind) !==
+        surface.provider_kind
+    ) {
+      throw new Error(
+        'REVIEW_HOME_INDEX_PROVIDER_METADATA_MISMATCH'
+      );
+    }
+    if (
+      result.learning_surface_schema &&
+      String(
+        result.learning_surface_schema
+      ) !==
+        surface.learning_surface_schema
+    ) {
+      throw new Error(
+        'REVIEW_HOME_INDEX_SURFACE_SCHEMA_MISMATCH'
+      );
+    }
+
     var existing =
       h3ReviewHomeIndexFind_(
         indexed.table,
@@ -5630,6 +5829,10 @@ function h3ReviewHomeIndexUpsertAfterCommit_(
 
       entry = {
         kind: kind,
+        surface_family:
+          surface.surface_family,
+        level:
+          surface.level,
         set_id: setId,
         set_no:
           txn.setNo,
@@ -5671,6 +5874,10 @@ function h3ReviewHomeIndexUpsertAfterCommit_(
 
       entry = {
         kind: kind,
+        surface_family:
+          surface.surface_family,
+        level:
+          surface.level,
         set_id: setId,
         set_no:
           existing
@@ -5733,7 +5940,8 @@ function h3ReviewHomeIndexUpsertAfterCommit_(
 
     var raw =
       h3ReviewHomeIndexRawRow_(
-        entry
+        entry,
+        indexed.table
       );
 
     if (existing) {
@@ -5762,13 +5970,29 @@ function h3ReviewHomeIndexUpsertAfterCommit_(
         );
       }
 
+      var existingEntry =
+        h3ReviewHomeIndexRowEntry_(
+          existing.row,
+          indexed.table.map
+        );
+
+      if (
+        existingEntry.surface_family !==
+          entry.surface_family ||
+        existingEntry.level !==
+          entry.level
+      ) {
+        throw new Error(
+          'REVIEW_HOME_INDEX_EXISTING_SURFACE_MISMATCH'
+        );
+      }
+
       indexed.sheet
         .getRange(
           existing.rowNumber,
           1,
           1,
-          H3_REVIEW_HOME_INDEX_HEADERS_
-            .length
+          indexed.table.header.length
         )
         .setValues([raw]);
     } else {
@@ -5809,6 +6033,10 @@ function h3ReviewHomeIndexUpsertAfterCommit_(
     if (
       storedEntry.review_kind !==
         kind ||
+      storedEntry.surface_family !==
+        surface.surface_family ||
+      storedEntry.level !==
+        surface.level ||
       storedEntry.set_id !== setId ||
       Number(
         storedEntry.listening_set_no ||
@@ -5826,6 +6054,10 @@ function h3ReviewHomeIndexUpsertAfterCommit_(
         'H3_REVIEW_HOME_INDEX_SYNC_V1',
       status: 'PASS',
       kind: kind,
+      surface_family:
+        surface.surface_family,
+      level:
+        surface.level,
       set_id: setId,
       set_no:
         Number(entry.set_no),

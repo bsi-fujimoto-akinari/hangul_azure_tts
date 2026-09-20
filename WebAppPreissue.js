@@ -1657,12 +1657,6 @@ function h3ProdValidatePreissueSet_(
       k1Info
     );
 
-  var script =
-    h3PreissueRequireScript_(
-      setId,
-      queue
-    );
-
   return {
     schema:
       'H3_PRODUCTION_PREISSUE_GATE_V1',
@@ -1683,8 +1677,6 @@ function h3ProdValidatePreissueSet_(
       }),
     audio_rows:
       queue.rows.length,
-    script_file_id:
-      script.file_id,
     learner_log_rows: 0,
     production_txn_rows: 0,
     issue_performed: false

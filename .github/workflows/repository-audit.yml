@@ -1626,9 +1626,10 @@ jobs:
                   raise SystemExit(f'Written persistent loader invariant missing: {needle}')
 
           marker = '/**\n * Historical Written Review persistent loader.'
-          if marker not in persistence:
+          production_marker = '/* =========================================================\n * Production Written persistent Review'
+          if marker not in persistence or production_marker not in persistence:
               raise SystemExit('Written persistent loader marker missing.')
-          written_persistence = persistence.split(marker, 1)[1]
+          written_persistence = persistence.split(marker, 1)[1].split(production_marker, 1)[0]
 
           for forbidden in [
               '.appendRow(',
@@ -1640,17 +1641,46 @@ jobs:
           ]:
               if forbidden in written_persistence:
                   raise SystemExit(
-                      f'Written persistent loader is not read-only: {forbidden}'
+                      f'Historical Written persistent loader is not read-only: {forbidden}'
+                  )
+
+          for needle in [
+              "'written_review_payload_v1'",
+              "'written_review_binding_v1'",
+              "'H3-WRITTEN-PRODUCTION-REVIEW-CONTRACT-20260920-V1'",
+              'function h3WrittenProductionReviewTxnContext_(',
+              'function h3WrittenProductionReviewBuildPayload_(',
+              'function h3WrittenProductionReviewContextBySet_(',
+              'function h3WrittenProductionReviewEnsure_(',
+              'function h3WrittenProductionReviewHistoryEntries_(',
+              'function h3WrittenReviewAllHistoryEntries_(',
+              "'PREPARED'",
+              "'LOCKED'",
+          ]:
+              if needle not in persistence:
+                  raise SystemExit(
+                      f'Production Written Review invariant missing: {needle}'
                   )
 
           if "var H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ =\n  h3ReviewWrittenProviderFactory_;" not in core:
               raise SystemExit('Written provider is not active.')
-          for forbidden in [
-              'review_kind',
-              'h3WrittenReview',
+          for needle in [
+              'h3WrittenSubmit_(request)',
+              'h3WrittenAnswerSync_(',
+              'h3WrittenProductionReviewEnsure_(',
+              'getWrittenProductionPersistentReviewPayload_(',
           ]:
-              if forbidden in web:
-                  raise SystemExit(f'WebApp Written route was activated: {forbidden}')
+              if needle not in web:
+                  raise SystemExit(f'Written production Review route missing: {needle}')
+          route = web[web.index("request.mode === 'WRITTEN'"):]
+          order = [
+              route.index('h3WrittenSubmit_(request)'),
+              route.index('h3WrittenAnswerSync_('),
+              route.index('h3WrittenProductionReviewEnsure_('),
+              route.index('getWrittenProductionPersistentReviewPayload_('),
+          ]
+          if order != sorted(order):
+              raise SystemExit('Written submit/sync/Review ordering is invalid.')
           PY
 
           node <<'NODE'
@@ -1883,6 +1913,8 @@ jobs:
 
           for needle in [
               'function h3WrittenReviewPersistentHistoryEntries_(',
+              'function h3WrittenProductionReviewHistoryEntries_(',
+              'function h3WrittenReviewAllHistoryEntries_(',
               "review_kind: 'WRITTEN'",
               "replay_capability:",
               "'unavailable'",
@@ -1898,7 +1930,7 @@ jobs:
 
           for needle in [
               'function h3WrittenReviewPersistentHistory_(',
-              'h3WrittenReviewPersistentHistoryEntries_(',
+              'h3WrittenReviewAllHistoryEntries_(',
               'getWrittenPersistentReviewPayload_(',
               'historyEntries:',
               'h3WrittenReviewPersistentHistory_',
@@ -2004,7 +2036,7 @@ jobs:
               openReplayMedia:()=>({}),
               gradeReplay:()=>({})
             }),
-            h3WrittenReviewPersistentHistoryEntries_:()=>[{
+            h3WrittenReviewAllHistoryEntries_:()=>[{
               review_kind:'WRITTEN',
               set_id:'H3-20260918-03',
               answered_at:'2026-09-19T00:12:42+09:00',
@@ -4388,6 +4420,8 @@ jobs:
               'function h3WrittenNormalizeAnswers_(request)',
               'function h3WrittenFingerprint_(setId, answers)',
               'function h3WrittenValidateSourceIdentity_(context)',
+              'function h3WrittenReviewAuthoring_(context)',
+              'function h3WrittenReviewScriptForQuestion_(',
               'function h3WrittenRequireNewSubmitPrecondition_(context)',
               'function h3WrittenSourceBinding_(context)',
               'function h3WrittenGrade_(context, answers)',
@@ -4409,10 +4443,23 @@ jobs:
           # is audited independently and must not change the D3 mutation boundary.
           if "request.mode === 'WRITTEN'" not in web or 'h3WrittenSubmit_(request)' not in web:
               raise SystemExit('WRITTEN production submit route is missing.')
+          for needle in [
+              'h3WrittenAnswerSync_(',
+              'h3WrittenProductionReviewEnsure_(',
+              'getWrittenProductionPersistentReviewPayload_(',
+          ]:
+              if needle not in web:
+                  raise SystemExit(f'WRITTEN post-submit Review route missing: {needle}')
           if "'WRITTEN'" not in client:
               raise SystemExit('WRITTEN client submit mode is not allowlisted.')
-          if 'row.mark' not in client:
-              raise SystemExit('WRITTEN result mark rendering is missing.')
+          for needle in [
+              'row.mark',
+              "result.mode === 'WRITTEN'",
+              "'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1'",
+              'renderPersistentReview(',
+          ]:
+              if needle not in client:
+                  raise SystemExit(f'WRITTEN result/Review UI invariant missing: {needle}')
 
           # Global allocator must scan all three journals and tolerate an absent written tab.
           for sheet in [

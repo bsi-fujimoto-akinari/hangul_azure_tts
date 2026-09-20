@@ -191,3 +191,24 @@ This stage does not register the Written provider, expose Written entries in
 HOME, add a learner Web route, enable media, or enable replay/submission.
 `H3_REVIEW_WRITTEN_PROVIDER_FACTORY_` remains `null` until a later,
 separately audited activation stage.
+
+
+## 28. Written HOME and Review UI staging
+
+Phase ② prepares the inactive Written provider for persistent HOME history and
+Review rendering without changing production provider activation.
+
+When the Written provider factory is enabled in a later audited phase, HOME
+history reads the locked historical Written binding/payload tables through the
+same fail-closed persistent context used by Review open. Written history
+entries carry `review_kind=WRITTEN`, preserve score/uncertainty metadata, and
+advertise `replay_capability=unavailable`.
+
+The client is prepared to distinguish 5L and 5W history entries, request
+Written Review by `review_kind=WRITTEN + set_id`, render D2-D6 symbolic
+answers and stored explanation text, omit audio controls when no audio asset
+key exists, and omit both HOME and Review replay controls for Written.
+
+Production activation remains separate: the factory stays `null`, direct Web
+boot routing is unchanged, and Written media/replay/grade capabilities remain
+fail-closed until a later phase.

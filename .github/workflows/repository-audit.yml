@@ -2913,6 +2913,7 @@ jobs:
               "'9b13effe68f565a1ef1fea5c13441dddf7ef3bed5296050c3e62931db48a670f'",
               'function h3WrittenReviewApplyExplanationOverlay_(',
               'function h3WrittenReviewExplanationValidateDisplay_(',
+              'function h3WrittenReviewExplanationSourceGateBody_(',
               "'HISTORICAL_REFORMAT'",
               "'HISTORICAL_WHY_EXPAND'",
               "'SOURCE_LINKED_REBUILD'",
@@ -2979,15 +2980,26 @@ jobs:
             total:5,
             answered_at:'UNKNOWN',
             raw_input:'2 3 1 1 1',
-            sections:Array.from({length:5},(_,i)=>({
-              result:i===2?'×':'○',
-              correct_answer_position:i===2?2:1,
-              question_surface:{
-                body:'본문'+(i+1),
-                choices:[1,2,3,4].map(n=>({text:'선택'+(i+1)+'-'+n}))
-              },
-              explanation:{text:'old'+(i+1)}
-            })),
+            sections:Array.from({length:5},(_,i)=>{
+              const section = ['D2','D3','D4','D5','D6'][i];
+              const koreanBody = '본문'+(i+1);
+              const body =
+                section === 'D4'
+                  ? '次の文と最も近い意味のものを選んでください。\\n' + koreanBody
+                  : section === 'D5'
+                    ? '2つの（　）に共通して入るものを選んでください。\\n' + koreanBody
+                    : koreanBody;
+              return {
+                section,
+                result:i===2?'×':'○',
+                correct_answer_position:i===2?2:1,
+                question_surface:{
+                  body,
+                  choices:[1,2,3,4].map(n=>({text:'선택'+(i+1)+'-'+n}))
+                },
+                explanation:{text:'old'+(i+1)}
+              };
+            }),
             technical:{base:true}
           };
 
@@ -3000,7 +3012,10 @@ jobs:
               q_no:i+1,
               provenance_mode:'HISTORICAL_REFORMAT',
               source_gate:{
-                body_ko:part.question_surface.body,
+                body_ko:
+                  (part.section === 'D4' || part.section === 'D5')
+                    ? part.question_surface.body.split('\\n').slice(1).join('\\n')
+                    : part.question_surface.body,
                 choices_ko:part.question_surface.choices.map(x=>x.text),
                 correct_position:part.correct_answer_position,
                 mark:part.result
@@ -3060,6 +3075,15 @@ jobs:
               name === 'written_review_explanation_binding_v1' ? bindingSheet :
               null
           };
+
+          if (
+            context.h3WrittenReviewExplanationSourceGateBody_({
+              section:'D4',
+              question_surface:{body:'한국어 본문'}
+            }) !== '한국어 본문'
+          ) {
+            throw new Error('Korean-only D4 source gate was altered.');
+          }
 
           const result = context.h3WrittenReviewApplyExplanationOverlay_(
             spreadsheet,

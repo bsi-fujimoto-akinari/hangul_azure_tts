@@ -52,6 +52,7 @@ jobs:
               'WebAppTranslationPilotAudit.js',
               'WebAppTranslationActivation.js',
               'WebAppTranslationActivationAudit.js',
+              'WebAppTranslationProduction.js',
               'WebAppPreissue.js',
               'WebAppReceipt.js',
               'WebAppReviewCore.js',
@@ -68,6 +69,7 @@ jobs:
               'H3_READING_P9_P10_PILOT_CONTRACT.md',
               'H3_TRANSLATION_P11_P12_PILOT_CONTRACT.md',
               'H3_TRANSLATION_ACTIVATION_CONTRACT.md',
+              'H3_TRANSLATION_PRODUCTION_CONTRACT.md',
               'Index.html',
               'Stylesheet.html',
               'Client.html',
@@ -6132,6 +6134,8 @@ jobs:
           activation = Path('WebAppTranslationActivation.js').read_text(encoding='utf-8')
           activation_audit = Path('WebAppTranslationActivationAudit.js').read_text(encoding='utf-8')
           activation_contract = Path('H3_TRANSLATION_ACTIVATION_CONTRACT.md').read_text(encoding='utf-8')
+          production = Path('WebAppTranslationProduction.js').read_text(encoding='utf-8')
+          production_contract = Path('H3_TRANSLATION_PRODUCTION_CONTRACT.md').read_text(encoding='utf-8')
           web = Path('WebApp.js').read_text(encoding='utf-8')
           client = Path('Client.html').read_text(encoding='utf-8')
 
@@ -6209,8 +6213,40 @@ jobs:
               if needle not in activation_contract:
                   raise SystemExit(f'Translation activation contract missing: {needle}')
 
-          if "request.surface_family ===\n        'TRANSLATION'" in web:
-              raise SystemExit('Translation activation accidentally reached the server route.')
+          if "request.mode === 'TRANSLATION'" in web:
+              raise SystemExit('Translation must remain a WRITTEN surface, not a top-level mode.')
+
+          for needle in [
+              "request.surface_family ===\n        'TRANSLATION'",
+              'buildTranslationProductionRenderPayload_(',
+              'h3TranslationSubmit_(',
+          ]:
+              if needle not in web:
+                  raise SystemExit(f'Translation production route missing: {needle}')
+
+          for needle in [
+              "var H3_TRANSLATION_PRODUCTION_COMMIT_ENABLED_ =\n  false;",
+              "function buildTranslationProductionRenderPayload_(",
+              "function h3TranslationSubmit_(",
+              "function h3TranslationCurrentLearning_(",
+              "'TRANSLATION_PROD_STAGE_NOT_ISSUED'",
+              "'TRANSLATION_PRODUCTION_COMMIT_DISABLED'",
+              "'RECOVERY_REQUIRED'",
+              "'TRANSLATION_PRODUCTION'",
+          ]:
+              if needle not in production:
+                  raise SystemExit(f'Translation production invariant missing: {needle}')
+
+          for needle in [
+              'Version: H3-TRANSLATION-PRODUCTION-20260921-V1',
+              'Status: ROUTE_STAGED_COMMIT_DISABLED',
+              'PREISSUE_READY',
+              'intentionally not renderable',
+              'H3_TRANSLATION_PRODUCTION_COMMIT_ENABLED_=false',
+              'Review/HOME integration',
+          ]:
+              if needle not in production_contract:
+                  raise SystemExit(f'Translation production contract missing: {needle}')
 
           if "renderTranslationSurface_" in client:
               raise SystemExit('Translation learner renderer must remain inactive in this pilot.')
@@ -6239,7 +6275,8 @@ jobs:
             'WebAppTranslationPilot.js',
             'WebAppTranslationPilotAudit.js',
             'WebAppTranslationActivation.js',
-            'WebAppTranslationActivationAudit.js'
+            'WebAppTranslationActivationAudit.js',
+            'WebAppTranslationProduction.js'
           ].forEach(name => {
             vm.runInContext(
               fs.readFileSync(name, 'utf8'),
@@ -6302,11 +6339,87 @@ jobs:
             );
           }
 
+          const classifyContext = {
+            stage:{
+              set_id:'H3-20260921-T001',
+              translation_direction:'KR_TO_JP',
+              answer_type:'MULTIPLE_CHOICE'
+            },
+            txnTable:{
+              map:{
+                SET_ID:1,
+                TRANSLATION_DIRECTION:5,
+                ANSWER_TYPE:6,
+                REQUEST_FINGERPRINT:8,
+                STATUS:11
+              },
+              rows:[]
+            }
+          };
+
+          context.__translationCtx = classifyContext;
+
+          let classified = vm.runInContext(
+            "h3TranslationProdClassifyExistingTxn_(__translationCtx,'fp')",
+            context
+          );
+
+          if (classified.action !== 'NEW') {
+            throw new Error(
+              'Translation production NEW txn classification failed.'
+            );
+          }
+
+          classifyContext.txnTable.rows = [[
+            'H3TX-20260921-000001',
+            'H3-20260921-T001',
+            'TRANS-P11-20260921-001',
+            'WRITTEN',
+            'TRANSLATION',
+            'KR_TO_JP',
+            'MULTIPLE_CHOICE',
+            '{}',
+            'fp',
+            result.p11_source_binding_sha256,
+            '2026-09-21T02:30:00+09:00',
+            'COMMITTED',
+            '{}',
+            '2',
+            '2026-09-21T02:30:01+09:00',
+            ''
+          ]];
+
+          classified = vm.runInContext(
+            "h3TranslationProdClassifyExistingTxn_(__translationCtx,'fp')",
+            context
+          );
+
+          if (
+            classified.action !==
+              'RETURN_COMMITTED'
+          ) {
+            throw new Error(
+              'Translation production committed idempotency classification failed.'
+            );
+          }
+
+          if (
+            vm.runInContext(
+              'H3_TRANSLATION_PRODUCTION_COMMIT_ENABLED_',
+              context
+            ) !== false
+          ) {
+            throw new Error(
+              'Translation production commit gate must remain disabled.'
+            );
+          }
+
           console.log(
-            'P11/P12 Translation pilot + activation core pure audits: PASS',
+            'P11/P12 Translation pilot + activation + production pure audits: PASS',
             JSON.stringify({
               pilot: result,
-              activation: activation
+              activation: activation,
+              production_commit_enabled: false
             })
           );
           NODE
@@ -6333,6 +6446,7 @@ jobs:
           node --check WebAppTranslationPilotAudit.js
           node --check WebAppTranslationActivation.js
           node --check WebAppTranslationActivationAudit.js
+          node --check WebAppTranslationProduction.js
           node --check WebAppPreissue.js
           node --check WebAppReceipt.js
           node --check WebAppReviewCore.js

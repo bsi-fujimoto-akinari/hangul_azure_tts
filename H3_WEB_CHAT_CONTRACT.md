@@ -209,6 +209,8 @@ Script TXT artifacts are noncanonical learner conveniences and must be stored be
 - 5L: `03_AUDIO/02_5L/{LISTENING_SET_ID}.txt`.
 - SYSTEM_TEST: `03_AUDIO/90_ARCHIVE/01_SYSTEM_TEST/{SET_ID}_script.txt`.
 
+For 5L, SCRIPT_TXT is explicitly outside the learner issue critical path. Audio completion, exact individual audio binding, source-lock validation, preissue, and issue do not require a script TXT file or `script_file_id`. The semantic script may be materialized later by the explicit repository helper for Review/audit convenience. Script materialization failure must not convert an otherwise-valid learner issue into failure.
+
 The canonical learner/history authority remains Google Sheets. TXT relocation or regeneration must not rewrite scores, history, pointers, or counters.
 
 ## 10. R3-09B frozen review target

@@ -4010,7 +4010,7 @@ jobs:
           print('H3 normal hot-path audit: PASS')
           PY
 
-      - name: Check staged 5W Web transaction D1/D2
+      - name: Check production 5W Web transaction D3
         shell: bash
         run: |
           python3 - <<'PY'
@@ -4024,7 +4024,7 @@ jobs:
           client = Path('Client.html').read_text(encoding='utf-8')
 
           required_written = [
-              'var H3_WRITTEN_PRODUCTION_COMMIT_ENABLED = false;',
+              'var H3_WRITTEN_PRODUCTION_COMMIT_ENABLED = true;',
               "var H3_WEB_WRITTEN_TXN_SHEET = 'written_web_txn_v1';",
               'function h3WrittenNormalizeAnswers_(request)',
               'function h3WrittenFingerprint_(setId, answers)',
@@ -4046,11 +4046,14 @@ jobs:
               if needle not in written:
                   raise SystemExit(f'5W written core invariant missing: {needle}')
 
-          # D1/D2 must remain staged and unreachable from production/client routes.
-          if "request.mode === 'WRITTEN'" in web or 'h3WrittenSubmit_(' in web:
-              raise SystemExit('WRITTEN route was activated in WebApp.js.')
-          if 'h3WrittenSubmit_(' in client or "mode: 'WRITTEN'" in client:
-              raise SystemExit('WRITTEN submit was activated in Client.html.')
+          # D3 activates the production submit route while render/current-learning
+          # integration remains a later phase.
+          if "request.mode === 'WRITTEN'" not in web or 'h3WrittenSubmit_(request)' not in web:
+              raise SystemExit('WRITTEN production submit route is missing.')
+          if "'WRITTEN'" not in client:
+              raise SystemExit('WRITTEN client submit mode is not allowlisted.')
+          if 'row.mark' not in client:
+              raise SystemExit('WRITTEN result mark rendering is missing.')
 
           # Global allocator must scan all three journals and tolerate an absent written tab.
           for sheet in [
@@ -4151,7 +4154,7 @@ jobs:
               if needle not in web:
                   raise SystemExit(f'SYSTEM_TEST regression invariant missing: {needle}')
 
-          print('5W D1/D2 static guards: PASS')
+          print('5W D3 production static guards: PASS')
           PY
 
           node <<'NODE'
@@ -4201,7 +4204,7 @@ jobs:
             JSON.stringify(run('H3_WEB_WRITTEN_TXN_HEADERS')) === JSON.stringify(expectedHeaders),
             'Written journal 16-column header contract mismatch.'
           );
-          assert(run('H3_WRITTEN_PRODUCTION_COMMIT_ENABLED') === false, 'Written commit gate is not OFF.');
+          assert(run('H3_WRITTEN_PRODUCTION_COMMIT_ENABLED') === true, 'Written commit gate is not ON.');
 
           context.__request = {
             schema:'H3_WEB_SUBMIT_V1',
@@ -4311,7 +4314,7 @@ jobs:
           };
           assert(
             run("h3NextWebTxnIdFromRows_('20260920',__journalsNoWritten)") === 'H3TX-20260920-000010',
-            'Missing written journal is not tolerated before D3.'
+            'Global allocator must remain robust if a journal is absent in isolated tests.'
           );
           context.__duplicateJournals = {
             listening_web_test_txn_v1:[['H3TX-20260920-000005']],
@@ -4325,7 +4328,7 @@ jobs:
           run('__result=h3WrittenBuildResult_(__sourceContext,__grade,"H3TX-20260920-000010",__binding1.sha256)');
           assert(run('__result.mode==="WRITTEN" && __result.summary[0].mark==="○" && !("result" in __result.summary[0])'), 'G2 WRITTEN summary shape mismatch.');
 
-          console.log('5W D1/D2 pure transaction tests: PASS');
+          console.log('5W D3 pure transaction tests: PASS');
           NODE
 
           node <<'NODE'

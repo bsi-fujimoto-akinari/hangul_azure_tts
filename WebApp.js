@@ -78,6 +78,10 @@ function submitListeningWebAnswers(request) {
     return result;
   }
 
+  if (request && request.mode === 'WRITTEN') {
+    return h3WrittenSubmit_(request);
+  }
+
   if (
     request &&
     request.mode === 'REVIEW_REPLAY'

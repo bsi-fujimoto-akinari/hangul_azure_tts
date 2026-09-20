@@ -93,6 +93,31 @@ STATUS=COMMITTED
 
 Chat treats the receipt as a lookup key, performs canonical readback, and never duplicates backend mutations. The detailed contract is `H3_WEB_CHAT_CONTRACT.md`.
 
+
+### 5W Written transaction D3
+
+The production Written transaction journal is `written_web_txn_v1` with the
+16-column `H3_WEB_WRITTEN_TXN_HEADERS` contract. The journal may contain
+`PREPARED`, `COMMITTED`, `RECOVERY_REQUIRED`, and terminal recovery/error
+states owned by `WebAppWrittenProduction.js`.
+
+The production submit route accepts `schema=H3_WEB_SUBMIT_V1`,
+`mode=WRITTEN`, one exact issued `SET_ID`, and ordered D2-D6 answers with
+explicit boolean uncertainty. The transaction performs source-lock validation,
+allocates from the global H3TX namespace, writes a PREPARED journal row, writes
+only the exact queue `ANSWERS_LOG` cell, verifies the poststate hash, and then
+promotes the journal row to COMMITTED.
+
+At D3 the mutation boundary intentionally ends at queue `ANSWERS_LOG`.
+`generation_log_v1`, `skill_queue_v1`, scheduler/retest state,
+`generation_state_v1`, and next-issue progression remain a later Answer Sync
+phase. A successful D3 transaction must never advance those surfaces.
+
+Current-learning discovery/rendering for a new 5W set and automatic persistent
+Review materialization for newly committed 5W transactions are separate later
+phases. Historical Written Review remains independently available through the
+existing locked backfill provider.
+
 ## 8. Drive and hot canonical policy
 
 Current folders are role-based: `00_SOURCE`, `01_OFFICIAL_MEDIA`, `02_TOWMI`, `03_AUDIO`, `04_LEARNER_ARTIFACTS`, `05_STATUS`, and `06_AUDIT`.

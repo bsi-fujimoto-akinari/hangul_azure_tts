@@ -1,14 +1,15 @@
 /**
- * Staged 5W Web transaction core.
+ * Production 5W Web transaction core.
  *
- * D1/D2 only:
- * - no production route reaches h3WrittenSubmit_
- * - live written_web_txn_v1 creation is not authorized here
- * - learner mutation surface is queue!E (ANSWERS_LOG) only
+ * D3 activation:
+ * - production submit routing may reach h3WrittenSubmit_
+ * - written_web_txn_v1 is the durable transaction journal
+ * - learner mutation surface remains queue!E (ANSWERS_LOG) only
  * - scheduler/history propagation after queue E remains outside this core
+ * - source identity, PREPARED recovery, and set-level idempotency remain fail-closed
  */
 
-var H3_WRITTEN_PRODUCTION_COMMIT_ENABLED = false;
+var H3_WRITTEN_PRODUCTION_COMMIT_ENABLED = true;
 
 var H3_WEB_WRITTEN_TXN_SHEET = 'written_web_txn_v1';
 

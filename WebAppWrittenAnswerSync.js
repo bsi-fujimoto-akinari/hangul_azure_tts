@@ -2816,25 +2816,28 @@ function h3WrittenSyncBuildPlan_(
     }
   );
 
-  var coreWrongBeforeNew =
-    existingCoreWrong;
+  var coreWrongBeforeNew = 0;
 
   Object.keys(
-    currentWrongIds
+    projectedSkills
   ).forEach(
     function (skillId) {
-      var prior =
-        skillMap[
+      if (
+        currentWrongIds[
           skillId
-        ];
+        ]
+      ) {
+        return;
+      }
 
       if (
-        prior &&
-        prior.object
+        projectedSkills[
+          skillId
+        ].object
           .EFFECTIVE_STATE ===
           'RETEST_WRONG'
       ) {
-        coreWrongBeforeNew -= 1;
+        coreWrongBeforeNew += 1;
       }
     }
   );

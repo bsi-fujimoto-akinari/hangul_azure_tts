@@ -2524,8 +2524,8 @@ jobs:
               "'review-history-score'",
               "'聞きとり'",
               "'筆記'",
-              "'復習Lv'",
-              'entry.written_set_no',
+              "復習Lv",
+              'written_set_no',
               'openReviewHistoryEntry_(',
           ]:
               if needle not in home:
@@ -2720,7 +2720,7 @@ jobs:
               "'review-controls-sticky'",
               "'聞きとり'",
               "'筆記'",
-              "'復習Lv'",
+              "復習Lv",
           ]:
               if needle not in client:
                   raise SystemExit(f'HOME learner-open invariant missing: {needle}')

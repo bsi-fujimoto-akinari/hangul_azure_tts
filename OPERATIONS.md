@@ -326,13 +326,35 @@ Unlike Listening, selecting Q5 does not auto-submit. The Written learner must
 press `採点` after all five answers are present; `リセット` is available
 before grading only.
 
+
+## 33. Runtime identity hierarchy
+
+`H3_RUNTIME_IDENTITY_V1` standardizes coordination for 5W and 5L without renaming historical IDs or adding drift-prone alias counters.
+
+```text
+ISSUE_NO = learner-facing ordinal
+STAGE_ID = preissue preparation/scheduling identity
+SET_ID   = immutable learner-set identity
+```
+
+Canonical mappings:
+
+- 5W: `ISSUE_NO` = stable Written ordinal; `STAGE_ID` = `written_set_stage_v1.STAGE_ID`; `SET_ID` = `ACTUAL_SET_ID` after allocation/issue.
+- 5L: `ISSUE_NO` = `LISTENING_ISSUE_NO / NEXT_LISTENING_SET_NO`; `STAGE_ID` = selected `listening_k2_k5_stage_v1.PRESTAGE_ID`; `SET_ID` = `listening_set_payload_v1.LISTENING_SET_ID` after allocation/lock.
+- K1_READY remains an independent subordinate source identity for 5L.
+- A `SET_ID` suffix is never interpreted as `ISSUE_NO`.
+- Before exact SET_ID allocation, report `PENDING_ALLOCATION`; do not predict an ID.
+- Coordination reports must always use the same `ISSUE_NO / STAGE_ID / SET_ID` tuple for both modalities.
+
+The detailed rules and current snapshot example are in `H3_WEB_CHAT_CONTRACT.md` section 25.
+
 ## H3 Web / Review active manifest
 
 ```text
-MANIFEST_ID=H3-WEB-REVIEW-MANIFEST-20260920-V6
-ACTIVE_WEB_CHAT_CONTRACT=H3-WEB-CHAT-CURRENT-20260920-V6
+MANIFEST_ID=H3-WEB-REVIEW-MANIFEST-20260920-V7
+ACTIVE_WEB_CHAT_CONTRACT=H3-WEB-CHAT-CURRENT-20260920-V7
 ACTIVE_WEB_CHAT_CONTRACT_PATH=H3_WEB_CHAT_CONTRACT.md
-ACTIVE_WEB_CHAT_CONTRACT_BLOB_SHA=94ce43f904923d873bcf0a75b7fd915d3ca42ac4
+ACTIVE_WEB_CHAT_CONTRACT_BLOB_SHA=33bbbe833da8e00d52a7f6aeec1ce51fc1a9b2a4
 ACTIVE_REVIEW_ARCHITECTURE=H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V7
 ACTIVE_REVIEW_ARCHITECTURE_PATH=H3_REVIEW_ARCHITECTURE.md
 ACTIVE_REVIEW_ARCHITECTURE_BLOB_SHA=69f7c1398f3d898b7058d0c4c8dd51b05b6212b1
@@ -342,6 +364,7 @@ ACTIVE_WRITTEN_REVIEW_PAYLOAD_SHEET=written_review_payload_v1
 ACTIVE_WRITTEN_REVIEW_BINDING_SHEET=written_review_binding_v1
 ACTIVE_REVIEW_LEVEL_CONTRACT=H3_REVIEW_LEVEL_V2
 ACTIVE_REVIEW_HOME_INDEX_SHEET=review_home_index_v1
+ACTIVE_RUNTIME_IDENTITY_CONTRACT=H3_RUNTIME_IDENTITY_V1
 LEARNER_CONTENT_AUTHORITY=WEB_APP_REVIEW_ONLY
 ```
 

@@ -922,7 +922,7 @@ jobs:
           required = [
               "mode: app.payload.mode,",
               ".getListeningWebMedia({",
-              "schema: 'H3_WEB_MEDIA_REQUEST_V1'",
+              "'H3_WEB_MEDIA_REQUEST_V1'",
               "schema: 'H3_WEB_SUBMIT_V1'",
           ]
           for needle in required:

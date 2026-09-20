@@ -325,6 +325,100 @@ function h3WrittenParseIssuedAnswers_(context) {
   return positions;
 }
 
+
+function h3WrittenReviewAuthoring_(context) {
+  var meta = h3WrittenParseJson_(
+    context.questionMetaJson,
+    'WRITTEN_REVIEW_AUTHORING_META_INVALID'
+  );
+
+  if (
+    !meta ||
+    !Array.isArray(meta.questions) ||
+    meta.questions.length !== 5
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_AUTHORING_QUESTION_COUNT_INVALID'
+    );
+  }
+
+  return meta.questions.map(
+    function (question, index) {
+      var review =
+        question && question.review;
+      var choices =
+        review && review.choices;
+
+      if (
+        !review ||
+        typeof review !== 'object' ||
+        Array.isArray(review) ||
+        !String(review.body_ja || '').trim() ||
+        !String(review.reason || '').trim() ||
+        !Array.isArray(choices) ||
+        choices.length !== 4 ||
+        !Array.isArray(review.learning_blocks)
+      ) {
+        throw new Error(
+          'WRITTEN_REVIEW_AUTHORING_MISSING:Q' +
+            String(index + 1)
+        );
+      }
+
+      choices.forEach(
+        function (choice, choiceIndex) {
+          if (
+            !choice ||
+            String(choice.ko || '') !==
+              String(
+                question.choices[
+                  choiceIndex
+                ] || ''
+              ) ||
+            !String(choice.ja || '').trim()
+          ) {
+            throw new Error(
+              'WRITTEN_REVIEW_AUTHORING_CHOICE_MISMATCH:Q' +
+                String(index + 1)
+            );
+          }
+        }
+      );
+
+      return h3WrittenParseJson_(
+        JSON.stringify(review),
+        'WRITTEN_REVIEW_AUTHORING_CLONE_FAILED'
+      );
+    }
+  );
+}
+
+
+function h3WrittenReviewScriptForQuestion_(
+  context,
+  index
+) {
+  if (index < 4) {
+    return String(
+      context.stageAudio[index] || ''
+    );
+  }
+
+  return [
+    context.stageAudio[4],
+    context.stageAudio[5],
+    context.stageAudio[6]
+  ]
+    .map(function (value) {
+      return String(value || '');
+    })
+    .filter(function (value) {
+      return value !== '';
+    })
+    .join('\n');
+}
+
+
 function h3WrittenValidateSourceIdentity_(context) {
   if (context.actualSetId !== context.setId) {
     throw new Error('WRITTEN_STAGE_SET_ID_MISMATCH');
@@ -663,6 +757,7 @@ function h3WrittenRecoverPrepared_(
   try {
     context = h3WrittenReadContext_(runtimeSpreadsheet, setId);
     h3WrittenValidateSourceIdentity_(context);
+    h3WrittenReviewAuthoring_(context);
     sourceBinding = h3WrittenSourceBinding_(context);
   } catch (sourceErr) {
     h3WrittenMarkRecoveryRequired_(
@@ -869,6 +964,7 @@ function h3WrittenSubmit_(request) {
     );
     h3WrittenValidateSourceIdentity_(context);
     h3WrittenRequireNewSubmitPrecondition_(context);
+    h3WrittenReviewAuthoring_(context);
 
     var sourceBinding = h3WrittenSourceBinding_(context);
     var txnId = h3NextWebTxnId_(runtimeSpreadsheet);
@@ -1231,6 +1327,9 @@ function buildWrittenProductionRenderPayload_(
   h3WrittenRequireNewSubmitPrecondition_(
     context
   );
+  h3WrittenReviewAuthoring_(
+    context
+  );
 
   var questions =
     h3WrittenRenderQuestions_(
@@ -1266,7 +1365,7 @@ function buildWrittenProductionRenderPayload_(
       image:
         'NONE',
       review:
-        'WRITTEN_PERSISTENT_REVIEW_PENDING'
+        'PERSISTENT_REVIEW_V1'
     },
     questions:
       questions

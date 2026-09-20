@@ -99,6 +99,15 @@ function submitListeningWebAnswers(request) {
         writtenResult.txn_id
       );
 
+    h3WrittenProductionReviewEnsure_(
+      writtenResult.txn_id
+    );
+
+    writtenResult.after_sync =
+      getWrittenProductionPersistentReviewPayload_(
+        writtenResult.set_id
+      );
+
     return writtenResult;
   }
 

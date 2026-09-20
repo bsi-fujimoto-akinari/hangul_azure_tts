@@ -409,3 +409,18 @@ Server-side boot behavior:
 Therefore normal Chat handoff remains the short parameterless URL, but the learner does not need to tap `現在の5L -> 開く` while an active issued set exists.
 
 Explicit query-string routes remain diagnostic/internal and do not change this default boot behavior.
+
+## 18. Listening audio reliability
+
+Canonical Listening render version is now `H3-LISTENING-RENDER-RULES-20260920-V20`.
+
+For learner-facing 5L audio:
+- question navigation must pause every non-active audio element;
+- automatic transition to the next question must start that question at its beginning when its source is ready;
+- background prefetch failure is local to the target asset and must not render a global learner error;
+- media RPC receives one automatic retry;
+- exhausted media loading exposes only the question-local fallback;
+- K2/K3 preissue must source-lock prompt and all four choices against `AUDIO_PLAN_JSON`;
+- a K2/K3 prompt omission or reordered/mismatched projection is a preissue STOP.
+
+A live L04 K3 audit established that its generated source includes the prompt segments, so the current issued learner set is preserved rather than regenerated.

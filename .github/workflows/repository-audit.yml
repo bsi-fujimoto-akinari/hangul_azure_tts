@@ -2599,7 +2599,7 @@ jobs:
           }
           NODE
 
-      - name: Check 5L #1 legacy Review phase-2 backend
+      - name: 'Check 5L #1 legacy Review phase-2 backend'
         shell: bash
         run: |
           python3 - <<'PY'
@@ -2629,15 +2629,27 @@ jobs:
                   raise SystemExit(f'Legacy Review phase-2 implementation missing: {needle}')
 
           m = re.search(
-              r"function buildReviewHomePayload_\(\) \{(?P<body>.*?)\n\}\n\nfunction h3ReviewReplayValidateTxnId_",
+              r"function buildReviewHomePayload_\(\) \{(?P<body>.*?)\n\}\n\nfunction h3ReviewReplayValidateLegacyId_",
               review,
               re.S,
           )
           if not m:
               raise SystemExit('Could not isolate buildReviewHomePayload_.')
           home = m.group('body')
-          if 'h3LegacyReviewHistoryEntries_' in home:
-              raise SystemExit('Phase 2 must not expose legacy Review history in HOME.')
+          phase3_exposed = (
+              'h3LegacyReviewHistoryEntries_' in home
+          )
+          if phase3_exposed:
+              for needle in [
+                  'getLegacyPersistentReviewPayload_(',
+                  'getLegacyPersistentReviewMediaPayload_(',
+                  'buildLegacyReviewReplayPayload_(',
+              ]:
+                  if needle not in review:
+                      raise SystemExit(
+                          'Legacy HOME exposure exists without complete Phase-3 backend: ' +
+                          needle
+                      )
 
           if '## 26. 5L #1 legacy pre-Web Review phase-1 freeze' not in arch:
               raise SystemExit('Phase-1 architecture freeze missing.')
@@ -2647,7 +2659,7 @@ jobs:
           print('5L #1 legacy Review phase-2 backend static audit: PASS')
           PY
 
-      - name: Check 5L #1 legacy Review phase-3 exposure
+      - name: 'Check 5L #1 legacy Review phase-3 exposure'
         shell: bash
         run: |
           python3 - <<'PY'

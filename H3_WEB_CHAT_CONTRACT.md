@@ -1,6 +1,6 @@
 # H3 Web / Chat Contract
 
-Version: H3-WEB-CHAT-CURRENT-20260920-V6
+Version: H3-WEB-CHAT-CURRENT-20260920-V7
 
 This document defines the current learner trigger, Web handoff, receipt, and minimal Chat response contract. Completed migration chronology remains in Git history.
 
@@ -240,3 +240,74 @@ After the column-L write, perform one exact same-row A:M readback and require:
 When all of those conditions pass, the post-bind readback proves that the validated immutable payload was not changed by bind. A second Drive blob read / image SHA256 recomputation is therefore not required after bind.
 
 `consumeK1ReadyAfterIssue_()` keeps its existing post-write readback semantics. This optimization does not relax consume eligibility, source-lock, audio-start validation, or fail-closed behavior.
+
+
+## 25. Runtime identity hierarchy
+
+`H3_RUNTIME_IDENTITY_V1` is the canonical coordination/reporting contract for both 5W and 5L.
+
+Every learner set is described with the same three identity layers:
+
+```text
+ISSUE_NO = learner-facing ordinal within that modality
+STAGE_ID = preissue preparation/scheduling identity
+SET_ID   = immutable learner-set identity
+```
+
+These layers are related but are not interchangeable.
+
+- `ISSUE_NO` is a learner-facing sequence number. It must never be parsed from a `SET_ID` suffix.
+- `STAGE_ID` identifies the preissue preparation authority. It must never be presented as a learner `SET_ID`.
+- `SET_ID` identifies the exact learner set. Once allocated and bound, it is immutable. Before allocation, coordination output must use `PENDING_ALLOCATION` rather than invent or predict an ID.
+- Existing historical IDs are immutable and are not renamed to make their spelling resemble the ordinal.
+- No new persistent alias counter is introduced solely for reporting; the tuple is derived from existing canonical authorities to avoid state drift.
+
+### 5W mapping
+
+- answered 5W `ISSUE_NO`: stable chronological Written ordinal, currently mirrored by `review_home_index_v1.SET_NO`;
+- next unissued 5W `ISSUE_NO`: the next stable Written ordinal;
+- `STAGE_ID`: `written_set_stage_v1.STAGE_ID`;
+- `SET_ID`: `written_set_stage_v1.ACTUAL_SET_ID` after allocation/issue, otherwise `PENDING_ALLOCATION`.
+
+Scheduler/block pointers remain authoritative for preparation. The learner ordinal is descriptive and must not replace `BLOCK_NO`, `SET_OFFSET`, or `STAGE_ID`.
+
+### 5L mapping
+
+- completed `ISSUE_NO`: `listening_state_v1.LISTENING_ISSUE_NO`;
+- next `ISSUE_NO`: `listening_state_v1.NEXT_LISTENING_SET_NO`. The legacy field name `SET_NO` is semantically the 5L issue ordinal under this contract;
+- `STAGE_ID`: the selected `listening_k2_k5_stage_v1.PRESTAGE_ID` used as the primary preissue scheduling identity. K1_READY remains an independent subordinate source authority and is not replaced by this alias;
+- `SET_ID`: `listening_set_payload_v1.LISTENING_SET_ID` after allocation/lock, otherwise `PENDING_ALLOCATION`.
+
+The numeric suffix of historical Listening `SET_ID` values is not the `ISSUE_NO`. For example, the committed 5L with `ISSUE_NO=3` has `SET_ID=H3-20260920-L04`; this is valid and must not be rewritten.
+
+### Coordination output
+
+Whenever Chat reports the next 5W or 5L, it must use the same tuple and labels:
+
+```text
+5W
+ISSUE_NO=<n>
+STAGE_ID=<stage>
+SET_ID=<actual or PENDING_ALLOCATION>
+
+5L
+ISSUE_NO=<n>
+STAGE_ID=<stage>
+SET_ID=<actual or PENDING_ALLOCATION>
+```
+
+For the current runtime state at canonicalization:
+
+```text
+5W
+ISSUE_NO=19
+STAGE_ID=STD-B002-S1
+SET_ID=PENDING_ALLOCATION
+
+5L
+ISSUE_NO=4
+STAGE_ID=H3-K25S-20260920-001
+SET_ID=PENDING_ALLOCATION
+```
+
+The concrete values in the example above are a dated runtime snapshot; future reports must recompute/read the tuple from the canonical authorities rather than copying the example.

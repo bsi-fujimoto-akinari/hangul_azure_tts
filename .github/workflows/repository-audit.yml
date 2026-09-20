@@ -3439,6 +3439,27 @@ jobs:
               if needle not in ops:
                   raise SystemExit(f'Operations minimal-output rule missing: {needle}')
 
+          for needle in [
+              '## 25. Runtime identity hierarchy',
+              'H3_RUNTIME_IDENTITY_V1',
+              'ISSUE_NO',
+              'STAGE_ID',
+              'SET_ID',
+              'PENDING_ALLOCATION',
+              'must never be parsed from a `SET_ID` suffix',
+              'H3-20260920-L04',
+          ]:
+              if needle not in contract:
+                  raise SystemExit(f'Runtime identity contract missing: {needle}')
+
+          for needle in [
+              '## 33. Runtime identity hierarchy',
+              'ACTIVE_RUNTIME_IDENTITY_CONTRACT=H3_RUNTIME_IDENTITY_V1',
+              'A `SET_ID` suffix is never interpreted as `ISSUE_NO`.',
+          ]:
+              if needle not in ops:
+                  raise SystemExit(f'Runtime identity operations rule missing: {needle}')
+
           print('Minimal learner-facing Chat output contract: PASS')
           PY
 

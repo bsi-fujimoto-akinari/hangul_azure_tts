@@ -1860,6 +1860,223 @@ jobs:
           );
           NODE
 
+      - name: Check staged Written HOME and Review UI
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          core = Path('WebAppReviewCore.js').read_text(encoding='utf-8')
+          written = Path('WebAppReviewWrittenAdapter.js').read_text(encoding='utf-8')
+          persistence = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          client = Path('Client.html').read_text(encoding='utf-8')
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+
+          for needle in [
+              'function h3WrittenReviewPersistentHistoryEntries_(',
+              "review_kind: 'WRITTEN'",
+              "replay_capability:",
+              "'unavailable'",
+              'function h3WrittenReviewValidateRequest_(',
+              'function getWrittenPersistentReviewPayload_(',
+              "'INVALID_WRITTEN_REVIEW_REQUEST'",
+              "'FULL_SOURCE_LOCK_ON_OPEN'",
+          ]:
+              if needle not in persistence:
+                  raise SystemExit(
+                      f'Written HOME/Review persistence invariant missing: {needle}'
+                  )
+
+          for needle in [
+              'function h3WrittenReviewPersistentHistory_(',
+              'h3WrittenReviewPersistentHistoryEntries_(',
+              'getWrittenPersistentReviewPayload_(',
+              'historyEntries:',
+              'h3WrittenReviewPersistentHistory_',
+          ]:
+              if needle not in written:
+                  raise SystemExit(
+                      f'Written provider staging invariant missing: {needle}'
+                  )
+
+          for needle in [
+              'function loadWrittenReview(',
+              "review_kind:",
+              "'WRITTEN'",
+              "entry.review_kind ===",
+              "'5W · '",
+              "entry.review_kind !==",
+              "review.kind !== 'WRITTEN'",
+              'part.audio_asset_key',
+              'part.user_answer_position',
+              'part.correct_answer_position',
+              'part.explanation.text',
+          ]:
+              if needle not in client:
+                  raise SystemExit(
+                      f'Written HOME/Review client invariant missing: {needle}'
+                  )
+
+          # Phase ② must not activate the production provider or add a direct Web route.
+          if "var H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ =\n  null;" not in core:
+              raise SystemExit('Written provider became active during phase ②.')
+          for forbidden in [
+              'review_kind',
+              'h3WrittenReview',
+          ]:
+              if forbidden in web:
+                  raise SystemExit(
+                      f'WebApp direct Written route activated early: {forbidden}'
+                  )
+
+          # Written Review must not expose replay or media through the staged provider.
+          for needle in [
+              'openMedia:',
+              'h3WrittenReviewUnavailable_',
+              'openReplay:',
+              'openReplayMedia:',
+              'gradeReplay:',
+          ]:
+              if needle not in written:
+                  raise SystemExit(
+                      f'Written unavailable capability guard missing: {needle}'
+                  )
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const assert = require('assert');
+
+          const source = [
+            'WebAppReviewCore.js',
+            'WebAppReviewWrittenAdapter.js'
+          ].map(name => fs.readFileSync(name, 'utf8')).join('\n');
+
+          const writtenReview = {
+            schema:'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1',
+            mode:'REVIEW',
+            kind:'WRITTEN',
+            read_only:true,
+            persisted:true,
+            set_id:'H3-20260918-03',
+            score:4,
+            total:5,
+            replay_capability:'unavailable',
+            sections:[1,2,3,4,5].map((q, i) => ({
+              section:'D' + (q + 1),
+              result:i === 1 ? '×' : '○'
+            }))
+          };
+
+          const context = vm.createContext({
+            console,
+            SpreadsheetApp:{
+              openById:()=>({id:'RUNTIME'})
+            },
+            H3_WEB_RUNTIME_SPREADSHEET_ID:'RUNTIME',
+            h3ListeningReviewProvider_:()=>({
+              kind:'LISTENING',
+              order:0,
+              historyEntries:()=>[{
+                txn_id:'H3TX-1',
+                set_id:'H3-20260920-L04',
+                listening_set_no:3,
+                committed_at:'2026-09-20T12:00:00+09:00',
+                score:4,total:5,wrong_count:1,uncertain_count:0,
+                needs_review:true
+              }],
+              currentLearning:()=>null,
+              openReview:()=>({kind:'LISTENING'}),
+              openMedia:()=>({}),
+              openReplay:()=>({}),
+              openReplayMedia:()=>({}),
+              gradeReplay:()=>({})
+            }),
+            h3WrittenReviewPersistentHistoryEntries_:()=>[{
+              review_kind:'WRITTEN',
+              set_id:'H3-20260918-03',
+              answered_at:'2026-09-19T00:12:42+09:00',
+              score:4,total:5,wrong_count:1,
+              uncertainty_known:true,
+              uncertain_count:1,
+              needs_review:true,
+              replay_capability:'unavailable'
+            }],
+            getWrittenPersistentReviewPayload_:request => {
+              assert.strictEqual(request.review_kind, 'WRITTEN');
+              assert.strictEqual(request.set_id, 'H3-20260918-03');
+              return writtenReview;
+            }
+          });
+
+          vm.runInContext(source, context, {
+            filename:'Written HOME/Review staged provider'
+          });
+
+          // Production source stays Listening-only.
+          assert.strictEqual(
+            vm.runInContext('h3ReviewProviders_().length', context),
+            1
+          );
+
+          // Simulate only the later factory flip: all phase ② seams must already work.
+          vm.runInContext(
+            'H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ = h3WrittenReviewProvider_;',
+            context
+          );
+
+          const home = JSON.parse(JSON.stringify(
+            vm.runInContext('buildReviewHomePayload_()', context)
+          ));
+          assert.strictEqual(home.review_history.length, 2);
+          const writtenEntry = home.review_history.find(
+            entry => entry.review_kind === 'WRITTEN'
+          );
+          assert.ok(writtenEntry);
+          assert.strictEqual(
+            writtenEntry.replay_capability,
+            'unavailable'
+          );
+
+          context.__request = {
+            schema:'H3_WEB_RENDER_REQUEST_V1',
+            mode:'REVIEW',
+            review_kind:'WRITTEN',
+            set_id:'H3-20260918-03',
+            txn_id:null,
+            legacy_review_id:null
+          };
+          const review = JSON.parse(JSON.stringify(
+            vm.runInContext(
+              'h3ReviewRenderRequest_(__request)',
+              context
+            )
+          ));
+          assert.strictEqual(review.kind, 'WRITTEN');
+          assert.strictEqual(review.sections.length, 5);
+
+          context.__replay = {
+            schema:'H3_WEB_RENDER_REQUEST_V1',
+            mode:'REVIEW_REPLAY',
+            review_kind:'WRITTEN',
+            set_id:'H3-20260918-03'
+          };
+          assert.throws(
+            () => vm.runInContext(
+              'h3ReviewRenderRequest_(__replay)',
+              context
+            ),
+            error =>
+              String(error.message) ===
+              'WRITTEN_REVIEW_CAPABILITY_UNAVAILABLE'
+          );
+
+          console.log(
+            'Staged Written HOME and Review UI: PASS'
+          );
+          NODE
+
       - name: Check persistent Review routes and Web UI
         shell: bash
         run: |

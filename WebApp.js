@@ -148,14 +148,6 @@ function h3WebBootRequest_(e) {
 
   if (paramKeys.length) {
     if (
-      params.mode === 'REVIEW_REPLAY' &&
-      params.txn_id
-    ) {
-      mode = 'REVIEW_REPLAY';
-      txnId = String(
-        params.txn_id
-      );
-    } else if (
       params.mode === 'REVIEW' &&
       params.txn_id
     ) {

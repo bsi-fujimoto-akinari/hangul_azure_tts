@@ -1,6 +1,6 @@
 # H3 Web / Chat Contract
 
-Version: H3-WEB-CHAT-CURRENT-20260920-V3
+Version: H3-WEB-CHAT-CURRENT-20260920-V4
 
 This document defines the current learner trigger, Web handoff, receipt, and minimal Chat response contract. Completed migration chronology remains in Git history.
 
@@ -72,13 +72,13 @@ Chat must return the resolver's `url` field, not `direct_url`. The returned `url
 
 Do not return a normal learner link containing `?mode=`, `set_id=`, `txn_id=`, `script.googleusercontent.com`, `/macros/echo`, `user_content_key`, or `lib=`. `direct_url` is internal diagnostics only.
 
-HOME resolves only the latest safe `ISSUED`, uncommitted, production-renderable 5L. Failure to resolve the just-issued target is a STOP condition, not permission to fall back to a query-string link.
+Parameterless boot resolves the latest safe `ISSUED`, uncommitted, production-renderable 5L or 5W. Failure to resolve the just-issued target is a STOP condition, not permission to fall back to a query-string link.
 
 ### Parameterless direct boot
 
 With no query parameters, server boot checks canonical HOME/current-learning state. If an authorized active learning set exists, it boots that exact mode and SET_ID: `LISTENING` for 5L or `WRITTEN` for 5W. Otherwise it boots HOME. Thus the learner does not need to tap the current-set button during an active issue.
 
-Explicit `SYSTEM_TEST`, `LISTENING`, `WRITTEN`, `REVIEW`, and `REVIEW_REPLAY` routes remain controlled internal/diagnostic paths. `ping=1` remains a health check. HTTP job execution stays disabled.
+Explicit `SYSTEM_TEST`, `LISTENING`, `WRITTEN`, and `REVIEW` routes remain controlled internal/diagnostic paths. `REVIEW_REPLAY` is retired and is not a learner boot route. `ping=1` remains a health check. HTTP job execution stays disabled.
 
 
 ### 5W current-learning and question render
@@ -114,13 +114,13 @@ TXT files are noncanonical conveniences. Moving or regenerating them must not re
 
 For 5L, SCRIPT_TXT is explicitly outside the learner issue critical path. Audio completion, source-lock validation, preissue, and issue do not require a script TXT file. It may be materialized later for Review/audit convenience.
 
-## 9. Persistent Review and replay
+## 9. Persistent Review
 
 Committed 5L answers open the persistent Review built from exact transaction, payload, binding, image, and audio sources. HOME lists committed Reviews. Opening a Review performs full source-lock validation.
 
 For 5W, a committed production answer must also materialize an immediate persistent Written Review and make the exact committed set available from HOME. The production sequence is `WRITTEN COMMIT → Answer Sync CORE_COMPLETE → Written Review PREPARED/LOCKED → immediate Review response`. The Review binding must agree with the exact Written TXN_ID/SET_ID/STAGE_ID, result hash, Written source-binding hash, Review payload hash, and production Review contract. A missing or hash-invalid production Written Review is an implementation defect and must not be worked around by reproducing explanation or script content in Chat.
 
-REVIEW_REPLAY is nonlearning, reuses the original locked media, hides protected answers/explanation until local completion, and performs zero learner-runtime writes. Detailed invariants are in `H3_REVIEW_ARCHITECTURE.md`.
+`REVIEW_REPLAY` is retired. Listening and Written Review are read-only postgrade surfaces; the learner-facing UI provides no replay/retry action.
 
 ## 10. Learner-facing explanation and script ownership
 
@@ -132,6 +132,11 @@ This contract applies equally to 5L and 5W learner-facing postgrade content.
 - Script TXT files may continue to exist as noncanonical internal/audit conveniences, but they are not a learner-facing artifact and must not be used as a fallback when Review persistence or rendering is missing.
 - Review reconstruction must retain or source-lock the exact script content required for the Review page without depending on chat-local state.
 - HOME history must reopen the same source-bound explanation and script content for the exact committed set.
+- HOME does not render an unanswered/current-learning header. Active issued learning is resolved by parameterless boot before HOME is shown.
+- Written history receives a stable chronological `5W #N` ordinal; Listening retains `5L #N`.
+- HOME cards themselves are the Review navigation target; separate `復習` and `再挑戦` buttons are not learner-facing controls.
+- HOME filters are `聞きとり` and `筆記`; sorting supports newest-first and descending Review level.
+- Review level uses `H3_REVIEW_LEVEL_V1` (0–100): each item contributes result severity `×=12 / △=6 / ○=0` plus up to 8 points from repeated weakness on the same skill (`2×historical wrong + historical uncertain`). Higher values mean higher review priority.
 
 ## 18. Listening audio reliability
 

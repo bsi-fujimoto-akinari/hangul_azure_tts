@@ -165,11 +165,11 @@ SCRIPT_TXT is not a preissue prerequisite. When needed for Review/audit convenie
 - Production transactions are atomic and idempotent, with journal and receipt integrity.
 - Persistent Review is reconstructed only from committed, locked, hash-valid sources.
 - HOME history uses a lightweight index; opening Review performs full source-lock validation.
-- `REVIEW_REPLAY` is nonlearning and performs zero learner-runtime writes.
+- `REVIEW_REPLAY` is retired; active providers fail closed on replay requests.
 - SYSTEM_TEST remains an explicit allowlisted diagnostic route and must not mutate learner runtime.
-- The Review UI shows one question card at a time with compact progress, `再挑戦`, and `ホーム` controls.
+- HOME shows only the Review library. Each history card opens Review directly; filters are `聞きとり`/`筆記`, sorting supports newest-first and `H3_REVIEW_LEVEL_V1`, and the filter/sort block is sticky. Review shows one question card at a time with compact progress and a full-width `ホーム` control.
 
-Detailed Review storage, reconstruction, failure, replay, and legacy rules are in `H3_REVIEW_ARCHITECTURE.md`.
+Detailed Review storage, reconstruction, failure, retired-replay, HOME priority, and legacy rules are in `H3_REVIEW_ARCHITECTURE.md`.
 
 ## 10. Verification and prohibited operations
 
@@ -329,17 +329,18 @@ before grading only.
 ## H3 Web / Review active manifest
 
 ```text
-MANIFEST_ID=H3-WEB-REVIEW-MANIFEST-20260920-V2
-ACTIVE_WEB_CHAT_CONTRACT=H3-WEB-CHAT-CURRENT-20260920-V3
+MANIFEST_ID=H3-WEB-REVIEW-MANIFEST-20260920-V3
+ACTIVE_WEB_CHAT_CONTRACT=H3-WEB-CHAT-CURRENT-20260920-V4
 ACTIVE_WEB_CHAT_CONTRACT_PATH=H3_WEB_CHAT_CONTRACT.md
-ACTIVE_WEB_CHAT_CONTRACT_BLOB_SHA=9c44eb65543ee89aa88c429a450d61351fa67f02
-ACTIVE_REVIEW_ARCHITECTURE=H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V3
+ACTIVE_WEB_CHAT_CONTRACT_BLOB_SHA=16d39b9a0911c40db4bd0f37af82ec6b2b4e4d13
+ACTIVE_REVIEW_ARCHITECTURE=H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V4
 ACTIVE_REVIEW_ARCHITECTURE_PATH=H3_REVIEW_ARCHITECTURE.md
-ACTIVE_REVIEW_ARCHITECTURE_BLOB_SHA=07ca5e012c5c9c45684eff4f14933181fa41d804
+ACTIVE_REVIEW_ARCHITECTURE_BLOB_SHA=7a77efe5fb9a263ba2627641a1439e3080478dfa
 ACTIVE_WRITTEN_PRODUCTION_REVIEW_CONTRACT=H3-WRITTEN-PRODUCTION-REVIEW-CONTRACT-20260920-V1
 ACTIVE_WRITTEN_PRODUCTION_REVIEW_SCHEMA=H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1
 ACTIVE_WRITTEN_REVIEW_PAYLOAD_SHEET=written_review_payload_v1
 ACTIVE_WRITTEN_REVIEW_BINDING_SHEET=written_review_binding_v1
+ACTIVE_REVIEW_LEVEL_CONTRACT=H3_REVIEW_LEVEL_V1
 LEARNER_CONTENT_AUTHORITY=WEB_APP_REVIEW_ONLY
 ```
 

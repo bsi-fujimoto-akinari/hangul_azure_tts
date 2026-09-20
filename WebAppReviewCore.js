@@ -270,6 +270,362 @@ function h3ReviewHistoryEnvelope_(
 }
 
 
+
+var H3_REVIEW_LEVEL_CONTRACT_ =
+  'H3_REVIEW_LEVEL_V1';
+
+
+function h3ReviewSkillEvidenceIndex_(
+  spreadsheet
+) {
+  var bySet = {};
+  var bySkill = {};
+  var writtenSetSeen = {};
+
+  function add(
+    kind,
+    setId,
+    skillId,
+    result
+  ) {
+    var normalizedResult =
+      String(result || '');
+    if (
+      ['○', '△', '×'].indexOf(
+        normalizedResult
+      ) < 0
+    ) {
+      return;
+    }
+
+    var normalizedSetId =
+      String(setId || '');
+    if (!normalizedSetId) {
+      return;
+    }
+
+    var setKey =
+      kind + '|' + normalizedSetId;
+    if (!bySet[setKey]) {
+      bySet[setKey] = [];
+    }
+
+    var normalizedSkillId =
+      String(skillId || '');
+    bySet[setKey].push({
+      skill_id:
+        normalizedSkillId,
+      result:
+        normalizedResult
+    });
+
+    if (
+      kind === 'WRITTEN'
+    ) {
+      writtenSetSeen[
+        normalizedSetId
+      ] = true;
+    }
+
+    if (!normalizedSkillId) {
+      return;
+    }
+
+    var skillKey =
+      kind + '|' +
+      normalizedSkillId;
+    if (!bySkill[skillKey]) {
+      bySkill[skillKey] = {
+        wrong: 0,
+        uncertain: 0,
+        correct: 0
+      };
+    }
+
+    if (
+      normalizedResult === '×'
+    ) {
+      bySkill[skillKey].wrong += 1;
+    } else if (
+      normalizedResult === '△'
+    ) {
+      bySkill[skillKey]
+        .uncertain += 1;
+    } else {
+      bySkill[skillKey]
+        .correct += 1;
+    }
+  }
+
+  var listeningSheet =
+    spreadsheet.getSheetByName(
+      'listening_log_v1'
+    );
+  if (listeningSheet) {
+    var listening =
+      h3ReviewTable_(
+        listeningSheet
+      );
+    h3ProdRequireColumns_(
+      listening,
+      [
+        'PARENT_SET_ID',
+        'SKILL_ID',
+        'STATUS',
+        'USER_RESULT'
+      ],
+      'listening_log_v1'
+    );
+
+    listening.rows.forEach(
+      function (row) {
+        if (
+          String(
+            row[
+              listening.map.STATUS
+            ] || ''
+          ) !== 'VALID'
+        ) {
+          return;
+        }
+
+        add(
+          'LISTENING',
+          row[
+            listening.map
+              .PARENT_SET_ID
+          ],
+          row[
+            listening.map.SKILL_ID
+          ],
+          row[
+            listening.map
+              .USER_RESULT
+          ]
+        );
+      }
+    );
+  }
+
+  var writtenSheet =
+    spreadsheet.getSheetByName(
+      'generation_log_v1'
+    );
+  if (writtenSheet) {
+    var written =
+      h3ReviewTable_(
+        writtenSheet
+      );
+    h3ProdRequireColumns_(
+      written,
+      [
+        'SET_ID',
+        'SKILL_ID',
+        'STATUS',
+        'USER_RESULT'
+      ],
+      'generation_log_v1'
+    );
+
+    written.rows.forEach(
+      function (row) {
+        var setId = String(
+          row[
+            written.map.SET_ID
+          ] || ''
+        );
+
+        if (
+          setId &&
+          String(
+            row[
+              written.map.STATUS
+            ] || ''
+          ) === 'ANSWERED'
+        ) {
+          writtenSetSeen[setId] =
+            true;
+        }
+
+        if (
+          String(
+            row[
+              written.map.STATUS
+            ] || ''
+          ) !== 'ANSWERED'
+        ) {
+          return;
+        }
+
+        add(
+          'WRITTEN',
+          setId,
+          row[
+            written.map.SKILL_ID
+          ],
+          row[
+            written.map.USER_RESULT
+          ]
+        );
+      }
+    );
+  }
+
+  return {
+    bySet: bySet,
+    bySkill: bySkill,
+    written_set_ids:
+      Object.keys(
+        writtenSetSeen
+      ).sort()
+  };
+}
+
+
+function h3ReviewLevelForEntry_(
+  kind,
+  entry,
+  evidence
+) {
+  var setKey =
+    kind + '|' +
+    String(entry.set_id || '');
+  var items =
+    evidence.bySet[setKey] ||
+    [];
+  var level = 0;
+
+  if (items.length) {
+    items.forEach(
+      function (item) {
+        if (item.result === '×') {
+          level += 12;
+        } else if (
+          item.result === '△'
+        ) {
+          level += 6;
+        }
+
+        if (item.skill_id) {
+          var stats =
+            evidence.bySkill[
+              kind + '|' +
+              item.skill_id
+            ];
+
+          if (stats) {
+            level += Math.min(
+              8,
+              (
+                Number(
+                  stats.wrong || 0
+                ) * 2
+              ) +
+              Number(
+                stats.uncertain || 0
+              )
+            );
+          }
+        }
+      }
+    );
+  } else {
+    level +=
+      Number(
+        entry.wrong_count || 0
+      ) * 12;
+
+    if (
+      entry.uncertainty_known !==
+        false
+    ) {
+      level +=
+        Number(
+          entry.uncertain_count || 0
+        ) * 6;
+    }
+  }
+
+  return Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(level)
+    )
+  );
+}
+
+
+function h3ReviewAttachHomeMetadata_(
+  envelopes,
+  evidence
+) {
+  var writtenIds =
+    evidence.written_set_ids
+      .slice();
+
+  envelopes.forEach(
+    function (envelope) {
+      var entry = envelope.entry;
+      if (!entry.review_kind) {
+        entry.review_kind =
+          envelope.kind;
+      }
+
+      entry.review_level =
+        h3ReviewLevelForEntry_(
+          envelope.kind,
+          entry,
+          evidence
+        );
+      entry.review_level_contract =
+        H3_REVIEW_LEVEL_CONTRACT_;
+
+      if (
+        envelope.kind ===
+          'WRITTEN' &&
+        writtenIds.indexOf(
+          String(entry.set_id || '')
+        ) < 0
+      ) {
+        writtenIds.push(
+          String(entry.set_id || '')
+        );
+      }
+    }
+  );
+
+  writtenIds.sort();
+  var ordinalBySet = {};
+  writtenIds.forEach(
+    function (setId, index) {
+      ordinalBySet[setId] =
+        index + 1;
+    }
+  );
+
+  envelopes.forEach(
+    function (envelope) {
+      if (
+        envelope.kind ===
+          'WRITTEN'
+      ) {
+        envelope.entry
+          .written_set_no =
+          Number(
+            ordinalBySet[
+              String(
+                envelope.entry
+                  .set_id || ''
+              )
+            ] || 0
+          );
+      }
+    }
+  );
+}
+
+
 function h3ReviewHomeHistory_(
   spreadsheet
 ) {
@@ -290,6 +646,13 @@ function h3ReviewHomeHistory_(
           );
         });
     }
+  );
+
+  h3ReviewAttachHomeMetadata_(
+    envelopes,
+    h3ReviewSkillEvidenceIndex_(
+      spreadsheet
+    )
   );
 
   envelopes.sort(function (a, b) {
@@ -367,9 +730,15 @@ function buildReviewHomePayload_() {
         spreadsheet
       ),
     review_filters: [
-      'ALL',
-      'NEEDS_REVIEW'
-    ]
+      'LISTENING',
+      'WRITTEN'
+    ],
+    review_sorts: [
+      'RECENT',
+      'REVIEW_LEVEL'
+    ],
+    review_level_contract:
+      H3_REVIEW_LEVEL_CONTRACT_
   };
 }
 

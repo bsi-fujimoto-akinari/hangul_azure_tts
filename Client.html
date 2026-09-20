@@ -16,7 +16,11 @@
     mediaCache: {},
     mediaTrimMs: {},
     mediaLoading: {},
-    reviewFilter: 'NEEDS_REVIEW'
+    reviewKindFilters: {
+      LISTENING: true,
+      WRITTEN: true
+    },
+    reviewSort: 'RECENT'
   };
 
   document.addEventListener('DOMContentLoaded', function () {
@@ -71,7 +75,11 @@
     app.mediaTrimMs = {};
     app.mediaLoading = {};
     app.mediaRetryCount = {};
-    app.reviewFilter = 'NEEDS_REVIEW';
+    app.reviewKindFilters = {
+      LISTENING: true,
+      WRITTEN: true
+    };
+    app.reviewSort = 'RECENT';
 
     document.body.classList.remove(
       'graded'
@@ -292,6 +300,116 @@
     });
   }
 
+  function openReviewHistoryEntry_(
+    entry
+  ) {
+    if (
+      entry.review_kind ===
+        'WRITTEN'
+    ) {
+      loadWrittenReview(
+        entry.set_id
+      );
+      return;
+    }
+
+    if (entry.legacy_review_id) {
+      loadLegacyReview(
+        entry.legacy_review_id
+      );
+      return;
+    }
+
+    loadReviewTxn(
+      entry.txn_id
+    );
+  }
+
+
+  function applyReviewHistoryView_(
+    history
+  ) {
+    var nodes =
+      Array.prototype.slice.call(
+        history.querySelectorAll(
+          '.review-history-item'
+        )
+      );
+
+    nodes.sort(function (a, b) {
+      if (
+        app.reviewSort ===
+          'REVIEW_LEVEL'
+      ) {
+        var levelDiff =
+          Number(
+            b.dataset.reviewLevel || 0
+          ) -
+          Number(
+            a.dataset.reviewLevel || 0
+          );
+        if (levelDiff) {
+          return levelDiff;
+        }
+      }
+
+      var at =
+        String(
+          a.dataset.answeredAt || ''
+        );
+      var bt =
+        String(
+          b.dataset.answeredAt || ''
+        );
+
+      if (at !== bt) {
+        return at < bt ? 1 : -1;
+      }
+
+      return (
+        Number(
+          a.dataset.originalIndex || 0
+        ) -
+        Number(
+          b.dataset.originalIndex || 0
+        )
+      );
+    });
+
+    var shown = 0;
+    nodes.forEach(function (node) {
+      var kind =
+        String(
+          node.dataset.reviewKind ||
+          'LISTENING'
+        );
+      var visible =
+        app.reviewKindFilters[kind] ===
+        true;
+
+      node.classList.toggle(
+        'hidden',
+        !visible
+      );
+      if (visible) {
+        shown += 1;
+      }
+      history.appendChild(node);
+    });
+
+    var empty =
+      history.querySelector(
+        '.review-filter-empty'
+      );
+    if (empty) {
+      empty.classList.toggle(
+        'hidden',
+        shown !== 0
+      );
+    }
+  }
+
+
   function renderHome(payload) {
     var root =
       document.getElementById(
@@ -301,124 +419,6 @@
     root.classList.remove(
       'hidden'
     );
-
-    var header =
-      el(
-        'section',
-        'home-hero'
-      );
-
-    var titleRow =
-      el(
-        'div',
-        'home-title-row'
-      );
-
-    var title =
-      document.createElement('h2');
-    title.textContent = 'H3';
-    titleRow.appendChild(title);
-
-    var subtitle =
-      document.createElement('span');
-    subtitle.className =
-      'home-subtitle';
-    subtitle.textContent =
-      '5W / 5L';
-    titleRow.appendChild(
-      subtitle
-    );
-
-    header.appendChild(
-      titleRow
-    );
-
-    var current =
-      el(
-        'div',
-        'home-current-strip'
-      );
-
-    var currentMeta =
-      el(
-        'div',
-        'home-current-meta'
-      );
-
-    var currentLabel =
-      document.createElement('span');
-    currentLabel.className =
-      'home-current-label';
-    currentLabel.textContent =
-      payload.current_learning &&
-      payload.current_learning
-        .mode === 'WRITTEN'
-        ? '現在の5W'
-        : '現在の5L';
-    currentMeta.appendChild(
-      currentLabel
-    );
-
-    var currentValue =
-      document.createElement('strong');
-
-    if (
-      payload.current_learning
-    ) {
-      if (
-        payload.current_learning
-          .mode === 'WRITTEN'
-      ) {
-        currentValue.textContent =
-          payload.current_learning
-            .set_id;
-      } else {
-        currentValue.textContent =
-          '5L #' +
-          payload.current_learning
-            .listening_set_no;
-      }
-    } else {
-      currentValue.textContent =
-        '回答待ちなし';
-    }
-
-    currentMeta.appendChild(
-      currentValue
-    );
-    current.appendChild(
-      currentMeta
-    );
-
-    if (
-      payload.current_learning
-    ) {
-      var openCurrent =
-        el(
-          'button',
-          'primary home-current-action'
-        );
-      openCurrent.type = 'button';
-      openCurrent.textContent =
-        '開く';
-      openCurrent.addEventListener(
-        'click',
-        function () {
-          loadLearningSet(
-            payload.current_learning
-              .set_id,
-            payload.current_learning
-              .mode || 'LISTENING'
-          );
-        }
-      );
-      current.appendChild(
-        openCurrent
-      );
-    }
-
-    header.appendChild(current);
-    root.appendChild(header);
 
     var review =
       el(
@@ -467,44 +467,153 @@
     reviewHead.appendChild(
       reviewTitleWrap
     );
+    review.appendChild(
+      reviewHead
+    );
+
+    var controls =
+      el(
+        'div',
+        'review-controls-sticky'
+      );
 
     var filters =
       el(
         'div',
         'review-history-filters'
       );
+    filters.setAttribute(
+      'aria-label',
+      '問題種別'
+    );
 
     [
       {
-        key: 'ALL',
-        label: 'すべて'
+        key: 'LISTENING',
+        label: '聞きとり'
       },
       {
-        key: 'NEEDS_REVIEW',
-        label: '要復習'
+        key: 'WRITTEN',
+        label: '筆記'
       }
     ].forEach(function (spec) {
       var button =
         el(
           'button',
-          'review-filter-button'
+          'review-filter-button active'
         );
       button.type = 'button';
       button.dataset.filter =
         spec.key;
       button.textContent =
         spec.label;
-      button.classList.toggle(
-        'active',
-        spec.key === 'ALL'
+      button.setAttribute(
+        'aria-pressed',
+        'true'
       );
+
       button.addEventListener(
         'click',
         function () {
+          var activeCount =
+            Object.keys(
+              app.reviewKindFilters
+            ).filter(
+              function (key) {
+                return (
+                  app.reviewKindFilters[
+                    key
+                  ] === true
+                );
+              }
+            ).length;
+
+          if (
+            app.reviewKindFilters[
+              spec.key
+            ] === true &&
+            activeCount === 1
+          ) {
+            return;
+          }
+
+          app.reviewKindFilters[
+            spec.key
+          ] =
+            !app.reviewKindFilters[
+              spec.key
+            ];
+
+          button.classList.toggle(
+            'active',
+            app.reviewKindFilters[
+              spec.key
+            ]
+          );
+          button.setAttribute(
+            'aria-pressed',
+            String(
+              app.reviewKindFilters[
+                spec.key
+              ]
+            )
+          );
+
+          applyReviewHistoryView_(
+            history
+          );
+        }
+      );
+
+      filters.appendChild(button);
+    });
+
+    var sorts =
+      el(
+        'div',
+        'review-history-sorts'
+      );
+    sorts.setAttribute(
+      'aria-label',
+      '並び順'
+    );
+
+    [
+      {
+        key: 'RECENT',
+        label: '新しい順'
+      },
+      {
+        key: 'REVIEW_LEVEL',
+        label: '復習Lv順'
+      }
+    ].forEach(function (spec) {
+      var button =
+        el(
+          'button',
+          'review-sort-button'
+        );
+      button.type = 'button';
+      button.dataset.sort =
+        spec.key;
+      button.textContent =
+        spec.label;
+      button.classList.toggle(
+        'active',
+        spec.key ===
+          app.reviewSort
+      );
+
+      button.addEventListener(
+        'click',
+        function () {
+          app.reviewSort =
+            spec.key;
+
           Array.prototype
             .forEach.call(
-              filters.querySelectorAll(
-                '.review-filter-button'
+              sorts.querySelectorAll(
+                '.review-sort-button'
               ),
               function (node) {
                 node.classList.toggle(
@@ -514,35 +623,18 @@
               }
             );
 
-          Array.prototype
-            .forEach.call(
-              review.querySelectorAll(
-                '.review-history-item'
-              ),
-              function (node) {
-                var show =
-                  spec.key === 'ALL' ||
-                  node.dataset
-                    .needsReview ===
-                    'true';
-
-                node.classList.toggle(
-                  'hidden',
-                  !show
-                );
-              }
-            );
+          applyReviewHistoryView_(
+            history
+          );
         }
       );
-      filters.appendChild(button);
+
+      sorts.appendChild(button);
     });
 
-    reviewHead.appendChild(
-      filters
-    );
-    review.appendChild(
-      reviewHead
-    );
+    controls.appendChild(filters);
+    controls.appendChild(sorts);
+    review.appendChild(controls);
 
     var history =
       el(
@@ -564,187 +656,199 @@
       history.appendChild(empty);
     } else {
       payload.review_history
-        .forEach(function (entry) {
-          var item =
-            el(
-              'article',
-              'review-history-item'
-            );
-
-          item.dataset.needsReview =
-            String(
-              !!entry.needs_review
-            );
-          item.dataset.reviewKind =
-            String(
-              entry.review_kind ||
-              'LISTENING'
-            );
-
-          var meta =
-            el(
-              'div',
-              'review-history-meta'
-            );
-
-          var headingRow =
-            el(
-              'div',
-              'review-history-heading'
-            );
-
-          var heading =
-            document.createElement('h4');
-          heading.textContent =
-            entry.review_kind ===
-              'WRITTEN'
-              ? (
-                  '5W · ' +
-                  entry.set_id
-                )
-              : (
-                  '5L #' +
-                  entry.listening_set_no
-                );
-          headingRow.appendChild(
-            heading
-          );
-
-          var score =
-            el(
-              'span',
-              'review-history-score'
-            );
-          score.textContent =
-            entry.score +
-            '/' +
-            entry.total;
-          headingRow.appendChild(
-            score
-          );
-
-          meta.appendChild(
-            headingRow
-          );
-
-          var date =
-            document.createElement('p');
-          date.className =
-            'review-history-date';
-          date.textContent =
-            formatHistoryDate(
-              entry.committed_at ||
-              entry.answered_at
-            );
-          meta.appendChild(date);
-
-          var summary =
-            document.createElement('p');
-          summary.className =
-            'review-history-summary';
-          summary.textContent =
-            '×' +
-            entry.wrong_count +
-            '　' +
-            (
-              entry.uncertainty_known ===
-                false
-                ? '?—'
-                : (
-                    '?' +
-                    entry.uncertain_count
-                  )
-            );
-          meta.appendChild(
-            summary
-          );
-
-          item.appendChild(meta);
-
-          var actions =
-            el(
-              'div',
-              'review-history-actions'
-            );
-
-          var open =
-            el(
-              'button',
-              'secondary review-open-button'
-            );
-          open.type = 'button';
-          open.textContent =
-            '復習';
-          open.addEventListener(
-            'click',
-            function () {
-              if (
-                entry.review_kind ===
-                'WRITTEN'
-              ) {
-                loadWrittenReview(
-                  entry.set_id
-                );
-              } else if (
-                entry.legacy_review_id
-              ) {
-                loadLegacyReview(
-                  entry.legacy_review_id
-                );
-              } else {
-                loadReviewTxn(
-                  entry.txn_id
-                );
-              }
-            }
-          );
-          actions.appendChild(open);
-
-          if (
-            entry.review_kind !==
-              'WRITTEN' &&
-            entry.replay_capability !==
-              'unavailable'
+        .forEach(
+          function (
+            entry,
+            entryIndex
           ) {
-            var replay =
+            var item =
               el(
-                'button',
-                'secondary review-replay-open-button'
+                'article',
+                'review-history-item'
               );
-            replay.type = 'button';
-            replay.textContent =
-              '再挑戦';
-            replay.addEventListener(
-              'click',
+
+            var kind =
+              String(
+                entry.review_kind ||
+                'LISTENING'
+              );
+            var reviewLevel =
+              Number(
+                entry.review_level || 0
+              );
+
+            item.dataset.reviewKind =
+              kind;
+            item.dataset.reviewLevel =
+              String(reviewLevel);
+            item.dataset.answeredAt =
+              String(
+                entry.committed_at ||
+                entry.answered_at ||
+                ''
+              );
+            item.dataset.originalIndex =
+              String(entryIndex);
+            item.setAttribute(
+              'role',
+              'button'
+            );
+            item.setAttribute(
+              'tabindex',
+              '0'
+            );
+
+            var meta =
+              el(
+                'div',
+                'review-history-meta'
+              );
+
+            var headingRow =
+              el(
+                'div',
+                'review-history-heading'
+              );
+
+            var heading =
+              document.createElement('h4');
+            heading.textContent =
+              kind === 'WRITTEN'
+                ? (
+                    '5W #' +
+                    String(
+                      entry
+                        .written_set_no ||
+                      '—'
+                    )
+                  )
+                : (
+                    '5L #' +
+                    entry
+                      .listening_set_no
+                  );
+            headingRow.appendChild(
+              heading
+            );
+
+            var score =
+              el(
+                'span',
+                'review-history-score'
+              );
+            score.textContent =
+              entry.score +
+              '/' +
+              entry.total;
+            headingRow.appendChild(
+              score
+            );
+
+            meta.appendChild(
+              headingRow
+            );
+
+            var date =
+              document.createElement(
+                'p'
+              );
+            date.className =
+              'review-history-date';
+            date.textContent =
+              formatHistoryDate(
+                entry.committed_at ||
+                entry.answered_at
+              );
+            meta.appendChild(date);
+
+            var summary =
+              document.createElement(
+                'p'
+              );
+            summary.className =
+              'review-history-summary';
+            summary.textContent =
+              '×' +
+              entry.wrong_count +
+              '　' +
+              (
+                entry
+                  .uncertainty_known ===
+                  false
+                  ? '?—'
+                  : (
+                      '?' +
+                      entry
+                        .uncertain_count
+                    )
+              ) +
+              '　復習Lv ' +
+              reviewLevel;
+            meta.appendChild(
+              summary
+            );
+
+            item.appendChild(meta);
+
+            var openEntry =
               function () {
+                openReviewHistoryEntry_(
+                  entry
+                );
+              };
+
+            item.addEventListener(
+              'click',
+              openEntry
+            );
+            item.addEventListener(
+              'keydown',
+              function (event) {
                 if (
-                  entry.legacy_review_id
+                  event.key ===
+                    'Enter' ||
+                  event.key === ' '
                 ) {
-                  loadLegacyReplay(
-                    entry.legacy_review_id
-                  );
-                } else {
-                  loadReplayTxn(
-                    entry.txn_id
-                  );
+                  event
+                    .preventDefault();
+                  openEntry();
                 }
               }
             );
-            actions.appendChild(replay);
+
+            item.setAttribute(
+              'aria-label',
+              heading.textContent +
+              ' ' +
+              score.textContent +
+              ' 復習レベル ' +
+              reviewLevel
+            );
+
+            history.appendChild(
+              item
+            );
           }
+        );
 
-          item.appendChild(
-            actions
-          );
-
-          history.appendChild(
-            item
-          );
-        });
+      var filteredEmpty =
+        el(
+          'div',
+          'home-empty-state review-filter-empty hidden'
+        );
+      filteredEmpty.textContent =
+        '選択した種別の復習履歴はありません。';
+      history.appendChild(
+        filteredEmpty
+      );
     }
 
     review.appendChild(history);
     root.appendChild(review);
+
+    applyReviewHistoryView_(
+      history
+    );
   }
 
   function formatHistoryDate(value) {
@@ -2001,38 +2105,6 @@
         'div',
         'review-footer-actions'
       );
-
-    if (
-      review.kind !== 'WRITTEN' &&
-      review.replay_capability !==
-        'unavailable'
-    ) {
-      var replay =
-        el(
-          'button',
-          'primary review-replay-button'
-        );
-      replay.type = 'button';
-      replay.textContent =
-        '再挑戦';
-      replay.addEventListener(
-        'click',
-        function () {
-          if (
-            review.legacy_review_id
-          ) {
-            loadLegacyReplay(
-              review.legacy_review_id
-            );
-          } else {
-            loadReplayTxn(
-              review.txn_id
-            );
-          }
-        }
-      );
-      actions.appendChild(replay);
-    }
 
     var back =
       el(

@@ -16,10 +16,7 @@
     mediaCache: {},
     mediaTrimMs: {},
     mediaLoading: {},
-    reviewKindFilters: {
-      LISTENING: true,
-      WRITTEN: true
-    },
+    reviewKindFilter: null,
     reviewSort: 'RECENT'
   };
 
@@ -75,10 +72,7 @@
     app.mediaTrimMs = {};
     app.mediaLoading = {};
     app.mediaRetryCount = {};
-    app.reviewKindFilters = {
-      LISTENING: true,
-      WRITTEN: true
-    };
+    app.reviewKindFilter = null;
     app.reviewSort = 'RECENT';
 
     document.body.classList.remove(
@@ -384,8 +378,8 @@
           'LISTENING'
         );
       var visible =
-        app.reviewKindFilters[kind] ===
-        true;
+        kind ===
+        app.reviewKindFilter;
 
       node.classList.toggle(
         'hidden',
@@ -477,10 +471,27 @@
         'review-controls-sticky'
       );
 
+    if (!app.reviewKindFilter) {
+      var latestKind =
+        payload.review_history &&
+        payload.review_history.length
+          ? String(
+              payload.review_history[0]
+                .review_kind || ''
+            )
+          : '';
+
+      app.reviewKindFilter =
+        ['LISTENING', 'WRITTEN']
+          .indexOf(latestKind) >= 0
+          ? latestKind
+          : 'WRITTEN';
+    }
+
     var filters =
       el(
         'div',
-        'review-history-filters'
+        'review-history-filters review-segmented'
       );
     filters.setAttribute(
       'aria-label',
@@ -490,74 +501,60 @@
     [
       {
         key: 'LISTENING',
-        label: '聞きとり'
+        label: 'L'
       },
       {
         key: 'WRITTEN',
-        label: '筆記'
+        label: 'W'
       }
     ].forEach(function (spec) {
       var button =
         el(
           'button',
-          'review-filter-button active'
+          'review-filter-button'
         );
       button.type = 'button';
       button.dataset.filter =
         spec.key;
       button.textContent =
         spec.label;
+      button.classList.toggle(
+        'active',
+        spec.key ===
+          app.reviewKindFilter
+      );
       button.setAttribute(
         'aria-pressed',
-        'true'
+        String(
+          spec.key ===
+          app.reviewKindFilter
+        )
       );
 
       button.addEventListener(
         'click',
         function () {
-          var activeCount =
-            Object.keys(
-              app.reviewKindFilters
-            ).filter(
-              function (key) {
-                return (
-                  app.reviewKindFilters[
-                    key
-                  ] === true
+          app.reviewKindFilter =
+            spec.key;
+
+          Array.prototype
+            .forEach.call(
+              filters.querySelectorAll(
+                '.review-filter-button'
+              ),
+              function (node) {
+                var active =
+                  node === button;
+                node.classList.toggle(
+                  'active',
+                  active
+                );
+                node.setAttribute(
+                  'aria-pressed',
+                  String(active)
                 );
               }
-            ).length;
-
-          if (
-            app.reviewKindFilters[
-              spec.key
-            ] === true &&
-            activeCount === 1
-          ) {
-            return;
-          }
-
-          app.reviewKindFilters[
-            spec.key
-          ] =
-            !app.reviewKindFilters[
-              spec.key
-            ];
-
-          button.classList.toggle(
-            'active',
-            app.reviewKindFilters[
-              spec.key
-            ]
-          );
-          button.setAttribute(
-            'aria-pressed',
-            String(
-              app.reviewKindFilters[
-                spec.key
-              ]
-            )
-          );
+            );
 
           applyReviewHistoryView_(
             history
@@ -571,7 +568,7 @@
     var sorts =
       el(
         'div',
-        'review-history-sorts'
+        'review-history-sorts review-segmented'
       );
     sorts.setAttribute(
       'aria-label',
@@ -581,11 +578,11 @@
     [
       {
         key: 'RECENT',
-        label: '新しい順'
+        label: 'Newest'
       },
       {
         key: 'REVIEW_LEVEL',
-        label: '復習Lv順'
+        label: 'Priority'
       }
     ].forEach(function (spec) {
       var button =
@@ -603,6 +600,13 @@
         spec.key ===
           app.reviewSort
       );
+      button.setAttribute(
+        'aria-pressed',
+        String(
+          spec.key ===
+          app.reviewSort
+        )
+      );
 
       button.addEventListener(
         'click',
@@ -616,9 +620,15 @@
                 '.review-sort-button'
               ),
               function (node) {
+                var active =
+                  node === button;
                 node.classList.toggle(
                   'active',
-                  node === button
+                  active
+                );
+                node.setAttribute(
+                  'aria-pressed',
+                  String(active)
                 );
               }
             );
@@ -683,6 +693,7 @@
               String(reviewLevel);
             item.dataset.answeredAt =
               String(
+                entry.review_effective_at ||
                 entry.committed_at ||
                 entry.answered_at ||
                 ''

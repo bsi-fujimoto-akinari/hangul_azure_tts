@@ -1197,7 +1197,7 @@ jobs:
             {
               legacy_review_id:'L1', source_mode:'LEGACY_PRE_WEB',
               set_id:'S1', listening_set_no:1,
-              answered_at:'2026-09-20T10:00:00Z', score:3, total:5,
+              answered_at:'UNKNOWN', score:3, total:5,
               wrong_count:2, uncertainty_known:false,
               uncertain_count:null, needs_review:true,
               review_open_validation:'FULL_SOURCE_LOCK_ON_OPEN'
@@ -1212,45 +1212,82 @@ jobs:
           context.h3ListeningReviewCurrentLearning_ = () =>
             JSON.parse(JSON.stringify(current));
 
-          const actualHome = vm.runInContext('buildReviewHomePayload_()', context);
-          const baselineLegacy = JSON.parse(JSON.stringify(legacyHistory)).map(entry => {
-            entry.committed_at = entry.answered_at;
-            return entry;
-          });
-          const baselineHistory = JSON.parse(JSON.stringify(txnHistory))
-            .concat(baselineLegacy)
-            .sort((a, b) => {
-              const at = String(a.committed_at || a.answered_at || '');
-              const bt = String(b.committed_at || b.answered_at || '');
-              if (at !== bt) return at < bt ? 1 : -1;
-              return Number(b.listening_set_no || 0) - Number(a.listening_set_no || 0);
-            })
-            .slice(0, 50);
-          baselineHistory.forEach(entry => {
-            entry.review_kind = 'LISTENING';
-            entry.review_level =
-              Number(entry.wrong_count || 0) * 12 +
-              (
-                entry.uncertainty_known === false
-                  ? 0
-                  : Number(entry.uncertain_count || 0) * 6
-              );
-            entry.review_level_contract = 'H3_REVIEW_LEVEL_V1';
-          });
-          const expectedHome = {
-            schema:'H3_WEB_HOME_V1',
-            mode:'HOME',
-            read_only:true,
-            current_learning:current,
-            review_history:baselineHistory,
-            review_filters:['LISTENING','WRITTEN'],
-            review_sorts:['RECENT','REVIEW_LEVEL'],
-            review_level_contract:'H3_REVIEW_LEVEL_V1'
-          };
+          context.h3ReviewNowMs_ = () =>
+            Date.parse('2026-10-04T10:00:00Z');
+
+          const actualHome = JSON.parse(JSON.stringify(
+            vm.runInContext('buildReviewHomePayload_()', context)
+          ));
+
+          assert.strictEqual(actualHome.schema, 'H3_WEB_HOME_V1');
+          assert.strictEqual(actualHome.mode, 'HOME');
+          assert.strictEqual(actualHome.read_only, true);
+          assert.deepStrictEqual(actualHome.current_learning, current);
           assert.deepStrictEqual(
-            JSON.parse(JSON.stringify(actualHome)),
-            expectedHome,
-            'HOME payload changed during Core extraction.'
+            actualHome.review_filters,
+            ['LISTENING','WRITTEN']
+          );
+          assert.deepStrictEqual(
+            actualHome.review_sorts,
+            ['RECENT','REVIEW_LEVEL']
+          );
+          assert.strictEqual(
+            actualHome.review_level_contract,
+            'H3_REVIEW_LEVEL_V2'
+          );
+          assert.strictEqual(
+            actualHome.review_level_half_life_days,
+            14
+          );
+          assert.strictEqual(
+            actualHome.review_level_time_headroom_share,
+            0.40
+          );
+          assert.deepStrictEqual(
+            actualHome.review_history.map(entry => entry.set_id),
+            ['S3','S2','S1'],
+            'HOME newest ordering must use effective timestamps.'
+          );
+
+          const unknownEntry = actualHome.review_history.find(
+            entry => entry.set_id === 'S1'
+          );
+          assert.ok(unknownEntry);
+          assert.strictEqual(
+            unknownEntry.answered_at,
+            'UNKNOWN'
+          );
+          assert.strictEqual(
+            unknownEntry.review_time_source,
+            'UNKNOWN_FALLBACK_OLDEST'
+          );
+          assert.strictEqual(
+            unknownEntry.review_effective_at,
+            '2026-09-20T08:00:00.000Z'
+          );
+          assert.strictEqual(
+            unknownEntry.review_level_contract,
+            'H3_REVIEW_LEVEL_V2'
+          );
+          assert.strictEqual(
+            unknownEntry.review_base_level,
+            24
+          );
+          assert.strictEqual(
+            unknownEntry.review_level,
+            39
+          );
+
+          const knownEntry = actualHome.review_history.find(
+            entry => entry.set_id === 'S3'
+          );
+          assert.strictEqual(
+            knownEntry.review_time_source,
+            'ACTUAL'
+          );
+          assert.ok(
+            knownEntry.review_level >
+            knownEntry.review_base_level
           );
 
           const providers = vm.runInContext('h3ReviewProviders_()', context);
@@ -2522,8 +2559,11 @@ jobs:
               "'review-controls-sticky'",
               "'review-history-heading'",
               "'review-history-score'",
-              "'聞きとり'",
-              "'筆記'",
+              "'L'",
+              "'W'",
+              "'Newest'",
+              "'Priority'",
+              "reviewKindFilter",
               "復習Lv",
               'written_set_no',
               'openReviewHistoryEntry_(',
@@ -2536,6 +2576,8 @@ jobs:
           for needle in [
               '.review-controls-sticky',
               'position: sticky',
+              '.review-segmented',
+              'border-radius: 12px',
               '.review-history-heading',
               '.review-progress',
               '.review-progress-button.current',
@@ -2562,7 +2604,7 @@ jobs:
           if '## 9. Current production and Review invariants' not in operations:
               raise SystemExit('OPERATIONS lacks the current Review UI contract.')
 
-          if 'H3_REVIEW_LEVEL_V1' not in chat:
+          if 'H3_REVIEW_LEVEL_V2' not in chat:
               raise SystemExit('Web/Chat contract lacks the current HOME priority contract.')
           PY
 
@@ -2718,8 +2760,11 @@ jobs:
           for needle in [
               'function renderHome(payload)',
               "'review-controls-sticky'",
-              "'聞きとり'",
-              "'筆記'",
+              "'L'",
+              "'W'",
+              "'Newest'",
+              "'Priority'",
+              "reviewKindFilter",
               "復習Lv",
           ]:
               if needle not in client:

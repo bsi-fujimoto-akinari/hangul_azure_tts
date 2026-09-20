@@ -1,6 +1,6 @@
 # H3 Review Architecture
 
-Version: H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V4
+Version: H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V5
 Status: R3_CLOSED_NORMAL_LIVE
 
 This document defines the current durable Review contract. Completed R3 phase chronology and device-validation evidence remain in Git history and Drive `06_AUDIT`.
@@ -101,9 +101,11 @@ The parameterless HOME provides read-only access to committed Review entries. HO
 
 Each history card is the navigation target for its exact persistent Review. Separate `復習` and `再挑戦` buttons are removed. Listening keeps its canonical `5L #N` sequence. Written history receives a stable chronological `5W #N` ordinal derived from answered Written SET_ID order.
 
-HOME filters are provider filters `聞きとり` and `筆記` (both enabled by default). Sorting supports newest-first and descending Review level. The filter/sort control block is sticky while the history list scrolls.
+HOME uses an exclusive provider segment `L` / `W`; exactly one provider is visible at a time, and the initial provider follows the newest history entry. Sorting is a second segmented control, `Newest` / `Priority`. The control block remains sticky while the history list scrolls.
 
-Review priority is `H3_REVIEW_LEVEL_V1` on a 0–100 scale. For each item, result severity contributes `×=12 / △=6 / ○=0`; same-skill historical weakness adds `min(8, 2×wrong_count + uncertain_count)`. Missing skill identity contributes no skill bonus. Higher values mean higher review priority. This score changes display order only and must not mutate scheduler/retest state.
+Review priority is `H3_REVIEW_LEVEL_V2` on a 0–100 scale. First compute base weakness `B`: each item contributes `×=12 / △=6 / ○=0`; same-skill historical weakness adds `min(8, 2×wrong_count + uncertain_count)`. Missing skill identity contributes no skill bonus. Then compute elapsed-day pressure `F = 1 - 2^(-d/14)` and final priority `B + (100-B)×0.40×F`. The 14-day half-life is a simple exponential forgetting approximation, not a personalized memory estimate. Time can fill at most 40% of the remaining headroom, preserving strong recent error signals.
+
+For `answered_at=UNKNOWN`, HOME uses the oldest valid timestamp among the current history entries as a provisional effective timestamp for sorting and age. The stored/displayed timestamp is not rewritten and remains `UNKNOWN`. If no valid timestamp exists, the current load time is used as the fail-safe fallback. Review priority changes display order only and must not mutate scheduler/retest state.
 
 No learner-facing delete or edit operation exists. Chat receipt submission is optional for ordinary learning because the Web App owns postgrade Review. Chat may verify receipts for audit/troubleshooting but must never repeat the backend mutation.
 
@@ -147,7 +149,7 @@ Current production behavior is audited directly from runtime code. Completed pha
 
 ## 13. Current learner UI contract
 
-HOME shows only the compact Review library; active learning is resolved before HOME. History cards are directly tappable, provider filters and sort controls are sticky, Written uses stable `5W #N`, and exactly one Review card is visible at a time. The Review footer contains only a full-width `ホーム` action.
+HOME shows only the compact Review library; active learning is resolved before HOME. History cards are directly tappable, the sticky controls are segmented `L/W` and `Newest/Priority`, Written uses stable `5W #N`, and exactly one Review card is visible at a time. The Review footer contains only a full-width `ホーム` action.
 
 ## 26. Legacy pre-Web Review compatibility
 

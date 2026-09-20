@@ -838,24 +838,47 @@
   .review-history-filters,
   .review-history-sorts {
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+    align-items: stretch;
+  }
+
+  .review-segmented {
+    overflow: hidden;
+    border: 1px solid #b8b8b8;
+    border-radius: 12px;
+    background: #fff;
   }
 
   .review-filter-button,
   .review-sort-button {
-    border: 1px solid #aaa;
-    border-radius: 999px;
+    min-height: 38px;
+    border: 0;
+    border-radius: 0;
     background: #fff;
-    padding: 7px 11px;
-    font-weight: 700;
+    padding: 7px 12px;
+    color: #6f6f6f;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: .01em;
+    line-height: 1;
+  }
+
+  .review-filter-button + .review-filter-button,
+  .review-sort-button + .review-sort-button {
+    border-left: 1px solid #d8d8d8;
   }
 
   .review-filter-button.active,
   .review-sort-button.active {
-    border-color: #222;
     background: #222;
     color: #fff;
+  }
+
+  .review-filter-button:focus-visible,
+  .review-sort-button:focus-visible {
+    position: relative;
+    z-index: 1;
+    outline: 3px solid #8ab4f8;
+    outline-offset: -3px;
   }
 
   .review-history-list {
@@ -1107,25 +1130,32 @@
     }
 
     .review-controls-sticky {
-      align-items: stretch;
-      flex-direction: column;
-      gap: 6px;
+      align-items: center;
+      flex-direction: row;
+      justify-content: space-between;
+      gap: 8px;
       padding-top: 7px;
       padding-bottom: 7px;
     }
 
-    .review-history-filters,
-    .review-history-sorts {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      width: 100%;
+    .review-history-filters {
+      flex: 0 0 auto;
     }
 
-    .review-filter-button,
+    .review-history-sorts {
+      flex: 0 1 auto;
+      min-width: 0;
+    }
+
+    .review-filter-button {
+      min-width: 42px;
+      padding-left: 12px;
+      padding-right: 12px;
+    }
+
     .review-sort-button {
-      width: 100%;
-      min-height: 40px;
-      padding: 6px 8px;
+      padding-left: 11px;
+      padding-right: 11px;
     }
 
     .review-history-item {

@@ -88,10 +88,10 @@ function auditTranslationActivationCoreV1_() {
   h3TranslationActivationAssert_(
     next.issue_no === 3 &&
       next.stage_id ===
-        'TRANS-P11-20260921-001' &&
+        'TRANS-P11-20260921-003' &&
       next.set_id ===
-        'H3-20260921-T001',
-    'SHARED_DATE_SERIAL_ALLOCATION'
+        'H3-20260921-T003',
+    'MONOTONIC_SHARED_DATE_SERIAL_ALLOCATION'
   );
 
   var p11Plan =
@@ -322,6 +322,50 @@ function auditTranslationActivationCoreV1_() {
     'DIRECTION_DRIFT_FAIL_CLOSED'
   );
 
+
+  h3TranslationActivationExpectThrow_(
+    function () {
+      var drift =
+        JSON.parse(
+          JSON.stringify(
+            p11Plan.stage
+          )
+        );
+      drift.locked_bundle_json =
+        drift.locked_bundle_json.replace(
+          'H3-P11-SK001',
+          'H3-P11-SK999'
+        );
+      h3TranslationPreissueValidate_(
+        drift,
+        p11,
+        []
+      );
+    },
+    'LOCKED_JSON_DRIFT_FAIL_CLOSED'
+  );
+
+  h3TranslationActivationAssert_(
+    h3TranslationCanonicalJson_(
+      h3TranslationParseLockedBundleJson_(
+        p11Plan.stage
+          .locked_bundle_json
+      )
+    ) ===
+      h3TranslationCanonicalJson_(
+        p11
+      ) &&
+      h3TranslationHash_(
+        h3TranslationParseLockedBundleJson_(
+          p11Plan.stage
+            .locked_bundle_json
+        )
+      ) ===
+        p11Plan.stage
+          .locked_bundle_sha256,
+    'LOCKED_JSON_PARITY'
+  );
+
   h3TranslationActivationExpectThrow_(
     function () {
       h3TranslationPreissueValidate_(
@@ -340,7 +384,7 @@ function auditTranslationActivationCoreV1_() {
       'H3_TRANSLATION_ACTIVATION_CORE_AUDIT_V1',
     result:
       'PASS',
-    checks: 12,
+    checks: 14,
     p11_set_id:
       p11Plan.identity.set_id,
     p11_stage_id:

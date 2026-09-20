@@ -1182,3 +1182,65 @@ blocking_overflow: none
 ```
 
 This migration changes scheduler policy/state only. It does not rewrite L04, learner answers, score, history, counters, pointers, Review bindings, audio, payloads, or K1_READY records.
+
+## 27. 5L #1 legacy Review three-phase migration
+
+Target:
+
+```text
+H3-20260919-L02
+5L #1
+original score = 1/5
+```
+
+Migration is deliberately split into three independent gates.
+
+### Phase 1 — audit / freeze
+
+Status after this change: `PASS`.
+
+Verified:
+
+- exact L02 locked/issued set payload exists;
+- five L02 canonical learner-log rows exist;
+- original answer vector is `3,1,3,2,2`;
+- original results are `○,×,×,×,×`;
+- exact K1 image source and SHA exist;
+- five individual audio bindings exist;
+- no L02 Web transaction exists;
+- no L02 explanation payload exists;
+- no L02 persistent Review binding exists;
+- current-style uncertainty flags are not historically recorded.
+
+Phase 1 writes documentation/audit evidence only.
+
+### Phase 2 — implementation / backfill metadata
+
+Phase 2 may:
+
+1. add `listening_legacy_review_v1`;
+2. implement a dedicated legacy Review source/builder;
+3. author five source-locked L02 explanation rows with `LEGACY_PRE_WEB_BACKFILL`;
+4. create one LOCKED legacy review metadata binding;
+5. merge legacy history data server-side without exposing it to the learner yet;
+6. explicitly exclude legacy registered sets from current-learning resolution.
+
+Phase 2 must not mutate the original L02 learner history, score, answer rows, retest evidence, set counter, valid counts, pointers, scheduler, K1_READY, original payload, image, or audio.
+
+### Phase 3 — learner exposure / validation
+
+Phase 3 may activate the 5L #1 HOME history entry only after backend source-lock validation passes.
+
+Required validation:
+
+- HOME shows 5L #1 in chronological position;
+- score = 1/5;
+- wrong count = 4;
+- uncertainty is shown as unknown, not zero;
+- Review opens all five exact source-bound items;
+- K1 image and all five original audio assets resolve;
+- optional replay creates zero learner-runtime writes;
+- closing and reopening the browser reconstructs the same Review;
+- iPhone ChatGPT in-app browser validation passes.
+
+Any failed gate leaves the legacy entry hidden and does not affect ordinary 5L production.

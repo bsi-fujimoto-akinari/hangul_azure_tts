@@ -448,3 +448,19 @@ Outside overload, at most one section slot per normal 5L is a retest. When the c
 The preissue contract requires `H3_LISTENING_OVERLOAD_PLAN_V3` and exact agreement between the persisted `normal_retest_per_set_cap`, the planned retest sections, and the locked set payload. Any blocking overflow remains a STOP.
 
 This is scheduler recovery only; it does not create a sixth learner-facing 5L item and does not permit Chat to issue a supplemental or normal 5L outside the dedicated learner workflow.
+
+## 21. 5L #1 legacy Review phase-1 contract
+
+The first valid Listening set, `H3-20260919-L02` / 5L #1, predates the Web transaction journal. Its canonical original result is 1/5 with K1○ and K2-K5×.
+
+Phase 1 freezes a separate `LEGACY_PRE_WEB` Review source. Chat and the Web App must not create a synthetic COMMITTED transaction or synthetic TXN_ID for this set.
+
+Future learner-facing behavior after Phase 3:
+
+- the normal handoff remains the parameterless HOME URL;
+- HOME may list 5L #1 beside normal transaction-backed Reviews;
+- opening 5L #1 resolves a legacy review ID, not a TXN_ID;
+- original uncertainty flags are shown as unknown because they were not recorded;
+- Review and optional replay are read-only and zero-mutation.
+
+Until Phase 2 and Phase 3 are completed, 5L #1 must not be exposed as a learner-facing persistent Review entry merely because the Phase-1 contract exists.

@@ -4911,20 +4911,6 @@ function h3WrittenProductionReviewEnsure_(
       )
     );
 
-  expected.review_binding_sha256 =
-    bindingSha;
-  expectedSha =
-    h3ReviewHash_(expected);
-  bindingSha =
-    h3ReviewHash_(
-      h3WrittenProductionReviewBindingHashObject_(
-        txn,
-        expectedSha
-      )
-    );
-  expected.review_binding_sha256 =
-    bindingSha;
-
   var sheets =
     h3WrittenProductionReviewRequireSheets_(
       spreadsheet

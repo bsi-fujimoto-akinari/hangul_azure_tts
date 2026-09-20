@@ -1104,10 +1104,6 @@ function bindK1ReadyToListeningSet_(
     }
   }
 
-  validateK1ReadyPayload_(
-    after
-  );
-
   return {
     k1_ready_id: after.id,
     listening_set_id: setId,

@@ -1011,19 +1011,24 @@ R3 closes only after:
 
 The learner-facing H3 Web App URL and the Apps Script audio/job execution surface are different authorities.
 
-Canonical learner base:
+Canonical learner Chat handoff:
 
 ```text
 https://script.google.com/macros/s/AKfycby8I309RUkfVIsnJks808KA713QLppfrGiAFUTV2tA/dev
 ```
 
-Normal 5L issue handoff:
+Normal 5L handoff:
 1. complete canonical preissue/issue;
 2. obtain the exact issued SET_ID;
 3. call/read `getListeningLearnerUrl(SET_ID)`;
-4. return its `url` field to the learner.
+4. require `handoff_mode=HOME_PARAMETERLESS`;
+5. return only its `url` field.
 
-Never use as learner URL:
+The helper validates that the target set itself is production-renderable before returning HOME. HOME then independently resolves the latest `ISSUED`, uncommitted renderable set and exposes `現在の5L -> 開く`.
+
+Do not return as the normal Chat link:
+- any URL with `?mode=`, `set_id=`, or `txn_id=`;
+- `direct_url` from the resolver;
 - `script.googleusercontent.com`;
 - `/macros/echo`;
 - any URL containing `user_content_key` or `lib=`;
@@ -1031,8 +1036,7 @@ Never use as learner URL:
 - Drive MP3/TXT URLs;
 - a redirected browser content URL copied from an Apps Script response.
 
-`getListeningLearnerUrl` is read-only and verifies that the target is renderable through the production LISTENING route before returning the direct learner URL.
+The exact direct LISTENING route remains available only for internal diagnostics.
 
-The parameterless base is HOME. For an issued 5L set, return the direct `?mode=LISTENING&set_id=...` URL.
+If the resolver passes but HOME cannot expose the just-issued set, stop and audit. Do not substitute a query-string learner link.
 
-If URL resolution fails, stop. Do not guess or substitute a different Apps Script endpoint.

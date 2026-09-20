@@ -208,10 +208,11 @@ The runtime connection uses Script Property `K1_READY_SHEET_ID`, read by `config
 The required runtime order is:
 
 ```text
-K1_READY persist
-  -> exact readback / validation
-  -> fresh prebind gate
+K1_READY atomic persist
+  -> one exact A:M readback / validation
+  -> fresh prebind full validation including image SHA
   -> BOUND_LISTENING_SET_ID bind
+  -> one exact A:M bind readback (only L may differ)
   -> audio queue
   -> individual K1-K5 audio
   -> exact individual audio binding
@@ -219,6 +220,8 @@ K1_READY persist
   -> issue success
   -> consume
 ```
+
+This is the `K1_READY_ONE_SHOT_V1` contract. The new-row persist path must not repeatedly read the same row after one exact A:M verification has already established header/schema/literal/value/ID/hash integrity.
 
 Fresh binding is permitted only after `readK1ReadyRecord_()` and `validateK1ReadyPayload_()` establish all of the following:
 
@@ -230,7 +233,7 @@ Fresh binding is permitted only after `readK1ReadyRecord_()` and `validateK1Read
 
 If any prebind condition fails, do not bind, do not write the Listening audio queue, and do not issue the 5L set. Do not guess missing values, reconstruct a fallback payload, or auto-repair the persistent record.
 
-`bindK1ReadyToListeningSet_()` may change only `BOUND_LISTENING_SET_ID`, from blank to the target LISTENING_SET_ID, and must read it back exactly. An already-bound record must not be rebound to another set.
+`bindK1ReadyToListeningSet_()` may change only `BOUND_LISTENING_SET_ID`, from blank to the target LISTENING_SET_ID. The prebind row receives full payload validation including the Drive image SHA256 check. After bind, one exact A:M readback must prove the same K1_READY_ID, `STATUS=READY`, blank `CONSUMED_AT`, exact target binding in column L, and byte-for-byte/string-equivalent equality of every other persisted column to the already-validated prebind row. When those checks pass, do not re-read the Drive image blob or recompute image SHA a second time. An already-bound record must not be rebound to another set.
 
 Before `processListeningAudioSet_()` reaches any `runListeningJob_()` call, `assertBoundK1ReadyForSet_()` must re-read the persistent bound record and verify that the bound SET_ID matches the set being processed, `STATUS=READY`, `CONSUMED_AT` remains blank, and the queue-side K1 audio payload exactly matches the persistent K1_READY payload. Any mismatch stops processing before audio work starts.
 

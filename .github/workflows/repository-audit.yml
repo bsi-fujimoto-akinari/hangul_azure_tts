@@ -1447,13 +1447,13 @@ jobs:
             call("h3ReviewMediaRequest_({mode:'REVIEW',txn_id:'H3TX-1'})"),
             {provider:'LISTENING',route:'txn-media'}
           );
-          assert.deepStrictEqual(
-            call("h3ReviewRenderRequest_({mode:'REVIEW_REPLAY',txn_id:'H3TX-1'})"),
-            {provider:'LISTENING',route:'replay'}
+          throws(
+            "h3ReviewRenderRequest_({mode:'REVIEW_REPLAY',txn_id:'H3TX-1'})",
+            'REVIEW_REPLAY_RETIRED'
           );
-          assert.deepStrictEqual(
-            call("h3ReviewSubmitRequest_({mode:'REVIEW_REPLAY',txn_id:'H3TX-1'})"),
-            {provider:'LISTENING',route:'replay-grade'}
+          throws(
+            "h3ReviewSubmitRequest_({mode:'REVIEW_REPLAY',txn_id:'H3TX-1'})",
+            'REVIEW_REPLAY_RETIRED'
           );
 
           const question = (qNo, overrides={}) => Object.assign({

@@ -5099,6 +5099,19 @@ function h3WrittenProductionReviewEnsure_(
     }
   }
 
+  if (
+    h3WrittenReviewStoredText_(
+      prepared,
+      'STATUS'
+    ) === 'LOCKED' &&
+    bindingRows.length === 1
+  ) {
+    return h3WrittenProductionReviewContextBySet_(
+      spreadsheet,
+      txn.setId
+    ).payload;
+  }
+
   if (bindingRows.length === 0) {
     sheets.bindingSheet.appendRow([
       txn.txnId,

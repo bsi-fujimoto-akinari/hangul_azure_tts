@@ -270,7 +270,7 @@ function h3WrittenReviewProjectHistorical_(
 function h3WrittenReviewPersistentHistory_(
   spreadsheet
 ) {
-  return h3WrittenReviewPersistentHistoryEntries_(
+  return h3WrittenReviewAllHistoryEntries_(
     spreadsheet
   );
 }

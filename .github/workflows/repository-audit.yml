@@ -40,6 +40,8 @@ jobs:
               'WebAppTransactionCommon.js',
               'WebAppSurfaceCommon.js',
               'WebAppSurfaceCommonAudit.js',
+              'WebAppLevelCommon.js',
+              'WebAppLevelCommonAudit.js',
               'WebAppWrittenProduction.js',
               'WebAppWrittenAnswerSync.js',
               'WebAppProductionRender.js',
@@ -63,6 +65,7 @@ jobs:
               'H3_WEB_CHAT_CONTRACT.md',
               'H3_REVIEW_ARCHITECTURE.md',
               'H3_LEARNING_SURFACE_CONTRACT.md',
+              'H3_LEVEL_RUNTIME_CONTRACT.md',
               'H3_READING_P8_PILOT_CONTRACT.md',
               'H3_READING_ACTIVATION_CONTRACT.md',
               'H3_READING_PRODUCTION_CONTRACT.md',
@@ -6424,6 +6427,102 @@ jobs:
           );
           NODE
 
+      - name: Check independent level runtime boundary
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          contract = Path('H3_LEVEL_RUNTIME_CONTRACT.md').read_text(encoding='utf-8')
+          common = Path('WebAppLevelCommon.js').read_text(encoding='utf-8')
+          audit = Path('WebAppLevelCommonAudit.js').read_text(encoding='utf-8')
+          surface = Path('H3_LEARNING_SURFACE_CONTRACT.md').read_text(encoding='utf-8')
+
+          for needle in [
+              'Version: H3-LEVEL-RUNTIME-20260921-V1',
+              'Status: STAGED_NO_JUN2_TAXONOMY',
+              '<LEVEL>|<SKILL_ID>',
+              '準2級|<future 準2級 skill id>',
+              'BLOCKED_NO_JUN2_TAXONOMY',
+              'accuracy >= 80%',
+              'accuracy > 90%',
+              'must never be copied automatically across levels',
+          ]:
+              if needle not in contract:
+                  raise SystemExit(f'Level runtime contract missing: {needle}')
+
+          for needle in [
+              "var H3_RUNTIME_LEVELS_ = [",
+              "'3級'",
+              "'準2級'",
+              'function h3LevelSkillStateKey_(',
+              'function h3LevelAssertNoCrossLevelStateTransfer_(',
+              'function h3LevelResolveQueueSkill_(',
+              'function h3LevelPromotionPlan_(',
+              'function h3LevelActivationReadiness_(',
+              "'BLOCKED_NO_JUN2_TAXONOMY'",
+          ]:
+              if needle not in common:
+                  raise SystemExit(f'Level runtime helper missing: {needle}')
+
+          for needle in [
+              'function auditLevelRuntimeV1_(',
+              'H3_LEVEL_RUNTIME_AUDIT_V1',
+              'PROMOTION_MONOTONIC_HIGH',
+              'CROSS_LEVEL_TRANSFER_REJECTED',
+              'QUEUE_LEVEL_MISMATCH',
+          ]:
+              if needle not in audit:
+                  raise SystemExit(f'Level runtime audit missing: {needle}')
+
+          if '## 12. Independent level-runtime boundary' not in surface:
+              raise SystemExit('Learning surface contract lacks level-runtime boundary.')
+
+          print('Independent level runtime static boundary: PASS')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const context = vm.createContext({console});
+
+          [
+            'WebAppLevelCommon.js',
+            'WebAppLevelCommonAudit.js'
+          ].forEach(name => {
+            vm.runInContext(
+              fs.readFileSync(name, 'utf8'),
+              context,
+              {filename:name}
+            );
+          });
+
+          const result = vm.runInContext(
+            'auditLevelRuntimeV1_()',
+            context
+          );
+
+          if (
+            result.result !== 'PASS' ||
+            result.schema !==
+              'H3_LEVEL_RUNTIME_AUDIT_V1' ||
+            result.checks !== 14 ||
+            result.contract_id !==
+              'H3-LEVEL-RUNTIME-20260921-V1'
+          ) {
+            throw new Error(
+              'Level runtime pure audit mismatch: ' +
+              JSON.stringify(result)
+            );
+          }
+
+          console.log(
+            'Independent level runtime pure audit: PASS',
+            JSON.stringify(result)
+          );
+          NODE
+
       - name: Check JavaScript syntax
         shell: bash
         run: |
@@ -6434,6 +6533,8 @@ jobs:
           node --check WebAppTransactionCommon.js
           node --check WebAppSurfaceCommon.js
           node --check WebAppSurfaceCommonAudit.js
+          node --check WebAppLevelCommon.js
+          node --check WebAppLevelCommonAudit.js
           node --check WebAppWrittenProduction.js
           node --check ListeningBackendOrchestrator.js
           node --check WebAppProductionRender.js

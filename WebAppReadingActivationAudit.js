@@ -1,5 +1,5 @@
 /**
- * Pure audit for H3 Reading activation core V2.
+ * Pure audit for H3 Reading activation core V3.
  */
 
 function h3ReadingActivationAuditAssert_(
@@ -142,6 +142,136 @@ function auditReadingActivationCoreV1_() {
       plan.row_values[9] ===
         stage.locked_bundle_json,
     'STAGE_ROW_SHAPE'
+  );
+
+
+  var existingP8 = [
+    {
+      issue_no: 1,
+      stage_id:
+        'READ-P8-20260921-001',
+      set_id:
+        'H3-20260921-R001',
+      section_key:
+        'H3-P8'
+    }
+  ];
+
+  var p9Locked =
+    h3ReadingLockBundle_(
+      h3ReadingP9PilotFixture_()
+    );
+  var p9Plan =
+    h3ReadingBuildSectionMaterializationPlan_(
+      'H3-P9',
+      '20260921',
+      existingP8,
+      p9Locked,
+      '2026-09-21T01:06:00+09:00'
+    );
+
+  h3ReadingActivationAuditAssert_(
+    p9Plan.schema ===
+      'H3_READING_SECTION_MATERIALIZATION_PLAN_V1' &&
+      p9Plan.section_key ===
+        'H3-P9' &&
+      p9Plan.stage.issue_no === 2 &&
+      p9Plan.stage.stage_id ===
+        'READ-P9-20260921-002' &&
+      p9Plan.stage.set_id ===
+        'H3-20260921-R002' &&
+      p9Plan.stage.status ===
+        'PREISSUE_READY',
+    'P9_SECTION_ALLOCATION'
+  );
+
+  var p10Locked =
+    h3ReadingLockBundle_(
+      h3ReadingP10PilotFixture_()
+    );
+  var p10Plan =
+    h3ReadingBuildSectionMaterializationPlan_(
+      'H3-P10',
+      '20260921',
+      existingP8.concat([
+        p9Plan.stage
+      ]),
+      p10Locked,
+      '2026-09-21T01:07:00+09:00'
+    );
+
+  h3ReadingActivationAuditAssert_(
+    p10Plan.section_key ===
+      'H3-P10' &&
+      p10Plan.stage.issue_no === 3 &&
+      p10Plan.stage.stage_id ===
+        'READ-P10-20260921-003' &&
+      p10Plan.stage.set_id ===
+        'H3-20260921-R003' &&
+      p10Plan.stage.status ===
+        'PREISSUE_READY',
+    'P10_SECTION_ALLOCATION'
+  );
+
+  h3ReadingActivationAuditAssert_(
+    h3ReadingParseStageId_(
+      p9Plan.stage.stage_id
+    ).serial ===
+      h3ReadingParseSetId_(
+        p9Plan.stage.set_id
+      ).serial &&
+      h3ReadingParseStageId_(
+        p10Plan.stage.stage_id
+      ).serial ===
+        h3ReadingParseSetId_(
+          p10Plan.stage.set_id
+        ).serial,
+    'SECTION_IDENTITY_PARITY'
+  );
+
+  h3ReadingActivationAuditExpectThrow_(
+    function () {
+      h3ReadingBuildSectionMaterializationPlan_(
+        'H3-P10',
+        '20260921',
+        existingP8,
+        p9Locked,
+        '2026-09-21T01:08:00+09:00'
+      );
+    },
+    'SECTION_LOCK_MISMATCH_FAIL_CLOSED'
+  );
+
+  h3ReadingActivationAuditExpectThrow_(
+    function () {
+      h3ReadingAllocateIdentityForSection_(
+        'H3-P9',
+        '20260921',
+        [
+          {
+            issue_no: 1,
+            stage_id:
+              'READ-P8-20260921-002',
+            set_id:
+              'H3-20260921-R001',
+            section_key:
+              'H3-P8'
+          }
+        ]
+      );
+    },
+    'EXISTING_IDENTITY_PARITY_FAIL_CLOSED'
+  );
+
+  h3ReadingActivationAuditExpectThrow_(
+    function () {
+      h3ReadingStageIdFromDateSerial_(
+        'H3-P11',
+        '20260921',
+        4
+      );
+    },
+    'UNSUPPORTED_SECTION_FAIL_CLOSED'
   );
 
   var storedLocked =
@@ -370,13 +500,13 @@ function auditReadingActivationCoreV1_() {
 
   return {
     schema:
-      'H3_READING_ACTIVATION_CORE_AUDIT_V2',
+      'H3_READING_ACTIVATION_CORE_AUDIT_V3',
     contract_id:
       H3_READING_ACTIVATION_CONTRACT_ID_,
     result:
       'PASS',
     checks:
-      16,
+      22,
     source_group_id:
       '245',
     item_count:
@@ -385,6 +515,14 @@ function auditReadingActivationCoreV1_() {
       allocation.set_id,
     allocated_stage_id:
       allocation.stage_id,
+    p9_allocated_set_id:
+      p9Plan.stage.set_id,
+    p9_allocated_stage_id:
+      p9Plan.stage.stage_id,
+    p10_allocated_set_id:
+      p10Plan.stage.set_id,
+    p10_allocated_stage_id:
+      p10Plan.stage.stage_id,
     locked_bundle_sha256:
       stage.locked_bundle_sha256,
     source_binding_sha256:

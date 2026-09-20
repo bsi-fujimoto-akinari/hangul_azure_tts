@@ -1584,6 +1584,282 @@ jobs:
           console.log('Written Review projection and routing: PASS');
           NODE
 
+      - name: Check inactive Written persistent Review loader
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          persistence = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          core = Path('WebAppReviewCore.js').read_text(encoding='utf-8')
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+
+          for needle in [
+              "var H3_WRITTEN_LEGACY_REVIEW_PAYLOAD_SHEET_ =",
+              "'written_legacy_review_payload_v1'",
+              "var H3_WRITTEN_LEGACY_REVIEW_BINDING_SHEET_ =",
+              "'written_legacy_review_binding_v1'",
+              "'H3-WRITTEN-LEGACY-REVIEW-CONTRACT-20260920-V1'",
+              'function h3WrittenReviewPersistentValidateRows_(',
+              'function h3WrittenReviewPersistentContext_(',
+              'function h3WrittenReviewNormalizePersistent_(',
+              'function buildWrittenPersistentReviewPayload_(',
+              'function validateWrittenPersistentReviewBinding_(',
+              'function validateWrittenPersistentReviewBackfill_()',
+              "'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1'",
+              "replay_capability:",
+              "'unavailable'",
+              "provider_active: false",
+              "'WRITTEN_REVIEW_PERSISTENCE_RECONSTRUCTION_HASH_MISMATCH'",
+              "'WRITTEN_REVIEW_PERSISTENCE_BINDING_HASH_MISMATCH'",
+          ]:
+              if needle not in persistence:
+                  raise SystemExit(f'Written persistent loader invariant missing: {needle}')
+
+          marker = '/**\n * Historical Written Review persistent loader.'
+          if marker not in persistence:
+              raise SystemExit('Written persistent loader marker missing.')
+          written_persistence = persistence.split(marker, 1)[1]
+
+          for forbidden in [
+              '.appendRow(',
+              '.setValue(',
+              '.setValues(',
+              'DriveApp',
+              'LockService',
+              'written_web_txn_v1',
+          ]:
+              if forbidden in written_persistence:
+                  raise SystemExit(
+                      f'Written persistent loader is not read-only: {forbidden}'
+                  )
+
+          if "var H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ =\n  null;" not in core:
+              raise SystemExit('Written provider became active.')
+          for forbidden in [
+              'review_kind',
+              'h3WrittenReview',
+          ]:
+              if forbidden in web:
+                  raise SystemExit(f'WebApp Written route was activated: {forbidden}')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+          const assert = require('assert');
+
+          const source = [
+            'WebAppReviewCore.js',
+            'WebAppReviewWrittenAdapter.js',
+            'WebAppReviewPersistence.js'
+          ].map(name => fs.readFileSync(name, 'utf8')).join('\n');
+
+          const context = vm.createContext({
+            console,
+            hash_: value =>
+              crypto.createHash('sha256')
+                .update(String(value), 'utf8')
+                .digest('hex'),
+            h3ProdParseJson_: (value, code) => {
+              try {
+                return JSON.parse(String(value));
+              } catch (error) {
+                throw new Error(code);
+              }
+            },
+            SpreadsheetApp: {
+              openById: () => {
+                throw new Error('UNEXPECTED_SPREADSHEET_ACCESS');
+              }
+            },
+            H3_WEB_RUNTIME_SPREADSHEET_ID: 'RUNTIME'
+          });
+
+          vm.runInContext(source, context, {
+            filename: 'Written persistent loader'
+          });
+
+          const call = expression =>
+            JSON.parse(JSON.stringify(
+              vm.runInContext(expression, context)
+            ));
+
+          const question = (qNo, overrides={}) => Object.assign({
+            q_no: qNo,
+            section: 'D' + (qNo + 1),
+            question_surface: 'Q' + qNo + ' surface',
+            question_body: 'body ' + qNo,
+            choices: [
+              {position:1,symbol:'①',text:'a'},
+              {position:2,symbol:'②',text:'b'},
+              {position:3,symbol:'③',text:'c'},
+              {position:4,symbol:'④',text:'d'}
+            ],
+            dialogue_components: [],
+            raw_user_answer: qNo === 2 ? '②?' : '①',
+            user_answer: qNo === 2 ? '②' : '①',
+            user_answer_text: qNo === 2 ? 'b' : 'a',
+            correct_answer: qNo === 2 ? '③' : '①',
+            correct_answer_text: qNo === 2 ? 'c' : 'a',
+            mark: qNo === 2 ? '×' : '○',
+            explicit_uncertainty: qNo === 2,
+            explanation_text: 'explanation ' + qNo,
+            explanation_source: 'WHY',
+            key_expression: 'key ' + qNo,
+            audio_sources: 'UNKNOWN',
+            generation_log: 'UNKNOWN',
+            evidence: {source:'fixture'}
+          }, overrides);
+
+          const record = {
+            schema: 'H3_5W_HISTORICAL_RECONSTRUCTION_V2',
+            set_id: 'H3-20260918-03',
+            source_mode: 'WRITTEN_QUEUE_WITH_GENERATION_LOG',
+            source_queue_row: 19,
+            answered_at: '2026-09-19T00:12:42+09:00',
+            raw_input: '1 2? 1 1 1',
+            score: 4,
+            total: 5,
+            questions: [1,2,3,4,5].map(qNo => question(qNo))
+          };
+
+          context.__record = record;
+          const reconstructionSha = vm.runInContext(
+            'h3ReviewHash_(__record)',
+            context
+          );
+          const logicalKey =
+            'LEGACY_WRITTEN_REVIEW::' + record.set_id;
+          const materializedAt =
+            '2026-09-20T16:07:52+09:00';
+          const contractId =
+            'H3-WRITTEN-LEGACY-REVIEW-CONTRACT-20260920-V1';
+
+          const payloadRow = {
+            LOGICAL_KEY: logicalKey,
+            PAYLOAD_KEY: logicalKey + '::' + reconstructionSha,
+            SET_ID: record.set_id,
+            SOURCE_QUEUE_ROW: '19',
+            SOURCE_MODE: record.source_mode,
+            MATERIALIZED_AT: materializedAt,
+            STATUS: 'LOCKED',
+            RECONSTRUCTION_SCHEMA: record.schema,
+            RECONSTRUCTION_JSON: JSON.stringify(record),
+            RECONSTRUCTION_SHA256: reconstructionSha,
+            REVIEW_CONTRACT_ID: contractId,
+            LOCKED_AT: materializedAt
+          };
+
+          const bindingModel = {
+            logicalKey,
+            setId: record.set_id,
+            sourceQueueRow: 19,
+            sourceMode: record.source_mode,
+            reconstructionSchema: record.schema,
+            reconstructionSha256: reconstructionSha,
+            reviewContractId: contractId
+          };
+
+          context.__bindingModel = bindingModel;
+          const bindingSha = vm.runInContext(
+            'h3ReviewHash_(h3WrittenReviewBindingHashObject_(__bindingModel))',
+            context
+          );
+
+          const bindingRow = {
+            LOGICAL_KEY: logicalKey,
+            SET_ID: record.set_id,
+            SOURCE_QUEUE_ROW: '19',
+            SOURCE_MODE: record.source_mode,
+            MATERIALIZED_AT: materializedAt,
+            STATUS: 'LOCKED',
+            RECONSTRUCTION_SCHEMA: record.schema,
+            RECONSTRUCTION_SHA256: reconstructionSha,
+            REVIEW_CONTRACT_ID: contractId,
+            REVIEW_BINDING_SHA256: bindingSha,
+            LOCKED_AT: materializedAt
+          };
+
+          context.__payloadRow = payloadRow;
+          context.__bindingRow = bindingRow;
+
+          const validated = call(
+            'h3WrittenReviewPersistentValidateRows_(__payloadRow,__bindingRow)'
+          );
+          assert.strictEqual(validated.setId, record.set_id);
+          assert.strictEqual(
+            validated.reviewBindingSha256,
+            bindingSha
+          );
+
+          context.__validated =
+            vm.runInContext(
+              'h3WrittenReviewPersistentValidateRows_(__payloadRow,__bindingRow)',
+              context
+            );
+          const normalized = call(
+            'h3WrittenReviewNormalizePersistent_(__validated)'
+          );
+          assert.strictEqual(
+            normalized.schema,
+            'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1'
+          );
+          assert.strictEqual(normalized.kind, 'WRITTEN');
+          assert.strictEqual(normalized.read_only, true);
+          assert.strictEqual(normalized.persisted, true);
+          assert.strictEqual(normalized.sections.length, 5);
+          assert.strictEqual(
+            normalized.replay_capability,
+            'unavailable'
+          );
+          assert.strictEqual(
+            normalized.sections[1].uncertain,
+            true
+          );
+          assert.strictEqual(
+            normalized.sections[1].user_answer_position,
+            2
+          );
+
+          const badBinding = Object.assign(
+            {},
+            bindingRow,
+            {REVIEW_BINDING_SHA256:'0'.repeat(64)}
+          );
+          context.__badBinding = badBinding;
+          assert.throws(
+            () => vm.runInContext(
+              'h3WrittenReviewPersistentValidateRows_(__payloadRow,__badBinding)',
+              context
+            ),
+            error =>
+              String(error.message) ===
+              'WRITTEN_REVIEW_PERSISTENCE_BINDING_HASH_MISMATCH'
+          );
+
+          const badPayload = Object.assign(
+            {},
+            payloadRow,
+            {RECONSTRUCTION_SHA256:'0'.repeat(64)}
+          );
+          context.__badPayload = badPayload;
+          assert.throws(
+            () => vm.runInContext(
+              'h3WrittenReviewPersistentValidateRows_(__badPayload,__bindingRow)',
+              context
+            ),
+            error =>
+              String(error.message) ===
+              'WRITTEN_REVIEW_PERSISTENCE_RECONSTRUCTION_HASH_MISMATCH'
+          );
+
+          console.log(
+            'Inactive Written persistent Review loader: PASS'
+          );
+          NODE
+
       - name: Check persistent Review routes and Web UI
         shell: bash
         run: |

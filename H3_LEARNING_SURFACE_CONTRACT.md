@@ -66,14 +66,18 @@ The common Client validates declared item_count against the received question ar
 - SYSTEM_TEST preserves its existing five-question behavior.
 - Reading/Translation rendering remains fail-closed until their family adapters are implemented.
 
-## 7. Review/HOME parallel-work gate
+## 7. Review/HOME compatibility boundary
 
 Legacy Review compatibility defaults are defined as:
 
 - LISTENING -> 5L / 3級
 - WRITTEN -> 5W / 3級
 
-Direct integration into shared Review Core / HOME index is intentionally deferred while the parallel 5W Review reconstruction work owns that shared surface. Do not modify Review Core/HOME schema from this branch until that reconstruction is complete and fresh main is re-read.
+Phase 1B wires this metadata into the common Review return envelope and HOME history model. The physical HOME table keeps its existing name `review_home_index_v1` and accepts both the legacy 13-column header and the staged V2-compatible header that appends `SURFACE_FAMILY` and `LEVEL`.
+
+The compatibility reader derives 5L/5W + 3級 when those columns are absent. New writes materialize the explicit metadata only after the table has been migrated to the V2 header. `migrateReviewHomeIndexV2()` is an explicit, idempotent post-merge migration primitive; it is never called implicitly.
+
+The parallel 5W Review reconstruction Chat is READ_ONLY. This branch may therefore stage ReviewCore/HOME code, but merge, Apps Script synchronization, and live HOME schema migration remain gated on the reconstruction report and a fresh main/runtime readback.
 
 ## 8. Non-goals
 
@@ -89,19 +93,20 @@ This phase does not:
 
 ## 9. Implementation status
 
-Implemented in the Phase 1A branch:
+Implemented and staged on the feature branch:
 
-- common surface validation helpers;
-- common pure audit;
-- 5L/5W render envelope metadata;
-- 5L/5W committed-result envelope metadata;
+- Phase 1A common surface validation helpers and pure audit;
+- 5L/5W render and committed-result envelope metadata;
 - Client removal of the global five-question assumption;
-- family-specific fixed-cardinality compatibility validation.
+- family-specific fixed-cardinality compatibility validation;
+- Phase 1B Review dispatch metadata wiring;
+- V1/V2-compatible HOME index surface_family/level handling;
+- explicit idempotent HOME V2 migration primitive;
+- Review weakness identity keyed by provider_kind + level + skill_id.
 
-Deferred by the parallel-work gate:
+Still intentionally inactive:
 
-- Review dispatch metadata wiring;
-- HOME index surface_family/level materialization;
-- Review weakness level-key migration.
-
-These deferred items are Phase 1B and require a fresh readback after the 5W Review reconstruction branch is complete.
+- Reading / Translation learner renderers and schedulers;
+- 準2級 taxonomy/queue activation;
+- live HOME V2 migration;
+- merge / Apps Script sync while the parallel Review reconstruction read-only investigation is still open.

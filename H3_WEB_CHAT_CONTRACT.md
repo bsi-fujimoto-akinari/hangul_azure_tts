@@ -64,7 +64,7 @@ Canonical learner URL:
 https://script.google.com/macros/s/AKfycby8I309RUkfVIsnJks808KA713QLppfrGiAFUTV2tA/dev
 ```
 
-The normal 5L handoff is parameterless HOME. After successful issue, Chat calls `getListeningLearnerUrl(SET_ID)` and requires `handoff_mode=HOME_PARAMETERLESS`.
+The normal learner handoff for both 5L and 5W is parameterless HOME. After successful 5L issue, Chat calls `getListeningLearnerUrl(SET_ID)`; after successful 5W issue, Chat calls `getWrittenLearnerUrl(SET_ID)`. Both must return `handoff_mode=HOME_PARAMETERLESS`.
 
 ### Parameterless handoff refinement
 
@@ -76,9 +76,29 @@ HOME resolves only the latest safe `ISSUED`, uncommitted, production-renderable 
 
 ### Parameterless direct boot
 
-With no query parameters, server boot checks canonical HOME/current-learning state. If an authorized active 5L exists, it boots LISTENING for that exact SET_ID; otherwise it boots HOME. Thus the learner does not need to tap the current-set button during an active issue.
+With no query parameters, server boot checks canonical HOME/current-learning state. If an authorized active learning set exists, it boots that exact mode and SET_ID: `LISTENING` for 5L or `WRITTEN` for 5W. Otherwise it boots HOME. Thus the learner does not need to tap the current-set button during an active issue.
 
-Explicit `SYSTEM_TEST`, `LISTENING`, `REVIEW`, and `REVIEW_REPLAY` routes remain controlled internal/diagnostic paths. `ping=1` remains a health check. HTTP job execution stays disabled.
+Explicit `SYSTEM_TEST`, `LISTENING`, `WRITTEN`, `REVIEW`, and `REVIEW_REPLAY` routes remain controlled internal/diagnostic paths. `ping=1` remains a health check. HTTP job execution stays disabled.
+
+
+### 5W current-learning and question render
+
+A 5W set is current-learning only when the exact `written_set_stage_v1` row is
+`STATUS=ISSUED`, has one exact `ACTUAL_SET_ID` and `ISSUED_AT`, the matching
+queue row still has blank `ANSWERS_LOG`, no committed Written Web transaction
+exists for that SET_ID, and the full Written render source-lock passes.
+
+The learner render is derived from the same issued stage/queue authority used by
+`h3WrittenSubmit_`. It exposes only D2-D6 question text, the four visible
+choices, display headings, and source-binding identity. It never exposes
+`answer_pos`, `answer_text`, the answer key, or explanation before grading.
+Written current-learning has no pre-answer media dependency.
+
+The 5W UI keeps D2-D6 dynamic section order, renders Korean line breaks exactly,
+shows the `?` uncertainty control, and requires an explicit `採点` action
+after all five answers are selected. `リセット` is available only before
+grading. First successful grading locks the answer snapshot and routes the
+submission through the Written transaction + Answer Sync backend.
 
 ## 8. Script TXT storage
 

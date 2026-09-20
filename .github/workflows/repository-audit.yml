@@ -269,8 +269,14 @@ jobs:
               if stale in index:
                   raise SystemExit(f'Manual grading UI still present: {stale}')
 
-          if "window.setTimeout(function () {\n              submitAnswers();\n            }, 80);" not in client:
-              raise SystemExit('Q5 auto-submit path is missing.')
+          if (
+              "window.setTimeout(function () {" not in client or
+              "submitAnswers();" not in client or
+              "app.payload.mode !==\n                'WRITTEN'" not in client
+          ):
+              raise SystemExit(
+                  'Listening/SYSTEM_TEST Q5 auto-submit path regressed or WRITTEN guard is missing.'
+              )
 
           commit_start = web.index('function h3CommitSystemTestTransaction_(')
           commit_src = web[commit_start:]
@@ -1893,6 +1899,8 @@ jobs:
               'getWrittenPersistentReviewPayload_(',
               'historyEntries:',
               'h3WrittenReviewPersistentHistory_',
+              'currentLearning:',
+              'h3WrittenReviewCurrentLearning_',
           ]:
               if needle not in written:
                   raise SystemExit(
@@ -2763,7 +2771,7 @@ jobs:
           for doc, needle in [
               (chat, '### Parameterless handoff refinement'),
               (chat, 'Chat must return the resolver\'s `url` field, not `direct_url`.'),
-              (chat, 'The normal 5L handoff is parameterless HOME.'),
+              (chat, 'The normal learner handoff for both 5L and 5W is parameterless HOME.'),
               (ops, '## 23. Learner URL authority'),
               (ops, 'require `handoff_mode=HOME_PARAMETERLESS`'),
               (ops, 'Do not return as the normal Chat link:'),
@@ -2890,7 +2898,8 @@ jobs:
               'Object.keys(params)',
               'SpreadsheetApp.openById(',
               'h3ReviewCurrentLearning_(',
-              "mode = 'LISTENING';",
+              'current.mode',
+              "'WRITTEN'",
               'current.set_id',
           ]:
               if needle not in boot:
@@ -2911,7 +2920,7 @@ jobs:
 
           for doc, needle in [
               (ops, '### Parameterless direct boot'),
-              (ops, 'boot directly as LISTENING'),
+              (ops, 'LISTENING for 5L or WRITTEN for 5W'),
               (chat, '### Parameterless direct boot'),
               (chat, 'the learner does not need to tap'),
           ]:
@@ -2957,6 +2966,22 @@ jobs:
             );
           }
 
+          const written = runWithCurrent({
+            mode:'WRITTEN',
+            review_kind:'WRITTEN',
+            set_id:'H3-20260920-01',
+            stage_id:'STD-B001-S4'
+          });
+
+          if (
+            written.mode !== 'WRITTEN' ||
+            written.set_id !== 'H3-20260920-01'
+          ) {
+            throw new Error(
+              'Parameterless active-set boot did not resolve to WRITTEN.'
+            );
+          }
+
           const empty = runWithCurrent(null);
           if (
             empty.mode !== 'HOME' ||
@@ -2986,7 +3011,9 @@ jobs:
               'background === true',
               'retries < 1',
               'function resetAudioAsset(',
-              'playAudioAssetNow(nextSection, true)',
+              'function audioKeyForIndex_(',
+              'playAudioAssetNow(',
+              'audioKeyForIndex_(',
               'setActiveIndex(nextIndex, true)',
               'pauseOtherAudio(null);',
           ]:
@@ -4011,6 +4038,334 @@ jobs:
           print('H3 normal hot-path audit: PASS')
           PY
 
+      - name: Check production 5W current-learning render
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          written = Path('WebAppWrittenProduction.js').read_text(encoding='utf-8')
+          adapter = Path('WebAppReviewWrittenAdapter.js').read_text(encoding='utf-8')
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+          client = Path('Client.html').read_text(encoding='utf-8')
+          css = Path('Stylesheet.html').read_text(encoding='utf-8')
+          ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
+          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
+
+          for needle in [
+              "var H3_WRITTEN_RENDER_VERSION =",
+              "'H3-WRITTEN-RENDER-20260918-V7'",
+              "var H3_WRITTEN_WEB_SURFACE_CONTRACT_ID =",
+              "function h3WrittenValidateRenderRequest_(",
+              "function h3WrittenRenderTxnGate_(",
+              "function h3WrittenRenderQuestions_(",
+              "function buildWrittenProductionRenderPayload_(",
+              "function h3WrittenCurrentLearning_(",
+              "function getWrittenLearnerUrl(",
+              "'WRITTEN_RENDER_TRANSACTION_RECOVERY_BLOCK'",
+              "'WRITTEN_CURRENT_LEARNING_AMBIGUOUS:'",
+              "'WRITTEN_LEARNER_URL_CURRENT_GATE_FAILED'",
+          ]:
+              if needle not in written:
+                  raise SystemExit(
+                      f'5W current-learning/render invariant missing: {needle}'
+                  )
+
+          for needle in [
+              "function h3WrittenReviewCurrentLearning_(",
+              "h3WrittenCurrentLearning_(",
+              "currentLearning:",
+              "h3WrittenReviewCurrentLearning_",
+          ]:
+              if needle not in adapter:
+                  raise SystemExit(
+                      f'Written provider current-learning seam missing: {needle}'
+                  )
+
+          for needle in [
+              "request.mode === 'WRITTEN'",
+              "buildWrittenProductionRenderPayload_(",
+              "params.mode === 'WRITTEN'",
+              "'CURRENT_LEARNING_MODE_INVALID'",
+          ]:
+              if needle not in web:
+                  raise SystemExit(
+                      f'Written learner Web route missing: {needle}'
+                  )
+
+          for needle in [
+              "payload.questions.map(",
+              "q.question_text",
+              "'question-prompt'",
+              "written-grade-button",
+              "written-reset-button",
+              "resetWrittenAnswers_",
+              "app.payload.mode !==",
+              "'WRITTEN'",
+              "audioKeyForIndex_(",
+          ]:
+              if needle not in client:
+                  raise SystemExit(
+                      f'Written learner client invariant missing: {needle}'
+                  )
+
+          for needle in [
+              '.written-question .question-head',
+              '.question-prompt',
+              '.written-controls',
+          ]:
+              if needle not in css:
+                  raise SystemExit(
+                      f'Written learner CSS invariant missing: {needle}'
+                  )
+
+          # Pre-answer payload must never serialize protected answer fields.
+          start = written.index('function buildWrittenProductionRenderPayload_(')
+          end = written.index('function h3WrittenCurrentLearning_(', start)
+          render_fn = written[start:end]
+          for forbidden in [
+              'answerPositions:',
+              'answer_pos:',
+              'answer_text:',
+              'correct_answer:',
+              'explanation:',
+          ]:
+              if forbidden in render_fn:
+                  raise SystemExit(
+                      f'Written pre-answer payload leaks protected field: {forbidden}'
+                  )
+
+          for doc, needle in [
+              (ops, '## 32. Written current-learning and render'),
+              (ops, 'getWrittenLearnerUrl(SET_ID)'),
+              (chat, '### 5W current-learning and question render'),
+              (chat, 'mode and SET_ID'),
+          ]:
+              if needle not in doc:
+                  raise SystemExit(
+                      f'Written current-learning documentation missing: {needle}'
+                  )
+
+          print('5W current-learning/render static contract: PASS')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+
+          const source = fs.readFileSync(
+            'WebAppWrittenProduction.js',
+            'utf8'
+          );
+
+          const context = vm.createContext({
+            console,
+            H3_WEB_RUNTIME_SPREADSHEET_ID:'RUNTIME',
+            h3BuildWebReceipt_:()=> '',
+            h3NextWebTxnId_:()=> 'H3TX-TEST',
+            h3NowTokyo_:()=> '2026-09-20T17:30:00+09:00',
+            h3Sha256Hex_: value =>
+              crypto.createHash('sha256')
+                .update(String(value), 'utf8')
+                .digest('hex')
+          });
+          vm.runInContext(source, context, {
+            filename:'WebAppWrittenProduction.js'
+          });
+
+          const run = expression =>
+            vm.runInContext(expression, context);
+          const copy = value =>
+            JSON.parse(JSON.stringify(value));
+          const assert = (condition, message) => {
+            if (!condition) throw new Error(message);
+          };
+          const expectThrow = (expression, expected) => {
+            let message = '';
+            try {
+              run(expression);
+            } catch (error) {
+              message = String(error.message);
+            }
+            assert(
+              message === expected,
+              expected + ' was not raised; got ' + message
+            );
+          };
+
+          const questions = [
+            {
+              q:1, answer_pos:2, answer_text:'기회',
+              question:'이번에는 좋은 (　　　)가 생겼어요.',
+              choices:['계획','기회','표정','방향']
+            },
+            {
+              q:2, answer_pos:3, answer_text:'가야 해요',
+              question:'늦었으니까 지금 (　　　).',
+              choices:['가도 돼요','간 적이 있어요','가야 해요','갈까요']
+            },
+            {
+              q:3, answer_pos:4, answer_text:'긴장됐어요',
+              question:'무대 직전이라 [가슴이 떨렸어요].',
+              choices:['배가 고팠어요','기분이 나빴어요','숨이 편했어요','긴장됐어요']
+            },
+            {
+              q:4, answer_pos:1, answer_text:'떼었어요',
+              question:'・화면에서 눈을 (　　　).\n・벽의 사진을 (　　　).',
+              choices:['떼었어요','감았어요','버렸어요','닫았어요']
+            },
+            {
+              q:5, answer_pos:2, answer_text:'그럼 제가 할까요?',
+              question:'A：지금 전화하기 어려워요.\nB：(　　　　　　　　　　)\nA：고마워요.',
+              choices:['내일은 쉬어요.','그럼 제가 할까요?','전화는 비싸요.','집에 갈게요.']
+            }
+          ];
+
+          let sourceText = '[SET H3-20260920-01]\n';
+          questions.forEach((q, i) => {
+            sourceText += '\nQ' + (i + 1) + '\n' + q.question + '\n';
+            q.choices.forEach((choice, j) => {
+              sourceText += String(j + 1) + ' ' + choice + '\n';
+            });
+          });
+
+          context.__renderContext = {
+            stageId:'STD-B001-S4',
+            questionMetaJson:JSON.stringify({
+              stage_id:'STD-B001-S4',
+              questions
+            }),
+            questionsLog:sourceText
+          };
+
+          const rendered = copy(run(
+            'h3WrittenRenderQuestions_(__renderContext)'
+          ));
+
+          assert(rendered.length === 5, 'Expected five Written questions.');
+          assert(
+            rendered.map(q => q.section).join(',') ===
+              'D2,D3,D4,D5,D6',
+            'Written section order mismatch.'
+          );
+          assert(
+            rendered[0].display === '筆2/語彙' &&
+            rendered[4].display === '筆6/応答',
+            'Written display mapping mismatch.'
+          );
+          assert(
+            rendered[3].question_text.includes('\n'),
+            'D5 line breaks were not preserved.'
+          );
+          assert(
+            rendered[4].question_text.includes('A：') &&
+            rendered[4].question_text.includes('B：'),
+            'D6 dialogue surface was not preserved.'
+          );
+          rendered.forEach((question, index) => {
+            assert(question.visible_choices.length === 4, 'Choice count mismatch.');
+            assert(question.audio_asset_key === null, 'Written pre-answer audio must be absent.');
+            for (const key of [
+              'answer_pos','answer_text','correct_answer','explanation'
+            ]) {
+              assert(!(key in question), 'Protected field leaked: ' + key);
+            }
+          });
+
+          context.__badRenderContext = JSON.parse(
+            JSON.stringify(context.__renderContext)
+          );
+          context.__badRenderContext.questionsLog =
+            context.__badRenderContext.questionsLog.replace(
+              '기회',
+              '다른말'
+            );
+          expectThrow(
+            'h3WrittenRenderQuestions_(__badRenderContext)',
+            'WRITTEN_RENDER_CHOICE_SOURCE_MISMATCH:1'
+          );
+
+          // Isolated current-learning resolver fixture.
+          const stageHeader = [
+            'STAGE_ID','STATUS','ACTUAL_SET_ID','ISSUED_AT'
+          ];
+          const stageMap = {
+            STAGE_ID:0,STATUS:1,ACTUAL_SET_ID:2,ISSUED_AT:3
+          };
+          let stageRows = [
+            ['STD-B001-S3','ISSUED','H3-20260918-03','2026-09-18T23:46:15+09:00'],
+            ['STD-B001-S4','ISSUED','H3-20260920-01','2026-09-20T17:00:00+09:00']
+          ];
+
+          const stageSheet = {name:'stage'};
+          const journal = {
+            getLastRow:()=>1,
+            getRange:()=>({getDisplayValues:()=>[]})
+          };
+          const runtime = {
+            getSheetByName:name =>
+              name === 'written_set_stage_v1'
+                ? stageSheet
+                : null
+          };
+
+          context.__stageHeader = stageHeader;
+          context.__stageMap = stageMap;
+          context.__stageRows = stageRows;
+          context.__runtime = runtime;
+          context.h3WrittenRequireJournal_ = () => journal;
+          context.h3WrittenReadRows_ = () => ({
+            header:context.__stageHeader,
+            map:context.__stageMap,
+            rows:context.__stageRows
+          });
+          context.h3WrittenRequireColumns_ = () => {};
+          context.h3WrittenReadContext_ = (_spreadsheet, setId) => ({
+            setId,
+            stageId:setId === 'H3-20260920-01'
+              ? 'STD-B001-S4'
+              : 'STD-B001-S3',
+            answersLog:setId === 'H3-20260920-01' ? '' : 'answered'
+          });
+          context.h3WrittenValidateSourceIdentity_ = value => value;
+          context.buildWrittenProductionRenderPayload_ = request => ({
+            mode:'WRITTEN',
+            set_id:request.set_id
+          });
+
+          const current = copy(run(
+            'h3WrittenCurrentLearning_(__runtime)'
+          ));
+          assert(
+            current.mode === 'WRITTEN' &&
+            current.set_id === 'H3-20260920-01' &&
+            current.stage_id === 'STD-B001-S4',
+            'Written current-learning resolver mismatch.'
+          );
+
+          context.__stageRows = stageRows.concat([
+            ['STD-B001-S5','ISSUED','H3-20260920-02','2026-09-20T18:00:00+09:00']
+          ]);
+          context.h3WrittenReadContext_ = (_spreadsheet, setId) => ({
+            setId,
+            stageId:setId === 'H3-20260920-01'
+              ? 'STD-B001-S4'
+              : (
+                  setId === 'H3-20260920-02'
+                    ? 'STD-B001-S5'
+                    : 'STD-B001-S3'
+                ),
+            answersLog:setId === 'H3-20260918-03' ? 'answered' : ''
+          });
+          expectThrow(
+            'h3WrittenCurrentLearning_(__runtime)',
+            'WRITTEN_CURRENT_LEARNING_AMBIGUOUS:2'
+          );
+
+          console.log('5W current-learning/render pure tests: PASS');
+          NODE
+
       - name: Check production 5W Web transaction D3
         shell: bash
         run: |
@@ -4047,8 +4402,8 @@ jobs:
               if needle not in written:
                   raise SystemExit(f'5W written core invariant missing: {needle}')
 
-          # D3 activates the production submit route while render/current-learning
-          # integration remains a later phase.
+          # D3 owns the production submit transaction; current-learning/render
+          # is audited independently and must not change the D3 mutation boundary.
           if "request.mode === 'WRITTEN'" not in web or 'h3WrittenSubmit_(request)' not in web:
               raise SystemExit('WRITTEN production submit route is missing.')
           if "'WRITTEN'" not in client:

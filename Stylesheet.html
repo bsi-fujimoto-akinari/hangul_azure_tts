@@ -54,6 +54,26 @@
     font-size: 17px;
     align-self: center;
   }
+  .written-question .question-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .question-prompt {
+    white-space: pre-wrap;
+    line-height: 1.65;
+    margin: 2px 0 12px;
+    font-size: 16px;
+    overflow-wrap: anywhere;
+  }
+  .written-controls {
+    position: sticky;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    z-index: 4;
+    padding: 10px;
+    border: 1px solid #d8d8d8;
+    border-radius: 12px;
+    background: rgba(255,255,255,.96);
+    backdrop-filter: blur(8px);
+  }
   .question-head > .compact-audio-wrap,
   .review-section-head > .compact-audio-wrap {
     align-self: center;
@@ -354,6 +374,11 @@
     }
     .question-head { margin-bottom: 8px; }
     .question-title { font-size: 17px; }
+    .question-prompt {
+      font-size: 16px;
+      line-height: 1.6;
+      margin-bottom: 10px;
+    }
 
     .audio-wrap { margin-bottom: 8px; }
     .audio-label { font-size: 12px; }

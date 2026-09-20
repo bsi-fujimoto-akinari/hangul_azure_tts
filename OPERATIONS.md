@@ -212,7 +212,7 @@ HOME resolves only an `ISSUED`, uncommitted, production-renderable set. If it ca
 
 ### Parameterless direct boot
 
-With no query parameters, the server reads canonical current-learning state. If a safe active set exists, boot directly as LISTENING for that exact SET_ID; otherwise boot as HOME. Explicit query routes remain internal/diagnostic.
+With no query parameters, the server reads canonical current-learning state. If a safe active set exists, boot directly in its canonical mode: LISTENING for 5L or WRITTEN for 5W, with that exact SET_ID; otherwise boot as HOME. Explicit query routes remain internal/diagnostic.
 
 ## 24. Listening audio reliability patch
 
@@ -297,3 +297,31 @@ Preparation writes are limited to the canonical preparation surfaces: `listening
 This orchestrator does not issue a learner set, set `ISSUED_AT`, consume K1_READY, create learner log or production transaction rows, update `listening_state_v1` counters/pointers, or advance the scheduler. Learner issue remains a separate dedicated flow after a verified `PREISSUE_READY`.
 
 For current set no.4, K2-K5 pre-stage may remain READY while no new K1_READY exists. In that state the correct runtime behavior is to perform no backend materialization or audio start until a new valid K1_READY is supplied explicitly.
+
+
+## 32. Written current-learning and render
+
+`h3WrittenCurrentLearning_(spreadsheet)` is the production 5W current-learning
+resolver. It accepts only one exact `written_set_stage_v1` row with
+`STATUS=ISSUED`, nonblank `ACTUAL_SET_ID`/`ISSUED_AT`, blank queue
+`ANSWERS_LOG`, no committed Written transaction, and no PREPARED or
+RECOVERY_REQUIRED transaction for the same set. More than one safe unanswered
+Written set is a fail-closed ambiguity.
+
+`buildWrittenProductionRenderPayload_(request)` reuses
+`h3WrittenReadContext_`, `h3WrittenValidateSourceIdentity_`, and the same
+source-binding contract as Written submit. It additionally verifies that every
+rendered question and choice is present in the locked queue question surface.
+The payload contains only safe pre-answer fields and never exposes answer
+positions/text or explanations.
+
+The normal learner handoff for an issued 5W set is
+`getWrittenLearnerUrl(SET_ID)`; it verifies both exact renderability and
+current-learning identity, then returns the same parameterless HOME URL used by
+5L. Direct `?mode=WRITTEN&set_id=...` is diagnostics-only.
+
+The client renders D2-D6 dynamically, preserves Korean line breaks, shows
+①-④ choices plus the explicit `?` control, and does not request audio for 5W.
+Unlike Listening, selecting Q5 does not auto-submit. The Written learner must
+press `採点` after all five answers are present; `リセット` is available
+before grading only.

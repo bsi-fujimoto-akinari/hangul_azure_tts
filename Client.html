@@ -126,6 +126,26 @@
           return;
         }
 
+        if (
+          !Array.isArray(
+            payload.questions
+          ) ||
+          payload.questions.length !== 5
+        ) {
+          throw new Error(
+            'QUESTION_PAYLOAD_SHAPE_INVALID'
+          );
+        }
+
+        sections =
+          payload.questions.map(
+            function (question) {
+              return String(
+                question.section || ''
+              );
+            }
+          );
+
         renderQuestions(
           payload.questions
         );
@@ -240,11 +260,32 @@
     });
   }
 
-  function loadLearningSet(setId) {
+  function loadLearningSet(
+    setId,
+    mode
+  ) {
+    var targetMode =
+      String(
+        mode || 'LISTENING'
+      );
+
+    if (
+      [
+        'LISTENING',
+        'WRITTEN'
+      ].indexOf(targetMode) < 0
+    ) {
+      showError(
+        '学習モードを確認できません。'
+      );
+      return;
+    }
+
     loadSet({
       schema:
         'H3_WEB_RENDER_REQUEST_V1',
-      mode: 'LISTENING',
+      mode:
+        targetMode,
       set_id:
         String(setId),
       txn_id: null
@@ -275,7 +316,7 @@
 
     var title =
       document.createElement('h2');
-    title.textContent = 'H3 5L';
+    title.textContent = 'H3';
     titleRow.appendChild(title);
 
     var subtitle =
@@ -283,7 +324,7 @@
     subtitle.className =
       'home-subtitle';
     subtitle.textContent =
-      '聞き取り';
+      '5W / 5L';
     titleRow.appendChild(
       subtitle
     );
@@ -309,7 +350,11 @@
     currentLabel.className =
       'home-current-label';
     currentLabel.textContent =
-      '現在の5L';
+      payload.current_learning &&
+      payload.current_learning
+        .mode === 'WRITTEN'
+        ? '現在の5W'
+        : '現在の5L';
     currentMeta.appendChild(
       currentLabel
     );
@@ -320,10 +365,19 @@
     if (
       payload.current_learning
     ) {
-      currentValue.textContent =
-        '5L #' +
+      if (
         payload.current_learning
-          .listening_set_no;
+          .mode === 'WRITTEN'
+      ) {
+        currentValue.textContent =
+          payload.current_learning
+            .set_id;
+      } else {
+        currentValue.textContent =
+          '5L #' +
+          payload.current_learning
+            .listening_set_no;
+      }
     } else {
       currentValue.textContent =
         '回答待ちなし';
@@ -352,7 +406,9 @@
         function () {
           loadLearningSet(
             payload.current_learning
-              .set_id
+              .set_id,
+            payload.current_learning
+              .mode || 'LISTENING'
           );
         }
       );
@@ -705,6 +761,132 @@
       .replace(/-/g, '/');
   }
 
+  function audioKeyForIndex_(
+    index
+  ) {
+    if (
+      !app.payload ||
+      !Array.isArray(
+        app.payload.questions
+      ) ||
+      !app.payload.questions[
+        index
+      ]
+    ) {
+      return null;
+    }
+
+    return (
+      app.payload.questions[
+        index
+      ].audio_asset_key ||
+      null
+    );
+  }
+
+  function updateWrittenGradeButton_() {
+    var button =
+      document.querySelector(
+        '.written-grade-button'
+      );
+
+    if (!button) {
+      return;
+    }
+
+    button.disabled =
+      app.locked ||
+      app.submitting ||
+      !allAnswered();
+  }
+
+  function resetWrittenAnswers_() {
+    if (
+      !app.payload ||
+      app.payload.mode !==
+        'WRITTEN' ||
+      app.locked ||
+      app.submitting
+    ) {
+      return;
+    }
+
+    app.answers = {};
+    app.uncertain = {};
+    app.activeIndex = 0;
+
+    Array.prototype.forEach.call(
+      document.querySelectorAll(
+        '.choice'
+      ),
+      function (node) {
+        node.classList.remove(
+          'selected'
+        );
+      }
+    );
+
+    Array.prototype.forEach.call(
+      document.querySelectorAll(
+        '.uncertain'
+      ),
+      function (node) {
+        node.classList.remove(
+          'active'
+        );
+        node.setAttribute(
+          'aria-pressed',
+          'false'
+        );
+      }
+    );
+
+    updateLiveSummary();
+    setActiveIndex(0);
+  }
+
+  function appendWrittenControls_(
+    root
+  ) {
+    var controls =
+      el(
+        'div',
+        'control-row written-controls'
+      );
+
+    var reset =
+      el(
+        'button',
+        'secondary written-reset-button'
+      );
+    reset.type = 'button';
+    reset.textContent =
+      'リセット';
+    reset.addEventListener(
+      'click',
+      resetWrittenAnswers_
+    );
+    controls.appendChild(reset);
+
+    var grade =
+      el(
+        'button',
+        'primary written-grade-button'
+      );
+    grade.type = 'button';
+    grade.textContent = '採点';
+    grade.disabled = true;
+    grade.addEventListener(
+      'click',
+      submitAnswers
+    );
+    controls.appendChild(grade);
+
+    root.appendChild(
+      controls
+    );
+  }
+
   function renderQuestions(questions) {
     var root = document.getElementById('questions');
     root.textContent = '';
@@ -712,9 +894,18 @@
     questions.forEach(function (q, index) {
       var qNo = index + 1;
       var card = el('section', 'question-card');
+      if (
+        app.payload &&
+        app.payload.mode ===
+          'WRITTEN'
+      ) {
+        card.classList.add(
+          'written-question'
+        );
+      }
       card.dataset.section = q.section;
       card.dataset.index = String(index);
-      card.dataset.audioKey = q.audio_asset_key;
+      card.dataset.audioKey = q.audio_asset_key || '';
       if (index === 0) card.classList.add('mobile-active');
 
       var head = el('div', 'question-head');
@@ -736,11 +927,33 @@
       });
 
       head.appendChild(title);
-      head.appendChild(
-        buildAudioBlock(q.audio_asset_key, q.audio_fallback_url, '', true)
-      );
+
+      if (q.audio_asset_key) {
+        head.appendChild(
+          buildAudioBlock(
+            q.audio_asset_key,
+            q.audio_fallback_url,
+            '',
+            true
+          )
+        );
+      }
+
       head.appendChild(uncertain);
       card.appendChild(head);
+
+      if (
+        q.question_text
+      ) {
+        var prompt =
+          el(
+            'div',
+            'question-prompt'
+          );
+        prompt.textContent =
+          q.question_text;
+        card.appendChild(prompt);
+      }
 
       if (q.section === 'K1') {
         var img = document.createElement('img');
@@ -782,14 +995,27 @@
             var nextSection = sections[nextIndex];
 
             setActiveIndex(nextIndex, true);
-            playAudioAssetNow(nextSection, true);
+            playAudioAssetNow(
+              audioKeyForIndex_(
+                nextIndex
+              ),
+              true
+            );
             return;
           }
 
           if (allAnswered()) {
-            window.setTimeout(function () {
-              submitAnswers();
-            }, 80);
+            if (
+              !app.payload ||
+              app.payload.mode !==
+                'WRITTEN'
+            ) {
+              window.setTimeout(function () {
+                submitAnswers();
+              }, 80);
+            } else {
+              updateWrittenGradeButton_();
+            }
           } else {
             var firstMissing = sections.findIndex(function (section) {
               return typeof app.answers[section] !== 'number';
@@ -797,7 +1023,9 @@
             if (firstMissing >= 0) {
               setActiveIndex(firstMissing, true);
               playAudioAssetNow(
-                sections[firstMissing],
+                audioKeyForIndex_(
+                  firstMissing
+                ),
                 true
               );
             }
@@ -810,6 +1038,16 @@
       card.appendChild(choices);
       root.appendChild(card);
     });
+
+    if (
+      app.payload &&
+      app.payload.mode ===
+        'WRITTEN'
+    ) {
+      appendWrittenControls_(
+        root
+      );
+    }
   }
 
   function buildAudioBlock(assetKey, fallbackUrl, label, compact) {
@@ -939,24 +1177,49 @@
   }
 
   function scheduleInitialAudioPrefetch() {
-    if (isMobileMode()) {
-      ensureAudioLoaded(
-        sections[0],
-        { background: false }
-      );
-      window.setTimeout(function () {
-        ensureAudioLoaded(
-          sections[1],
-          { background: true }
-        );
-      }, 500);
+    if (
+      !app.payload ||
+      !Array.isArray(
+        app.payload.questions
+      )
+    ) {
       return;
     }
 
-    sections.forEach(function (section, index) {
+    var keys =
+      app.payload.questions
+        .map(function (question) {
+          return (
+            question.audio_asset_key ||
+            null
+          );
+        })
+        .filter(Boolean);
+
+    if (!keys.length) {
+      return;
+    }
+
+    if (isMobileMode()) {
+      ensureAudioLoaded(
+        keys[0],
+        { background: false }
+      );
+      if (keys[1]) {
+        window.setTimeout(function () {
+          ensureAudioLoaded(
+            keys[1],
+            { background: true }
+          );
+        }, 500);
+      }
+      return;
+    }
+
+    keys.forEach(function (assetKey, index) {
       window.setTimeout(function () {
         ensureAudioLoaded(
-          section,
+          assetKey,
           { background: index !== 0 }
         );
       }, index * 350);
@@ -1221,26 +1484,31 @@
       );
     updateMobilePager();
 
-    var activeSection =
-      sections[app.activeIndex];
+    var activeAudioKey =
+      audioKeyForIndex_(
+        app.activeIndex
+      );
 
     ensureAudioLoaded(
-      activeSection,
+      activeAudioKey,
       { background: false }
     );
 
-    if (restartAudio === true) {
+    if (
+      restartAudio === true &&
+      activeAudioKey
+    ) {
       resetAudioAsset(
-        activeSection
+        activeAudioKey
       );
     }
 
     if (app.activeIndex < max) {
       window.setTimeout(function () {
         ensureAudioLoaded(
-          sections[
+          audioKeyForIndex_(
             app.activeIndex + 1
-          ],
+          ),
           { background: true }
         );
       }, 350);
@@ -1289,6 +1557,7 @@
 
   function updateLiveSummary() {
     updateMobilePager();
+    updateWrittenGradeButton_();
   }
 
   function allAnswered() {
@@ -1374,7 +1643,7 @@
 
   function setInteractiveDisabled(disabled) {
     Array.prototype.forEach.call(
-      document.querySelectorAll('.choice, .uncertain'),
+      document.querySelectorAll('.choice, .uncertain, .written-reset-button, .written-grade-button'),
       function (node) {
         node.disabled = disabled;
       }

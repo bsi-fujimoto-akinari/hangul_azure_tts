@@ -2039,6 +2039,8 @@ jobs:
 
           web = Path('WebApp.js').read_text(encoding='utf-8')
           code = Path('Code.js').read_text(encoding='utf-8')
+          review = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          client = Path('Client.html').read_text(encoding='utf-8')
           ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
           chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
 
@@ -2047,8 +2049,9 @@ jobs:
               "https://script.google.com/macros/s/AKfycby8I309RUkfVIsnJks808KA713QLppfrGiAFUTV2tA/dev",
               "function h3BuildListeningLearnerUrl_(",
               "function getListeningLearnerUrl(",
-              "'H3_LEARNER_URL_V1'",
-              "'script.google.com'",
+              "'H3_LEARNER_URL_V2'",
+              "'HOME_PARAMETERLESS'",
+              "'INTERNAL_DIAGNOSTIC_ONLY'",
               "buildProductionRenderPayload_({",
               "'LEARNER_URL_RENDER_GATE_FAILED'",
           ]
@@ -2065,64 +2068,112 @@ jobs:
               if needle not in code:
                   raise SystemExit(f'Learner route allowlist missing: {needle}')
 
+          for needle in [
+              'function h3ReviewCurrentLearning_(',
+              "=== 'ISSUED'",
+              'buildProductionRenderPayload_({',
+              "mode: 'LISTENING'",
+          ]:
+              if needle not in review:
+                  raise SystemExit(f'HOME current-learning invariant missing: {needle}')
+
+          for needle in [
+              'function renderHome(payload)',
+              'payload.current_learning',
+              "'現在の5L'",
+              "'開く'",
+              'loadLearningSet(',
+          ]:
+              if needle not in client:
+                  raise SystemExit(f'HOME learner-open invariant missing: {needle}')
+
           for doc, needle in [
-              (chat, '## 17. Post-R3 learner URL authority fix'),
-              (chat, 'Never return a `script.googleusercontent.com` URL'),
-              (chat, '`getListeningLearnerUrl(SET_ID)`'),
+              (chat, '### Parameterless handoff refinement'),
+              (chat, 'Chat must return the resolver\'s `url` field, not `direct_url`.'),
+              (chat, 'The normal 5L handoff is parameterless HOME.'),
               (ops, '## 23. Learner URL authority'),
-              (ops, 'If URL resolution fails, stop.'),
+              (ops, 'require `handoff_mode=HOME_PARAMETERLESS`'),
+              (ops, 'Do not return as the normal Chat link:'),
           ]:
               if needle not in doc:
                   raise SystemExit(f'Learner URL documentation invariant missing: {needle}')
 
-          forbidden_runtime = [
+          forbidden_handoff = [
+              "'url':",  # object uses multiline style; handled in node runtime below
+          ]
+
+          # Redirected Apps Script content surfaces must not be embedded
+          # in the canonical base constant.
+          base_start = web.index('var H3_LEARNER_WEB_APP_BASE_URL')
+          base_end = web.index('function h3BuildListeningLearnerUrl_', base_start)
+          base_block = web[base_start:base_end]
+          for needle in [
               'script.googleusercontent.com',
               '/macros/echo',
               'user_content_key',
-          ]
-          helper_start = web.index('function h3BuildListeningLearnerUrl_(')
-          helper_end = web.index('function getListeningLearnerUrl(', helper_start)
-          helper = web[helper_start:helper_end]
-          for needle in forbidden_runtime:
-              if needle in helper:
-                  raise SystemExit(f'Forbidden redirected URL surface in learner URL helper: {needle}')
+          ]:
+              if needle in base_block:
+                  raise SystemExit(
+                      f'Forbidden redirected URL surface in learner base: {needle}'
+                  )
           PY
 
           node <<'NODE'
           const fs = require('fs');
           const vm = require('vm');
 
-          const source = fs.readFileSync('WebApp.js', 'utf8');
+          let source = fs.readFileSync('WebApp.js', 'utf8');
+
+          // getListeningLearnerUrl() only needs the render gate for this
+          // regression fixture. Stub it to prove return-shape semantics.
           const ctx = vm.createContext({
             console,
-            encodeURIComponent
+            encodeURIComponent,
+            buildProductionRenderPayload_: req => ({
+              mode: 'LISTENING',
+              set_id: req.set_id
+            })
           });
           vm.runInContext(source, ctx, {filename:'WebApp.js'});
 
-          const url = vm.runInContext(
-            "h3BuildListeningLearnerUrl_('H3-20260920-L04')",
+          const result = vm.runInContext(
+            "getListeningLearnerUrl('H3-20260920-L04')",
             ctx
           );
-          const expected =
-            'https://script.google.com/macros/s/' +
-            'AKfycby8I309RUkfVIsnJks808KA713QLppfrGiAFUTV2tA/' +
-            'dev?mode=LISTENING&set_id=H3-20260920-L04';
 
-          if (url !== expected) {
-            throw new Error(
-              'Learner URL builder mismatch:\n' +
-              'actual=' + url + '\nexpected=' + expected
-            );
+          const base =
+            'https://script.google.com/macros/s/' +
+            'AKfycby8I309RUkfVIsnJks808KA713QLppfrGiAFUTV2tA/dev';
+          const direct =
+            base + '?mode=LISTENING&set_id=H3-20260920-L04';
+
+          if (result.schema !== 'H3_LEARNER_URL_V2') {
+            throw new Error('Learner URL schema mismatch.');
+          }
+          if (result.handoff_mode !== 'HOME_PARAMETERLESS') {
+            throw new Error('Learner handoff mode is not HOME_PARAMETERLESS.');
+          }
+          if (result.url !== base || result.home_url !== base) {
+            throw new Error('Normal learner URL is not parameterless HOME.');
+          }
+          if (result.direct_url !== direct) {
+            throw new Error('Diagnostic direct URL mismatch.');
+          }
+          if (result.direct_url_policy !== 'INTERNAL_DIAGNOSTIC_ONLY') {
+            throw new Error('Direct URL is not diagnostic-only.');
           }
 
           for (const bad of [
+            '?mode=',
+            'set_id=',
+            'txn_id=',
             'script.googleusercontent.com',
             '/macros/echo',
             'user_content_key',
-            '&lib='
+            'lib='
           ]) {
-            if (url.includes(bad)) {
-              throw new Error('Forbidden learner URL fragment: ' + bad);
+            if (result.url.includes(bad)) {
+              throw new Error('Forbidden normal learner URL fragment: ' + bad);
             }
           }
 
@@ -2136,7 +2187,7 @@ jobs:
             rejected = true;
           }
           if (!rejected) {
-            throw new Error('Invalid SET_ID was accepted by learner URL builder.');
+            throw new Error('Invalid SET_ID was accepted by direct URL builder.');
           }
           NODE
 

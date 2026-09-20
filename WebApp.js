@@ -268,17 +268,23 @@ function getListeningLearnerUrl(
 
   return {
     schema:
-      'H3_LEARNER_URL_V1',
+      'H3_LEARNER_URL_V2',
     mode:
-      'LISTENING',
+      'HOME',
+    handoff_mode:
+      'HOME_PARAMETERLESS',
     set_id:
       normalized,
     url:
+      H3_LEARNER_WEB_APP_BASE_URL,
+    home_url:
+      H3_LEARNER_WEB_APP_BASE_URL,
+    direct_url:
       h3BuildListeningLearnerUrl_(
         normalized
       ),
-    home_url:
-      H3_LEARNER_WEB_APP_BASE_URL,
+    direct_url_policy:
+      'INTERNAL_DIAGNOSTIC_ONLY',
     host:
       'script.google.com'
   };

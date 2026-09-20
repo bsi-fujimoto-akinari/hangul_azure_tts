@@ -325,3 +325,17 @@ The client renders D2-D6 dynamically, preserves Korean line breaks, shows
 Unlike Listening, selecting Q5 does not auto-submit. The Written learner must
 press `採点` after all five answers are present; `リセット` is available
 before grading only.
+
+## H3 Web / Review active manifest
+
+```text
+MANIFEST_ID=H3-WEB-REVIEW-MANIFEST-20260920-V1
+ACTIVE_WEB_CHAT_CONTRACT=H3-WEB-CHAT-CURRENT-20260920-V2
+ACTIVE_WEB_CHAT_CONTRACT_PATH=H3_WEB_CHAT_CONTRACT.md
+ACTIVE_WEB_CHAT_CONTRACT_BLOB_SHA=c897116d39ba56e73cb7dee0fefeaac8c29505d8
+ACTIVE_REVIEW_ARCHITECTURE=H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V2
+ACTIVE_REVIEW_ARCHITECTURE_PATH=H3_REVIEW_ARCHITECTURE.md
+ACTIVE_REVIEW_ARCHITECTURE_BLOB_SHA=9ccd725ec4c8e6f63d76161e19b6ddd6c6b69089
+LEARNER_CONTENT_AUTHORITY=WEB_APP_REVIEW_ONLY
+```
+

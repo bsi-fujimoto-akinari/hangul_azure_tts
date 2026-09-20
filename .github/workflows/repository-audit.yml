@@ -2425,7 +2425,8 @@ jobs:
                   )
 
           grade_start = persistence.index('function gradeReviewReplay_(')
-          grade_body = persistence[grade_start:]
+          grade_end = persistence.index('\nfunction ', grade_start + 1)
+          grade_body = persistence[grade_start:grade_end]
 
           for needle in [
               "'H3_REVIEW_REPLAY_RESULT_V1'",

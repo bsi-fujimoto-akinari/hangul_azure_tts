@@ -2966,6 +2966,7 @@ jobs:
             crypto.createHash('sha256')
               .update(String(value), 'utf8')
               .digest('hex');
+          context.h3WrittenParseJson_ = value => JSON.parse(String(value));
           context.h3ReviewRequireExactHeader_ = () => {};
           context.h3ReviewTable_ = sheet => sheet;
 

@@ -1006,3 +1006,33 @@ R3 closes only after:
 4. CURRENT final readback PASS;
 5. manifest final readback PASS;
 6. no learner runtime/history/scheduler drift.
+
+## 23. Learner URL authority
+
+The learner-facing H3 Web App URL and the Apps Script audio/job execution surface are different authorities.
+
+Canonical learner base:
+
+```text
+https://script.google.com/macros/s/AKfycby8I309RUkfVIsnJks808KA713QLppfrGiAFUTV2tA/dev
+```
+
+Normal 5L issue handoff:
+1. complete canonical preissue/issue;
+2. obtain the exact issued SET_ID;
+3. call/read `getListeningLearnerUrl(SET_ID)`;
+4. return its `url` field to the learner.
+
+Never use as learner URL:
+- `script.googleusercontent.com`;
+- `/macros/echo`;
+- any URL containing `user_content_key` or `lib=`;
+- audio queue execution endpoints;
+- Drive MP3/TXT URLs;
+- a redirected browser content URL copied from an Apps Script response.
+
+`getListeningLearnerUrl` is read-only and verifies that the target is renderable through the production LISTENING route before returning the direct learner URL.
+
+The parameterless base is HOME. For an issued 5L set, return the direct `?mode=LISTENING&set_id=...` URL.
+
+If URL resolution fails, stop. Do not guess or substitute a different Apps Script endpoint.

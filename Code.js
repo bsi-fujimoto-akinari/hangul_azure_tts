@@ -4780,7 +4780,11 @@ function doGet(e) {
     params.mode ===
       'SYSTEM_TEST' ||
     params.mode ===
-      'LISTENING'
+      'LISTENING' ||
+    params.mode ===
+      'REVIEW' ||
+    params.mode ===
+      'REVIEW_REPLAY'
   ) {
     return h3WebDoGet_(e);
   }

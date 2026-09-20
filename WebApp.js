@@ -212,6 +212,78 @@ function h3DriveUtf8Text_(fileId, maxBytes) {
 var H3_WEB_RUNTIME_SPREADSHEET_ID =
   '18nxNQoHg3arFaEDOaqc4wuFHmBq43Q4g-I_uD6IDysM';
 
+
+var H3_LEARNER_WEB_APP_BASE_URL =
+  'https://script.google.com/macros/s/AKfycby8I309RUkfVIsnJks808KA713QLppfrGiAFUTV2tA/dev';
+
+function h3BuildListeningLearnerUrl_(
+  setId
+) {
+  var normalized =
+    String(setId || '').trim();
+
+  if (
+    !/^H3-\d{8}-L\d{2,3}$/.test(
+      normalized
+    )
+  ) {
+    throw new Error(
+      'LEARNER_URL_SET_ID_INVALID'
+    );
+  }
+
+  return (
+    H3_LEARNER_WEB_APP_BASE_URL +
+    '?mode=LISTENING&set_id=' +
+    encodeURIComponent(normalized)
+  );
+}
+
+function getListeningLearnerUrl(
+  setId
+) {
+  var normalized =
+    String(setId || '').trim();
+
+  var payload =
+    buildProductionRenderPayload_({
+      schema:
+        'H3_WEB_RENDER_REQUEST_V1',
+      mode:
+        'LISTENING',
+      set_id:
+        normalized
+    });
+
+  if (
+    !payload ||
+    payload.mode !== 'LISTENING' ||
+    String(payload.set_id || '') !==
+      normalized
+  ) {
+    throw new Error(
+      'LEARNER_URL_RENDER_GATE_FAILED'
+    );
+  }
+
+  return {
+    schema:
+      'H3_LEARNER_URL_V1',
+    mode:
+      'LISTENING',
+    set_id:
+      normalized,
+    url:
+      h3BuildListeningLearnerUrl_(
+        normalized
+      ),
+    home_url:
+      H3_LEARNER_WEB_APP_BASE_URL,
+    host:
+      'script.google.com'
+  };
+}
+
 var H3_WEB_TEST_TXN_SHEET =
   'listening_web_test_txn_v1';
 

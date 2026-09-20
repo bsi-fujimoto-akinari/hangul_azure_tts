@@ -2031,6 +2031,115 @@ jobs:
                   raise SystemExit(f'R3-12 Web/Chat close evidence missing: {needle}')
           PY
 
+      - name: Check learner URL authority
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+          code = Path('Code.js').read_text(encoding='utf-8')
+          ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
+          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
+
+          required_web = [
+              "var H3_LEARNER_WEB_APP_BASE_URL =",
+              "https://script.google.com/macros/s/AKfycby8I309RUkfVIsnJks808KA713QLppfrGiAFUTV2tA/dev",
+              "function h3BuildListeningLearnerUrl_(",
+              "function getListeningLearnerUrl(",
+              "'H3_LEARNER_URL_V1'",
+              "'script.google.com'",
+              "buildProductionRenderPayload_({",
+              "'LEARNER_URL_RENDER_GATE_FAILED'",
+          ]
+          for needle in required_web:
+              if needle not in web:
+                  raise SystemExit(f'Learner URL Web invariant missing: {needle}')
+
+          for needle in [
+              "params.mode ===\n      'LISTENING'",
+              "params.mode ===\n      'SYSTEM_TEST'",
+              "params.mode ===\n      'REVIEW'",
+              "params.mode ===\n      'REVIEW_REPLAY'",
+          ]:
+              if needle not in code:
+                  raise SystemExit(f'Learner route allowlist missing: {needle}')
+
+          for doc, needle in [
+              (chat, '## 17. Post-R3 learner URL authority fix'),
+              (chat, 'Never return a `script.googleusercontent.com` URL'),
+              (chat, '`getListeningLearnerUrl(SET_ID)`'),
+              (ops, '## 23. Learner URL authority'),
+              (ops, 'If URL resolution fails, stop.'),
+          ]:
+              if needle not in doc:
+                  raise SystemExit(f'Learner URL documentation invariant missing: {needle}')
+
+          forbidden_runtime = [
+              'script.googleusercontent.com',
+              '/macros/echo',
+              'user_content_key',
+          ]
+          helper_start = web.index('function h3BuildListeningLearnerUrl_(')
+          helper_end = web.index('function getListeningLearnerUrl(', helper_start)
+          helper = web[helper_start:helper_end]
+          for needle in forbidden_runtime:
+              if needle in helper:
+                  raise SystemExit(f'Forbidden redirected URL surface in learner URL helper: {needle}')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const source = fs.readFileSync('WebApp.js', 'utf8');
+          const ctx = vm.createContext({
+            console,
+            encodeURIComponent
+          });
+          vm.runInContext(source, ctx, {filename:'WebApp.js'});
+
+          const url = vm.runInContext(
+            "h3BuildListeningLearnerUrl_('H3-20260920-L04')",
+            ctx
+          );
+          const expected =
+            'https://script.google.com/macros/s/' +
+            'AKfycby8I309RUkfVIsnJks808KA713QLppfrGiAFUTV2tA/' +
+            'dev?mode=LISTENING&set_id=H3-20260920-L04';
+
+          if (url !== expected) {
+            throw new Error(
+              'Learner URL builder mismatch:\n' +
+              'actual=' + url + '\nexpected=' + expected
+            );
+          }
+
+          for (const bad of [
+            'script.googleusercontent.com',
+            '/macros/echo',
+            'user_content_key',
+            '&lib='
+          ]) {
+            if (url.includes(bad)) {
+              throw new Error('Forbidden learner URL fragment: ' + bad);
+            }
+          }
+
+          let rejected = false;
+          try {
+            vm.runInContext(
+              "h3BuildListeningLearnerUrl_('not-a-set')",
+              ctx
+            );
+          } catch (_e) {
+            rejected = true;
+          }
+          if (!rejected) {
+            throw new Error('Invalid SET_ID was accepted by learner URL builder.');
+          }
+          NODE
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

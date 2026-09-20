@@ -2706,8 +2706,8 @@ jobs:
 
           required = [
               '## 22. Minimal Chat output contract',
-              '問題なし',
-              '問題あり',
+              'No issues detected.',
+              'Issue detected.',
               'parameterless Web App URL and nothing else',
           ]
           for needle in required:

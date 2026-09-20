@@ -1,6 +1,6 @@
 # H3 Web / Chat Contract
 
-Version: H3-WEB-CHAT-CURRENT-20260920-V5
+Version: H3-WEB-CHAT-CURRENT-20260920-V6
 
 This document defines the current learner trigger, Web handoff, receipt, and minimal Chat response contract. Completed migration chronology remains in Git history.
 
@@ -139,6 +139,10 @@ This contract applies equally to 5L and 5W learner-facing postgrade content.
 - HOME sort is a compact `Newest` / `Priority` segmented control.
 - Review level uses `H3_REVIEW_LEVEL_V2` (0–100). Base weakness remains `×=12 / △=6 / ○=0` plus up to 8 points from repeated weakness on the same skill (`2×historical wrong + historical uncertain`). Time pressure then uses `F = 1 - 2^(-d/14)` where `d` is elapsed days, and the final level is `B + (100-B)×0.40×F`. Higher values mean higher review priority.
 - If a history entry has `answered_at=UNKNOWN`, HOME temporarily substitutes the oldest valid timestamp present in the current HOME history for ordering and Review-level age only. The learner-visible date remains `UNKNOWN`; this fallback is provisional pending historical investigation.
+- HOME history is served only from the derived `review_home_index_v1`. This index stores one ACTIVE row per provider/set plus precomputed `BASE_PRIORITY`; it is not learner history or Review authority.
+- `BASE_PRIORITY` is refreshed after a committed answer/Answer Sync, not during HOME rendering. HOME recomputes only the time-dependent forgetting component.
+- HOME never reconstructs Review payloads or performs deep source/hash validation. Opening a Review remains the full source-lock boundary.
+- Parameterless boot owns current-learning resolution. Once HOME is selected, `buildReviewHomePayload_()` returns `current_learning=null` and does not repeat that resolution.
 
 ## 18. Listening audio reliability
 

@@ -1060,6 +1060,7 @@ jobs:
           web = Path('WebApp.js').read_text(encoding='utf-8')
 
           for needle in [
+              'function h3ReviewWrittenProviderFactory_(',
               'function h3ReviewCanonicalJson_(',
               'function h3ReviewHash_(',
               'function h3ReviewRequireExactHeader_(',
@@ -1070,7 +1071,7 @@ jobs:
               'function h3ReviewRenderRequest_(',
               'function h3ReviewMediaRequest_(',
               'function h3ReviewSubmitRequest_(',
-              'var H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ =\n  null;',
+              'var H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ =\n  h3ReviewWrittenProviderFactory_;',
           ]:
               if needle not in core:
                   raise SystemExit(f'Review Core invariant missing: {needle}')
@@ -1163,6 +1164,7 @@ jobs:
             gradeReviewReplay_: () => ({})
           });
           vm.runInContext(source, context, {filename:'ReviewCore+ListeningAdapter'});
+          vm.runInContext('H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ = null;', context);
 
           const originalCurrent = context.h3ListeningReviewCurrentLearning_;
           const txnHistory = [
@@ -1313,6 +1315,7 @@ jobs:
           web = Path('WebApp.js').read_text(encoding='utf-8')
 
           for needle in [
+              'function h3ReviewWrittenProviderFactory_(',
               'function h3ReviewProviderForRequest_(',
               'request.review_kind',
               'request.txn_id',
@@ -1322,7 +1325,7 @@ jobs:
               "'REVIEW_PROVIDER_KIND_INVALID'",
               "'REVIEW_PROVIDER_ROUTE_AMBIGUOUS'",
               'h3ReviewProviderForRequest_(\n      request',
-              'var H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ =\n  null;',
+              'var H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ =\n  h3ReviewWrittenProviderFactory_;',
           ]:
               if needle not in core:
                   raise SystemExit(f'Written provider routing invariant missing: {needle}')
@@ -1404,8 +1407,8 @@ jobs:
 
           assert.strictEqual(
             vm.runInContext('h3ReviewProviders_().length', context),
-            1,
-            'Written provider became active in production.'
+            2,
+            'Written provider is not active in production.'
           );
           assert.deepStrictEqual(
             call("h3ReviewRenderRequest_({mode:'REVIEW',txn_id:'H3TX-1'})"),
@@ -1519,10 +1522,6 @@ jobs:
             [['④?','×',true],['②?','△',true],['④?','△',true]]
           );
 
-          vm.runInContext(
-            'H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ = h3WrittenReviewProvider_;',
-            context
-          );
           assert.strictEqual(
             vm.runInContext('h3ReviewProviders_().length', context),
             2
@@ -1584,7 +1583,7 @@ jobs:
           console.log('Written Review projection and routing: PASS');
           NODE
 
-      - name: Check inactive Written persistent Review loader
+      - name: Check production Written persistent Review loader
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1609,7 +1608,7 @@ jobs:
               "'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1'",
               "replay_capability:",
               "'unavailable'",
-              "provider_active: false",
+              "provider_active: true",
               "'WRITTEN_REVIEW_PERSISTENCE_RECONSTRUCTION_HASH_MISMATCH'",
               "'WRITTEN_REVIEW_PERSISTENCE_BINDING_HASH_MISMATCH'",
           ]:
@@ -1634,8 +1633,8 @@ jobs:
                       f'Written persistent loader is not read-only: {forbidden}'
                   )
 
-          if "var H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ =\n  null;" not in core:
-              raise SystemExit('Written provider became active.')
+          if "var H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ =\n  h3ReviewWrittenProviderFactory_;" not in core:
+              raise SystemExit('Written provider is not active.')
           for forbidden in [
               'review_kind',
               'h3WrittenReview',
@@ -1856,11 +1855,11 @@ jobs:
           );
 
           console.log(
-            'Inactive Written persistent Review loader: PASS'
+            'Production Written persistent Review loader: PASS'
           );
           NODE
 
-      - name: Check staged Written HOME and Review UI
+      - name: Check production Written HOME and Review UI
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1917,16 +1916,16 @@ jobs:
                       f'Written HOME/Review client invariant missing: {needle}'
                   )
 
-          # Phase ② must not activate the production provider or add a direct Web route.
-          if "var H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ =\n  null;" not in core:
-              raise SystemExit('Written provider became active during phase ②.')
+          # Production Written provider is active; WebApp keeps using common Review dispatch.
+          if "var H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ =\n  h3ReviewWrittenProviderFactory_;" not in core:
+              raise SystemExit('Written provider is not active in production.')
           for forbidden in [
               'review_kind',
               'h3WrittenReview',
           ]:
               if forbidden in web:
                   raise SystemExit(
-                      f'WebApp direct Written route activated early: {forbidden}'
+                      f'Unexpected direct Written WebApp route: {forbidden}'
                   )
 
           # Written Review must not expose replay or media through the staged provider.
@@ -2014,16 +2013,10 @@ jobs:
             filename:'Written HOME/Review staged provider'
           });
 
-          // Production source stays Listening-only.
+          // Production source exposes Listening + Written providers.
           assert.strictEqual(
             vm.runInContext('h3ReviewProviders_().length', context),
-            1
-          );
-
-          // Simulate only the later factory flip: all phase ② seams must already work.
-          vm.runInContext(
-            'H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ = h3WrittenReviewProvider_;',
-            context
+            2
           );
 
           const home = JSON.parse(JSON.stringify(
@@ -2073,7 +2066,7 @@ jobs:
           );
 
           console.log(
-            'Staged Written HOME and Review UI: PASS'
+            'Production Written HOME and Review UI: PASS'
           );
           NODE
 

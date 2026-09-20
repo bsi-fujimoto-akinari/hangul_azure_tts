@@ -4470,8 +4470,8 @@ function runListeningJob_(
         folderId:
           audioTargetFolderId_(
             c,
-            '5W',
-            j.id
+            '5L',
+            j.parentSetId
           ),
         voice:
           voice.label,
@@ -5412,8 +5412,8 @@ function runJob_(
         folderId:
           audioTargetFolderId_(
             c,
-            '5L',
-            j.parentSetId
+            '5W',
+            j.id
           ),
         voices:
           q.concat(d),

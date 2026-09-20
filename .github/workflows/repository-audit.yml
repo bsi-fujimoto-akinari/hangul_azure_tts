@@ -2393,144 +2393,45 @@ jobs:
               raise SystemExit('UTF-8 SHA-256 regression fixture failed.')
           PY
 
-      - name: Check REVIEW_REPLAY read-only contract
+      - name: Check REVIEW_REPLAY retirement contract
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
           web = Path('WebApp.js').read_text(encoding='utf-8')
-          persistence = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          adapter = Path('WebAppReviewListeningAdapter.js').read_text(encoding='utf-8')
           client = Path('Client.html').read_text(encoding='utf-8')
-          style = Path('Stylesheet.html').read_text(encoding='utf-8')
           architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
           operations = Path('OPERATIONS.md').read_text(encoding='utf-8')
           chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
 
-          for needle in [
-              'h3ReviewRenderRequest_(',
-              'h3ReviewMediaRequest_(',
-              'h3ReviewSubmitRequest_(',
-              "params.mode === 'REVIEW_REPLAY'",
-          ]:
-              if needle not in web:
-                  raise SystemExit(f'R3-09E Web route invariant missing: {needle}')
-
-          replay_start = persistence.index('function buildReviewReplayPayload_(')
-          replay_end = persistence.index('function getReviewReplayPayload_(', replay_start)
-          replay_builder = persistence[replay_start:replay_end]
+          if "params.mode === 'REVIEW_REPLAY'" in web:
+              raise SystemExit('REVIEW_REPLAY remains an active learner boot route.')
 
           for needle in [
-              "'H3_REVIEW_REPLAY_SET_V1'",
-              "mode:\n      'REVIEW_REPLAY'",
-              'nonlearning: true',
-              'persisted: false',
-              'source_review_binding_sha256:',
-              'questions:',
+              'function h3ListeningReviewReplayRetired_()',
+              "'REVIEW_REPLAY_RETIRED'",
+              'openReplay:\n      h3ListeningReviewReplayRetired_',
+              'openReplayMedia:\n      h3ListeningReviewReplayRetired_',
+              'gradeReplay:\n      h3ListeningReviewReplayRetired_',
           ]:
-              if needle not in replay_builder:
-                  raise SystemExit(f'R3-09E replay issue invariant missing: {needle}')
+              if needle not in adapter:
+                  raise SystemExit(f'Replay retirement guard missing: {needle}')
 
-          for forbidden in [
-              'user_answer:',
-              'correct_answer:',
-              'explanation:',
-              'script_text:',
-              'prior_answer',
+          if "'再挑戦'" in client:
+              raise SystemExit('Learner-facing retry control remains in Client.')
+
+          for doc, needle in [
+              (architecture, '## 9. Retired REVIEW_REPLAY'),
+              (architecture, 'REVIEW_REPLAY_RETIRED'),
+              (operations, 'REVIEW_REPLAY'),
+              (operations, 'retired'),
+              (chat, 'REVIEW_REPLAY'),
+              (chat, 'retired'),
           ]:
-              if forbidden in replay_builder:
-                  raise SystemExit(
-                      f'R3-09E replay issue leaks hidden review content: {forbidden}'
-                  )
-
-          grade_start = persistence.index('function gradeReviewReplay_(')
-          grade_end = persistence.index('\nfunction ', grade_start + 1)
-          grade_body = persistence[grade_start:grade_end]
-
-          for needle in [
-              "'H3_REVIEW_REPLAY_RESULT_V1'",
-              'runtime_write_count: 0',
-              'original_score:',
-              'after_replay:',
-              'buildPersistentReviewPayload_(',
-          ]:
-              if needle not in grade_body:
-                  raise SystemExit(f'R3-09E replay grade invariant missing: {needle}')
-
-          for forbidden in [
-              'h3ProdSubmit_(',
-              '.appendRow(',
-              '.setValue(',
-              '.setValues(',
-              'listening_log_v1',
-              'listening_state_v1',
-          ]:
-              if forbidden in grade_body:
-                  raise SystemExit(
-                      f'R3-09E replay grader contains forbidden learner WRITE surface: {forbidden}'
-                  )
-
-          for needle in [
-              'function loadReplayTxn(txnId)',
-              "'REVIEW_REPLAY'",
-              'function setReviewPage(',
-              "'review-progress'",
-              "'review-progress-button'",
-              "'review-footer-actions'",
-              "'再挑戦'",
-              "'ホーム'",
-          ]:
-              if needle not in client:
-                  raise SystemExit(f'R3-09E Client invariant missing: {needle}')
-
-          for forbidden in [
-              "'この回答は学習成績・復習スケジュールには反映されません。'",
-              "'もう一度この5問を解く'",
-              "'replay-notice'",
-              "'persistent-review-header'",
-              "'persistent-review-score'",
-              "'review-result-strip'",
-          ]:
-              if forbidden in client:
-                  raise SystemExit(
-                      f'R3-09E refined learner UI contains retired surface: {forbidden}'
-                  )
-
-          for needle in [
-              '.review-progress',
-              '.review-progress-button',
-              '.review-footer-actions',
-              '.review-replay-button',
-              '.review-history-actions',
-          ]:
-              if needle not in style:
-                  raise SystemExit(f'R3-09E CSS invariant missing: {needle}')
-
-          for forbidden in [
-              '.replay-notice',
-              '.replay-comparison',
-              '.persistent-review-header',
-              '.persistent-review-score',
-              '.review-result-strip',
-          ]:
-              if forbidden in style:
-                  raise SystemExit(
-                      f'R3-09E retired CSS surface remains: {forbidden}'
-                  )
-
-          for needle in [
-              'Status: R3_CLOSED_NORMAL_LIVE',
-              '## 9. REVIEW_REPLAY',
-              'RUNTIME_WRITE_COUNT=0',
-          ]:
-              if needle not in architecture:
-                  raise SystemExit(f'R3-09E architecture evidence missing: {needle}')
-
-          if '## 9. Current production and Review invariants' not in operations:
-              raise SystemExit('OPERATIONS lacks the current replay contract.')
-
-          if '## 9. Persistent Review and replay' not in chat:
-              raise SystemExit('Web/Chat contract lacks REVIEW_REPLAY.')
+              if needle not in doc:
+                  raise SystemExit(f'Replay retirement documentation missing: {needle}')
           PY
 
           node <<'NODE'
@@ -2551,19 +2452,18 @@ jobs:
             filename: 'WebApp.js'
           });
 
-          const replay = vm.runInContext(
+          const retired = vm.runInContext(
             "h3WebBootRequest_({parameter:{mode:'REVIEW_REPLAY',txn_id:'H3TX-20260919-000005'}})",
             ctx
           );
 
           if (
-            replay.mode !== 'REVIEW_REPLAY' ||
-            replay.txn_id !== 'H3TX-20260919-000005'
+            retired.mode !== 'HOME' ||
+            retired.txn_id !== null
           ) {
-            throw new Error('REVIEW_REPLAY boot contract mismatch.');
+            throw new Error('Retired REVIEW_REPLAY boot did not fall back to HOME.');
           }
           NODE
-
       - name: Check current Review learner UI
         shell: bash
         run: |

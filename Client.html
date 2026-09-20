@@ -3,6 +3,7 @@
   'use strict';
 
   var sections = ['K1', 'K2', 'K3', 'K4', 'K5'];
+  var questionKeys = ['K1', 'K2', 'K3', 'K4', 'K5'];
   var circled = ['①', '②', '③', '④'];
   var mobileQuery = window.matchMedia('(max-width: 619px)');
 
@@ -70,6 +71,7 @@
     app.submitting = false;
     app.activeIndex = 0;
     app.surfaceFamily = null;
+    questionKeys = [];
     app.mediaCache = {};
     app.mediaTrimMs = {};
     app.mediaLoading = {};
@@ -133,6 +135,113 @@
     }
 
     return '';
+  }
+
+  function questionKeyFor_(
+    question,
+    index
+  ) {
+    var explicit =
+      String(
+        question &&
+        (
+          question.question_key ||
+          question.item_id
+        ) ||
+        ''
+      ).trim();
+
+    if (explicit) {
+      return explicit;
+    }
+
+    var section =
+      String(
+        question &&
+        question.section ||
+        ''
+      ).trim();
+
+    if (section) {
+      return section;
+    }
+
+    return 'Q' + String(index + 1);
+  }
+
+  function validateReadingPayload_(
+    payload
+  ) {
+    if (
+      !Array.isArray(payload.passages) ||
+      payload.passages.length !== 1
+    ) {
+      throw new Error(
+        'READING_PASSAGE_PAYLOAD_INVALID'
+      );
+    }
+
+    var passage =
+      payload.passages[0];
+    var passageId =
+      String(
+        passage &&
+        passage.passage_id ||
+        ''
+      );
+    var passageSha =
+      String(
+        passage &&
+        passage.passage_sha256 ||
+        ''
+      );
+
+    if (
+      !passageId ||
+      !passageSha ||
+      !String(
+        passage.text_ko || ''
+      ).trim()
+    ) {
+      throw new Error(
+        'READING_PASSAGE_IDENTITY_INVALID'
+      );
+    }
+
+    var seen = {};
+    payload.questions.forEach(
+      function (question, index) {
+        var key =
+          questionKeyFor_(
+            question,
+            index
+          );
+
+        if (
+          !question.item_id ||
+          !question.question_key ||
+          seen[key]
+        ) {
+          throw new Error(
+            'READING_QUESTION_IDENTITY_INVALID'
+          );
+        }
+        seen[key] = true;
+
+        if (
+          String(
+            question.passage_id || ''
+          ) !== passageId ||
+          String(
+            question.passage_sha256 || ''
+          ) !== passageSha
+        ) {
+          throw new Error(
+            'READING_PASSAGE_BINDING_INVALID'
+          );
+        }
+      }
+    );
   }
 
   function validateLearningPayloadShape_(payload) {
@@ -219,6 +328,13 @@
           'QUESTION_PAYLOAD_PROVIDER_INVALID'
         );
       }
+
+      if (family === 'READING') {
+        validateReadingPayload_(
+          payload
+        );
+      }
+
       return family;
     } else if (
       family === 'SYSTEM_TEST'
@@ -259,6 +375,51 @@
     return family;
   }
 
+  function renderReadingSurface_(
+    payload
+  ) {
+    renderQuestions(
+      payload.questions
+    );
+
+    var root =
+      document.getElementById(
+        'questions'
+      );
+    var passage =
+      payload.passages[0];
+    var block =
+      el(
+        'section',
+        'question-prompt reading-passage'
+      );
+    block.dataset.passageId =
+      passage.passage_id;
+
+    var title =
+      el(
+        'h2',
+        'question-title'
+      );
+    title.textContent =
+      '本文';
+    block.appendChild(title);
+
+    var textBlock =
+      el(
+        'div',
+        'reading-passage-text'
+      );
+    textBlock.textContent =
+      passage.text_ko;
+    block.appendChild(textBlock);
+
+    root.insertBefore(
+      block,
+      root.firstChild
+    );
+  }
+
   function renderLearningSurface_(
     payload,
     family
@@ -269,6 +430,13 @@
     ) {
       renderQuestions(
         payload.questions
+      );
+      return;
+    }
+
+    if (family === 'READING') {
+      renderReadingSurface_(
+        payload
       );
       return;
     }
@@ -318,6 +486,15 @@
             function (question) {
               return String(
                 question.section || ''
+              );
+            }
+          );
+        questionKeys =
+          payload.questions.map(
+            function (question, index) {
+              return questionKeyFor_(
+                question,
+                index
               );
             }
           );
@@ -1183,6 +1360,8 @@
 
     questions.forEach(function (q, index) {
       var qNo = index + 1;
+      var questionKey =
+        questionKeys[index];
       var card = el('section', 'question-card');
       if (
         app.payload &&
@@ -1210,9 +1389,18 @@
       uncertain.addEventListener('click', function () {
         if (app.locked) return;
 
-        app.uncertain[q.section] = !app.uncertain[q.section];
-        uncertain.classList.toggle('active', !!app.uncertain[q.section]);
-        uncertain.setAttribute('aria-pressed', String(!!app.uncertain[q.section]));
+        app.uncertain[questionKey] =
+          !app.uncertain[questionKey];
+        uncertain.classList.toggle(
+          'active',
+          !!app.uncertain[questionKey]
+        );
+        uncertain.setAttribute(
+          'aria-pressed',
+          String(
+            !!app.uncertain[questionKey]
+          )
+        );
         updateLiveSummary();
       });
 
@@ -1268,7 +1456,8 @@
         button.addEventListener('click', function () {
           if (app.locked) return;
 
-          app.answers[q.section] = choiceId;
+          app.answers[questionKey] =
+            choiceId;
           Array.prototype.forEach.call(
             choices.querySelectorAll('.choice'),
             function (node) {
@@ -1282,8 +1471,6 @@
 
           if (index < app.payload.questions.length - 1) {
             var nextIndex = index + 1;
-            var nextSection = sections[nextIndex];
-
             setActiveIndex(nextIndex, true);
             playAudioAssetNow(
               audioKeyForIndex_(
@@ -1307,9 +1494,16 @@
               updateWrittenGradeButton_();
             }
           } else {
-            var firstMissing = sections.findIndex(function (section) {
-              return typeof app.answers[section] !== 'number';
-            });
+            var firstMissing =
+              questionKeys.findIndex(
+                function (questionKey) {
+                  return (
+                    typeof app.answers[
+                      questionKey
+                    ] !== 'number'
+                  );
+                }
+              );
             if (firstMissing >= 0) {
               setActiveIndex(firstMissing, true);
               playAudioAssetNow(
@@ -1332,7 +1526,8 @@
     if (
       app.payload &&
       app.payload.mode ===
-        'WRITTEN'
+        'WRITTEN' &&
+      app.surfaceFamily === '5W'
     ) {
       appendWrittenControls_(
         root
@@ -1827,15 +2022,18 @@
     var buttons = document.querySelectorAll('.progress-button');
 
     Array.prototype.forEach.call(buttons, function (button, index) {
-      var section = sections[index];
+      var questionKey =
+        questionKeys[index];
       button.classList.toggle('current', index === app.activeIndex);
       button.classList.toggle(
         'answered',
-        typeof app.answers[section] === 'number' && !app.uncertain[section]
+        typeof app.answers[questionKey] === 'number' &&
+          !app.uncertain[questionKey]
       );
       button.classList.toggle(
         'uncertain-mark',
-        typeof app.answers[section] === 'number' && !!app.uncertain[section]
+        typeof app.answers[questionKey] === 'number' &&
+          !!app.uncertain[questionKey]
       );
       button.setAttribute(
         'aria-current',
@@ -1851,13 +2049,31 @@
   }
 
   function allAnswered() {
-    return sections.every(function (section) {
-      return typeof app.answers[section] === 'number';
-    });
+    return questionKeys.every(
+      function (questionKey) {
+        return (
+          typeof app.answers[
+            questionKey
+          ] === 'number'
+        );
+      }
+    );
   }
 
   function submitAnswers() {
     if (!allAnswered() || app.locked || app.submitting) return;
+
+    if (
+      app.surfaceFamily ===
+        'READING' ||
+      app.surfaceFamily ===
+        'TRANSLATION'
+    ) {
+      showError(
+        'この学習形式の回答送信はまだ有効化されていません。'
+      );
+      return;
+    }
 
     if (
       [

@@ -1335,6 +1335,10 @@ jobs:
             knownEntry.review_base_level
           );
 
+          const call = expression => JSON.parse(JSON.stringify(
+            vm.runInContext(expression, context)
+          ));
+
           context.__v2Row = [
             'WRITTEN','W1',1,'2026-09-20T09:00:00Z',1,2,1,
             'TRUE',0,12,'W1','WRITTEN_PRODUCTION_WEB','ACTIVE',
@@ -1422,9 +1426,6 @@ jobs:
           context.getReviewReplayMediaPayload_ = () => ({route:'replay-media'});
           context.gradeReviewReplay_ = () => ({route:'replay-grade',runtime_write_count:0});
 
-          const call = expression => JSON.parse(JSON.stringify(
-            vm.runInContext(expression, context)
-          ));
           assert.deepStrictEqual(
             call("h3ReviewRenderRequest_({mode:'REVIEW',txn_id:'T'})"),
             {

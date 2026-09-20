@@ -475,7 +475,7 @@ Script TXT storage is co-located with audio:
 - 5L set TXT: `03_AUDIO/02_5L/{LISTENING_SET_ID}.txt`;
 - SYSTEM_TEST script TXT: `03_AUDIO/90_ARCHIVE/01_SYSTEM_TEST/{SET_ID}_script.txt`.
 
-5L script TXT is generated automatically after all five source-locked K1-K5 audio rows are done. Its content is reconstructed from the same AUDIO_PLAN_JSON surface, with repetitions/cues collapsed to one semantic script surface. Existing same-name TXT must match exactly; conflicting content is a hard stop.
+5L script TXT is not part of the learner issue critical path. After all five source-locked K1-K5 audio rows are done, the exact semantic script may be materialized explicitly with `persistListeningSetScript(SET_ID)` for Review/audit convenience. Its content is reconstructed from the same AUDIO_PLAN_JSON surface, with repetitions/cues collapsed to one semantic script surface. Existing same-name TXT must match exactly when materialization is requested; a script materialization failure does not invalidate an otherwise-valid learner issue.
 
 Until the R3-W written Web App migration, 5W DAILY_TXT remains Chat-owned after verified answer sync, but Drive storage is `03_AUDIO/01_5W`, not `04_LEARNER_ARTIFACTS`.
 
@@ -500,7 +500,7 @@ Required preissue state:
 - the retest slot matches the persisted overload plan and per-set retest cap;
 - exactly five queue rows exist for the target set, all are `done`, error-free, and match the persisted individual audio binding;
 - every bound MP3 exists;
-- exactly one co-located `{LISTENING_SET_ID}.txt` exists and equals the semantic script reconstructed from the same audio plans;
+- SCRIPT_TXT is not a preissue prerequisite; absence of `{LISTENING_SET_ID}.txt` does not block issue;
 - learner history rows for the target set are zero;
 - production transaction rows for the target set are zero;
 - no unresolved production `RECOVERY_REQUIRED` transaction exists;

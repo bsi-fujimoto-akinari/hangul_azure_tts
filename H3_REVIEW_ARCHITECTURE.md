@@ -289,3 +289,37 @@ This rule is scoped to Written 5W Review. Listening Review keeps its existing ex
 
 Structured Written 5W learning-block text must preserve stored newline boundaries. In particular, a Hanja network stored as target, `⇒` related examples, and `≠` homophone examples on separate lines must render as the same three visual lines. The renderer must not infer or synthesize line splits when the stored content itself is one line; such content corrections belong to the source/payload layer.
 
+## 34. Written 5W approved explanation overlay
+
+Committed historical and production Review authorities remain immutable. Learner-facing
+5W explanation corrections use the optional Review-only
+\`written_review_explanation_overlay_v1\` plus
+\`written_review_explanation_binding_v1\` overlay.
+
+The overlay is bound to the exact immutable base authority hash
+(\`RECONSTRUCTION_SHA256\` for historical Written Review or \`REVIEW_SHA256\` for
+production Written Review), the exact SET_ID, source mode, approved-display hash,
+and \`H3-WRITTEN-REVIEW-EXPLANATION-OVERLAY-20260921-V1\`. It may replace only the
+learner-facing \`sections[].explanation\` object after the normal provider-specific
+base Review has passed all existing source-lock validation. It must not alter score,
+mark, uncertainty, answered_at, raw_input, SET_ID, STAGE_ID, TXN_ID, source binding,
+learner history, scheduler, retest state, counters, pointers, Listening data, or
+active-learning behavior.
+
+If both overlay tables are absent, the existing base Review remains readable
+unchanged. If only one overlay table exists, rows are duplicate/ambiguous, a hash
+or source gate mismatches, or a stored source body/choice/correct-answer/mark gate
+does not match the validated base Review, opening the affected overlay fails closed.
+
+The internal provenance vocabulary supports
+\`HISTORICAL_REFORMAT\`, \`HISTORICAL_WHY_EXPAND\`,
+\`SOURCE_LINKED_REBUILD\`, \`CURRENT_REGENERATED_FROM_VERIFIED_SOURCES\`, and
+\`CURRENT_NATIVE_STRICT\`. Provenance remains technical/collapsible and is never
+shown as learner explanation content. The approved #1-#18 learner-facing source
+text is bound by SHA-256
+\`9b13effe68f565a1ef1fea5c13441dddf7ef3bed5296050c3e62931db48a670f\`.
+
+Written 5W body-translation paragraphs and learning blocks preserve stored newline
+boundaries. Listening Review retains its existing disclosure and translation
+behavior.
+

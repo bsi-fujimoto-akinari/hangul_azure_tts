@@ -217,6 +217,133 @@ function h3ReviewProviderForRequest_(
 }
 
 
+function h3ReviewSurfaceMetadata_(
+  kind,
+  surfaceFamily,
+  level
+) {
+  var normalizedKind =
+    String(kind || '');
+  var normalizedFamily =
+    String(surfaceFamily || '');
+  var normalizedLevel =
+    String(level || '');
+
+  if (
+    ['LISTENING', 'WRITTEN']
+      .indexOf(normalizedKind) < 0
+  ) {
+    throw new Error(
+      'REVIEW_SURFACE_PROVIDER_INVALID'
+    );
+  }
+
+  if (!normalizedFamily) {
+    normalizedFamily =
+      normalizedKind === 'LISTENING'
+        ? '5L'
+        : '5W';
+  }
+
+  if (!normalizedLevel) {
+    normalizedLevel = '3級';
+  }
+
+  if (
+    ['5L', '5W', 'READING', 'TRANSLATION']
+      .indexOf(normalizedFamily) < 0
+  ) {
+    throw new Error(
+      'REVIEW_SURFACE_FAMILY_INVALID'
+    );
+  }
+
+  if (
+    ['3級', '準2級']
+      .indexOf(normalizedLevel) < 0
+  ) {
+    throw new Error(
+      'REVIEW_SURFACE_LEVEL_INVALID'
+    );
+  }
+
+  if (
+    normalizedKind === 'LISTENING' &&
+    normalizedFamily !== '5L'
+  ) {
+    throw new Error(
+      'REVIEW_SURFACE_PROVIDER_FAMILY_MISMATCH'
+    );
+  }
+
+  if (
+    normalizedKind === 'WRITTEN' &&
+    normalizedFamily === '5L'
+  ) {
+    throw new Error(
+      'REVIEW_SURFACE_PROVIDER_FAMILY_MISMATCH'
+    );
+  }
+
+  return {
+    learning_surface_schema:
+      'H3_LEARNING_SURFACE_V1',
+    provider_kind:
+      normalizedKind,
+    surface_family:
+      normalizedFamily,
+    level:
+      normalizedLevel
+  };
+}
+
+
+function h3ReviewAttachSurfaceMetadata_(
+  provider,
+  payload
+) {
+  if (
+    !payload ||
+    typeof payload !== 'object' ||
+    Array.isArray(payload)
+  ) {
+    throw new Error(
+      'REVIEW_SURFACE_PAYLOAD_INVALID'
+    );
+  }
+
+  var metadata =
+    h3ReviewSurfaceMetadata_(
+      provider && provider.kind,
+      payload.surface_family,
+      payload.level
+    );
+
+  payload.learning_surface_schema =
+    metadata.learning_surface_schema;
+  payload.provider_kind =
+    metadata.provider_kind;
+  payload.surface_family =
+    metadata.surface_family;
+  payload.level =
+    metadata.level;
+
+  if (
+    Array.isArray(payload.sections)
+  ) {
+    payload.item_count =
+      payload.sections.length;
+  } else if (
+    Array.isArray(payload.questions)
+  ) {
+    payload.item_count =
+      payload.questions.length;
+  }
+
+  return payload;
+}
+
+
 function h3ReviewHistoryEnvelope_(
   provider,
   entry
@@ -239,8 +366,26 @@ function h3ReviewHistoryEnvelope_(
       entry.answered_at;
   }
 
+  var surface =
+    h3ReviewSurfaceMetadata_(
+      provider.kind,
+      entry.surface_family,
+      entry.level
+    );
+
+  entry.provider_kind =
+    surface.provider_kind;
+  entry.surface_family =
+    surface.surface_family;
+  entry.level =
+    surface.level;
+
   return {
     kind: provider.kind,
+    surface_family:
+      surface.surface_family,
+    level:
+      surface.level,
     set_id: String(
       entry.set_id || ''
     ),
@@ -283,7 +428,7 @@ var H3_REVIEW_LEVEL_TIME_HEADROOM_SHARE_ =
 var H3_REVIEW_HOME_INDEX_SHEET_ =
   'review_home_index_v1';
 
-var H3_REVIEW_HOME_INDEX_HEADERS_ = [
+var H3_REVIEW_HOME_INDEX_HEADERS_V1_ = [
   'KIND',
   'SET_ID',
   'SET_NO',
@@ -299,6 +444,16 @@ var H3_REVIEW_HOME_INDEX_HEADERS_ = [
   'STATUS'
 ];
 
+var H3_REVIEW_HOME_INDEX_HEADERS_V2_ =
+  H3_REVIEW_HOME_INDEX_HEADERS_V1_
+    .concat([
+      'SURFACE_FAMILY',
+      'LEVEL'
+    ]);
+
+var H3_REVIEW_HOME_INDEX_HEADERS_ =
+  H3_REVIEW_HOME_INDEX_HEADERS_V2_;
+
 
 function h3ReviewSkillEvidenceIndex_(
   spreadsheet
@@ -309,6 +464,7 @@ function h3ReviewSkillEvidenceIndex_(
 
   function add(
     kind,
+    level,
     setId,
     skillId,
     result
@@ -329,8 +485,21 @@ function h3ReviewSkillEvidenceIndex_(
       return;
     }
 
+    var normalizedLevel =
+      String(level || '3級');
+    if (
+      ['3級', '準2級']
+        .indexOf(normalizedLevel) < 0
+    ) {
+      throw new Error(
+        'REVIEW_EVIDENCE_LEVEL_INVALID'
+      );
+    }
+
     var setKey =
-      kind + '|' + normalizedSetId;
+      kind + '|' +
+      normalizedLevel + '|' +
+      normalizedSetId;
     if (!bySet[setKey]) {
       bySet[setKey] = [];
     }
@@ -358,6 +527,7 @@ function h3ReviewSkillEvidenceIndex_(
 
     var skillKey =
       kind + '|' +
+      normalizedLevel + '|' +
       normalizedSkillId;
     if (!bySkill[skillKey]) {
       bySkill[skillKey] = {
@@ -380,6 +550,24 @@ function h3ReviewSkillEvidenceIndex_(
       bySkill[skillKey]
         .correct += 1;
     }
+  }
+
+  function rowLevel(
+    table,
+    row
+  ) {
+    if (
+      Object.prototype.hasOwnProperty.call(
+        table.map,
+        'LEVEL'
+      )
+    ) {
+      return String(
+        row[table.map.LEVEL] ||
+        '3級'
+      );
+    }
+    return '3級';
   }
 
   var listeningSheet =
@@ -416,6 +604,10 @@ function h3ReviewSkillEvidenceIndex_(
 
         add(
           'LISTENING',
+          rowLevel(
+            listening,
+            row
+          ),
           row[
             listening.map
               .PARENT_SET_ID
@@ -484,6 +676,10 @@ function h3ReviewSkillEvidenceIndex_(
 
         add(
           'WRITTEN',
+          rowLevel(
+            written,
+            row
+          ),
           setId,
           row[
             written.map.SKILL_ID
@@ -512,8 +708,11 @@ function h3ReviewBaseLevelForEntry_(
   entry,
   evidence
 ) {
+  var entryLevel =
+    String(entry.level || '3級');
   var setKey =
     kind + '|' +
+    entryLevel + '|' +
     String(entry.set_id || '');
   var items =
     evidence.bySet[setKey] ||
@@ -535,6 +734,7 @@ function h3ReviewBaseLevelForEntry_(
           var stats =
             evidence.bySkill[
               kind + '|' +
+              entryLevel + '|' +
               item.skill_id
             ];
 
@@ -599,12 +799,18 @@ function h3ReviewHomeIndexTable_(
   var table =
     h3ReviewTable_(sheet);
 
-  if (
-    JSON.stringify(table.header) !==
+  var isV1 =
+    JSON.stringify(table.header) ===
     JSON.stringify(
-      H3_REVIEW_HOME_INDEX_HEADERS_
-    )
-  ) {
+      H3_REVIEW_HOME_INDEX_HEADERS_V1_
+    );
+  var isV2 =
+    JSON.stringify(table.header) ===
+    JSON.stringify(
+      H3_REVIEW_HOME_INDEX_HEADERS_V2_
+    );
+
+  if (!isV1 && !isV2) {
     throw new Error(
       'REVIEW_HOME_INDEX_HEADER_MISMATCH'
     );
@@ -612,7 +818,11 @@ function h3ReviewHomeIndexTable_(
 
   return {
     sheet: sheet,
-    table: table
+    table: table,
+    schema_version:
+      isV2
+        ? 'H3_REVIEW_HOME_INDEX_V2'
+        : 'H3_REVIEW_HOME_INDEX_V1'
   };
 }
 
@@ -694,8 +904,31 @@ function h3ReviewHomeIndexRowEntry_(
     );
   }
 
+  var surface =
+    h3ReviewSurfaceMetadata_(
+      kind,
+      Object.prototype.hasOwnProperty.call(
+        map,
+        'SURFACE_FAMILY'
+      )
+        ? row[map.SURFACE_FAMILY]
+        : '',
+      Object.prototype.hasOwnProperty.call(
+        map,
+        'LEVEL'
+      )
+        ? row[map.LEVEL]
+        : ''
+    );
+
   var entry = {
     review_kind: kind,
+    provider_kind:
+      surface.provider_kind,
+    surface_family:
+      surface.surface_family,
+    level:
+      surface.level,
     set_id: setId,
     answered_at:
       String(
@@ -819,6 +1052,10 @@ function h3ReviewHomeIndexEnvelopes_(
       out.push({
         kind:
           entry.review_kind,
+        surface_family:
+          entry.surface_family,
+        level:
+          entry.level,
         set_id:
           entry.set_id,
         set_no:
@@ -1140,6 +1377,10 @@ function buildReviewHomePayload_() {
     ],
     review_level_contract:
       H3_REVIEW_LEVEL_CONTRACT_,
+    review_home_index_contract:
+      'H3_REVIEW_HOME_INDEX_V2_COMPAT',
+    learning_surface_schema:
+      'H3_LEARNING_SURFACE_V1',
     review_level_half_life_days:
       H3_REVIEW_LEVEL_HALF_LIFE_DAYS_,
     review_level_time_headroom_share:
@@ -1165,7 +1406,10 @@ function h3ReviewRenderRequest_(request) {
     request &&
     request.mode === 'REVIEW'
   ) {
-    return provider.openReview(request);
+    return h3ReviewAttachSurfaceMetadata_(
+      provider,
+      provider.openReview(request)
+    );
   }
 
   if (

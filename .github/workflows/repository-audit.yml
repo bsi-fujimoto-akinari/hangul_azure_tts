@@ -2716,8 +2716,8 @@ jobs:
 
           for needle in [
               'successful `5L` trigger -> the exact parameterless Web App URL only',
-              'verified `[H3_WEB_SYNC]` -> `問題なし` only',
-              'failed `[H3_WEB_SYNC]` verification -> `問題あり` only',
+              'verified `[H3_WEB_SYNC]` -> `No issues detected.` only',
+              'failed `[H3_WEB_SYNC]` verification -> `Issue detected.` only',
           ]:
               if needle not in ops:
                   raise SystemExit(f'Operations minimal-output rule missing: {needle}')

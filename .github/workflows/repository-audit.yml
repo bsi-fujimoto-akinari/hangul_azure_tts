@@ -5125,11 +5125,6 @@ jobs:
           const vm = require('vm');
           const crypto = require('crypto');
 
-          const source = fs.readFileSync(
-            'WebAppWrittenAnswerSync.js',
-            'utf8'
-          );
-
           const context = vm.createContext({
             console,
             h3Sha256Hex_: value =>
@@ -5141,8 +5136,17 @@ jobs:
             H3_WEB_WRITTEN_SECTIONS: ['D2','D3','D4','D5','D6']
           });
 
-          vm.runInContext(source, context, {
-            filename:'WebAppWrittenAnswerSync.js'
+          [
+            'WebAppLevelCommon.js',
+            'WebAppFormatCommon.js',
+            'WebAppWrittenNewfmt.js',
+            'WebAppWrittenAnswerSync.js'
+          ].forEach(name => {
+            vm.runInContext(
+              fs.readFileSync(name, 'utf8'),
+              context,
+              {filename:name}
+            );
           });
 
           const run = expression =>

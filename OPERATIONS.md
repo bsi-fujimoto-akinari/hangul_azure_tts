@@ -392,7 +392,7 @@ TXN_ID=H3TX-YYYYMMDD-NNNNNN
 STATUS=COMMITTED
 ```
 
-Chat treats this as a pointer to canonical backend state, not as sufficient proof by itself. Chat must read back the authoritative journal/state and verify the committed transaction. On PASS it replies exactly `問題なし`; on verification failure it replies exactly `問題あり`. Ordinary post-answer explanation is owned by the Web App / persistent Review. Chat never duplicates the backend answer/history mutation.
+Chat treats this as a pointer to canonical backend state, not as sufficient proof by itself. Chat must read back the authoritative journal/state and verify the committed transaction. On PASS it replies exactly `No issues detected.`; on verification failure it replies exactly `Issue detected.`. Ordinary post-answer explanation is owned by the Web App / persistent Review. Chat never duplicates the backend answer/history mutation.
 
 The full frozen R3-04 contract is `H3_WEB_CHAT_CONTRACT.md`.
 
@@ -1231,7 +1231,7 @@ This closure does not remove the legacy compatibility layer itself. It removes o
 Normal production Chat surfaces are intentionally minimal:
 
 - successful `5L` trigger -> the exact parameterless Web App URL only;
-- verified `[H3_WEB_SYNC]` -> `問題なし` only;
-- failed `[H3_WEB_SYNC]` verification -> `問題あり` only.
+- verified `[H3_WEB_SYNC]` -> `No issues detected.` only;
+- failed `[H3_WEB_SYNC]` verification -> `Issue detected.` only.
 
 This changes presentation only. Canonical backend verification, idempotency, source locks, preissue gates, scheduler checks, and recovery behavior remain mandatory. Detailed explanation belongs to the Web App / persistent Review unless the learner explicitly asks for it in a separate Chat turn.

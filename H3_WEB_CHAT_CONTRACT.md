@@ -485,13 +485,13 @@ Do not add a label, preamble, postamble, progress report, source-audit commentar
 Chat still performs authoritative receipt readback before responding. The learner-facing response is exactly one of:
 
 ```text
-問題なし
+No issues detected.
 ```
 
 or
 
 ```text
-問題あり
+Issue detected.
 ```
 
 No score, answer vector, explanation, audit detail, progress detail, or next-step commentary is included in that turn.

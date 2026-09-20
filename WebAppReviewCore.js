@@ -584,6 +584,11 @@ function h3ReviewTimestampMs_(
 }
 
 
+function h3ReviewNowMs_() {
+  return new Date().getTime();
+}
+
+
 function h3ReviewOldestKnownTimestampMs_(
   envelopes
 ) {
@@ -676,7 +681,7 @@ function h3ReviewAttachHomeMetadata_(
     evidence.written_set_ids
       .slice();
   var nowMs =
-    new Date().getTime();
+    h3ReviewNowMs_();
   var oldestKnownMs =
     h3ReviewOldestKnownTimestampMs_(
       envelopes

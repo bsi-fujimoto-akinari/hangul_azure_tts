@@ -311,3 +311,21 @@ SET_ID=PENDING_ALLOCATION
 ```
 
 The concrete values in the example above are a dated runtime snapshot; future reports must recompute/read the tuple from the canonical authorities rather than copying the example.
+
+### Reading production route staging
+
+Reading is a distinct `surface_family=READING` under `mode=WRITTEN`. An explicit diagnostic render request may carry `surface_family=READING`; server dispatch then uses the Reading stage/source-lock authority instead of 5W D2-D6.
+
+The Reading production route is staged under `H3-READING-PRODUCTION-20260921-V1`. Render requires an exact `ISSUED`, uncommitted, source-valid Reading stage. The current P8 pilot remains `PREISSUE_READY`, so it is intentionally not learner-renderable yet.
+
+Reading transaction persistence uses `reading_web_txn_v1` + `reading_log_v1` and the global H3TX allocator. Production commit remains fail-closed while `H3_READING_PRODUCTION_COMMIT_ENABLED_=false`. Client Reading submit remains disabled. Review/HOME/current-learning integration is a later serialized phase.
+
+Reading SET_ID allocation is canonicalized by `H3-READING-ACTIVATION-CORE-20260921-V2`:
+
+```text
+SET_ID   = H3-YYYYMMDD-RNNN
+STAGE_ID = READ-P8-YYYYMMDD-NNN
+```
+
+The numeric Reading allocation suffix is not ISSUE_NO and must never be interpreted as such.
+

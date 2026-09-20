@@ -2771,7 +2771,7 @@ jobs:
           for doc, needle in [
               (chat, '### Parameterless handoff refinement'),
               (chat, 'Chat must return the resolver\'s `url` field, not `direct_url`.'),
-              (chat, 'The normal 5L handoff is parameterless HOME.'),
+              (chat, 'The normal learner handoff for both 5L and 5W is parameterless HOME.'),
               (ops, '## 23. Learner URL authority'),
               (ops, 'require `handoff_mode=HOME_PARAMETERLESS`'),
               (ops, 'Do not return as the normal Chat link:'),

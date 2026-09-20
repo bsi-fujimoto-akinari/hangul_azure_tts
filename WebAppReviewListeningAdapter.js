@@ -6,6 +6,13 @@
  * exposes them through the common provider contract.
  */
 
+function h3ListeningReviewReplayRetired_() {
+  throw new Error(
+    'REVIEW_REPLAY_RETIRED'
+  );
+}
+
+
 function h3ListeningReviewProvider_() {
   return {
     kind: 'LISTENING',
@@ -19,11 +26,11 @@ function h3ListeningReviewProvider_() {
     openMedia:
       h3ListeningReviewOpenMedia_,
     openReplay:
-      getReviewReplayPayload_,
+      h3ListeningReviewReplayRetired_,
     openReplayMedia:
-      getReviewReplayMediaPayload_,
+      h3ListeningReviewReplayRetired_,
     gradeReplay:
-      gradeReviewReplay_
+      h3ListeningReviewReplayRetired_
   };
 }
 

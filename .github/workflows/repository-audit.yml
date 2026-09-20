@@ -770,8 +770,8 @@ jobs:
           if "var mode = 'HOME';" not in web or 'var setId = null;' not in web or 'var txnId = null;' not in web:
               raise SystemExit('R3-09D parameterless Web App HOME default is missing.')
 
-          if "e.parameter.mode === 'SYSTEM_TEST'" not in web:
-              raise SystemExit('Explicit SYSTEM_TEST route was lost during R3-09D HOME migration.')
+          if "params.mode === 'SYSTEM_TEST'" not in web:
+              raise SystemExit('Explicit SYSTEM_TEST route was lost during parameterless direct-boot migration.')
 
           if 'buildSystemTestRenderPayload_(\n    request.set_id\n  )' not in web:
               raise SystemExit('SYSTEM_TEST render payload is not bound to the requested allowlisted set ID.')

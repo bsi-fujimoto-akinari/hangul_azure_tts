@@ -209,6 +209,8 @@ Script TXT artifacts are noncanonical learner conveniences and must be stored be
 - 5L: `03_AUDIO/02_5L/{LISTENING_SET_ID}.txt`.
 - SYSTEM_TEST: `03_AUDIO/90_ARCHIVE/01_SYSTEM_TEST/{SET_ID}_script.txt`.
 
+For 5L, SCRIPT_TXT is explicitly outside the learner issue critical path. Audio completion, exact individual audio binding, source-lock validation, preissue, and issue do not require a script TXT file or `script_file_id`. The semantic script may be materialized later by the explicit repository helper for Review/audit convenience. Script materialization failure must not convert an otherwise-valid learner issue into failure.
+
 The canonical learner/history authority remains Google Sheets. TXT relocation or regeneration must not rewrite scores, history, pointers, or counters.
 
 ## 10. R3-09B frozen review target
@@ -499,3 +501,59 @@ No score, answer vector, explanation, audit detail, progress detail, or next-ste
 The Web App and persistent Review own ordinary post-answer explanation. If the learner separately asks for explanation or troubleshooting, Chat may provide it in that separate turn.
 
 Minimal learner-facing text never authorizes skipping transaction validation, idempotency, source-lock, scheduler, or recovery checks.
+
+## 23. NORMAL_HOTPATH_READBACK_V1
+
+`NORMAL_HOTPATH_READBACK_V1` is the canonical normal-flow readback contract for `K1`, `5L`, and `[H3_WEB_SYNC]`.
+
+General rules:
+
+1. Read only the canonical Sheet ranges required by the current operation.
+2. Independent reads must be issued in one parallel fan-out at the connector/tool layer (for example, `Promise.all` in one tool turn); serial independent Sheet reads are prohibited in normal flow.
+3. GitHub `main`, `HANGUL_INFRA_STATUS_CURRENT`, source manifest, canonical release files, and historical audit/release material are not per-request normal-flow reads.
+4. Those version/canonical surfaces are read only for version drift, a canonical change, recovery, mismatch, explicit audit, or another concrete integrity signal.
+5. This optimization never removes source-lock, item/audio hash validation, scheduler gates, idempotency checks, preissue validation, receipt verification, or fail-closed recovery behavior.
+6. Do not create a new runtime Sheet/tab merely to aggregate hot-path reads.
+
+### A. K1 preparation readback
+
+Normal K1 preparation uses one bounded parallel read bundle for only the runtime inputs required to author/persist the next K1 surface, such as the current Listening state/policy and any K1_READY row needed for supersede/eligibility checks. After a new K1_READY row is atomically persisted, its exact A:M verification follows the one-shot K1 contract; the same row is not repeatedly re-read merely to reconfirm already-verified immutable fields.
+
+### B. 5L preparation and preissue readback
+
+Normal 5L preparation begins with one bounded parallel fan-out for independent runtime authorities needed for the target set: Listening state/policy, the eligible persisted K1_READY, scheduler/retest inputs, and relevant target-set/log/transaction/audio state. Reads that depend on a newly created identifier or prior write still occur after that dependency, but independent authorities must not be serialized. The final preissue gate remains authoritative and fail-closed.
+
+### C. H3_WEB_SYNC receipt verification readback
+
+After exact four-line receipt parsing, Chat resolves the exact TXN_ID/SET_ID and performs one bounded parallel authoritative verification bundle for the matching production transaction, exact five learner-log rows, current Listening state, and unresolved `RECOVERY_REQUIRED` condition. The receipt itself is never treated as proof of commit. A PASS still requires the same identity/hash/state checks defined by this contract.
+
+This contract changes read scheduling only. It does not authorize live writes, relaxed validation, inferred state, or cached-state substitution for an authoritative required readback.
+
+## 24. K1_READY_ONE_SHOT_V1
+
+`K1_READY_ONE_SHOT_V1` defines the fail-closed K1 persist/bind readback contract.
+
+### New K1_READY persist
+
+- Write exactly one complete K1_READY row atomically with all required A:M fields.
+- Perform exactly one immediate exact A:M readback for that new row.
+- Use that same readback to verify the exact header/schema, literal-value requirement, persisted values, K1_READY_ID, required JSON/hash fields, `STATUS=READY`, blank `BOUND_LISTENING_SET_ID`, and blank `CONSUMED_AT`.
+- Do not perform duplicate same-content readbacks merely to reconfirm fields already verified by that exact A:M readback.
+- A mismatch remains a hard STOP; do not infer or repair the row from chat-local cache.
+
+### K1_READY bind
+
+Before binding, retain the full persistent payload validation, including image-file existence and exact image SHA256 verification. Bind may write only column L (`BOUND_LISTENING_SET_ID`).
+
+After the column-L write, perform one exact same-row A:M readback and require:
+
+- the same K1_READY_ID;
+- `STATUS=READY`;
+- exact target `BOUND_LISTENING_SET_ID`;
+- blank `CONSUMED_AT`;
+- every column other than L exactly unchanged from the already-validated prebind row.
+
+When all of those conditions pass, the post-bind readback proves that the validated immutable payload was not changed by bind. A second Drive blob read / image SHA256 recomputation is therefore not required after bind.
+
+`consumeK1ReadyAfterIssue_()` keeps its existing post-write readback semantics. This optimization does not relax consume eligibility, source-lock, audio-start validation, or fail-closed behavior.
+

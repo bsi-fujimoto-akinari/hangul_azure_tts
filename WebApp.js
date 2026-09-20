@@ -29,6 +29,13 @@ function getListeningWebSet(request) {
   }
 
   if (request && request.mode === 'REVIEW') {
+    if (
+      request.legacy_review_id
+    ) {
+      return getLegacyPersistentReviewPayload_(
+        request
+      );
+    }
     return getPersistentReviewPayload_(
       request
     );
@@ -52,6 +59,13 @@ function getListeningWebMedia(request) {
   }
 
   if (request && request.mode === 'REVIEW') {
+    if (
+      request.legacy_review_id
+    ) {
+      return getLegacyPersistentReviewMediaPayload_(
+        request
+      );
+    }
     return getPersistentReviewMediaPayload_(
       request
     );

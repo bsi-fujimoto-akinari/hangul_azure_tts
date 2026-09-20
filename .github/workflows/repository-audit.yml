@@ -47,6 +47,7 @@ jobs:
               'WebAppReadingPilotAudit.js',
               'WebAppReadingActivation.js',
               'WebAppReadingActivationAudit.js',
+              'WebAppReadingProduction.js',
               'WebAppPreissue.js',
               'WebAppReceipt.js',
               'WebAppReviewCore.js',
@@ -59,6 +60,7 @@ jobs:
               'H3_LEARNING_SURFACE_CONTRACT.md',
               'H3_READING_P8_PILOT_CONTRACT.md',
               'H3_READING_ACTIVATION_CONTRACT.md',
+              'H3_READING_PRODUCTION_CONTRACT.md',
               'Index.html',
               'Stylesheet.html',
               'Client.html',
@@ -5807,6 +5809,9 @@ jobs:
           client = Path('Client.html').read_text(encoding='utf-8')
           web = Path('WebApp.js').read_text(encoding='utf-8')
           contract = Path('H3_READING_P8_PILOT_CONTRACT.md').read_text(encoding='utf-8')
+          activation = Path('H3_READING_ACTIVATION_CONTRACT.md').read_text(encoding='utf-8')
+          production = Path('WebAppReadingProduction.js').read_text(encoding='utf-8')
+          production_contract = Path('H3_READING_PRODUCTION_CONTRACT.md').read_text(encoding='utf-8')
 
           for needle in [
               "H3-READING-P8-PILOT-20260920-V1",
@@ -5834,7 +5839,48 @@ jobs:
                   raise SystemExit(f'Reading client boundary missing: {needle}')
 
           if "request.mode === 'READING'" in web:
-              raise SystemExit('Reading pilot was accidentally activated as a server route.')
+              raise SystemExit('Reading must remain a WRITTEN surface, not a top-level mode.')
+
+          for needle in [
+              "request.surface_family ===\n        'READING'",
+              'buildReadingProductionRenderPayload_(',
+              'h3ReadingSubmit_(',
+          ]:
+              if needle not in web:
+                  raise SystemExit(f'Reading production route missing: {needle}')
+
+          for needle in [
+              "var H3_READING_PRODUCTION_COMMIT_ENABLED_ =\n  false;",
+              "function buildReadingProductionRenderPayload_(",
+              "function h3ReadingSubmit_(",
+              "function h3ReadingCurrentLearning_(",
+              "'READING_PROD_STAGE_NOT_ISSUED'",
+              "'READING_PRODUCTION_COMMIT_DISABLED'",
+              "'RECOVERY_REQUIRED'",
+          ]:
+              if needle not in production:
+                  raise SystemExit(f'Reading production invariant missing: {needle}')
+
+          if "app.surfaceFamily ===\n        'READING'" not in client:
+              raise SystemExit('Reading client submit gate is missing.')
+
+          for needle in [
+              'Version: H3-READING-ACTIVATION-CORE-20260921-V2',
+              'SET_ID   = H3-YYYYMMDD-RNNN',
+              'STAGE_ID = READ-P8-YYYYMMDD-NNN',
+              'PREISSUE_CAPABLE_ROUTE_INACTIVE',
+          ]:
+              if needle not in activation:
+                  raise SystemExit(f'Reading activation V2 invariant missing: {needle}')
+
+          for needle in [
+              'Version: H3-READING-PRODUCTION-20260921-V1',
+              'ROUTE_STAGED_COMMIT_DISABLED',
+              'PREISSUE_READY stage is intentionally not renderable',
+              'H3_READING_PRODUCTION_COMMIT_ENABLED_=false',
+          ]:
+              if needle not in production_contract:
+                  raise SystemExit(f'Reading production contract missing: {needle}')
 
           for needle in [
               'Status: STAGED_NOT_LEARNER_ACTIVE',
@@ -5874,7 +5920,8 @@ jobs:
             'WebAppReadingPilot.js',
             'WebAppReadingPilotAudit.js',
             'WebAppReadingActivation.js',
-            'WebAppReadingActivationAudit.js'
+            'WebAppReadingActivationAudit.js',
+            'WebAppReadingProduction.js'
           ].forEach(name => {
             vm.runInContext(
               fs.readFileSync(name, 'utf8'),
@@ -5911,7 +5958,18 @@ jobs:
             activation.result !== 'PASS' ||
             activation.source_group_id !== '245' ||
             activation.item_count !== 2 ||
-            activation.checks !== 10
+            activation.checks !== 16 ||
+            activation.schema !==
+              'H3_READING_ACTIVATION_CORE_AUDIT_V2' ||
+            activation.allocated_set_id !==
+              'H3-20260921-R001' ||
+            activation.allocated_stage_id !==
+              'READ-P8-20260921-001' ||
+            !/^[0-9a-f]{64}$/.test(
+              activation.locked_bundle_sha256
+            ) ||
+            activation.source_binding_sha256 !==
+              result.source_binding_sha256
           ) {
             throw new Error(
               'Reading activation core pure audit mismatch: ' +
@@ -5919,11 +5977,77 @@ jobs:
             );
           }
 
+          const classifyContext = {
+            stage:{set_id:'H3-20260921-R001'},
+            txnTable:{
+              map:{
+                SET_ID:1,
+                REQUEST_FINGERPRINT:6,
+                STATUS:9
+              },
+              rows:[]
+            }
+          };
+
+          let classified = vm.runInContext(
+            "h3ReadingProdClassifyExistingTxn_(__ctx,'fp')",
+            Object.assign(context,{__ctx:classifyContext})
+          );
+          if (
+            classified.action !== 'NEW'
+          ) {
+            throw new Error(
+              'Reading production NEW txn classification failed.'
+            );
+          }
+
+          classifyContext.txnTable.rows = [[
+            'H3TX-20260921-000001',
+            'H3-20260921-R001',
+            'READ-P8-20260921-001',
+            'WRITTEN',
+            'READING',
+            '{}',
+            'fp',
+            result.source_binding_sha256,
+            '2026-09-21T01:20:00+09:00',
+            'COMMITTED',
+            '{}',
+            '2',
+            '2026-09-21T01:20:01+09:00',
+            ''
+          ]];
+
+          classified = vm.runInContext(
+            "h3ReadingProdClassifyExistingTxn_(__ctx,'fp')",
+            context
+          );
+          if (
+            classified.action !==
+              'RETURN_COMMITTED'
+          ) {
+            throw new Error(
+              'Reading production committed idempotency classification failed.'
+            );
+          }
+
+          if (
+            vm.runInContext(
+              'H3_READING_PRODUCTION_COMMIT_ENABLED_',
+              context
+            ) !== false
+          ) {
+            throw new Error(
+              'Reading production commit gate must remain disabled.'
+            );
+          }
+
           console.log(
-            'P8 Reading pilot + activation core pure audits: PASS',
+            'P8 Reading pilot + activation + production pure audits: PASS',
             JSON.stringify({
               pilot: result,
-              activation: activation
+              activation: activation,
+              production_commit_enabled: false
             })
           );
           NODE
@@ -5945,6 +6069,7 @@ jobs:
           node --check WebAppReadingPilotAudit.js
           node --check WebAppReadingActivation.js
           node --check WebAppReadingActivationAudit.js
+          node --check WebAppReadingProduction.js
           node --check WebAppPreissue.js
           node --check WebAppReceipt.js
           node --check WebAppReviewCore.js

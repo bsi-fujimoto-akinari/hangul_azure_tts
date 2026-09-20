@@ -70,6 +70,7 @@
     app.mediaCache = {};
     app.mediaTrimMs = {};
     app.mediaLoading = {};
+    app.mediaRetryCount = {};
     app.reviewFilter = 'NEEDS_REVIEW';
 
     document.body.classList.remove(
@@ -681,8 +682,8 @@
             var nextIndex = index + 1;
             var nextSection = sections[nextIndex];
 
-            setActiveIndex(nextIndex);
-            playAudioAssetNow(nextSection);
+            setActiveIndex(nextIndex, true);
+            playAudioAssetNow(nextSection, true);
             return;
           }
 
@@ -695,8 +696,11 @@
               return typeof app.answers[section] !== 'number';
             });
             if (firstMissing >= 0) {
-              setActiveIndex(firstMissing);
-              playAudioAssetNow(sections[firstMissing]);
+              setActiveIndex(firstMissing, true);
+              playAudioAssetNow(
+                sections[firstMissing],
+                true
+              );
             }
           }
         });
@@ -837,22 +841,38 @@
 
   function scheduleInitialAudioPrefetch() {
     if (isMobileMode()) {
-      ensureAudioLoaded(sections[0]);
+      ensureAudioLoaded(
+        sections[0],
+        { background: false }
+      );
       window.setTimeout(function () {
-        ensureAudioLoaded(sections[1]);
+        ensureAudioLoaded(
+          sections[1],
+          { background: true }
+        );
       }, 500);
       return;
     }
 
     sections.forEach(function (section, index) {
       window.setTimeout(function () {
-        ensureAudioLoaded(section);
+        ensureAudioLoaded(
+          section,
+          { background: index !== 0 }
+        );
       }, index * 350);
     });
   }
 
-  function ensureAudioLoaded(assetKey) {
+  function ensureAudioLoaded(
+    assetKey,
+    options
+  ) {
     if (!assetKey) return;
+
+    var opts = options || {};
+    var background =
+      opts.background === true;
 
     if (app.mediaCache[assetKey]) {
       attachAudioData(
@@ -866,27 +886,81 @@
     if (app.mediaLoading[assetKey]) return;
     app.mediaLoading[assetKey] = true;
 
-    setAudioStatus(assetKey, '音声を準備中…', false);
+    if (!background) {
+      setAudioStatus(
+        assetKey,
+        '音声を準備中…',
+        false
+      );
+    }
 
     google.script.run
       .withSuccessHandler(function (media) {
         app.mediaLoading[assetKey] = false;
+        app.mediaRetryCount[assetKey] = 0;
         app.mediaCache[assetKey] = media.data_uri;
-        app.mediaTrimMs[assetKey] = Number(media.trim_start_ms || 0);
-        attachAudioData(assetKey, media.data_uri, app.mediaTrimMs[assetKey]);
-        setAudioStatus(assetKey, '', false);
-      })
-      .withFailureHandler(function (err) {
-        app.mediaLoading[assetKey] = false;
+        app.mediaTrimMs[assetKey] =
+          Number(
+            media.trim_start_ms || 0
+          );
+        attachAudioData(
+          assetKey,
+          media.data_uri,
+          app.mediaTrimMs[assetKey]
+        );
         setAudioStatus(
           assetKey,
-          'ページ内音声を準備できませんでした。Driveリンクを使用してください。',
+          '',
+          false
+        );
+      })
+      .withFailureHandler(function () {
+        app.mediaLoading[assetKey] = false;
+
+        var retries =
+          Number(
+            app.mediaRetryCount[
+              assetKey
+            ] || 0
+          );
+
+        if (retries < 1) {
+          app.mediaRetryCount[
+            assetKey
+          ] = retries + 1;
+
+          if (!background) {
+            setAudioStatus(
+              assetKey,
+              '音声を再準備中…',
+              false
+            );
+          }
+
+          window.setTimeout(
+            function () {
+              ensureAudioLoaded(
+                assetKey,
+                {
+                  background:
+                    background
+                }
+              );
+            },
+            700
+          );
+          return;
+        }
+
+        setAudioStatus(
+          assetKey,
+          '音声を準備できませんでした。もう一度この問題を開くか、Driveリンクを使用してください。',
           true
         );
-        showError('音声準備エラー: ' + errorText(err));
       })
       .getListeningWebMedia({
-        schema: 'H3_WEB_MEDIA_REQUEST_V1',
+        schema:
+          'H3_WEB_MEDIA_REQUEST_V1',
         mode: app.payload.mode,
         set_id: app.payload.set_id,
         txn_id:
@@ -939,7 +1013,32 @@
     });
   }
 
-  function playAudioAssetNow(assetKey) {
+  function resetAudioAsset(
+    assetKey
+  ) {
+    var audio =
+      document.querySelector(
+        'audio[data-asset-key="' +
+        assetKey +
+        '"]'
+      );
+
+    if (!audio) return;
+
+    var skip =
+      getAudioSkipSeconds(audio);
+
+    try {
+      audio.currentTime = skip;
+    } catch (e) {
+      // A freshly attached source will already start at zero.
+    }
+  }
+
+  function playAudioAssetNow(
+    assetKey,
+    restart
+  ) {
     if (!assetKey) return false;
 
     var audio = document.querySelector(
@@ -950,7 +1049,14 @@
       return false;
     }
 
-    prepareAudioStart(audio);
+    if (restart === true) {
+      resetAudioAsset(
+        assetKey
+      );
+    } else {
+      prepareAudioStart(audio);
+    }
+
     pauseOtherAudio(audio);
 
     var promise = audio.play();
@@ -995,17 +1101,46 @@
     }
   }
 
-  function setActiveIndex(index) {
+  function setActiveIndex(
+    index,
+    restartAudio
+  ) {
     if (!app.payload || app.locked) return;
 
-    var max = app.payload.questions.length - 1;
-    app.activeIndex = Math.max(0, Math.min(max, index));
+    var max =
+      app.payload.questions.length - 1;
+
+    pauseOtherAudio(null);
+
+    app.activeIndex =
+      Math.max(
+        0,
+        Math.min(max, index)
+      );
     updateMobilePager();
 
-    ensureAudioLoaded(sections[app.activeIndex]);
+    var activeSection =
+      sections[app.activeIndex];
+
+    ensureAudioLoaded(
+      activeSection,
+      { background: false }
+    );
+
+    if (restartAudio === true) {
+      resetAudioAsset(
+        activeSection
+      );
+    }
+
     if (app.activeIndex < max) {
       window.setTimeout(function () {
-        ensureAudioLoaded(sections[app.activeIndex + 1]);
+        ensureAudioLoaded(
+          sections[
+            app.activeIndex + 1
+          ],
+          { background: true }
+        );
       }, 350);
     }
 

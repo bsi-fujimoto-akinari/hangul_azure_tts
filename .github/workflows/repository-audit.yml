@@ -2931,6 +2931,10 @@ jobs:
               }
               return {};
             };
+            ctx.assertListeningAudioSourceAttestation_ = () => ({
+              object: {schema:'H3_LISTENING_AUDIO_SOURCE_ATTESTATION_V1'},
+              sha256:'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+            });
             ctx.persistListeningSetScript_ = (_setId, members) => {
               calls.script++;
               assert(
@@ -3577,6 +3581,190 @@ jobs:
             throw new Error('H3_WEB_SYNC roundtrip regression.');
           }
           console.log('H3_WEB_SYNC WRITTEN-compatible roundtrip: PASS');
+          NODE
+
+      - name: Check Listening audio source attestation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          text = Path('Code.js').read_text(encoding='utf-8')
+
+          required = [
+              "var H3_LISTENING_AUDIO_SOURCE_ATTESTATION_V1",
+          ]
+
+          needles = [
+              "HQ_LISTENING_AUDIO_SOURCE_ATTESTATION_SCHEMA",
+              "H3_LISTENING_AUDIO_SOURCE_ATTESTATION_V1",
+              "function readListeningSetPayloadForAudioAttestation_(",
+              "function assertListeningAudioItemProjection_(",
+              "function assertListeningAudioSourceAttestation_(",
+              "Listening item payload SHA mismatch before audio generation.",
+              "sourceAttestationSha256",
+              "source_attestation_sha256:",
+          ]
+          for needle in needles:
+              if needle not in text:
+                  raise SystemExit(
+                      f'Listening audio attestation invariant missing: {needle}'
+                  )
+
+          start = text.index('function processListeningAudioSet_(')
+          end = text.index('function snapshotListeningSet_(', start)
+          flow = text[start:end]
+
+          k1 = flow.index('assertBoundK1ReadyForSet_(')
+          attest = flow.index('assertListeningAudioSourceAttestation_(')
+          batch = flow.index('runListeningSetBatch_(')
+          if not (k1 < attest < batch):
+              raise SystemExit(
+                  'Audio source attestation must run after K1 source lock and before batch audio processing.'
+              )
+
+          batch_start = text.index('function runListeningSetBatch_(')
+          batch_end = text.index('function listeningPlanTextByRole_(', batch_start)
+          batch_text = text[batch_start:batch_end]
+          if "state.sourceAttestationSha256" not in batch_text:
+              raise SystemExit(
+                  'Set-level source attestation SHA is not checkpointed into audio state.'
+              )
+          if "state.sourceAttestationSchema" not in batch_text:
+              raise SystemExit(
+                  'Set-level source attestation schema is not checkpointed into audio state.'
+              )
+
+          print('Listening audio source attestation static audit: PASS')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+
+          const source = fs.readFileSync('Code.js', 'utf8');
+          const context = vm.createContext({
+            console,
+            Utilities: {
+              DigestAlgorithm: { SHA_256: 'SHA_256' },
+              Charset: { UTF_8: 'UTF_8' },
+              computeDigest: (_algorithm, text) =>
+                Array.from(
+                  crypto.createHash('sha256')
+                    .update(String(text), 'utf8')
+                    .digest()
+                )
+            }
+          });
+
+          vm.runInContext(source, context, {
+            filename: 'Code.js'
+          });
+
+          const run = expression =>
+            vm.runInContext(expression, context);
+
+          const assert = (condition, message) => {
+            if (!condition) throw new Error(message);
+          };
+
+          const expectThrow = (expression, message) => {
+            let threw = false;
+            try {
+              run(expression);
+            } catch (_error) {
+              threw = true;
+            }
+            assert(threw, message);
+          };
+
+          const k2Plan = [
+            {role:'prompt',text:'질문입니다.',repeat:1,pause_ms_after:3200},
+            {role:'prompt',text:'질문입니다.',repeat:1,pause_ms_after:3200},
+            {role:'choice_number1',text:'マルイチ',repeat:1,pause_ms_after:900},
+            {role:'choice1',text:'하나입니다.',repeat:1,pause_ms_after:3200},
+            {role:'choice1',text:'하나입니다.',repeat:1,pause_ms_after:3200},
+            {role:'choice_number2',text:'マルニ',repeat:1,pause_ms_after:900},
+            {role:'choice2',text:'둘입니다.',repeat:1,pause_ms_after:3200},
+            {role:'choice2',text:'둘입니다.',repeat:1,pause_ms_after:3200},
+            {role:'choice_number3',text:'マルサン',repeat:1,pause_ms_after:900},
+            {role:'choice3',text:'셋입니다.',repeat:1,pause_ms_after:3200},
+            {role:'choice3',text:'셋입니다.',repeat:1,pause_ms_after:3200},
+            {role:'choice_number4',text:'マルヨン',repeat:1,pause_ms_after:900},
+            {role:'choice4',text:'넷입니다.',repeat:1,pause_ms_after:3200},
+            {role:'choice4',text:'넷입니다.',repeat:1,pause_ms_after:3200}
+          ];
+          context.__k2Plan = k2Plan;
+          context.__k2Job = {
+            skillId:'H3-K2-SK001',
+            audioPlanRaw:JSON.stringify(k2Plan),
+            plan:k2Plan
+          };
+          context.__k2Item = {
+            section:'K2',
+            skill_id:'H3-K2-SK001',
+            prompt:'질문입니다.',
+            choices:[
+              '하나입니다.',
+              '둘입니다.',
+              '셋입니다.',
+              '넷입니다.'
+            ]
+          };
+
+          run('__k2Evidence=assertListeningAudioItemProjection_("K2",__k2Job,__k2Item)');
+          assert(
+            run('/^[0-9a-f]{64}$/.test(__k2Evidence.item_sha256)'),
+            'K2 item attestation hash invalid.'
+          );
+          assert(
+            run('/^[0-9a-f]{64}$/.test(__k2Evidence.audio_plan_sha256)'),
+            'K2 plan attestation hash invalid.'
+          );
+
+          run('__badK2=JSON.parse(JSON.stringify(__k2Job));__badK2.plan=JSON.parse(JSON.stringify(__k2Plan));__badK2.plan[4].text="다른 문장입니다.";__badK2.audioPlanRaw=JSON.stringify(__badK2.plan)');
+          expectThrow(
+            'assertListeningAudioItemProjection_("K2",__badK2,__k2Item)',
+            'K2 semantic source drift was accepted.'
+          );
+
+          const k4Plan = [
+            {role:'passage',text:'본문입니다.',repeat:1,pause_ms_after:2200},
+            {role:'replay_cue',text:'もう一度読みます',repeat:1,pause_ms_after:2200},
+            {role:'passage',text:'본문입니다.',repeat:1,pause_ms_after:3200}
+          ];
+          context.__k4Job = {
+            skillId:'H3-K4-SK001',
+            audioPlanRaw:JSON.stringify(k4Plan),
+            plan:k4Plan
+          };
+          context.__k4Item = {
+            section:'K4',
+            skill_id:'H3-K4-SK001',
+            passage:'본문입니다.',
+            choices_ja:['一','二','三','四']
+          };
+          run('__k4Evidence=assertListeningAudioItemProjection_("K4",__k4Job,__k4Item)');
+          assert(
+            run('__k4Evidence.skill_id==="H3-K4-SK001"'),
+            'K4 source projection failed.'
+          );
+
+          run('__badK4=JSON.parse(JSON.stringify(__k4Job));__badK4.plan=JSON.parse(JSON.stringify(__k4Job.plan));__badK4.plan[2].text="다른 본문입니다.";__badK4.audioPlanRaw=JSON.stringify(__badK4.plan)');
+          expectThrow(
+            'assertListeningAudioItemProjection_("K4",__badK4,__k4Item)',
+            'K4 passage source drift was accepted.'
+          );
+
+          context.__a = {b:2,a:{y:2,x:1}};
+          context.__b = {a:{x:1,y:2},b:2};
+          assert(
+            run('listeningAudioAttestationHash_(__a)===listeningAudioAttestationHash_(__b)'),
+            'Canonical source attestation hash is key-order dependent.'
+          );
+
+          console.log('Listening audio source attestation pure tests: PASS');
           NODE
 
       - name: Check JavaScript syntax

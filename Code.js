@@ -232,6 +232,31 @@ const HQ_K1_READY_HEADERS = [
 ];
 
 
+const HQ_LISTENING_SET_PAYLOAD_TAB =
+  'listening_set_payload_v1';
+
+const HQ_LISTENING_SET_PAYLOAD_HEADERS = [
+  'LISTENING_SET_ID',
+  'LISTENING_SET_NO',
+  'CREATED_AT',
+  'STATUS',
+  'K1_READY_ID',
+  'K2_ITEM_JSON',
+  'K3_ITEM_JSON',
+  'K4_ITEM_JSON',
+  'K5_ITEM_JSON',
+  'ANSWER_KEY_JSON',
+  'ITEM_PAYLOAD_SHA256',
+  'AUDIO_BINDING_JSON',
+  'SOURCE_PROVENANCE_JSON',
+  'LOCKED_AT',
+  'ISSUED_AT'
+];
+
+const HQ_LISTENING_AUDIO_SOURCE_ATTESTATION_SCHEMA =
+  'H3_LISTENING_AUDIO_SOURCE_ATTESTATION_V1';
+
+
 /* =========================================================
  * CONFIG
  * =======================================================*/
@@ -1173,6 +1198,593 @@ function assertBoundK1ReadyForSet_(
 }
 
 
+function canonicalizeListeningAudioAttestation_(
+  value
+) {
+  if (Array.isArray(value)) {
+    return value.map(
+      canonicalizeListeningAudioAttestation_
+    );
+  }
+
+  if (
+    value !== null &&
+    typeof value === 'object'
+  ) {
+    const out = {};
+
+    Object.keys(value)
+      .sort()
+      .forEach(
+        key => {
+          out[key] =
+            canonicalizeListeningAudioAttestation_(
+              value[key]
+            );
+        }
+      );
+
+    return out;
+  }
+
+  return value;
+}
+
+
+function listeningAudioAttestationHash_(
+  value
+) {
+  return hash_(
+    JSON.stringify(
+      canonicalizeListeningAudioAttestation_(
+        value
+      )
+    )
+  );
+}
+
+
+function parseListeningAudioAttestationJson_(
+  raw,
+  code
+) {
+  try {
+    return JSON.parse(
+      String(raw || '')
+    );
+  } catch (e) {
+    throw new Error(code);
+  }
+}
+
+
+function readListeningSetPayloadForAudioAttestation_(
+  c,
+  listeningSetId
+) {
+  if (!c.K1_READY_SHEET_ID) {
+    throw new Error(
+      'K1_READY_SHEET_ID is required for Listening audio source attestation.'
+    );
+  }
+
+  const spreadsheet =
+    SpreadsheetApp.openById(
+      c.K1_READY_SHEET_ID
+    );
+
+  const sheet =
+    spreadsheet.getSheetByName(
+      HQ_LISTENING_SET_PAYLOAD_TAB
+    );
+
+  if (!sheet) {
+    throw new Error(
+      'Listening set payload sheet is missing for audio source attestation.'
+    );
+  }
+
+  const header =
+    sheet
+      .getRange(
+        1,
+        1,
+        1,
+        HQ_LISTENING_SET_PAYLOAD_HEADERS.length
+      )
+      .getDisplayValues()[0];
+
+  if (
+    JSON.stringify(header) !==
+    JSON.stringify(
+      HQ_LISTENING_SET_PAYLOAD_HEADERS
+    )
+  ) {
+    throw new Error(
+      'Listening set payload header mismatch for audio source attestation.'
+    );
+  }
+
+  const last =
+    sheet.getLastRow();
+
+  if (last < 2) {
+    throw new Error(
+      'Listening set payload is empty for audio source attestation.'
+    );
+  }
+
+  const ids =
+    sheet
+      .getRange(
+        2,
+        1,
+        last - 1,
+        1
+      )
+      .getDisplayValues();
+
+  const matches = [];
+
+  ids.forEach(
+    (row, i) => {
+      if (
+        String(row[0] || '') ===
+        String(listeningSetId)
+      ) {
+        matches.push(i + 2);
+      }
+    }
+  );
+
+  if (matches.length !== 1) {
+    throw new Error(
+      'LISTENING_SET_ID must resolve to exactly one payload row for audio source attestation.'
+    );
+  }
+
+  const range =
+    sheet.getRange(
+      matches[0],
+      1,
+      1,
+      HQ_LISTENING_SET_PAYLOAD_HEADERS.length
+    );
+
+  const formulas =
+    range.getFormulas()[0];
+
+  if (
+    formulas.some(
+      formula => Boolean(formula)
+    )
+  ) {
+    throw new Error(
+      'Listening set payload attestation row must contain literal values.'
+    );
+  }
+
+  const values =
+    range.getDisplayValues()[0];
+
+  const out = {};
+
+  HQ_LISTENING_SET_PAYLOAD_HEADERS
+    .forEach(
+      (key, i) => {
+        out[key] =
+          String(values[i] || '');
+      }
+    );
+
+  return out;
+}
+
+
+function assertListeningAudioItemProjection_(
+  section,
+  job,
+  item
+) {
+  if (
+    !item ||
+    typeof item !== 'object' ||
+    Array.isArray(item) ||
+    item.section !== section ||
+    item.skill_id !== job.skillId
+  ) {
+    throw new Error(
+      'Listening audio source item identity mismatch:' +
+      section
+    );
+  }
+
+  validateListeningOfficialParityPlan_(
+    job.plan,
+    section
+  );
+
+  if (
+    section === 'K2' ||
+    section === 'K3'
+  ) {
+    if (
+      typeof item.prompt !== 'string' ||
+      !item.prompt ||
+      !Array.isArray(item.choices) ||
+      item.choices.length !== 4 ||
+      item.choices.some(
+        value =>
+          typeof value !== 'string' ||
+          !value
+      )
+    ) {
+      throw new Error(
+        'Listening audio source item shape invalid:' +
+        section
+      );
+    }
+
+    const actual =
+      job.plan
+        .filter(
+          segment =>
+            segment.role === 'prompt' ||
+            /^choice[1-4]$/.test(
+              segment.role
+            )
+        )
+        .map(
+          segment => ({
+            role: segment.role,
+            text: segment.text
+          })
+        );
+
+    const expected = [
+      {
+        role: 'prompt',
+        text: item.prompt
+      },
+      {
+        role: 'prompt',
+        text: item.prompt
+      }
+    ];
+
+    item.choices.forEach(
+      (choice, i) => {
+        const role =
+          'choice' + String(i + 1);
+
+        expected.push({
+          role: role,
+          text: choice
+        });
+        expected.push({
+          role: role,
+          text: choice
+        });
+      }
+    );
+
+    if (
+      JSON.stringify(actual) !==
+      JSON.stringify(expected)
+    ) {
+      throw new Error(
+        'Listening audio source projection mismatch:' +
+        section
+      );
+    }
+  } else {
+    const choiceKey =
+      section === 'K4'
+        ? 'choices_ja'
+        : 'choices_ko';
+
+    if (
+      typeof item.passage !== 'string' ||
+      !item.passage ||
+      !Array.isArray(
+        item[choiceKey]
+      ) ||
+      item[choiceKey].length !== 4
+    ) {
+      throw new Error(
+        'Listening audio source item shape invalid:' +
+        section
+      );
+    }
+
+    const passages =
+      job.plan
+        .filter(
+          segment =>
+            segment.role ===
+            'passage'
+        )
+        .map(
+          segment =>
+            segment.text
+        );
+
+    if (
+      JSON.stringify(passages) !==
+      JSON.stringify([
+        item.passage,
+        item.passage
+      ])
+    ) {
+      throw new Error(
+        'Listening audio source projection mismatch:' +
+        section
+      );
+    }
+  }
+
+  return {
+    section: section,
+    skill_id: job.skillId,
+    item_sha256:
+      listeningAudioAttestationHash_(
+        item
+      ),
+    audio_plan_sha256:
+      hash_(job.audioPlanRaw)
+  };
+}
+
+
+function assertListeningAudioSourceAttestation_(
+  listeningSetId,
+  listeningSetNo,
+  members,
+  k1Record,
+  c
+) {
+  const payload =
+    readListeningSetPayloadForAudioAttestation_(
+      c,
+      listeningSetId
+    );
+
+  const allDone =
+    members.every(
+      member =>
+        member.values[1] === 'done'
+    );
+
+  if (
+    Number(
+      payload.LISTENING_SET_NO
+    ) !==
+      Number(listeningSetNo) ||
+    !payload.LOCKED_AT ||
+    payload.ISSUED_AT !== '' ||
+    (
+      allDone
+        ? (
+            payload.STATUS !== 'LOCKED' &&
+            payload.STATUS !== 'AUDIO_BOUND'
+          )
+        : payload.STATUS !== 'LOCKED'
+    )
+  ) {
+    throw new Error(
+      'Listening set payload state invalid for audio source attestation.'
+    );
+  }
+
+  if (
+    payload.K1_READY_ID !==
+      k1Record.id
+  ) {
+    throw new Error(
+      'Listening payload K1_READY identity mismatch for audio source attestation.'
+    );
+  }
+
+  const answerKey =
+    parseListeningAudioAttestationJson_(
+      payload.ANSWER_KEY_JSON,
+      'Listening ANSWER_KEY_JSON invalid for audio source attestation.'
+    );
+
+  const sourceProv =
+    parseListeningAudioAttestationJson_(
+      payload.SOURCE_PROVENANCE_JSON,
+      'Listening SOURCE_PROVENANCE_JSON invalid for audio source attestation.'
+    );
+
+  if (
+    !sourceProv ||
+    typeof sourceProv !== 'object' ||
+    Array.isArray(sourceProv) ||
+    sourceProv.hash_canonicalization !==
+      'JSON_SORT_KEYS_COMPACT_UTF8_V1'
+  ) {
+    throw new Error(
+      'Listening source provenance contract invalid for audio source attestation.'
+    );
+  }
+
+  if (
+    !answerKey ||
+    typeof answerKey !== 'object' ||
+    Array.isArray(answerKey) ||
+    Number(answerKey.K1) !==
+      k1Record.answerKey
+  ) {
+    throw new Error(
+      'Listening answer key mismatch for audio source attestation.'
+    );
+  }
+
+  const items = {};
+
+  ['K2','K3','K4','K5']
+    .forEach(
+      section => {
+        items[section] =
+          parseListeningAudioAttestationJson_(
+            payload[
+              section +
+              '_ITEM_JSON'
+            ],
+            'Listening item JSON invalid for audio source attestation:' +
+              section
+          );
+
+        const answer =
+          Number(
+            answerKey[section]
+          );
+
+        if (
+          !Number.isInteger(answer) ||
+          answer < 1 ||
+          answer > 4
+        ) {
+          throw new Error(
+            'Listening answer key invalid for audio source attestation:' +
+            section
+          );
+        }
+      }
+    );
+
+  const itemPayloadObject = {
+    LISTENING_SET_ID:
+      String(listeningSetId),
+    LISTENING_SET_NO:
+      Number(listeningSetNo),
+    K1_READY_ID:
+      k1Record.id,
+    K1_READY_IMAGE_SHA256:
+      k1Record.imageSha256,
+    K1_READY_FINAL_CHOICES_JSON:
+      k1Record.choices,
+    K1_READY_ANSWER_KEY:
+      Number(answerKey.K1),
+    K2_ITEM_JSON:
+      items.K2,
+    K3_ITEM_JSON:
+      items.K3,
+    K4_ITEM_JSON:
+      items.K4,
+    K5_ITEM_JSON:
+      items.K5,
+    ANSWER_KEY_JSON:
+      answerKey
+  };
+
+  const calculatedItemSha =
+    listeningAudioAttestationHash_(
+      itemPayloadObject
+    );
+
+  if (
+    calculatedItemSha !==
+      payload.ITEM_PAYLOAD_SHA256
+  ) {
+    throw new Error(
+      'Listening item payload SHA mismatch before audio generation.'
+    );
+  }
+
+  const sectionEvidence = {};
+
+  ['K2','K3','K4','K5']
+    .forEach(
+      section => {
+        const matches =
+          members.filter(
+            member =>
+              member.values[5] ===
+              section
+          );
+
+        if (matches.length !== 1) {
+          throw new Error(
+            'Listening audio source attestation requires exactly one ' +
+            section +
+            ' queue row.'
+          );
+        }
+
+        const job =
+          readListeningSnapshotJob_(
+            matches[0],
+            true
+          );
+
+        const prov =
+          sourceProv[section];
+
+        if (
+          !prov ||
+          prov.skill_id !==
+            job.skillId ||
+          (
+            prov.slot_role !==
+              'PRIMARY' &&
+            prov.slot_role !==
+              'RETEST'
+          )
+        ) {
+          throw new Error(
+            'Listening source provenance mismatch before audio generation:' +
+            section
+          );
+        }
+
+        sectionEvidence[section] =
+          assertListeningAudioItemProjection_(
+            section,
+            job,
+            items[section]
+          );
+
+        sectionEvidence[section]
+          .slot_role =
+            prov.slot_role;
+      }
+    );
+
+  const object = {
+    schema:
+      HQ_LISTENING_AUDIO_SOURCE_ATTESTATION_SCHEMA,
+    set_id:
+      String(listeningSetId),
+    set_no:
+      Number(listeningSetNo),
+    k1_ready_id:
+      k1Record.id,
+    k1_image_sha256:
+      k1Record.imageSha256,
+    item_payload_sha256:
+      calculatedItemSha,
+    source_provenance_sha256:
+      listeningAudioAttestationHash_(
+        sourceProv
+      ),
+    locked_at:
+      payload.LOCKED_AT,
+    sections:
+      sectionEvidence
+  };
+
+  return {
+    object: object,
+    sha256:
+      listeningAudioAttestationHash_(
+        object
+      )
+  };
+}
+
+
 function consumeK1ReadyAfterIssue_(
   k1ReadyId,
   listeningSetId,
@@ -1933,18 +2545,29 @@ function processListeningAudioSet_(
    * therefore before Apps Script writes audio state
    * or starts Azure generation for the set.
    */
-  assertBoundK1ReadyForSet_(
-    seed.parentSetId,
-    members,
-    c
-  );
+  const k1Record =
+    assertBoundK1ReadyForSet_(
+      seed.parentSetId,
+      members,
+      c
+    );
+
+  const sourceAttestation =
+    assertListeningAudioSourceAttestation_(
+      seed.parentSetId,
+      setNos[0],
+      members,
+      k1Record,
+      c
+    );
 
   const result =
     runListeningSetBatch_(
       sheet,
       seed.parentSetId,
       members,
-      c
+      c,
+      sourceAttestation
     );
 
   if (
@@ -1971,7 +2594,9 @@ function processListeningAudioSet_(
     listening_set_no:
       setNos[0],
     audio_mode:
-      'INDIVIDUAL_K1_K5_ONLY'
+      'INDIVIDUAL_K1_K5_ONLY',
+    source_attestation_sha256:
+      sourceAttestation.sha256
   };
 }
 
@@ -2401,7 +3026,8 @@ function runListeningSetBatch_(
   sheet,
   parentSetId,
   members,
-  c
+  c,
+  sourceAttestation
 ) {
   let stage = 'preflight';
   const folders = {};
@@ -2462,6 +3088,39 @@ function runListeningSetBatch_(
             job,
             c
           );
+
+        if (
+          !sourceAttestation ||
+          !/^[0-9a-f]{64}$/.test(
+            String(
+              sourceAttestation.sha256 ||
+              ''
+            )
+          )
+        ) {
+          throw new Error(
+            'Listening audio source attestation is missing.'
+          );
+        }
+
+        if (
+          state.sourceAttestationSha256 &&
+          state.sourceAttestationSha256 !==
+            sourceAttestation.sha256
+        ) {
+          throw new Error(
+            'Listening audio source attestation differs from checkpoint.'
+          );
+        }
+
+        if (
+          status !== 'done'
+        ) {
+          state.sourceAttestationSchema =
+            HQ_LISTENING_AUDIO_SOURCE_ATTESTATION_SCHEMA;
+          state.sourceAttestationSha256 =
+            sourceAttestation.sha256;
+        }
 
         const spec =
           listeningAudioSpec_(

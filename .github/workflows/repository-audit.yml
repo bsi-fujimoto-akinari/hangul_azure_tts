@@ -40,6 +40,8 @@ jobs:
               'WebAppProductionRender.js',
               'WebAppPreissue.js',
               'WebAppReceipt.js',
+              'WebAppReviewCore.js',
+              'WebAppReviewListeningAdapter.js',
               'WebAppReviewPersistence.js',
               'H3_WEB_CHAT_CONTRACT.md',
               'H3_REVIEW_ARCHITECTURE.md',
@@ -967,7 +969,14 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          source = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          source = '\n'.join(
+              Path(name).read_text(encoding='utf-8')
+              for name in [
+                  'WebAppReviewCore.js',
+                  'WebAppReviewListeningAdapter.js',
+                  'WebAppReviewPersistence.js',
+              ]
+          )
           operations = Path('OPERATIONS.md').read_text(encoding='utf-8')
 
           required = [
@@ -1004,7 +1013,7 @@ jobs:
           const vm = require('vm');
           const crypto = require('crypto');
 
-          const source = fs.readFileSync('WebAppReviewPersistence.js', 'utf8');
+          const source = fs.readFileSync('WebAppReviewCore.js', 'utf8');
           const context = vm.createContext({
             console,
             h3Sha256Hex_: value =>
@@ -1012,7 +1021,7 @@ jobs:
             hash_: value =>
               crypto.createHash('sha256').update(String(value), 'utf8').digest('hex')
           });
-          vm.runInContext(source, context, { filename: 'WebAppReviewPersistence.js' });
+          vm.runInContext(source, context, { filename: 'WebAppReviewCore.js' });
 
           const canonical = vm.runInContext(
             "h3ReviewCanonicalJson_({z:1,a:{d:4,b:2},m:[{y:2,x:1}]})",
@@ -1035,6 +1044,260 @@ jobs:
           }
           NODE
 
+      - name: Check Review HOME core extraction parity
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          core = Path('WebAppReviewCore.js').read_text(encoding='utf-8')
+          adapter = Path('WebAppReviewListeningAdapter.js').read_text(encoding='utf-8')
+          persistence = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+
+          for needle in [
+              'function h3ReviewCanonicalJson_(',
+              'function h3ReviewHash_(',
+              'function h3ReviewRequireExactHeader_(',
+              'function h3ReviewProviders_(',
+              'function h3ReviewHistoryEnvelope_(',
+              'function h3ReviewHomeHistory_(',
+              'function h3ReviewCurrentLearning_(',
+              'function h3ReviewRenderRequest_(',
+              'function h3ReviewMediaRequest_(',
+              'function h3ReviewSubmitRequest_(',
+              'var H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ =\n  null;',
+          ]:
+              if needle not in core:
+                  raise SystemExit(f'Review Core invariant missing: {needle}')
+
+          for needle in [
+              'function h3ListeningReviewProvider_(',
+              "kind: 'LISTENING'",
+              'historyEntries:',
+              'currentLearning:',
+              'openReview:',
+              'openMedia:',
+              'openReplay:',
+              'openReplayMedia:',
+              'gradeReplay:',
+              'function h3ListeningReviewCurrentLearning_(',
+              'function h3ListeningReviewOpen_(',
+              'function h3ListeningReviewOpenMedia_(',
+          ]:
+              if needle not in adapter:
+                  raise SystemExit(f'Listening Review adapter invariant missing: {needle}')
+
+          for needle in [
+              'function buildPersistentReviewPayload_(',
+              'function getPersistentReviewPayload_(',
+              'function getPersistentReviewMediaPayload_(',
+              'function buildLegacyPersistentReviewPayload_(',
+              'function getLegacyPersistentReviewPayload_(',
+              'function getLegacyPersistentReviewMediaPayload_(',
+              'function getReviewReplayPayload_(',
+              'function getReviewReplayMediaPayload_(',
+              'function gradeReviewReplay_(',
+          ]:
+              if needle not in persistence:
+                  raise SystemExit(f'Listening persistence surface missing: {needle}')
+
+          for needle in [
+              'h3ReviewRenderRequest_(',
+              'h3ReviewMediaRequest_(',
+              'h3ReviewSubmitRequest_(',
+          ]:
+              if needle not in web:
+                  raise SystemExit(f'Web Review Core dispatch missing: {needle}')
+
+          for forbidden in [
+              '.appendRow(',
+              '.setValue(',
+              '.setValues(',
+              'SpreadsheetApp.flush(',
+              'DriveApp.',
+          ]:
+              if forbidden in core or forbidden in adapter:
+                  raise SystemExit(
+                      f'Review Core/adapter contains forbidden WRITE/media surface: {forbidden}'
+                  )
+
+          for forbidden in [
+              "mode === 'WRITTEN'",
+              "mode: 'WRITTEN'",
+              'WRITTEN_REVIEW',
+              'written_set_stage_v1',
+          ]:
+              if forbidden in core or forbidden in adapter:
+                  raise SystemExit(f'Inactive Written seam was enabled: {forbidden}')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const assert = require('assert');
+
+          const source = [
+            'WebAppReviewCore.js',
+            'WebAppReviewListeningAdapter.js'
+          ].map(name => fs.readFileSync(name, 'utf8')).join('\n');
+
+          const spreadsheet = {};
+          const context = vm.createContext({
+            console,
+            SpreadsheetApp: {
+              openById: () => spreadsheet
+            },
+            H3_WEB_RUNTIME_SPREADSHEET_ID: 'RUNTIME',
+            H3_WEB_PROD_TXN_SHEET: 'txn',
+            getPersistentReviewPayload_: () => ({}),
+            getLegacyPersistentReviewPayload_: () => ({}),
+            getPersistentReviewMediaPayload_: () => ({}),
+            getLegacyPersistentReviewMediaPayload_: () => ({}),
+            getReviewReplayPayload_: () => ({}),
+            getReviewReplayMediaPayload_: () => ({}),
+            gradeReviewReplay_: () => ({})
+          });
+          vm.runInContext(source, context, {filename:'ReviewCore+ListeningAdapter'});
+
+          const originalCurrent = context.h3ListeningReviewCurrentLearning_;
+          const txnHistory = [
+            {
+              txn_id:'T3', set_id:'S3', listening_set_no:3,
+              committed_at:'2026-09-20T09:00:00Z', score:4, total:5,
+              wrong_count:1, uncertain_count:0, needs_review:true,
+              review_open_validation:'FULL_SOURCE_LOCK_ON_OPEN'
+            },
+            {
+              txn_id:'T2', set_id:'S2', listening_set_no:2,
+              committed_at:'2026-09-20T08:00:00Z', score:5, total:5,
+              wrong_count:0, uncertain_count:1, needs_review:true,
+              review_open_validation:'FULL_SOURCE_LOCK_ON_OPEN'
+            }
+          ];
+          const legacyHistory = [
+            {
+              legacy_review_id:'L1', source_mode:'LEGACY_PRE_WEB',
+              set_id:'S1', listening_set_no:1,
+              answered_at:'2026-09-20T10:00:00Z', score:3, total:5,
+              wrong_count:2, uncertainty_known:false,
+              uncertain_count:null, needs_review:true,
+              review_open_validation:'FULL_SOURCE_LOCK_ON_OPEN'
+            }
+          ];
+          const current = {set_id:'CURRENT', listening_set_no:4};
+
+          context.h3ReviewHistoryEntries_ = () =>
+            JSON.parse(JSON.stringify(txnHistory));
+          context.h3LegacyReviewHistoryEntries_ = () =>
+            JSON.parse(JSON.stringify(legacyHistory));
+          context.h3ListeningReviewCurrentLearning_ = () =>
+            JSON.parse(JSON.stringify(current));
+
+          const actualHome = vm.runInContext('buildReviewHomePayload_()', context);
+          const baselineLegacy = JSON.parse(JSON.stringify(legacyHistory)).map(entry => {
+            entry.committed_at = entry.answered_at;
+            return entry;
+          });
+          const baselineHistory = JSON.parse(JSON.stringify(txnHistory))
+            .concat(baselineLegacy)
+            .sort((a, b) => {
+              const at = String(a.committed_at || a.answered_at || '');
+              const bt = String(b.committed_at || b.answered_at || '');
+              if (at !== bt) return at < bt ? 1 : -1;
+              return Number(b.listening_set_no || 0) - Number(a.listening_set_no || 0);
+            })
+            .slice(0, 50);
+          const expectedHome = {
+            schema:'H3_WEB_HOME_V1',
+            mode:'HOME',
+            read_only:true,
+            current_learning:current,
+            review_history:baselineHistory,
+            review_filters:['ALL','NEEDS_REVIEW']
+          };
+          assert.deepStrictEqual(
+            JSON.parse(JSON.stringify(actualHome)),
+            expectedHome,
+            'HOME payload changed during Core extraction.'
+          );
+
+          const providers = vm.runInContext('h3ReviewProviders_()', context);
+          assert.strictEqual(providers.length, 1, 'Written provider became active.');
+          assert.strictEqual(providers[0].kind, 'LISTENING', 'Listening provider missing.');
+
+          context.getPersistentReviewPayload_ = () => ({route:'txn-review'});
+          context.getLegacyPersistentReviewPayload_ = () => ({route:'legacy-review'});
+          context.getPersistentReviewMediaPayload_ = () => ({route:'txn-media'});
+          context.getLegacyPersistentReviewMediaPayload_ = () => ({route:'legacy-media'});
+          context.getReviewReplayPayload_ = () => ({route:'replay'});
+          context.getReviewReplayMediaPayload_ = () => ({route:'replay-media'});
+          context.gradeReviewReplay_ = () => ({route:'replay-grade',runtime_write_count:0});
+
+          const call = expression => JSON.parse(JSON.stringify(
+            vm.runInContext(expression, context)
+          ));
+          assert.deepStrictEqual(
+            call("h3ReviewRenderRequest_({mode:'REVIEW',txn_id:'T'})"),
+            {route:'txn-review'}
+          );
+          assert.deepStrictEqual(
+            call("h3ReviewRenderRequest_({mode:'REVIEW',legacy_review_id:'L'})"),
+            {route:'legacy-review'}
+          );
+          assert.deepStrictEqual(
+            call("h3ReviewMediaRequest_({mode:'REVIEW',txn_id:'T'})"),
+            {route:'txn-media'}
+          );
+          assert.deepStrictEqual(
+            call("h3ReviewMediaRequest_({mode:'REVIEW',legacy_review_id:'L'})"),
+            {route:'legacy-media'}
+          );
+          assert.deepStrictEqual(
+            call("h3ReviewRenderRequest_({mode:'REVIEW_REPLAY',txn_id:'T'})"),
+            {route:'replay'}
+          );
+          assert.deepStrictEqual(
+            call("h3ReviewMediaRequest_({mode:'REVIEW_REPLAY',txn_id:'T'})"),
+            {route:'replay-media'}
+          );
+          assert.deepStrictEqual(
+            call("h3ReviewSubmitRequest_({mode:'REVIEW_REPLAY',txn_id:'T'})"),
+            {route:'replay-grade',runtime_write_count:0}
+          );
+
+          context.h3ListeningReviewCurrentLearning_ = originalCurrent;
+          context.h3ReviewTable_ = value => value;
+          context.h3ProdRequireColumns_ = () => {};
+          context.h3LegacyReviewRegisteredSetIds_ = () => ({LEGACY:true});
+          context.buildProductionRenderPayload_ = request => ({set_id:request.set_id});
+
+          const payload = {
+            map:{LISTENING_SET_ID:0,LISTENING_SET_NO:1,STATUS:2},
+            rows:[
+              ['OLD','1','ISSUED'],
+              ['DONE','2','ISSUED'],
+              ['LEGACY','3','ISSUED'],
+              ['LATEST','4','ISSUED']
+            ]
+          };
+          const txn = {
+            map:{SET_ID:0,STATUS:1},
+            rows:[['DONE','COMMITTED']]
+          };
+          const tableSpreadsheet = {
+            getSheetByName:name => name === 'listening_set_payload_v1' ? payload : txn
+          };
+          context.__tableSpreadsheet = tableSpreadsheet;
+          assert.deepStrictEqual(
+            call('h3ListeningReviewCurrentLearning_(__tableSpreadsheet)'),
+            {set_id:'LATEST',listening_set_no:4},
+            'Listening current-learning resolution changed.'
+          );
+
+          console.log('Review HOME Core parity audit: PASS');
+          NODE
+
       - name: Check persistent Review routes and Web UI
         shell: bash
         run: |
@@ -1042,7 +1305,14 @@ jobs:
           from pathlib import Path
 
           web = Path('WebApp.js').read_text(encoding='utf-8')
-          persistence = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          persistence = '\n'.join(
+              Path(name).read_text(encoding='utf-8')
+              for name in [
+                  'WebAppReviewCore.js',
+                  'WebAppReviewListeningAdapter.js',
+                  'WebAppReviewPersistence.js',
+              ]
+          )
           client = Path('Client.html').read_text(encoding='utf-8')
           index = Path('Index.html').read_text(encoding='utf-8')
           style = Path('Stylesheet.html').read_text(encoding='utf-8')
@@ -1055,10 +1325,9 @@ jobs:
               "var mode = 'HOME';",
               "params.mode === 'REVIEW'",
               "txnId = String(",
-              "request && request.mode === 'HOME'",
-              "request && request.mode === 'REVIEW'",
-              "getPersistentReviewPayload_(",
-              "getPersistentReviewMediaPayload_(",
+              "h3ReviewRenderRequest_(",
+              "h3ReviewMediaRequest_(",
+              "h3ReviewSubmitRequest_(",
               "h3ReviewEnsureBindingForCommittedTxn_(",
               "buildPersistentReviewPayload_(",
               "'READ_ONLY_MODE_SUBMIT_FORBIDDEN'",
@@ -1187,7 +1456,7 @@ jobs:
           source = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
 
           start = source.index('function h3ReviewHistoryEntries_(')
-          end = source.index('function h3ReviewCurrentLearning_(', start)
+          end = source.index('function h3ReviewReplayValidateLegacyId_(', start)
           history = source[start:end]
 
           required = [
@@ -1230,7 +1499,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          review = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          review = Path('WebAppReviewCore.js').read_text(encoding='utf-8')
           preissue = Path('WebAppPreissue.js').read_text(encoding='utf-8')
           code = Path('Code.js').read_text(encoding='utf-8')
 
@@ -1304,10 +1573,9 @@ jobs:
           chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
 
           for needle in [
-              "request && request.mode === 'REVIEW_REPLAY'",
-              'getReviewReplayPayload_(',
-              'getReviewReplayMediaPayload_(',
-              'gradeReviewReplay_(',
+              'h3ReviewRenderRequest_(',
+              'h3ReviewMediaRequest_(',
+              'h3ReviewSubmitRequest_(',
               "params.mode === 'REVIEW_REPLAY'",
           ]:
               if needle not in web:
@@ -1664,7 +1932,14 @@ jobs:
 
           web = Path('WebApp.js').read_text(encoding='utf-8')
           code = Path('Code.js').read_text(encoding='utf-8')
-          review = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          review = '\n'.join(
+              Path(name).read_text(encoding='utf-8')
+              for name in [
+                  'WebAppReviewCore.js',
+                  'WebAppReviewListeningAdapter.js',
+                  'WebAppReviewPersistence.js',
+              ]
+          )
           client = Path('Client.html').read_text(encoding='utf-8')
           ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
           chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
@@ -1823,7 +2098,14 @@ jobs:
           from pathlib import Path
 
           web = Path('WebApp.js').read_text(encoding='utf-8')
-          review = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          review = '\n'.join(
+              Path(name).read_text(encoding='utf-8')
+              for name in [
+                  'WebAppReviewCore.js',
+                  'WebAppReviewListeningAdapter.js',
+                  'WebAppReviewPersistence.js',
+              ]
+          )
           ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
           chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
 
@@ -2215,7 +2497,14 @@ jobs:
           from pathlib import Path
           import re
 
-          review = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          review = '\n'.join(
+              Path(name).read_text(encoding='utf-8')
+              for name in [
+                  'WebAppReviewCore.js',
+                  'WebAppReviewListeningAdapter.js',
+                  'WebAppReviewPersistence.js',
+              ]
+          )
           web = Path('WebApp.js').read_text(encoding='utf-8')
           client = Path('Client.html').read_text(encoding='utf-8')
           arch = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
@@ -2234,10 +2523,12 @@ jobs:
               "function getLegacyPersistentReviewMediaPayload_(",
               "function buildLegacyReviewReplayPayload_(",
               "function h3ReviewReplayValidateLegacyId_(",
+              "function h3ListeningReviewOpen_(",
+              "function h3ListeningReviewOpenMedia_(",
               "LEGACY_REVIEW_RESULT_SOURCE_MISMATCH",
               "LEGACY_REVIEW_BINDING_HASH_MISMATCH",
               "!legacyRegistered[setId]",
-              ".concat(legacyHistory)",
+              "function h3ListeningReviewHistoryEntries_(",
               "runtime_write_count: 0",
           ]
           for needle in required_review:
@@ -2252,8 +2543,8 @@ jobs:
                   raise SystemExit(f'One-shot migration helper still active: {removed}')
 
           for needle in [
-              "getLegacyPersistentReviewPayload_(",
-              "getLegacyPersistentReviewMediaPayload_(",
+              "h3ReviewRenderRequest_(",
+              "h3ReviewMediaRequest_(",
           ]:
               if needle not in web:
                   raise SystemExit(f'Legacy Review Web route missing: {needle}')
@@ -2953,6 +3244,8 @@ jobs:
           node --check WebAppProductionRender.js
           node --check WebAppPreissue.js
           node --check WebAppReceipt.js
+          node --check WebAppReviewCore.js
+          node --check WebAppReviewListeningAdapter.js
           node --check WebAppReviewPersistence.js
           python3 - <<'PY'
           from pathlib import Path

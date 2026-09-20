@@ -18,25 +18,15 @@ function include_(filename) {
 }
 
 function getListeningWebSet(request) {
-  if (request && request.mode === 'HOME') {
-    return buildReviewHomePayload_();
-  }
-
-  if (request && request.mode === 'REVIEW_REPLAY') {
-    return getReviewReplayPayload_(
-      request
-    );
-  }
-
-  if (request && request.mode === 'REVIEW') {
-    if (
-      request.legacy_review_id
-    ) {
-      return getLegacyPersistentReviewPayload_(
-        request
-      );
-    }
-    return getPersistentReviewPayload_(
+  if (
+    request &&
+    [
+      'HOME',
+      'REVIEW',
+      'REVIEW_REPLAY'
+    ].indexOf(request.mode) >= 0
+  ) {
+    return h3ReviewRenderRequest_(
       request
     );
   }
@@ -52,21 +42,14 @@ function getListeningWebSet(request) {
 }
 
 function getListeningWebMedia(request) {
-  if (request && request.mode === 'REVIEW_REPLAY') {
-    return getReviewReplayMediaPayload_(
-      request
-    );
-  }
-
-  if (request && request.mode === 'REVIEW') {
-    if (
-      request.legacy_review_id
-    ) {
-      return getLegacyPersistentReviewMediaPayload_(
-        request
-      );
-    }
-    return getPersistentReviewMediaPayload_(
+  if (
+    request &&
+    [
+      'REVIEW',
+      'REVIEW_REPLAY'
+    ].indexOf(request.mode) >= 0
+  ) {
+    return h3ReviewMediaRequest_(
       request
     );
   }
@@ -99,7 +82,7 @@ function submitListeningWebAnswers(request) {
     request &&
     request.mode === 'REVIEW_REPLAY'
   ) {
-    return gradeReviewReplay_(
+    return h3ReviewSubmitRequest_(
       request
     );
   }

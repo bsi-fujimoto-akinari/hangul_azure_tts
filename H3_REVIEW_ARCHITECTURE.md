@@ -162,4 +162,10 @@ UNCERTAINTY_KNOWN=false
 
 Review/media/replay use internal `legacy_review_id` routing without learner URL parameters. Unknown historical uncertainty is rendered as `?—`. Replay is transient and must not mutate learner history, score, counters, pointers, scheduler, K1_READY, payload, or audio.
 
+## 28. Review / HOME provider core
+
+`WebAppReviewCore.js` owns provider-neutral canonical JSON/hash helpers, exact table/header helpers, HOME history ordering, current-learning arbitration, and Review request dispatch. `WebAppReviewListeningAdapter.js` is the only active provider and delegates to the existing transaction-backed and legacy Listening persistence implementation.
+
+The internal provider contract exposes history, current learning, Review/media, and replay operations without changing any learner-facing payload. The Written provider factory remains `null`: this is only a future adapter slot and does not enable a Written route, schema, transaction, history entry, or HOME card.
+
 One-shot migration helpers are absent from active code. Detailed migration and validation evidence remains recoverable from Git history and Drive `06_AUDIT`.

@@ -3262,7 +3262,7 @@ jobs:
               'function h3WrittenSnapshot_(setId, answersLog)',
               'function h3WrittenRecoverPrepared_(',
               'function h3WrittenSubmit_(request)',
-              "'H3_WRITTEN_WEB_ANSWER_LOG_V1'",
+              'H3_WRITTEN_WEB_ANSWER_LOG_V1',
               "'H3_WRITTEN_QUEUE_ANSWER_STATE_V1'",
               "'H3_WRITTEN_SOURCE_BINDING_V1'",
               "'WRITTEN_PREPARED_RUNTIME_MIXED'",

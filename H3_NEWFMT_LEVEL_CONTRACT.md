@@ -113,7 +113,11 @@ A format may become runtime-eligible only when all are true:
 
 Until then, readiness is `SOURCE_UNBOUND`.
 
-## 8. Explicit non-goals
+## 8. Repository gate
+
+Merge is permitted only after the repository audit validates the registry contract, pure audit, and JavaScript syntax. This gate changes no runtime policy or learner state.
+
+## 9. Explicit non-goals
 
 This phase does not:
 

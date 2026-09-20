@@ -42,6 +42,8 @@ jobs:
               'WebAppSurfaceCommonAudit.js',
               'WebAppLevelCommon.js',
               'WebAppLevelCommonAudit.js',
+              'WebAppJun2Taxonomy.js',
+              'WebAppJun2TaxonomyAudit.js',
               'WebAppFormatCommon.js',
               'WebAppFormatCommonAudit.js',
               'WebAppWrittenNewfmt.js',
@@ -70,6 +72,7 @@ jobs:
               'H3_REVIEW_ARCHITECTURE.md',
               'H3_LEARNING_SURFACE_CONTRACT.md',
               'H3_LEVEL_RUNTIME_CONTRACT.md',
+              'H3_JUN2_TAXONOMY_CONTRACT.md',
               'H3_NEWFMT_LEVEL_CONTRACT.md',
               'H3_2026_NEWFMT_SOURCE_CONTRACT.md',
               'H3_WRITTEN_NEWFMT_RUNTIME_CONTRACT.md',
@@ -6450,11 +6453,13 @@ jobs:
           surface = Path('H3_LEARNING_SURFACE_CONTRACT.md').read_text(encoding='utf-8')
 
           for needle in [
-              'Version: H3-LEVEL-RUNTIME-20260921-V1',
-              'Status: STAGED_NO_JUN2_TAXONOMY',
+              'Version: H3-LEVEL-RUNTIME-20260921-V2',
+              'Status: JUN2_TAXONOMY_READY_QUEUE_INACTIVE',
               '<LEVEL>|<SKILL_ID>',
               '準2級|<future 準2級 skill id>',
-              'BLOCKED_NO_JUN2_TAXONOMY',
+              'skill_master_v1',
+              'jun2_skill_master_v1',
+              'TAXONOMY_PRESENT_NOT_RUNTIME_ACTIVATED',
               'accuracy >= 80%',
               'accuracy > 90%',
               'must never be copied automatically across levels',
@@ -6466,22 +6471,26 @@ jobs:
               "var H3_RUNTIME_LEVELS_ = [",
               "'3級'",
               "'準2級'",
+              'function h3LevelMasterAuthority_(',
               'function h3LevelSkillStateKey_(',
               'function h3LevelAssertNoCrossLevelStateTransfer_(',
               'function h3LevelResolveQueueSkill_(',
               'function h3LevelPromotionPlan_(',
               'function h3LevelActivationReadiness_(',
               "'BLOCKED_NO_JUN2_TAXONOMY'",
+              "'jun2_skill_master_v1'",
           ]:
               if needle not in common:
                   raise SystemExit(f'Level runtime helper missing: {needle}')
 
           for needle in [
-              'function auditLevelRuntimeV1_(',
-              'H3_LEVEL_RUNTIME_AUDIT_V1',
+              'function auditLevelRuntimeV2_(',
+              'H3_LEVEL_RUNTIME_AUDIT_V2',
+              'MASTER_AUTHORITIES',
               'PROMOTION_MONOTONIC_HIGH',
               'CROSS_LEVEL_TRANSFER_REJECTED',
               'QUEUE_LEVEL_MISMATCH',
+              'JUN2_TAXONOMY_PRESENT',
           ]:
               if needle not in audit:
                   raise SystemExit(f'Level runtime audit missing: {needle}')
@@ -6510,17 +6519,17 @@ jobs:
           });
 
           const result = vm.runInContext(
-            'auditLevelRuntimeV1_()',
+            'auditLevelRuntimeV2_()',
             context
           );
 
           if (
             result.result !== 'PASS' ||
             result.schema !==
-              'H3_LEVEL_RUNTIME_AUDIT_V1' ||
-            result.checks !== 14 ||
+              'H3_LEVEL_RUNTIME_AUDIT_V2' ||
+            result.checks !== 16 ||
             result.contract_id !==
-              'H3-LEVEL-RUNTIME-20260921-V1'
+              'H3-LEVEL-RUNTIME-20260921-V2'
           ) {
             throw new Error(
               'Level runtime pure audit mismatch: ' +
@@ -6530,6 +6539,113 @@ jobs:
 
           console.log(
             'Independent level runtime pure audit: PASS',
+            JSON.stringify(result)
+          );
+          NODE
+
+      - name: Check source-bound 準2級 taxonomy master
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          contract = Path('H3_JUN2_TAXONOMY_CONTRACT.md').read_text(encoding='utf-8')
+          runtime = Path('WebAppJun2Taxonomy.js').read_text(encoding='utf-8')
+          audit = Path('WebAppJun2TaxonomyAudit.js').read_text(encoding='utf-8')
+          level = Path('H3_LEVEL_RUNTIME_CONTRACT.md').read_text(encoding='utf-8')
+
+          for needle in [
+              'Version: H3-JUN2-TAXONOMY-20260921-V1',
+              'Status: SOURCE_BOUND_MASTER_READY_QUEUE_INACTIVE',
+              'jun2_skill_master_v1',
+              'JUN2-D5-SK001',
+              'JUN2-D12-SK001',
+              'JUN2_D5_COMMON2X2',
+              'JUN2_D12_JP_TO_KR_4X2',
+              'STAGED_NOT_QUEUE_ACTIVE',
+              'JP_TO_KR',
+              'not a claim to exhaust every 準2級 exam skill',
+          ]:
+              if needle not in contract:
+                  raise SystemExit(f'準2級 taxonomy contract missing: {needle}')
+
+          for needle in [
+              "var H3_JUN2_TAXONOMY_CONTRACT_ID_ =",
+              "var H3_JUN2_MASTER_SHEET_ =",
+              "var H3_JUN2_SKILL_MASTER_HEADERS_ = [",
+              "var H3_JUN2_TAXONOMY_ROWS_ = [",
+              "'JUN2-D5-SK001'",
+              "'JUN2-D12-SK001'",
+              "function h3Jun2ValidateTaxonomy_(",
+              "function h3Jun2MasterValues_(",
+              "function h3Jun2MasterPlan_(",
+          ]:
+              if needle not in runtime:
+                  raise SystemExit(f'準2級 taxonomy helper missing: {needle}')
+
+          for needle in [
+              'function auditJun2TaxonomyV1_(',
+              'H3_JUN2_TAXONOMY_AUDIT_V1',
+              'NO_H3_ID_REUSE',
+              'LEVEL_FAIL_CLOSED',
+              'DIRECTION_FAIL_CLOSED',
+              'MASTER_PLAN',
+          ]:
+              if needle not in audit:
+                  raise SystemExit(f'準2級 taxonomy audit missing: {needle}')
+
+          for needle in [
+              'Version: H3-LEVEL-RUNTIME-20260921-V2',
+              'jun2_skill_master_v1',
+              'TAXONOMY_PRESENT_NOT_RUNTIME_ACTIVATED',
+          ]:
+              if needle not in level:
+                  raise SystemExit(f'Level runtime V2 missing 準2級 authority: {needle}')
+
+          print('Source-bound 準2級 taxonomy/master static boundary: PASS')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const context = vm.createContext({console});
+
+          [
+            'WebAppLevelCommon.js',
+            'WebAppFormatCommon.js',
+            'WebAppJun2Taxonomy.js',
+            'WebAppJun2TaxonomyAudit.js'
+          ].forEach(name => {
+            vm.runInContext(
+              fs.readFileSync(name, 'utf8'),
+              context,
+              {filename:name}
+            );
+          });
+
+          const result = vm.runInContext(
+            'auditJun2TaxonomyV1_()',
+            context
+          );
+
+          if (
+            result.result !== 'PASS' ||
+            result.schema !==
+              'H3_JUN2_TAXONOMY_AUDIT_V1' ||
+            result.checks !== 9 ||
+            result.contract_id !==
+              'H3-JUN2-TAXONOMY-20260921-V1' ||
+            result.skill_count !== 2
+          ) {
+            throw new Error(
+              '準2級 taxonomy/master audit mismatch: ' +
+              JSON.stringify(result)
+            );
+          }
+
+          console.log(
+            'Source-bound 準2級 taxonomy/master pure audit: PASS',
             JSON.stringify(result)
           );
           NODE
@@ -6759,6 +6875,8 @@ jobs:
           node --check WebAppSurfaceCommonAudit.js
           node --check WebAppLevelCommon.js
           node --check WebAppLevelCommonAudit.js
+          node --check WebAppJun2Taxonomy.js
+          node --check WebAppJun2TaxonomyAudit.js
           node --check WebAppFormatCommon.js
           node --check WebAppFormatCommonAudit.js
           node --check WebAppWrittenNewfmt.js

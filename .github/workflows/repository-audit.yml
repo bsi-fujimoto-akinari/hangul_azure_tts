@@ -5808,6 +5808,9 @@ jobs:
           web = Path('WebApp.js').read_text(encoding='utf-8')
           contract = Path('H3_READING_P8_PILOT_CONTRACT.md').read_text(encoding='utf-8')
 
+          activation = Path('WebAppReadingActivation.js').read_text(encoding='utf-8')
+          activation_contract = Path('H3_READING_ACTIVATION_CONTRACT.md').read_text(encoding='utf-8')
+
           for needle in [
               "H3-READING-P8-PILOT-20260920-V1",
               "function h3ReadingLockBundle_(",
@@ -5852,6 +5855,19 @@ jobs:
           render_body = client[render_start:render_end]
           if 'app.answers[q.section]' in render_body or 'app.uncertain[q.section]' in render_body:
               raise SystemExit('Reading repeated section still aliases browser answer state.')
+
+          for needle in [
+              "H3-READING-ACTIVATION-CORE-20260921-V2",
+              "function h3ReadingAllocateIdentityFromStageRows_(",
+              "function h3ReadingBuildMaterializationPlan_(",
+              "'LOCKED_BUNDLE_JSON'",
+              "'H3-20260921-R001'",
+          ]:
+              if needle not in activation and needle not in activation_contract:
+                  raise SystemExit(f'Reading V2 activation invariant missing: {needle}')
+
+          if "request.mode === 'READING'" in web:
+              raise SystemExit('Reading V2 accidentally activated a server route.')
 
           print('P8 Reading staged static boundary: PASS')
           PY
@@ -5911,7 +5927,19 @@ jobs:
             activation.result !== 'PASS' ||
             activation.source_group_id !== '245' ||
             activation.item_count !== 2 ||
-            activation.checks !== 10
+            activation.checks !== 16 ||
+            activation.contract_id !==
+              'H3-READING-ACTIVATION-CORE-20260921-V2' ||
+            activation.allocated_set_id !==
+              'H3-20260921-R001' ||
+            activation.allocated_stage_id !==
+              'READ-P8-20260921-001' ||
+            !/^[0-9a-f]{64}$/.test(
+              activation.locked_bundle_sha256
+            ) ||
+            !/^[0-9a-f]{64}$/.test(
+              activation.source_binding_sha256
+            )
           ) {
             throw new Error(
               'Reading activation core pure audit mismatch: ' +

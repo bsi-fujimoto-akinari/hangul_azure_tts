@@ -37,6 +37,8 @@ jobs:
               'WebApp.js',
               'WebAppFixture.js',
               'WebAppProduction.js',
+              'WebAppTransactionCommon.js',
+              'WebAppWrittenProduction.js',
               'WebAppProductionRender.js',
               'WebAppPreissue.js',
               'WebAppReceipt.js',
@@ -62,7 +64,7 @@ jobs:
           unexpected = sorted(tracked - allowed)
           missing = sorted({
               '.clasp.json', '.gitignore', 'Code.js',
-              'WebApp.js', 'WebAppFixture.js', 'WebAppProduction.js', 'WebAppProductionRender.js', 'WebAppPreissue.js', 'WebAppReceipt.js', 'Index.html',
+              'WebApp.js', 'WebAppFixture.js', 'WebAppProduction.js', 'WebAppTransactionCommon.js', 'WebAppWrittenProduction.js', 'WebAppProductionRender.js', 'WebAppPreissue.js', 'WebAppReceipt.js', 'Index.html',
               'Stylesheet.html', 'Client.html', 'appsscript.json'
           } - tracked)
 

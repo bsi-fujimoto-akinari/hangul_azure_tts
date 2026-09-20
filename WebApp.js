@@ -45,6 +45,15 @@ function getListeningWebSet(request) {
       );
     }
 
+    if (
+      request.surface_family ===
+        'TRANSLATION'
+    ) {
+      return buildTranslationProductionRenderPayload_(
+        request
+      );
+    }
+
     return buildWrittenProductionRenderPayload_(
       request
     );
@@ -111,6 +120,15 @@ function submitListeningWebAnswers(request) {
         'READING'
     ) {
       return h3ReadingSubmit_(
+        request
+      );
+    }
+
+    if (
+      request.surface_family ===
+        'TRANSLATION'
+    ) {
+      return h3TranslationSubmit_(
         request
       );
     }
@@ -203,11 +221,17 @@ function h3WebBootRequest_(e) {
         params.set_id
       );
       if (
-        params.surface_family ===
-          'READING'
+        [
+          'READING',
+          'TRANSLATION'
+        ].indexOf(
+          params.surface_family
+        ) >= 0
       ) {
         surfaceFamily =
-          'READING';
+          String(
+            params.surface_family
+          );
       }
     } else if (
       params.mode === 'SYSTEM_TEST' &&

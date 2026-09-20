@@ -43,6 +43,8 @@ jobs:
               'WebAppWrittenProduction.js',
               'WebAppWrittenAnswerSync.js',
               'WebAppProductionRender.js',
+              'WebAppReadingPilot.js',
+              'WebAppReadingPilotAudit.js',
               'WebAppPreissue.js',
               'WebAppReceipt.js',
               'WebAppReviewCore.js',
@@ -53,6 +55,7 @@ jobs:
               'H3_WEB_CHAT_CONTRACT.md',
               'H3_REVIEW_ARCHITECTURE.md',
               'H3_LEARNING_SURFACE_CONTRACT.md',
+              'H3_READING_P8_PILOT_CONTRACT.md',
               'Index.html',
               'Stylesheet.html',
               'Client.html',
@@ -5692,6 +5695,115 @@ jobs:
           console.log('Listening backend orchestrator pure tests: PASS');
           NODE
 
+      - name: Check staged P8 Reading pilot
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          reading = Path('WebAppReadingPilot.js').read_text(encoding='utf-8')
+          client = Path('Client.html').read_text(encoding='utf-8')
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+          contract = Path('H3_READING_P8_PILOT_CONTRACT.md').read_text(encoding='utf-8')
+
+          for needle in [
+              "H3-READING-P8-PILOT-20260920-V1",
+              "function h3ReadingLockBundle_(",
+              "function h3ReadingBuildRenderPayload_(",
+              "function h3ReadingGrade_(",
+              "function h3ReadingBuildRetestEvents_(",
+              "function h3ReadingBuildReviewProjection_(",
+              "'SHARED_READING_PASSAGE'",
+              "'READING_PILOT_NOT_ACTIVE'",
+          ]:
+              if needle not in reading:
+                  raise SystemExit(f'Reading pilot invariant missing: {needle}')
+
+          for needle in [
+              'var questionKeys =',
+              'function questionKeyFor_(',
+              'function validateReadingPayload_(',
+              'function renderReadingSurface_(',
+              "family === 'READING'",
+              "app.surfaceFamily === '5W'",
+              "app.surfaceFamily ===\n        'READING'",
+          ]:
+              if needle not in client:
+                  raise SystemExit(f'Reading client boundary missing: {needle}')
+
+          if "request.mode === 'READING'" in web:
+              raise SystemExit('Reading pilot was accidentally activated as a server route.')
+
+          for needle in [
+              'Status: STAGED_NOT_LEARNER_ACTIVE',
+              'The passage is context/source authority only.',
+              'must not be used as the browser answer-state key',
+              'does not',
+              'add P8 skills to the active dynamic queue',
+          ]:
+              if needle not in contract:
+                  raise SystemExit(f'Reading pilot contract evidence missing: {needle}')
+
+          # Shared P8 section cannot be the browser answer key.
+          render_start = client.index('function renderQuestions(')
+          render_end = client.index('function buildAudioBlock(', render_start)
+          render_body = client[render_start:render_end]
+          if 'app.answers[q.section]' in render_body or 'app.uncertain[q.section]' in render_body:
+              raise SystemExit('Reading repeated section still aliases browser answer state.')
+
+          print('P8 Reading staged static boundary: PASS')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+
+          const context = vm.createContext({
+            console,
+            hash_: text =>
+              crypto.createHash('sha256')
+                .update(String(text), 'utf8')
+                .digest('hex')
+          });
+
+          [
+            'WebAppSurfaceCommon.js',
+            'WebAppReadingPilot.js',
+            'WebAppReadingPilotAudit.js'
+          ].forEach(name => {
+            vm.runInContext(
+              fs.readFileSync(name, 'utf8'),
+              context,
+              {filename:name}
+            );
+          });
+
+          const result = vm.runInContext(
+            'auditReadingP8PilotV1_()',
+            context
+          );
+
+          if (
+            result.result !== 'PASS' ||
+            result.source_group_id !== '245' ||
+            result.item_count !== 2 ||
+            result.checks !== 12 ||
+            !/^[0-9a-f]{64}$/.test(result.passage_sha256) ||
+            !/^[0-9a-f]{64}$/.test(result.source_binding_sha256)
+          ) {
+            throw new Error(
+              'P8 Reading pilot pure audit mismatch: ' +
+              JSON.stringify(result)
+            );
+          }
+
+          console.log(
+            'P8 Reading pilot pure audit: PASS',
+            JSON.stringify(result)
+          );
+          NODE
+
       - name: Check JavaScript syntax
         shell: bash
         run: |
@@ -5705,6 +5817,8 @@ jobs:
           node --check WebAppWrittenProduction.js
           node --check ListeningBackendOrchestrator.js
           node --check WebAppProductionRender.js
+          node --check WebAppReadingPilot.js
+          node --check WebAppReadingPilotAudit.js
           node --check WebAppPreissue.js
           node --check WebAppReceipt.js
           node --check WebAppReviewCore.js

@@ -208,10 +208,11 @@ The runtime connection uses Script Property `K1_READY_SHEET_ID`, read by `config
 The required runtime order is:
 
 ```text
-K1_READY persist
-  -> exact readback / validation
-  -> fresh prebind gate
+K1_READY atomic persist
+  -> one exact A:M readback / validation
+  -> fresh prebind full validation including image SHA
   -> BOUND_LISTENING_SET_ID bind
+  -> one exact A:M bind readback (only L may differ)
   -> audio queue
   -> individual K1-K5 audio
   -> exact individual audio binding
@@ -219,6 +220,8 @@ K1_READY persist
   -> issue success
   -> consume
 ```
+
+This is the `K1_READY_ONE_SHOT_V1` contract. The new-row persist path must not repeatedly read the same row after one exact A:M verification has already established header/schema/literal/value/ID/hash integrity.
 
 Fresh binding is permitted only after `readK1ReadyRecord_()` and `validateK1ReadyPayload_()` establish all of the following:
 
@@ -230,7 +233,7 @@ Fresh binding is permitted only after `readK1ReadyRecord_()` and `validateK1Read
 
 If any prebind condition fails, do not bind, do not write the Listening audio queue, and do not issue the 5L set. Do not guess missing values, reconstruct a fallback payload, or auto-repair the persistent record.
 
-`bindK1ReadyToListeningSet_()` may change only `BOUND_LISTENING_SET_ID`, from blank to the target LISTENING_SET_ID, and must read it back exactly. An already-bound record must not be rebound to another set.
+`bindK1ReadyToListeningSet_()` may change only `BOUND_LISTENING_SET_ID`, from blank to the target LISTENING_SET_ID. The prebind row receives full payload validation including the Drive image SHA256 check. After bind, one exact A:M readback must prove the same K1_READY_ID, `STATUS=READY`, blank `CONSUMED_AT`, exact target binding in column L, and byte-for-byte/string-equivalent equality of every other persisted column to the already-validated prebind row. When those checks pass, do not re-read the Drive image blob or recompute image SHA a second time. An already-bound record must not be rebound to another set.
 
 Before `processListeningAudioSet_()` reaches any `runListeningJob_()` call, `assertBoundK1ReadyForSet_()` must re-read the persistent bound record and verify that the bound SET_ID matches the set being processed, `STATUS=READY`, `CONSUMED_AT` remains blank, and the queue-side K1 audio payload exactly matches the persistent K1_READY payload. Any mismatch stops processing before audio work starts.
 
@@ -475,7 +478,7 @@ Script TXT storage is co-located with audio:
 - 5L set TXT: `03_AUDIO/02_5L/{LISTENING_SET_ID}.txt`;
 - SYSTEM_TEST script TXT: `03_AUDIO/90_ARCHIVE/01_SYSTEM_TEST/{SET_ID}_script.txt`.
 
-5L script TXT is generated automatically after all five source-locked K1-K5 audio rows are done. Its content is reconstructed from the same AUDIO_PLAN_JSON surface, with repetitions/cues collapsed to one semantic script surface. Existing same-name TXT must match exactly; conflicting content is a hard stop.
+5L script TXT is not part of the learner issue critical path. After all five source-locked K1-K5 audio rows are done, the exact semantic script may be materialized explicitly with `persistListeningSetScript(SET_ID)` for Review/audit convenience. Its content is reconstructed from the same AUDIO_PLAN_JSON surface, with repetitions/cues collapsed to one semantic script surface. Existing same-name TXT must match exactly when materialization is requested; a script materialization failure does not invalidate an otherwise-valid learner issue.
 
 Until the R3-W written Web App migration, 5W DAILY_TXT remains Chat-owned after verified answer sync, but Drive storage is `03_AUDIO/01_5W`, not `04_LEARNER_ARTIFACTS`.
 
@@ -500,7 +503,7 @@ Required preissue state:
 - the retest slot matches the persisted overload plan and per-set retest cap;
 - exactly five queue rows exist for the target set, all are `done`, error-free, and match the persisted individual audio binding;
 - every bound MP3 exists;
-- exactly one co-located `{LISTENING_SET_ID}.txt` exists and equals the semantic script reconstructed from the same audio plans;
+- SCRIPT_TXT is not a preissue prerequisite; absence of `{LISTENING_SET_ID}.txt` does not block issue;
 - learner history rows for the target set are zero;
 - production transaction rows for the target set are zero;
 - no unresolved production `RECOVERY_REQUIRED` transaction exists;
@@ -1235,3 +1238,16 @@ Normal production Chat surfaces are intentionally minimal:
 - failed `[H3_WEB_SYNC]` verification -> `Issue detected.` only.
 
 This changes presentation only. Canonical backend verification, idempotency, source locks, preissue gates, scheduler checks, and recovery behavior remain mandatory. Detailed explanation belongs to the Web App / persistent Review unless the learner explicitly asks for it in a separate Chat turn.
+
+## 30. Normal hot-path readback
+
+Operational normal-flow reads follow `NORMAL_HOTPATH_READBACK_V1` in `H3_WEB_CHAT_CONTRACT.md`.
+
+- `K1`: perform one bounded parallel runtime read bundle, then one exact A:M readback after atomic K1_READY persist. Do not repeatedly read the same immutable K1_READY fields.
+- `5L`: fan out independent state/policy/K1_READY/scheduler/target-set/log/transaction/audio reads in parallel; preserve write-dependent sequencing and the final fail-closed preissue gate.
+- `H3_WEB_SYNC`: after exact receipt parsing, fan out exact transaction, five learner-log rows, current Listening state, and recovery-status verification in parallel, then evaluate the existing identity/hash/state contract.
+
+Normal flow does not re-read GitHub `main`, `HANGUL_INFRA_STATUS_CURRENT`, manifest, or canonical release files on every learner request. Read those only for drift, canonical change, mismatch, recovery, or explicit audit.
+
+Connector/tool implementations must batch independent reads in one tool turn (for example with `Promise.all`) rather than serialize them. No new runtime aggregation Sheet/tab is authorized.
+

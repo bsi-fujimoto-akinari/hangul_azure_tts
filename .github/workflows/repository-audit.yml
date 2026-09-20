@@ -4095,7 +4095,7 @@ jobs:
 
           for needle in [
               "payload.questions.map(",
-              "question.question_text",
+              "q.question_text",
               "'question-prompt'",
               "'written-grade-button'",
               "'written-reset-button'",

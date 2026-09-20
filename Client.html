@@ -2617,6 +2617,73 @@
     }
   }
 
+  function isWritten5WReview_() {
+    var payload =
+      app.payload || {};
+    var family =
+      String(
+        payload.surface_family || ''
+      );
+
+    return (
+      payload.kind === 'WRITTEN' &&
+      (
+        !family ||
+        family === '5W'
+      )
+    );
+  }
+
+  function buildReviewExplanationContainer_(
+    part
+  ) {
+    var isWritten5W =
+      isWritten5WReview_();
+    var container =
+      document.createElement(
+        isWritten5W
+          ? 'section'
+          : 'details'
+      );
+
+    container.className =
+      'review-explanation' +
+      (
+        isWritten5W
+          ? ' review-explanation-written'
+          : ''
+      );
+
+    if (isWritten5W) {
+      var heading =
+        document.createElement('h4');
+      heading.className =
+        'review-block-title ' +
+        'review-explanation-title';
+      heading.textContent =
+        '解説';
+      container.appendChild(
+        heading
+      );
+      return container;
+    }
+
+    container.open =
+      part.result !== '○';
+
+    var summary =
+      document.createElement(
+        'summary'
+      );
+    summary.textContent =
+      '解説';
+    container.appendChild(
+      summary
+    );
+
+    return container;
+  }
+
   function buildPersistentReviewCard(
     part,
     index
@@ -2764,24 +2831,10 @@
       part.explanation
     );
 
-    var details =
-      document.createElement(
-        'details'
+    var explanationContainer =
+      buildReviewExplanationContainer_(
+        part
       );
-    details.className =
-      'review-explanation';
-    details.open =
-      part.result !== '○';
-
-    var summary =
-      document.createElement(
-        'summary'
-      );
-    summary.textContent =
-      '解説';
-    details.appendChild(
-      summary
-    );
 
     var body =
       el(
@@ -2849,8 +2902,11 @@
       );
     });
 
-    details.appendChild(body);
-    card.appendChild(details);
+    explanationContainer
+      .appendChild(body);
+    card.appendChild(
+      explanationContainer
+    );
 
     return card;
   }

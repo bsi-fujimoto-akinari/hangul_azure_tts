@@ -1,6 +1,6 @@
 # H3 Review Architecture
 
-Version: H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V7
+Version: H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V8
 Status: R3_CLOSED_NORMAL_LIVE
 
 This document defines the current durable Review contract. Completed R3 phase chronology and device-validation evidence remain in Git history and Drive `06_AUDIT`.
@@ -280,3 +280,12 @@ Opening a Review performs provider-specific source-lock validation first and onl
 The HOME index reader is backward compatible with the current physical V1 header. `migrateReviewHomeIndexV2()` is the explicit idempotent migration that appends `SURFACE_FAMILY` and `LEVEL` and materializes the frozen legacy values for existing rows. The migration is never implicit and does not alter learner history, answers, scores, scheduler state, or Review payload authority.
 
 Reading, Translation, and 準2級 remain inactive until their dedicated family adapters and scheduler contracts are separately enabled.
+
+## 33. 5W Written Review explanation visibility and structured text
+
+For `surface_family=5W` under the Written Review provider, the learner explanation is structurally always visible for `○ / △ / ×`. The explanation container is an ordinary non-disclosure block, not a `<details>` element, and it has no result-dependent open/closed state. The separate technical-information block remains a `<details>` disclosure and remains independently collapsible.
+
+This rule is scoped to Written 5W Review. Listening Review keeps its existing explanation disclosure behavior, and active-learning rendering/answer behavior is unchanged.
+
+Structured Written 5W learning-block text must preserve stored newline boundaries. In particular, a Hanja network stored as target, `⇒` related examples, and `≠` homophone examples on separate lines must render as the same three visual lines. The renderer must not infer or synthesize line splits when the stored content itself is one line; such content corrections belong to the source/payload layer.
+

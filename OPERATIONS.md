@@ -61,6 +61,8 @@ persist -> exact readback -> prebind gate -> bind SET_ID -> audio queue
 
 Fresh binding requires `STATUS=READY`, blank `CONSUMED_AT`, blank `BOUND_LISTENING_SET_ID`, complete fields, and exact payload validation. Binding changes only `BOUND_LISTENING_SET_ID` and must read back exactly. Audio processing re-reads the bound record and verifies queue parity before any audio work.
 
+For normal 5L, audio processing also performs `H3_LISTENING_AUDIO_SOURCE_ATTESTATION_V1` before any Azure or Drive mutation. The attestation re-reads the locked `listening_set_payload_v1` row, verifies the stored item-payload SHA, exact K2-K5 skill/provenance identity, and the semantic projection from each canonical item into `AUDIO_PLAN_JSON`. The resulting set-level attestation SHA is checkpointed on every non-done audio row. A source or checkpoint mismatch is fail-closed and must not be repaired by inference.
+
 Consumption is post-issue only and changes only `STATUS=CONSUMED` and `CONSUMED_AT`. Audio completion, AUDIO_BOUND state, or a failed issue must not consume K1_READY. Missing or ambiguous state is a STOP condition; never infer, rebuild, or rebind it.
 
 `K1_READY_ONE_SHOT_V1`: persist uses one exact A:M readback; bind keeps one full prebind payload/image-SHA validation followed by one exact A:M post-bind readback. When only column L changed as authorized, do not repeat the Drive image blob/SHA validation.

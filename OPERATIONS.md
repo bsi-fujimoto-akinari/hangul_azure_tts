@@ -1,392 +1,86 @@
 # Operations Policy
 
-This document defines the source-of-truth, change, synchronization, deployment, secret-handling, tag, verification, and prohibited-operation policy for `hangul_azure_tts`.
+This document contains the current operating contract for `hangul_azure_tts`. Completed migration chronology remains available in Git history.
 
 ## 1. Source of truth
 
-- GitHub `main` is the sole source of truth for repository-managed code, manifest, workflow, and operations documentation.
-- Feature branches and pull requests are change workspaces, not sources of truth.
-- A local clone is a working copy, not a source of truth.
-- Apps Script production is the execution environment, not the code source of truth.
-- Production and baseline tags are immutable snapshot markers, not substitutes for `main`.
-- Google Sheets runtime/queue/history data are separate data sources of truth and are not to be centralized into this repository.
-- Script Properties are the runtime location for secrets and runtime configuration that must not be committed.
+- GitHub `main` is authoritative for repository-managed code, workflows, manifests, and documentation.
+- Feature branches and pull requests are change workspaces.
+- Apps Script is the execution environment, not the code source of truth.
+- Google Sheets remain authoritative for runtime, queue, and learner history data.
+- Script Properties hold environment-specific configuration and secrets.
+- Production and baseline tags are immutable verified snapshots.
 
 ## 2. Standard change workflow
 
-All repository-managed changes use this path:
-
 ```text
-main
-  -> feature branch
-  -> pull request
-  -> required `audit` PASS
-  -> squash merge
-  -> main
+main -> feature branch -> pull request -> audit PASS -> squash merge -> main
 ```
 
-Rules:
+Direct pushes and force pushes to `main` are prohibited. Each pull request should contain one bounded change. Do not bypass the required `audit` check or auto-resolve conflicts.
 
-- Direct pushes to `main` are prohibited.
-- Force pushes are prohibited.
-- Pull requests are required.
-- Required approval count may remain zero for single-maintainer operation, but required CI must pass.
-- The required status check is `audit`.
-- Squash merge is the standard merge method.
-- Ruleset bypass is not part of normal operation.
-- A pull request should normally contain one logical change or one bounded work item.
-- After merge, the `Repository audit` workflow must pass on `main`. Apps Script-impacting changes may then be synchronized automatically to the configured Apps Script project by `.github/workflows/apps-script-auto-sync.yml`.
+## 3. Repository and Apps Script synchronization
 
-Recommended feature branch naming:
+Normal direction is GitHub -> local -> Apps Script.
 
-```text
-gh-<work-id>-<short-name>
-```
+Before local synchronization, require a clean worktree. Use `git fetch` and `git pull --ff-only`; stop on divergence. Do not use `git reset --hard`, `git clean -fd`, or `clasp pull` as routine synchronization tools.
 
-Example: `gh-04-operations-doc`.
+`.github/workflows/apps-script-auto-sync.yml` may synchronize an audited `main` commit to Apps Script HEAD when Apps Script-impacting files change. It must verify the canonical `.clasp.json` target before `clasp push`. `CLASPRC_JSON` exists only as a GitHub Actions secret and must never be printed or committed.
 
-## 3. GitHub -> local synchronization
+This workflow changes neither versioned `/exec` deployments nor Script Properties, Sheets, Drive assets, Azure configuration, or learner state. Deployment promotion is a separate, explicitly authorized operation. Reverse synchronization with `clasp pull` is recovery-only and must return through a reviewed branch and pull request.
 
-Normal synchronization direction is **GitHub -> local**.
+## 4. Secrets and tracked files
 
-```powershell
-cd C:\Users\afuji\hangul_azure_tts
+Never commit credentials, `.clasprc.json`, `.env`, private keys, tokens, or generated local state. `.clasp.json` is tracked because it identifies the canonical Apps Script project; changing it requires explicit target verification.
 
-git status --short
-git fetch origin
-git branch --show-current
-git pull --ff-only origin main
-git rev-parse HEAD
-git status --short
-git log -1 --oneline
-```
+The repository audit is a guardrail, not a substitute for diff review. If a secret is exposed, rotate or revoke it; deleting the file alone is insufficient.
 
-PASS conditions:
-
-- Worktree is clean before synchronization.
-- Current branch is `main` for normal production synchronization.
-- Pull succeeds with `--ff-only`.
-- Local HEAD equals GitHub `main` HEAD.
-- Worktree remains clean after synchronization.
-
-Do not use `clasp pull` in this procedure. Do not use `git reset --hard` or `git clean -fd` as normal synchronization tools. If fast-forward synchronization cannot proceed, stop and audit the divergence instead of auto-resolving it.
-
-## 4. GitHub -> Apps Script synchronization
-
-Normal direction is **GitHub main -> Repository audit PASS -> GitHub Actions -> Apps Script HEAD**.
-
-The automatic workflow is `.github/workflows/apps-script-auto-sync.yml`. It runs only after a successful `Repository audit` on `main`, and it synchronizes only when the audited commit contains an Apps Script-impacting file (`*.js`, `*.gs`, `*.html`, or `appsscript.json`). A manual `workflow_dispatch` may also synchronize the current `main` after credential setup.
-
-Authentication is supplied only through the GitHub Actions secret `CLASPRC_JSON`, containing the local `~/.clasprc.json` JSON generated by an authorized `clasp login`. The secret must never be committed, printed, pasted into issue/PR text, or stored in Sheets/Drive.
-
-Automatic synchronization performs these gates before `clasp push`:
-
-1. checkout the audited `main` commit;
-2. verify it is on `main` lineage;
-3. detect Apps Script-impacting files;
-4. require `CLASPRC_JSON` for a real sync;
-5. verify `.clasp.json` targets the exact canonical Apps Script project;
-6. run `clasp show-file-status`;
-7. run non-force `clasp push`;
-8. read the deployment inventory for traceability.
-
-The automatic workflow does **not** run `clasp pull` and does not modify Script Properties, Google Sheets runtime data, Drive assets, Azure configuration, or GitHub secrets. Because clasp 3.x refuses manifest overwrite in non-interactive CI unless explicitly authorized, this single audited workflow may use `clasp push --force` only after post-merge audit PASS and exact Script ID verification. This exception applies only to clasp's manifest-overwrite confirmation; it does not permit force-pushing Git history or bypassing repository review.
-
-For the R3 migration, this workflow synchronizes Apps Script HEAD only. It does not automatically change a versioned `/exec` deployment. The development `/dev` Web App is used for R3-01/R3-02 device verification. Versioned Web App deployment automation, including a fixed deployment ID and production promotion gate, requires the later R3 production activation step.
-
-If `CLASPRC_JSON` is missing, the workflow must skip synchronization safely rather than attempting anonymous or substitute credentials.
-
-Manual local `clasp push` remains a recovery/fallback path only. When used, retain the existing target verification, clean-worktree, non-force, and no-`clasp pull` rules.
-
-## 5. Apps Script -> GitHub reverse synchronization
-
-Reverse synchronization is an exception path only. It may be used when a legitimate production-side change must be recovered, for example after an emergency direct edit or when reconstructing missing repository state.
-
-Before `clasp pull`:
-
-- Worktree must be clean.
-- GitHub `main` must first be synchronized locally.
-- `.clasp.json` must be verified against the intended production project.
-- The reverse direction must be explicitly authorized for the recovery task.
-
-After `clasp pull`:
-
-```text
-Apps Script
-  -> local diff
-  -> audit
-  -> feature branch
-  -> pull request
-  -> `audit` PASS
-  -> squash merge
-  -> main
-```
-
-Never assume production-side differences are correct merely because they exist. Review the diff before commit. Do not commit unexpected generated files, credentials, or local-only state.
-
-## 6. Secrets and local-only files
-
-Secrets and credentials must never be committed to this public repository.
-
-Examples that belong outside GitHub include:
-
-- Azure Speech keys
-- OAuth/client secrets
-- service-account or private keys
-- GitHub personal access tokens
-- `.clasprc.json`
-- `.env`
-- runtime-only secret/config values stored in Script Properties
-
-Repository policy distinguishes:
-
-- `.clasp.json`: repository-managed target configuration for the Apps Script project.
-- `.clasprc.json`: local authentication state; never commit.
-
-`node_modules/` and routine log files are also local-only unless a future policy explicitly changes that rule.
-
-The repository audit is a guardrail, not a substitute for human diff review. If a secret is committed, deleting the file is not sufficient; treat the value as exposed and rotate/revoke it as appropriate.
-
-## 7. Tags and baselines
-
-Tags are fixed markers of verified states, not deployment mechanisms.
-
-Policy:
-
-- Existing production and baseline tags are immutable.
-- Do not move, overwrite, delete, or reuse an existing production/baseline tag name.
-- A new verified production state receives a new tag.
-- Production tags should normally follow a pattern that is covered by the active tag ruleset, such as `*-prod-YYYYMMDD`.
-- Baseline tags should use an explicit baseline name plus date and must also use a protected naming pattern.
-- Create a production tag only after deployment and production verification have completed.
-- Prefer annotated tags for production snapshots, with a message that makes the purpose traceable.
-- `main` may advance beyond the most recent production tag; this is allowed as long as the difference is traceable.
-
-Detailed rollback execution belongs to the recovery/rollback procedure. Rollback uses a tag or known commit as a reference point; it does not move the tag itself.
-
-## 8. Production change boundary
+## 5. Production boundary
 
 Keep these states distinct:
 
 ```text
-GitHub main
-  = repository code source of truth
-
-Apps Script production
-  = code currently executing in production
-
-Production tag
-  = immutable marker of a deployed and verified production state
+GitHub main       = code source of truth
+Apps Script HEAD  = synchronized execution source
+Versioned /exec   = explicitly promoted deployment
+Production tag    = immutable verified snapshot
 ```
 
-A pull request merge changes `main`; Apps Script HEAD changes only after the post-merge `Repository audit` passes and the automatic sync workflow successfully performs `clasp push`.
+Documentation- or CI-only changes do not require Apps Script synchronization. Apps Script-impacting changes require audit PASS, exact-target sync, change-specific verification, and explicit deployment promotion when applicable.
 
-For Apps Script-impacting changes, the normal completion path is:
+## 6. Persistent K1_READY
+
+`Code.js` is authoritative for the implementation; `listening_k1_ready_v1` is authoritative for persistent data. Chat-local state is only a cache.
+
+Required order:
 
 ```text
-merge to main
-  -> Repository audit PASS
-  -> automatic exact-target verification
-  -> clasp push to Apps Script HEAD
-  -> functional verification
-  -> versioned deployment promotion when explicitly authorized by the current release stage
-  -> optional new production tag after verified production activation
+persist -> exact readback -> prebind gate -> bind SET_ID -> audio queue
+-> K1-K5 individual audio -> exact audio binding -> learner issue -> consume
 ```
 
-Changes limited to `.github/**`, `OPERATIONS.md`, README/documentation, repository rulesets, or tag administration do not normally require `clasp push`.
+Fresh binding requires `STATUS=READY`, blank `CONSUMED_AT`, blank `BOUND_LISTENING_SET_ID`, complete fields, and exact payload validation. Binding changes only `BOUND_LISTENING_SET_ID` and must read back exactly. Audio processing re-reads the bound record and verifies queue parity before any audio work.
 
-A change to `.clasp.json` is an infrastructure-sensitive target change and must receive explicit target verification before any subsequent deploy.
+Consumption is post-issue only and changes only `STATUS=CONSUMED` and `CONSUMED_AT`. Audio completion, AUDIO_BOUND state, or a failed issue must not consume K1_READY. Missing or ambiguous state is a STOP condition; never infer, rebuild, or rebind it.
 
-Script Properties, Google Sheets data, and Azure-side configuration are outside `clasp push` and must not be treated as though a GitHub deploy changed them.
+`K1_READY_ONE_SHOT_V1`: persist uses one exact A:M readback; bind keeps one full prebind payload/image-SHA validation followed by one exact A:M post-bind readback. When only column L changed as authorized, do not repeat the Drive image blob/SHA validation.
 
-### Persistent K1_READY runtime
+## 7. Learner triggers, targeted audio, and receipts
 
-Repository-managed `Code.js` is the implementation source of truth for persistent K1_READY handling. The `listening_k1_ready_v1` Google Sheet is the persistent runtime data source; chat-local K1_READY state is a cache only and must not be used as the sole source of truth.
+- `K1`: prepare and verify persistent K1_READY only.
+- `5L`: Listening five-question Web flow.
+- `5W`: current written five-question trigger.
+- `5Q`: deprecated for new learner requests; historical identifiers remain unchanged.
 
-The runtime connection uses Script Property `K1_READY_SHEET_ID`, read by `config_()` and required by `k1ReadySheet_()` when persistent K1_READY operations are invoked. It identifies the Spreadsheet containing `listening_k1_ready_v1`. Although the Spreadsheet ID is not a secret, keep it in Script Properties under the same runtime-configuration discipline as the existing configuration values and do not hard-code or commit environment-specific values.
-
-The required runtime order is:
-
-```text
-K1_READY atomic persist
-  -> one exact A:M readback / validation
-  -> fresh prebind full validation including image SHA
-  -> BOUND_LISTENING_SET_ID bind
-  -> one exact A:M bind readback (only L may differ)
-  -> audio queue
-  -> individual K1-K5 audio
-  -> exact individual audio binding
-  -> learner-facing Web App issue
-  -> issue success
-  -> consume
-```
-
-This is the `K1_READY_ONE_SHOT_V1` contract. The new-row persist path must not repeatedly read the same row after one exact A:M verification has already established header/schema/literal/value/ID/hash integrity.
-
-Fresh binding is permitted only after `readK1ReadyRecord_()` and `validateK1ReadyPayload_()` establish all of the following:
-
-- `STATUS=READY`
-- `CONSUMED_AT` is blank
-- `BOUND_LISTENING_SET_ID` is blank
-- required fields are nonblank
-- exact payload validation passes
-
-If any prebind condition fails, do not bind, do not write the Listening audio queue, and do not issue the 5L set. Do not guess missing values, reconstruct a fallback payload, or auto-repair the persistent record.
-
-`bindK1ReadyToListeningSet_()` may change only `BOUND_LISTENING_SET_ID`, from blank to the target LISTENING_SET_ID. The prebind row receives full payload validation including the Drive image SHA256 check. After bind, one exact A:M readback must prove the same K1_READY_ID, `STATUS=READY`, blank `CONSUMED_AT`, exact target binding in column L, and byte-for-byte/string-equivalent equality of every other persisted column to the already-validated prebind row. When those checks pass, do not re-read the Drive image blob or recompute image SHA a second time. An already-bound record must not be rebound to another set.
-
-Before `processListeningAudioSet_()` reaches any `runListeningJob_()` call, `assertBoundK1ReadyForSet_()` must re-read the persistent bound record and verify that the bound SET_ID matches the set being processed, `STATUS=READY`, `CONSUMED_AT` remains blank, and the queue-side K1 audio payload exactly matches the persistent K1_READY payload. Any mismatch stops processing before audio work starts.
-
-`consumeK1ReadyAfterIssue_()` is an explicit post-issue operation only. It may run only after confirmed learner-facing 5L issue success and may update only `STATUS=CONSUMED` and `CONSUMED_AT=<timestamp>`; `BOUND_LISTENING_SET_ID` remains unchanged. Individual-audio completion, AUDIO_BOUND preissue state, or a failed issue must never consume K1_READY. New R3 sets do not require combined set audio.
-
-For recovery, do not reconstruct a READY record by inference and do not move an existing `BOUND_LISTENING_SET_ID` to another set. Ambiguous, missing, or mismatched persistent state is a STOP condition requiring audit. Persistent K1_READY recovery is independent of learner history, counters, and valid-count state.
-
-## 9. Verification checklist
-
-For each repository change, verify as applicable:
-
-### Pull request
-
-- Feature branch used; no direct `main` change.
-- Diff contains only the intended logical change.
-- No secret, credential, or local-only file is present.
-- Required `audit` status is PASS.
-- Squash merge is used.
-- No ruleset bypass is used.
-
-### After merge
-
-- GitHub `main` HEAD is read back and recorded.
-- Repository CI is healthy.
-- Production impact is classified by checking Apps Script deploy surfaces (`*.js`, `*.gs`, `*.html`, and `appsscript.json`).
-
-### Local synchronization
-
-- Worktree clean before and after sync.
-- Branch is `main`.
-- `git pull --ff-only` succeeds.
-- Local HEAD equals GitHub `main` HEAD.
-
-### Before Apps Script synchronization, when required
-
-- Post-merge `Repository audit` is PASS.
-- `CLASPRC_JSON` exists only as a GitHub Actions secret.
-- `.clasp.json` targets the intended Apps Script project.
-- `clasp show-file-status` is as expected.
-- Direction is GitHub -> Apps Script.
-- `clasp pull` is not used.
-
-### After Apps Script synchronization, when required
-
-- Audited CI `clasp push --force` completes and reports an actual push; `Skipping push.` is a failure.
-- The GitHub source commit is identifiable in the workflow summary/log.
-- Change-specific Web App or runtime verification passes.
-- No unrelated Sheet, queue, audio, or runtime state is changed unintentionally.
-- A versioned `/exec` deployment remains unchanged unless the current release stage explicitly authorizes promotion.
-
-### Tagging, when required
-
-- Tag is created only after deploy and verification.
-- Tag points to the verified commit.
-- No existing production/baseline tag is moved, deleted, or reused.
-
-Suggested final status block:
-
-```text
-GITHUB_MAIN = <commit SHA>
-AUDIT = PASS
-LOCAL_SYNC = PASS / NOT_REQUIRED
-PRODUCTION_SYNC = PASS / NOT_REQUIRED
-PRODUCTION_VERIFICATION = PASS / NOT_REQUIRED
-PRODUCTION_TAG = <tag> / NOT_CREATED
-SECRET_EXPOSURE = NONE
-UNEXPECTED_CHANGE = NONE
-```
-
-## 10. Prohibited operations
-
-The following are prohibited in normal operation:
-
-- Direct push to `main`
-- Force push or history rewriting as a routine fix
-- Moving, deleting, or reusing an existing production/baseline tag
-- Normal use of `clasp pull`
-- Treating Apps Script editor direct edits as the normal development path
-- `clasp push` without target and diff verification
-- Committing secrets, credentials, `.clasprc.json`, `.env`, or private-key material
-- Merging while required CI is failing
-- Bypassing repository rulesets
-- Using `git reset --hard` or `git clean -fd` as normal synchronization steps
-- Unreviewed automatic conflict resolution
-- Creating a production tag before production verification
-- Running `clasp push` for documentation/CI-only changes
-- Changing automatic GitHub Actions synchronization/deployment scope without an explicitly approved policy change
-- Rewriting history as the normal rollback method
-- Moving runtime data or secrets into GitHub merely to centralize sources of truth
-
-Recovery exceptions must be explicitly authorized and audited. Even during recovery, do not solve problems by force-pushing `main`, moving protected tags, or treating deletion of an exposed secret as sufficient remediation.
-
-## 11. Canonical release history
-
-Release history is interpreted by role, not by treating every commit as a release.
-
-Canonical history classes:
-
-- `BASELINE`: an immutable verified fallback marker.
-- `PRODUCTION`: repository changes that reached Apps Script production and are represented by a verified production snapshot tag.
-- `INFRASTRUCTURE`: repository CI, audit, or safety controls that do not by themselves create a production release.
-- `POLICY`: operations, recovery, governance, or history documentation that does not by itself create a production release.
-
-The normalized history through GH-07 is:
-
-| Commit | Class | Meaning |
-| --- | --- | --- |
-| `e52a133eeaa48866f284b7e76a1ccfd44df4057b` | BASELINE | G1 live PASS / Listening Stage B ACTIVE historical baseline |
-| `a0db5fe89416df7d4df41272e5c4bf6bc18b86f5` | PRODUCTION | Restrict web-app access to deployer only |
-| `372581317bc42a486fb2873742698b5f92d65513` | INFRASTRUCTURE | Add secret-free repository audit CI |
-| `73d7fb62eebc41c1c740603e1b82ff438f5c5ae7` | PRODUCTION | Preserve v4 audio compatibility and add the 2.1 s final tail |
-| `67419486c6594762cf0f4582fa2ff6bb08edcab4` | PRODUCTION | Add K1 Japanese choice-number voice segments; verified production snapshot |
-| `877e9fd26c8f8d4e6229fba1a5e72d152b65b32e` | INFRASTRUCTURE | Add semantic audio regression checks |
-| `c83425b78449a0a1d65096a80763721bcd80abf0` | POLICY | Add source-of-truth operations policy |
-| `3d6393020d87c9e96cf3fd762809156c8c3f2512` | POLICY | Add recovery and rollback procedure |
-
-Protected snapshot markers:
-
-```text
-g1-live-pass-stageb-active-20260917
-  -> e52a133eeaa48866f284b7e76a1ccfd44df4057b
-
-k1-jp-number-audio-prod-20260917
-  -> 67419486c6594762cf0f4582fa2ff6bb08edcab4
-```
-
-The production tag, not every production-affecting intermediate commit, is the canonical marker of a verified production release. The intermediate production commits remain part of traceable Git history.
-
-`main` may contain later infrastructure or policy changes while Apps Script production remains represented by the latest verified production tag. Such a state is normal when `Code.js`, `appsscript.json`, and `.clasp.json` have not drifted from the production snapshot.
-
-A historical baseline is a fallback reference, not a routine direct full-snapshot deployment source. Recovery must follow `RECOVERY.md`, including recovery-source selection and forward corrective history.
-
-GitHub Release objects are optional presentation metadata and are not a source of truth. They are not required retroactively for existing tags. If adopted later, they must reference existing immutable tags rather than replace or redefine them.
-
-
-## 11. R3 learner triggers, targeted audio dispatch, and Web receipt
-
-The canonical learner-facing trigger vocabulary is:
-
-- `K1` = prepare/verify persistent K1_READY only.
-- `5L` = Listening five-question Web flow.
-- `5W` = written five-question flow; this is the current learner-facing replacement for historical `5Q`.
-- `5Q` = deprecated for new learner requests. Do not rewrite historical records merely to rename it.
-
-For audio processing, the historical one-minute `processLatestPendingAudioJob()` trigger remains a fallback. R3 prefers the exact-target entry point:
+The one-minute `processLatestPendingAudioJob()` trigger is fallback-only. Normal processing uses:
 
 ```text
 processPendingAudioForSet(mode, setId)
 ```
 
-where `mode` is exactly `5L` or `5W`. The dispatcher must process only the supplied SET_ID and must never fall through to a different pending set.
+`mode` must be `5L` or `5W`, and processing must never fall through to another pending set.
 
-Web transactions hand a four-line receipt back to Chat:
+Committed Web transactions return:
 
 ```text
 [H3_WEB_SYNC]
@@ -395,849 +89,126 @@ TXN_ID=H3TX-YYYYMMDD-NNNNNN
 STATUS=COMMITTED
 ```
 
-Chat treats this as a pointer to canonical backend state, not as sufficient proof by itself. Chat must read back the authoritative journal/state and verify the committed transaction. On PASS it replies exactly `No issues detected.`; on verification failure it replies exactly `Issue detected.`. Ordinary post-answer explanation is owned by the Web App / persistent Review. Chat never duplicates the backend answer/history mutation.
+Chat treats the receipt as a lookup key, performs canonical readback, and never duplicates backend mutations. The detailed contract is `H3_WEB_CHAT_CONTRACT.md`.
 
-The full frozen R3-04 contract is `H3_WEB_CHAT_CONTRACT.md`.
+## 8. Drive and hot canonical policy
 
+Current folders are role-based: `00_SOURCE`, `01_OFFICIAL_MEDIA`, `02_TOWMI`, `03_AUDIO`, `04_LEARNER_ARTIFACTS`, `05_STATUS`, and `06_AUDIT`.
 
-### R3-05 Drive canonical finalizer
-
-`MaintenanceR305.js` contains the guarded, idempotent manual function `r305FinalizeCanonicalDrive()` used only to finalize the R3-05 canonical Drive sources after repository audit and Apps Script synchronization.
-
-It may update only:
-- `hangul_source_manifest_v1.txt`
-- archive release `hangul_source_manifest_v1__20260919R30.txt`
-- `HANGUL_INFRA_STATUS_CURRENT.txt`
-
-It validates the exact V17 render canonical/release SHA256 before any write and never accesses learner Sheets/runtime/history. Unexpected version, hash, duplicate release, or readback state is a STOP condition.
-
-
-## 12. Drive slim-down and audio storage
-
-H3 Drive root numbering is ordered by role:
-
-- `00_SOURCE` = canonical rules/manifests/releases.
-- `01_OFFICIAL_MEDIA` = official screenshots/media inputs.
-- `02_TOWMI` = 합격トウミ source collection/extraction/canonicalization workspace.
-- `03_AUDIO` = generated 5W/5L audio and audio archives.
-- `04_LEARNER_ARTIFACTS` = learner-facing TXT and derived artifacts.
-- `05_STATUS` = current/dated operational status.
-- `06_AUDIT` = snapshots, reports, rollback evidence.
-
-Google Sheets and the Apps Script project remain unnumbered at the root because they are active canonical applications, not storage folders.
-
-
-Canonical audio storage is split under the H3 Drive audio root:
-
-- `03_AUDIO/01_5W`
-  - active/new written 5W audio.
-- `03_AUDIO/02_5L`
-  - active/new Listening 5L individual K1-K5 audio.
-- `03_AUDIO/90_ARCHIVE/01_SYSTEM_TEST`
-  - nonlearning SYSTEM_TEST audio only.
-- `03_AUDIO/90_ARCHIVE/02_PRE_R3_5L`
-  - pre-R3 Listening audio retained for audit/history.
-- `03_AUDIO/90_ARCHIVE/03_LEGACY_COMBINED`
-  - historical combined 5L audio only; no new combined audio is generated.
-- `03_AUDIO/90_ARCHIVE/04_STALE_REPLACED`
-  - replaced/stale audio retained only when useful for audit.
-
-The `VOICE_FOLDER_ID` Script Property continues to point to the `03_AUDIO` root only for compatibility with persisted legacy checkpoints. New audio jobs must use the dedicated subfolder selected by `audioTargetFolderId_()`.
-
-Rules:
-- never create new audio directly under `03_AUDIO`;
-- never move a file by re-uploading when the existing Drive file ID can be preserved;
-- historical file IDs/URLs remain authoritative even when the parent folder changes;
-- new 5L uses split K1-K5 audio only; `listening_set_audio_v1` and combined-audio generation are retired;
-- generic one-minute processing remains fallback only; exact SET_ID dispatch is preferred.
-
-## 13. Slim canonical surfaces
-
-High-frequency canonical sources should contain current operational state, not accumulated migration debris.
-
-- Keep append-only learner/history tables when history itself is canonical.
-- Move superseded maps, migration trials, audit scratch tabs, and retired transport surfaces out of the active workbook after a full pre-change snapshot exists.
-- Do not remove a tab that is still referenced by current runtime/state.
-- Preserve legacy evidence in `06_AUDIT/01_SHEET_SNAPSHOTS` or source releases rather than in high-frequency canonical tabs.
-- Source manifest files must use compact text storage. Blank-line expansion or other storage-format bloat is prohibited.
-- Semantic history must not be rewritten merely to rename `5Q` to `5W`.
-
-
-## 14. Fixed Web launcher and script TXT co-location
-
-Learner-facing Chat links use the parameterless Apps Script Web App URL whenever the current stage provides an internal/default authorized target. Query-string URLs are not preferred for ordinary learner navigation.
-
-GET routing:
-- parameterless `/dev` or `/exec` -> H3 Web App launcher;
-- `mode=SYSTEM_TEST` and `mode=LISTENING` remain authorized explicit Web App routes for diagnostics/internal use;
-- `ping=1` remains the health-check JSON route;
-- all other HTTP job routes remain disabled.
-
-Script TXT storage is co-located with audio:
-- 5W daily TXT: `03_AUDIO/01_5W/H3-YYYYMMDD.txt`;
-- 5L set TXT: `03_AUDIO/02_5L/{LISTENING_SET_ID}.txt`;
-- SYSTEM_TEST script TXT: `03_AUDIO/90_ARCHIVE/01_SYSTEM_TEST/{SET_ID}_script.txt`.
-
-5L script TXT is not part of the learner issue critical path. After all five source-locked K1-K5 audio rows are done, the exact semantic script may be materialized explicitly with `persistListeningSetScript(SET_ID)` for Review/audit convenience. Its content is reconstructed from the same AUDIO_PLAN_JSON surface, with repetitions/cues collapsed to one semantic script surface. Existing same-name TXT must match exactly when materialization is requested; a script materialization failure does not invalidate an otherwise-valid learner issue.
-
-Until the R3-W written Web App migration, 5W DAILY_TXT remains Chat-owned after verified answer sync, but Drive storage is `03_AUDIO/01_5W`, not `04_LEARNER_ARTIFACTS`.
-
-
-## 15. R3-07 production preissue gate
-
-R3-07 prepares one real learner set without issuing it.
-
-Current gate function:
-
-`validateProductionPreissueSet(setId)`
-
-This gate is read-only. It must PASS before any R3-08 issue mutation.
-
-Required preissue state:
-- `listening_set_payload_v1` has exactly one target row with `STATUS=AUDIO_BOUND` and blank `ISSUED_AT`;
-- the bound K1_READY row is `READY`, bound to the exact target SET_ID, and has blank `CONSUMED_AT`;
-- K1 image bytes match the persisted SHA256 and K1 choices/answer/TTS/QA/audit are internally consistent;
-- K2-K5 item JSON and answer keys satisfy their section/visibility contracts;
-- `ITEM_PAYLOAD_SHA256` recomputes exactly from the canonical sorted compact JSON contract;
-- every K1-K5 slot has explicit `PRIMARY` or `RETEST` provenance;
-- the retest slot matches the persisted overload plan and per-set retest cap;
-- exactly five queue rows exist for the target set, all are `done`, error-free, and match the persisted individual audio binding;
-- every bound MP3 exists;
-- SCRIPT_TXT is not a preissue prerequisite; absence of `{LISTENING_SET_ID}.txt` does not block issue;
-- learner history rows for the target set are zero;
-- production transaction rows for the target set are zero;
-- no unresolved production `RECOVERY_REQUIRED` transaction exists;
-- learner counters/state still point to the previously scored set.
-
-The preissue gate must not:
-- mark the payload `ISSUED`;
-- consume K1_READY;
-- create learner history;
-- advance counters;
-- enable the production answer commit gate;
-- expose the unissued set through the learner Web route.
-
-R3-08 must re-run the same gate immediately before its atomic issue transition.
-
-## 16. R3-09B persistent review architecture freeze
-
-R3-09B freezes the target architecture in `H3_REVIEW_ARCHITECTURE.md`.
-
-Key decisions:
-- the Apps Script Web App is the complete learner surface for issue, answer, grading, full explanation, persistent review, and optional nonlearning replay;
-- the current production transaction/history/scheduler authorities remain unchanged;
-- future sets receive source-locked explanation payloads before issue;
-- committed transactions receive exact persistent review bindings;
-- review reopening is reconstructed from canonical persisted sources, never browser memory;
-- `mode=REVIEW&txn_id=<TXN_ID>` is the exact read-only deep-review route;
-- the parameterless launcher provides review history;
-- `REVIEW_REPLAY` is strictly nonlearning and may not mutate learner history/state/scheduler/counters/pointers;
-- the four-line Web receipt remains valid, but sending it to Chat becomes optional after review activation;
-- L03 may receive review-only legacy backfill without rewriting its committed learning transaction.
-
-R3-09B changes documentation/architecture only. It does not create the new Sheets, patch Apps Script behavior, alter learner state, or enable normal-live production.
-
-The implementation sequence is:
+Audio storage is:
 
 ```text
-R3-09B = REVIEW_ARCHITECTURE_FREEZE
-R3-09C = REVIEW_PERSISTENCE_IMPLEMENTATION
-R3-09D = REVIEW_WEB_UI_AND_ROUTE_IMPLEMENTATION
-R3-09E = REVIEW_REPLAY_LIBRARY_DEVICE_VALIDATION
-R3-10  = FULL_E2E_AUDIT
-R3-11  = NORMAL_LIVE_ACTIVATION
+03_AUDIO/01_5W
+03_AUDIO/02_5L
+03_AUDIO/90_ARCHIVE/01_SYSTEM_TEST
+03_AUDIO/90_ARCHIVE/02_PRE_R3_5L
+03_AUDIO/90_ARCHIVE/03_LEGACY_COMBINED
+03_AUDIO/90_ARCHIVE/04_STALE_REPLACED
 ```
 
-R3-10 must include persistent-review reopen and REVIEW_REPLAY zero-mutation checks.
+New 5L sets use K1-K5 individual audio only. Do not create new combined 5L audio. Preserve file IDs and URLs when moving verified artifacts. Hot canonical files retain current gates, hashes, pointers, and contracts; completed detail belongs in release/audit storage or Git history.
 
-### R3-09B V2 UI freeze
+SCRIPT_TXT is not a preissue prerequisite. When needed for Review/audit convenience, materialize it explicitly after the five audio rows are done with `persistListeningSetScript(SET_ID)`; failure to create this noncanonical TXT must not invalidate an otherwise-valid learner issue.
 
-The frozen review target is now `H3-R3-09B-REVIEW-ARCHITECTURE-20260919-V2`.
+## 9. Current production and Review invariants
 
-Learner defaults:
-- `POSTGRADE_DEFAULT_VIEW=REVIEW`;
-- `DEFAULT_FILTER=NEEDS_REVIEW`;
-- `×/△` explanation expanded, `○` collapsed;
-- immediate and reopened Review use the exact same server-side persistent Review builder and renderer;
-- audio/script/full explanation stay in one question card;
-- receipt/SET_ID/TXN_ID are secondary collapsed technical details;
-- Review history v1 filters are only `すべて` and `要復習あり`.
+- Production commit gate is `NORMAL_LIVE_ACTIVE`; no fixed one-set arm remains.
+- Preissue is fail-closed for source-lock, recovery, scheduler overload, and audio parity.
+- Production transactions are atomic and idempotent, with journal and receipt integrity.
+- Persistent Review is reconstructed only from committed, locked, hash-valid sources.
+- HOME history uses a lightweight index; opening Review performs full source-lock validation.
+- `REVIEW_REPLAY` is nonlearning and performs zero learner-runtime writes.
+- SYSTEM_TEST remains an explicit allowlisted diagnostic route and must not mutate learner runtime.
+- The Review UI shows one question card at a time with compact progress, `再挑戦`, and `ホーム` controls.
 
-R3-09B V2 remains architecture/documentation only. Runtime persistence begins in R3-09C.
+Detailed Review storage, reconstruction, failure, replay, and legacy rules are in `H3_REVIEW_ARCHITECTURE.md`.
 
-## 17. R3-09C review persistence implementation
+## 10. Verification and prohibited operations
 
-R3-09C implements the persistence layer defined by `H3_REVIEW_ARCHITECTURE.md` V2 without activating the learner Review route.
+For every change, verify intended diff, tracked-file safety, credential safety, manifest/target policy, JavaScript syntax, and all relevant durable runtime invariants. After merge, confirm the `main` audit and classify production impact before any synchronization.
 
-Canonical runtime additions in `hangul_official_question_pool`:
-- `listening_explanation_payload_v1` (sheetId `810000203`);
-- `listening_review_binding_v1` (sheetId `810000204`).
+Prohibited without a separately authorized recovery or release operation:
 
-Apps Script implementation:
-- `WebAppReviewPersistence.js`;
-- canonical sorted compact JSON hashing;
-- exact item-payload SHA recomputation from the issued source lock;
-- exact five-section explanation SHA/set-SHA verification;
-- exact committed transaction/result hash verification;
-- exact audio-binding and K1-image binding verification;
-- one immutable review binding per production TXN_ID;
-- `buildPersistentReviewPayload_(txnId)` as the single semantic builder for immediate and reopened Review;
-- `validatePersistentReviewBinding_(txnId)` as a read-only persistence gate;
-- `h3ReviewEnsureBindingForCommittedTxn_(txnId)` as the idempotent review-binding writer for future activation.
+- direct or force push to `main`;
+- history rewrite, tag movement, or ruleset bypass;
+- unreviewed conflict resolution;
+- `clasp pull` as normal development;
+- unverified `clasp push` or versioned deployment promotion;
+- moving secrets or runtime data into GitHub;
+- changing learner history, score, counters, pointers, scheduler, K1_READY, or audio as a side effect of maintenance.
 
-L03 compatibility fixture:
-- TXN_ID: `H3TX-20260919-000005`;
-- five explanation rows are `LOCKED`;
-- each explanation explicitly carries `LEGACY_POSTCOMMIT_BACKFILL`;
-- one `LOCKED` review binding exists;
-- learner answer/history/state/counters/pointers are not rewritten.
-
-Frozen L03 hashes:
-- ITEM_PAYLOAD_SHA256 = `fb65e816186b65db6b266eec7431c31eb4882105d335f02587484989f45180e7`;
-- EXPLANATION_SET_SHA256 = `e1abe02f1bb48c19d498c54641f2623afbce028de4063db7379e77f73da2fbc5`;
-- RESULT_SHA256 = `a40a4d1d17b46f817b74ca725a2a74100a831ebc30f124d6400c90572189a44e`;
-- AUDIO_BINDING_SHA256 = `21db3cb3a93aa69b92ac79437a431ba1bd3220ebe132aafd15e494475b545bf1`;
-- REVIEW_BINDING_SHA256 = `0c6bdbb1d88460211861ba29658d0e3ef50df200f876b98e1f13312ec11a3b72`.
-
-R3-09C activation boundary:
-- no `mode=REVIEW` Web route yet;
-- no Client.html Review renderer yet;
-- production submit does not yet require review-binding creation before returning COMMITTED;
-- no REVIEW_REPLAY yet;
-- normal-live production remains unchanged.
-
-Next stage is R3-09D `REVIEW_WEB_UI_AND_ROUTE_IMPLEMENTATION`.
-
-## 18. R3-09D review Web UI and route implementation
-
-R3-09D connects the R3-09C persistent Review source-lock layer to the learner Web App.
-
-Implemented routes:
-- parameterless Web App -> `HOME`;
-- `mode=REVIEW&txn_id=<TXN_ID>` -> exact persistent Review;
-- explicit `mode=LISTENING&set_id=<SET_ID>` remains the production question route;
-- explicit allowlisted `mode=SYSTEM_TEST&set_id=<SET_ID>` remains available for test fixtures.
-
-Learner HOME:
-- shows a current issued/uncommitted 5L only when the production render gate accepts it;
-- shows persistent Review history newest-first;
-- v1 history filters are `すべて` and `要復習あり`;
-- Review history is read-only.
-
-Persistent Review:
-- exact COMMITTED transaction and LOCKED review binding are required;
-- K1 image is reloaded from the exact SHA-bound Drive source;
-- K1-K5 audio uses the exact bound individual MP3 sources;
-- script, translation, user answer, correct answer and explanation are shown in one question card;
-- default filter is `NEEDS_REVIEW`;
-- ×/△ explanation is expanded, ○ explanation is collapsed;
-- receipt / SET_ID / TXN_ID are collapsed under technical details.
-
-Postgrade behavior:
-- production submit first commits through the existing production transaction;
-- the exact Review binding is then required/read back;
-- the returned learner surface is `buildPersistentReviewPayload_(TXN_ID)`;
-- the old transient `buildProductionReviewPayload_(SET_ID)` is no longer used by the learner submit route.
-
-R3-09D boundaries:
-- no REVIEW_REPLAY yet;
-- no learner Review delete/edit;
-- no scheduler/retest/history mutation from REVIEW or HOME routes;
-- normal-live production activation remains outside R3-09D;
-- receipt-to-Chat ownership transition remains pending device validation in R3-09E.
-
-R3-09D initially exited implementation at `IMPLEMENTED_AWAITING_DEVICE_VALIDATION`.
-
-### R3-09D device validation close
-
-Device validation is now PASS on iPhone / ChatGPT in-app browser.
-
-Validated:
-- parameterless HOME reopened after the prior page was closed;
-- persistent history lists `5L #2`;
-- `復習する` reopens L03 from the persisted transaction/binding;
-- summary/result strip/filter UI matches the committed L03 result;
-- Q1 exact K1 image and inline audio UI render;
-- learner answer `④ ?` and correct answer `③` render from persisted data;
-- UTF-8 semantic SHA validation passes without rewriting stored Review data;
-- HOME/REVIEW access causes zero learner-runtime mutation.
-
-`RESULT=PASS_DEVICE_VALIDATED`
-
-Next stage: R3-09E `REVIEW_REPLAY_LIBRARY_DEVICE_VALIDATION`.
-
-### R3-09D UTF-8 hash correction
-
-Persistent Review semantic hashes contain Korean/Japanese text and therefore MUST use the repository's explicit UTF-8 string helper:
-
-```text
-hash_(canonicalJson)
-```
-
-Do not use `h3Sha256Hex_(string)` for semantic JSON/string hashes. `h3Sha256Hex_` remains valid for byte-array/file hashing.
-
-Affected canonical paths:
-- R3 preissue item payload SHA recomputation;
-- persistent Review item/explanation/result/audio/binding SHA recomputation.
-
-The stored L03 hashes were independently rederived from current canonical Sheet data and all matched exactly; no Review or learner data rewrite is required.
-
-## 19. R3-09E REVIEW_REPLAY implementation
-
-R3-09E adds a read-only nonlearning replay path for already committed persistent Reviews.
-
-Implemented:
-- `mode=REVIEW_REPLAY&txn_id=<TXN_ID>`;
-- replay launch from HOME history and persistent Review;
-- exact original K1 image and K1-K5 audio reuse;
-- original question visibility contract;
-- K2/K3 scripts remain hidden before replay grading;
-- prior answers/correct answers/explanations are omitted from the replay issue payload;
-- read-only server grading;
-- transient `今回 / 元回答` comparison after grading;
-- return to the exact persistent Review after grading.
-
-Hard write boundary:
-- production journal WRITE = 0;
-- `listening_log_v1` WRITE = 0;
-- `listening_state_v1` WRITE = 0;
-- scheduler/retest WRITE = 0;
-- counter/pointer advance = 0;
-- K1_READY mutation = 0;
-- audio/image generation = 0.
-
-Replay attempts are intentionally not persisted in v1.
-
-R3-09E currently exits implementation at `IMPLEMENTED_AWAITING_DEVICE_VALIDATION`. The iPhone validation must confirm both learner UX and zero runtime mutation before R3-09E closes.
-
-### R3-09E learner UI refinement
-
-Current learner UI:
-- HOME is compact and card-based;
-- Review uses a five-button `Qn result` pager and displays one question at a time;
-- Review aggregate score/count/filter header is removed;
-- Review action labels are `再挑戦` and `ホーム`;
-- Replay has no introductory/explanatory block and opens directly on Q1.
-
-This is presentation-only. REVIEW/HOME/REVIEW_REPLAY runtime write boundaries remain unchanged.
-
-### R3-09E close
-
-R3-09E is `PASS_DEVICE_VALIDATED_ZERO_MUTATION`.
-
-Close evidence:
-- L03 production transaction count remains exactly 1;
-- exact committed transaction remains `H3TX-20260919-000005`;
-- L03 learner history remains exactly five K1-K5 rows;
-- learner state remains issue 2 / next set 3 / last set L03;
-- persistent Review binding remains `LOCKED`;
-- L03 payload remains `ISSUED`;
-- bound K1_READY remains `CONSUMED`;
-- REVIEW_REPLAY created no learner-runtime, scheduler, retest, counter, pointer, payload, K1_READY, or Review-binding write.
-
-The replay result remains intentionally nonpersistent.
-
-`NEXT=R3-10 FULL_E2E_AUDIT`.
-
-Normal-live production remains blocked until R3-10 passes and R3-11 explicitly activates it.
-
-## 20. R3-10 FULL_E2E_AUDIT
-
-R3-10 audits the one real production transaction and the persistent Review/Replay stack before normal-live activation.
-
-Audit target:
-- `SET_ID=H3-20260919-L03`
-- `TXN_ID=H3TX-20260919-000005`
-- learner set no = 2.
-
-### PASS — transaction / history / counter
-
-Live canonical readback:
-- exactly one production transaction exists for L03;
-- status is `COMMITTED`;
-- no `RECOVERY_REQUIRED` production transaction exists;
-- exactly five L03 learner-log rows exist;
-- results are `K1×, K2△, K3×, K4○, K5△`;
-- `LISTENING_ISSUE_NO=2`;
-- `NEXT_LISTENING_SET_NO=3`;
-- `LAST_LISTENING_SET_ID=H3-20260919-L03`;
-- `PHASE=BASELINE_2`;
-- primary-valid counts are `K1=2,K2=1,K3=2,K4=2,K5=2`;
-- active skill count is 5 and `OVERLOAD_STATUS=LISTENING_OVERLOAD_REVIEW`.
-
-### PASS — source lock / artifacts / Review
-
-- L03 payload remains `ISSUED`;
-- exact K1_READY remains `CONSUMED`;
-- K1 image exists;
-- all five split MP3 files exist and queue rows remain `done` with no error;
-- learner Review Script `H3-20260919-L03.txt` exists beside the split audio;
-- five explanation rows remain `LOCKED`;
-- persistent Review binding remains `LOCKED`;
-- item/explanation/audio/image binding hashes remain cross-bound to the exact L03 transaction;
-- HOME / REVIEW / REVIEW_REPLAY access caused zero learner-runtime mutation.
-
-### PASS — idempotency contract
-
-Static production path remains:
-- same SET + same fingerprint after COMMITTED => return stored committed result;
-- same SET + different fingerprint after COMMITTED => `CONFLICT_ALREADY_COMMITTED`;
-- any unresolved `RECOVERY_REQUIRED` blocks a new production commit;
-- REVIEW_REPLAY is `persisted:false` with `runtime_write_count:0`.
-
-### BLOCKER R3-10-B1 — Listening scheduler plan not refreshed after L03
-
-The backend commit correctly persisted per-section retest evidence, but it does not recalculate or persist `OVERLOAD_PLAN_JSON`.
-
-Current inconsistency:
-- learner state says `NEXT_LISTENING_SET_NO=3`;
-- `OVERLOAD_PLAN_JSON.next_set_no=2`;
-- the stored plan is still the pre-L03 R3-07 plan;
-- the stored plan itself says `reevaluate_after_each_scored_learning_surface=true`;
-- production `h3ProdBuildPlan_` updates counts/status/provenance but never updates `OVERLOAD_PLAN_JSON`;
-- `generation_log_v1` and `skill_queue_v1` contain no L03 scheduler-sync record.
-
-This is blocking because preissue validation consumes `OVERLOAD_PLAN_JSON` when validating the next set's retest assignment. Normal-live activation must not proceed with a stale next-set scheduler plan.
-
-Required repair:
-1. derive active Listening retest obligations from canonical learner history/provenance;
-2. deterministically recompute the overload plan for `NEXT_LISTENING_SET_NO`;
-3. persist/read back the new plan atomically after a committed scored 5L set;
-4. backfill the current L03 post-commit state once, without rewriting learner answers/history;
-5. add regression coverage that the persisted plan advances after each scored surface.
-
-### BLOCKER R3-10-B2 — PC validation pending for persistent Review/Replay
-
-iPhone learner validation is complete.
-
-R3-10 still requires the current Apps Script Web App to be checked on PC for:
-- parameterless HOME;
-- reopening the persistent L03 Review;
-- Q1-Q5 one-question paging;
-- exact K1 image;
-- inline K1-K5 audio playback;
-- scripts/explanations;
-- HOME -> REVIEW_REPLAY;
-- replay grading and return to persistent Review.
-
-This is a device-validation blocker only; it must not create a new learning transaction.
-
-### R3-10 interim result
-
-```text
-RESULT=BLOCKED_2
-PASS=history,counter,transaction,idempotency,artifacts,review_source_lock,iPhone
-BLOCKER_1=LISTENING_SCHEDULER_PLAN_STALE_AFTER_L03
-BLOCKER_2=PC_PERSISTENT_REVIEW_REPLAY_VALIDATION_PENDING
-NORMAL_LIVE_ACTIVATION=BLOCKED
-NEXT=R3-10B scheduler repair + PC validation
-```
-
-R3-11 MUST NOT start until both blockers are closed and R3-10 is re-read as `blocking=0`.
-
-### R3-10B repair / R3-10 close
-
-The earlier `R3-10 interim result = BLOCKED_2` is superseded by this close readback.
-
-#### B1 scheduler repair — PASS
-
-R3-10B changed the production scheduler bridge so every scored 5L now:
-- derives active retest obligations from canonical valid Listening history;
-- applies the existing × = 1–3 set and △ = 2–5 set windows;
-- uses deterministic EDF ordering `due_max > due_min > origin_set_no > section_order`;
-- writes `OVERLOAD_PLAN_JSON` in the same production state transaction;
-- rejects a missing, stale, or blocking plan at preissue.
-
-The L03 legacy post-commit state was backfilled once without changing learner answers, score, history, counters, valid counts, or pointers.
-
-Live readback after backfill:
-- `LISTENING_ISSUE_NO=2`;
-- `NEXT_LISTENING_SET_NO=3`;
-- `LAST_LISTENING_SET_ID=H3-20260919-L03`;
-- `ACTIVE_WRONG_COUNT=5`;
-- `OVERLOAD_STATUS=LISTENING_OVERLOAD_PLAN_READY`;
-- plan schema = `H3_LISTENING_OVERLOAD_PLAN_V2`;
-- `next_set_no=3`;
-- EDF order = `K4,K1,K3,K2,K5`;
-- normal retests = `3:K4,4:K1,5:K3,6:K2,7:K5`;
-- supplemental = none;
-- blocking overflow = none.
-
-Repository regression coverage reproduces this exact L02/L03 history and schedule.
-
-#### B2 PC validation — PASS by release-policy change
-
-PC device validation is no longer a default release gate.
-
-Current device policy:
-- iPhone 13 mini / iPhone-class mobile Web App validation remains the primary learner-device gate;
-- PC validation is optional and nonblocking by default;
-- PC validation becomes required only when explicitly requested or when a PC-specific code/rendering change is under review.
-
-The canonical Listening render source is released as `H3-LISTENING-RENDER-RULES-20260920-V19` with this policy.
-
-#### R3-10 exit
-
-```text
-RESULT=PASS
-BLOCKING=0
-B1_SCHEDULER_REFRESH=PASS
-B2_PC_GATE=PASS_POLICY_NONBLOCKING
-LISTENING_ISSUE_NO=2
-NEXT_LISTENING_SET_NO=3
-OVERLOAD_STATUS=LISTENING_OVERLOAD_PLAN_READY
-OVERLOAD_PLAN_SCHEMA=H3_LISTENING_OVERLOAD_PLAN_V2
-NORMAL_LIVE_ACTIVATION=BLOCKED_UNTIL_R3_11
-NEXT=R3-11 NORMAL_LIVE_ACTIVATION
-```
-
-R3-10 is closed. R3-11 remains a separate explicit activation step and is not performed by this close.
-
-## 21. R3-11 NORMAL_LIVE_ACTIVATION
-
-R3-11 removes the R3-08 exact-one-set production arm and promotes Listening Web App production to the normal-live gate.
-
-### Code activation contract
-
-Current production behavior:
-- `H3_R3_PRODUCTION_COMMIT_ENABLED=true`;
-- `H3_R3_PRODUCTION_GATE_MODE=NORMAL_LIVE_ACTIVE`;
-- no hard-coded production `SET_ID`;
-- a production submission is eligible only when the issued payload's set number equals canonical `NEXT_LISTENING_SET_NO`;
-- policy and state must both expose `PRODUCTION_GATE=NORMAL_LIVE_ACTIVE`;
-- payload must already be `ISSUED`;
-- exactly five VALID, unanswered learner-log rows must exist for that set;
-- K1_READY must be exact-bound and `CONSUMED`;
-- unresolved recovery still blocks commit;
-- same-fingerprint idempotency and different-fingerprint conflict behavior are unchanged.
-
-Normal preissue behavior:
-- no R3-07/L03 target ID dependency;
-- policy `PRODUCTION_PREP_MODE=NORMAL_LIVE`;
-- state/policy gate must both be `NORMAL_LIVE_ACTIVE`;
-- `NEXT_LISTENING_SET_NO=set_no` and `LISTENING_ISSUE_NO=set_no-1`;
-- answer sync must be IDLE;
-- exact K1/source/audio/script/hash gates remain mandatory;
-- `H3_LISTENING_OVERLOAD_PLAN_V2.next_set_no=set_no`;
-- planned retest slot must match persisted provenance;
-- learner-log/production-txn duplication and any recovery row block issue.
-
-Canonical render version is `H3-LISTENING-RENDER-RULES-20260920-V19`.
-
-### Activation sequencing
-
-R3-11 intentionally uses this order:
-1. merge/audit the generalized production code;
-2. sync exact main to Apps Script HEAD;
-3. only then switch live policy/state gates from `N5_E2E_ARMED_ONE_SET` to `NORMAL_LIVE_ACTIVE`;
-4. read back runtime and verify no new set/history/transaction was issued.
-
-The activation itself does not generate or issue set no.3.
-
-Expected post-activation learner state remains:
-- `LISTENING_ISSUE_NO=2`;
-- `NEXT_LISTENING_SET_NO=3`;
-- `LAST_LISTENING_SET_ID=H3-20260919-L03`;
-- L03 production transaction count remains 1;
-- learner-log row count remains unchanged.
-
-`PRODUCTION_PREP_MODE=NORMAL_LIVE` means future generated sets may use the canonical preissue/issue/submit path. It does not itself create a set.
-
-R3-11 exits PASS only after the live Sheet gate readback matches the synced Apps Script code.
-
-### R3-11 close
-
-R3-11 is `PASS_NORMAL_LIVE_ACTIVE`.
-
-Final activation sequence:
-1. generalized production/preissue code passed repository audit;
-2. exact main commit synced successfully to Apps Script HEAD;
-3. live policy/state gates were switched to `NORMAL_LIVE_ACTIVE`;
-4. live readback confirmed no learner issue or history mutation.
-
-Final runtime:
-- policy ID `H3-LISTEN-POLICY-20260920-V7`;
-- `PRODUCTION_GATE=NORMAL_LIVE_ACTIVE` in policy and state;
-- `PRODUCTION_PREP_MODE=NORMAL_LIVE`;
-- `LISTENING_ISSUE_NO=2`;
-- `NEXT_LISTENING_SET_NO=3`;
-- `LAST_LISTENING_SET_ID=H3-20260919-L03`;
-- scheduler plan remains `H3_LISTENING_OVERLOAD_PLAN_V2` for set no.3 with K4 retest;
-- retired R3-07/R3-08 target fields are blank.
-
-No set no.3 payload, learner-log rows, production transaction, score, counter, pointer, or Review binding was created by activation.
-
-R3 production infrastructure is now normal-live. Future learner `5L` requests use the standard prepare -> preissue -> issue -> answer -> COMMITTED -> persistent Review flow.
-
-## 22. R3-12 INFRA_CLOSE
-
-R3-12 closes the R3 Web App migration after R3-11 normal-live activation.
-
-Allowed changes:
-- Drive CURRENT/status snapshot maintenance;
-- Drive source-manifest maintenance;
-- immutable release copy of the current Listening render canonical;
-- non-destructive archival of superseded diagnostic learner surfaces;
-- repository documentation/audit close markers.
-
-Forbidden changes:
-- learner answer/history rewrite;
-- score/counter/valid-count/pointer changes;
-- scheduler/retest changes;
-- set issuance;
-- K1_READY consumption or payload mutation;
-- production transaction creation;
-- deleting historical audit evidence;
-- moving current canonical files or CURRENT away from their stable IDs.
-
-Drive release contract:
-- current canonical `hangul_listening_render_rules_v1.txt` remains at its stable canonical file ID;
-- V19 receives an immutable dated release copy;
-- source manifest remains at its stable canonical file ID and advances one manifest revision;
-- CURRENT remains at its stable file ID and receives a dated immutable status snapshot;
-- Project Sources continue to point only to current canonical/current-status files.
-
-Deprecated surface cleanup:
-- the old Chat-attached R2 iOS HTML diagnostic is not a production target;
-- its related device-verification handoff may be archived with it;
-- archival must preserve file IDs/URLs and must not delete the historical R2 SYSTEM_TEST fixture or status snapshots.
-
-R3 closes only after:
-1. repository audit PASS;
-2. Drive release copy readback PASS;
-3. deprecated-surface archive move readback PASS;
-4. CURRENT final readback PASS;
-5. manifest final readback PASS;
-6. no learner runtime/history/scheduler drift.
+Follow `RECOVERY.md` for incident handling.
 
 ## 23. Learner URL authority
 
-The learner-facing H3 Web App URL and the Apps Script audio/job execution surface are different authorities.
-
-Canonical learner Chat handoff:
+Canonical learner URL:
 
 ```text
 https://script.google.com/macros/s/AKfycby8I309RUkfVIsnJks808KA713QLppfrGiAFUTV2tA/dev
 ```
 
 Normal 5L handoff:
-1. complete canonical preissue/issue;
-2. obtain the exact issued SET_ID;
-3. call/read `getListeningLearnerUrl(SET_ID)`;
-4. require `handoff_mode=HOME_PARAMETERLESS`;
-5. return only its `url` field, with no label, preamble, postamble, progress text, or audit commentary.
 
-The helper validates that the target set itself is production-renderable before returning HOME. HOME then independently resolves the latest `ISSUED`, uncommitted renderable set and exposes `現在の5L -> 開く`.
+1. complete canonical preissue and issue;
+2. call `getListeningLearnerUrl(SET_ID)`;
+3. require `handoff_mode=HOME_PARAMETERLESS`;
+4. return only the `url` field.
 
 Do not return as the normal Chat link:
-- any URL with `?mode=`, `set_id=`, or `txn_id=`;
-- `direct_url` from the resolver;
-- `script.googleusercontent.com`;
-- `/macros/echo`;
-- any URL containing `user_content_key` or `lib=`;
-- audio queue execution endpoints;
-- Drive MP3/TXT URLs;
-- a redirected browser content URL copied from an Apps Script response.
 
-The exact direct LISTENING route remains available only for internal diagnostics.
+- `direct_url`;
+- any URL containing `?mode=`, `set_id=`, or `txn_id=`;
+- `script.googleusercontent.com`, `/macros/echo`, `user_content_key`, or `lib=` URLs.
 
-If the resolver passes but HOME cannot expose the just-issued set, stop and audit. Do not substitute a query-string learner link.
+HOME resolves only an `ISSUED`, uncommitted, production-renderable set. If it cannot resolve the just-issued set, stop and audit rather than falling back to a diagnostic URL.
 
 ### Parameterless direct boot
 
-For the canonical parameterless learner URL, `h3WebBootRequest_()` now resolves the current learning target server-side.
-
-- If canonical backend state exposes an `ISSUED`, uncommitted, renderable 5L, boot directly as LISTENING.
-- If no such set exists, boot HOME.
-- No query parameters are required for the normal learner handoff.
-- Explicit `mode=LISTENING&set_id=...` remains internal/diagnostic only.
-
-This preserves the short URL while removing the extra HOME tap for an active learner set.
+With no query parameters, the server reads canonical current-learning state. If a safe active set exists, boot directly as LISTENING for that exact SET_ID; otherwise boot as HOME. Explicit query routes remain internal/diagnostic.
 
 ## 24. Listening audio reliability patch
 
-A live iPhone 5L #3 session exposed a mobile audio UX defect:
-- while Q3 audio was playing, a background media prefetch failed with `NetworkError: Connection failure due to HTTP 0`;
-- the failure was rendered as a global page error even though the active Q3 audio remained playable;
-- automatic question transitions could leave the previous question audio playing when the next audio source was not yet attached;
-- revisiting/auto-entering a question could preserve a nonzero playback position.
+Current learner audio behavior:
 
-L04 K3 source audit confirmed that the canonical audio source itself was valid:
-- locked K3 item contains one prompt and four choices;
-- queue `AUDIO_PLAN_JSON` contains the prompt twice followed by each choice twice;
-- generated MP3 duration is 58.824 s;
-- non-silence exists from the start and again after the first repeat gap, consistent with the two prompt segments.
+- pause every non-active audio element on navigation;
+- start an automatically advanced question at its beginning;
+- keep background prefetch failures local to the affected asset;
+- retry media RPC once before exposing a question-local fallback;
+- source-lock K2/K3 prompts and four choices against `AUDIO_PLAN_JSON` at preissue.
 
-Therefore L04 audio source/binding is not rewritten.
-
-V20 client behavior:
-- moving between questions always pauses audio from the previous question;
-- automatic answer-to-next-question navigation restarts the next question from its beginning;
-- background prefetch errors never create a global red page error;
-- media RPC failure receives one automatic retry;
-- after retry exhaustion, failure is shown only on that question's audio control with Drive fallback;
-- an active question may retry media loading again when revisited.
-
-V20 preissue behavior:
-- K1 queue `AUDIO_PLAN_JSON` must equal the bound K1_READY TTS segment list exactly;
-- K2/K3 queue projection must contain exactly two prompt segments followed by two segments for each of choices 1-4;
-- K2/K3 prompt/choice text must equal the locked item payload exactly;
-- all K2/K3 split segments must use `repeat=1`;
-- any projection mismatch blocks learner issue before exposure.
-
-Canonical render contract: `H3-LISTENING-RENDER-RULES-20260920-V20`.
-
-This patch does not rewrite the already-issued L04 payload, audio queue row, MP3, answers, history, scheduler, counter, pointer, or production transaction.
+Global learner errors must not be raised by background prefetch failure.
 
 ## 25. Official Listening audio parity V21
 
-User verification against official Listening audio established three production-parity corrections for future unissued 5L sets.
+For newly authored/unissued 5L:
 
-Effective scope:
-- applies from the next unissued 5L only;
-- does not rewrite or regenerate H3-20260920-L04;
-- does not change learner history, score, counters, pointers, scheduler, Review binding, or committed transactions.
+- K2/K3 announce ①-④ as `マルイチ`, `マルニ`, `マルサン`, `マルヨン` with Nanami immediately before each Korean choice;
+- K3 prompt and response voices differ according to the canonical Korean voice pair;
+- K4/K5 place Nanami's `もう一度読みます` between the two passage readings;
+- Korean replay cues are forbidden;
+- preissue rejects any parity violation.
 
-### K2 / K3 choice-number audio
+Semantic Review scripts omit control audio. Existing issued/committed sets remain immutable.
 
-Before each Korean answer choice, the audio plan must include the Japanese circled-number announcement:
+## 26. Listening overload scheduler
 
-- ① = `マルイチ`
-- ② = `マルニ`
-- ③ = `マルサン`
-- ④ = `マルヨン`
-
-The number voice is `ja-JP-NanamiNeural`.
-K2/K3 production projection is:
-
-```text
-prompt x2
-マルイチ -> choice1 x2
-マルニ   -> choice2 x2
-マルサン -> choice3 x2
-マルヨン -> choice4 x2
-```
-
-Each number announcement is an explicit `choice_number1..4` segment with `repeat=1` and `pause_ms_after=900`.
-
-### K3 dialogue speakers
-
-K3 prompt and response choices must use different Korean speakers.
-
-The production pairing is deterministic:
-
-```text
-Hyunsu -> JiMin
-InJoon -> YuJin
-JiMin  -> Hyunsu
-YuJin  -> InJoon
-```
-
-The prompt is read by `VOICE`; all K3 response choices are read by `RESPONSE_VOICE`. `VOICE=RESPONSE_VOICE` is a preissue failure.
-
-### K4 / K5 replay cue
-
-The replay cue between first and second passage readings is Japanese:
-
-```text
-もう一度読みます
-```
-
-It is an explicit `replay_cue` segment read by `ja-JP-NanamiNeural`.
-The previous Korean cue `다시 한 번 들으세요.` is prohibited for new V21 production.
-
-### Enforcement
-
-The audio engine uses `azure-listening-v3-official-parity-number-dual-jp-cue`.
-
-Before issue:
-- Code.js validates the V21 plan shape before Azure generation;
-- WebAppPreissue.js independently verifies the persisted AUDIO_PLAN_JSON against the locked item payload;
-- WebAppPreissue.js verifies NUMBER_VOICE / RESPONSE_VOICE / CUE_VOICE assignments;
-- any missing number cue, same-speaker K3, or non-Japanese K4/K5 replay cue blocks issue.
-
-Canonical render contract: `H3-LISTENING-RENDER-RULES-20260920-V21`.
-
-## 26. Listening overload recovery V8
-
-The post-L04 score can produce five simultaneous active Listening retest obligations. The previous runtime allowed only one normal retest per future 5L set and one supplemental reservation, which left the fifth obligation in blocking overflow.
-
-Current recovery policy:
-
-- normal mode remains `LISTENING_RETEST_PER_SET_CAP=1`;
-- when `ACTIVE_WRONG_COUNT > ACTIVE_WRONG_CAP`, overload mode uses `OVERLOAD_RETEST_PER_SET_CAP=2`;
-- every retest still replaces only its own K1-K5 section slot;
-- no normal 5L ever contains more than one K1, one K2, one K3, one K4, or one K5;
-- planner schema is `H3_LISTENING_OVERLOAD_PLAN_V3`;
-- V3 persists `normal_retest_per_set_cap` and preissue must match it exactly;
-- supplemental remains a fallback only if V3 still cannot fit all obligations inside their due windows;
-- supplemental never advances the normal 5L counter or primary coverage;
-- a blocking overflow remains a hard preissue STOP.
-
-For the committed L04 state, the deterministic V3 plan is:
-
-```text
-set 4: K1 RETEST + K2 RETEST
-set 5: K3 RETEST + K4 RETEST
-set 6: K5 RETEST
-supplemental: none
-blocking_overflow: none
-```
-
-This migration changes scheduler policy/state only. It does not rewrite L04, learner answers, score, history, counters, pointers, Review bindings, audio, payloads, or K1_READY records.
+Each 5L remains exactly K1-K5. Normally at most one slot is a retest. During canonical overload, up to two different section-matched retests are allowed. `H3_LISTENING_OVERLOAD_PLAN_V3`, the persisted cap, selected retest sections, and locked payload must agree exactly. Blocking overflow is a STOP condition.
 
 ## 27. Legacy pre-Web Review runtime
 
-The 5L #1 migration is complete. Only the compatibility runtime remains active.
+`H3-20260919-L02` is a permanent `LEGACY_PRE_WEB` compatibility surface. Its original result is reconstructed from canonical `listening_log_v1`; no synthetic transaction or TXN_ID is created.
 
-Current durable contract:
-- legacy registry: `listening_legacy_review_v1`;
-- locked historical set: `H3-20260919-L02`;
-- internal identifier: `H3LEG-20260919-L02-R1`;
-- HOME history includes this entry alongside normal transaction-backed Review entries;
-- `h3ReviewCurrentLearning_()` excludes registered legacy sets;
-- normal learner URL remains parameterless;
-- legacy Review/media/replay are routed internally by `legacy_review_id`;
-- historical uncertainty remains unknown and displays as `?—`;
-- Replay is nonlearning and zero-write.
+`listening_legacy_review_v1` stores the immutable binding. HOME merges its entry with transaction-backed history, excludes registered legacy sets from current-learning resolution, and routes Review/media/replay internally by `legacy_review_id`. Unknown historical uncertainty is shown as `?—`. Replay is transient and zero-mutation.
 
-Do not:
-- synthesize a historical Web transaction;
-- insert L02 into transaction-backed Review binding;
-- rewrite learner history to modernize the old set;
-- alter score/counters/valid-count/pointer/scheduler to support Review;
-- expose `legacy_review_id` in normal learner URLs.
+Completed migration helpers are not runtime code. Migration evidence remains in Git history and Drive `06_AUDIT`.
 
-Maintenance rule:
-- keep functions referenced by HOME/Review/media/replay/current-learning;
-- remove one-shot migration helpers after repository-wide refcount reaches zero;
-- preserve removed code through Git history and Drive audit evidence rather than keeping dead functions in active Apps Script;
-- keep one durable repository audit for this compatibility surface rather than phase-specific audits.
+## 28. Minimal learner-facing Chat output
 
-## 28. Legacy 5L #1 migration close
+- successful `5L` trigger -> the exact parameterless Web App URL only
+- verified `[H3_WEB_SYNC]` -> `No issues detected.` only
+- failed `[H3_WEB_SYNC]` verification -> `Issue detected.` only
 
-Status: `CLOSED`.
-
-Device evidence supplied by the learner confirms the parameterless app HOME renders:
-- current 5L: no pending answer;
-- Review count: 3;
-- order: 5L #3, 5L #2, 5L #1;
-- 5L #1: `1/5`, `×4`, `?—`.
-
-Closure uses that device evidence together with existing source-lock/hash checks and the durable static/runtime gates. Separate physical-device replay/audio operation is no longer a blocking migration gate after the learner explicitly requested closure; media bindings and zero-write replay remain protected by the durable runtime audit and normal defect handling.
-
-This closure does not remove the legacy compatibility layer itself. It removes only migration-only helpers, phase-specific CI, and migration-stage detail from hot canonical documentation.
-
-
-## 29. Minimal learner-facing Chat output
-
-Normal production Chat surfaces are intentionally minimal:
-
-- successful `5L` trigger -> the exact parameterless Web App URL only;
-- verified `[H3_WEB_SYNC]` -> `No issues detected.` only;
-- failed `[H3_WEB_SYNC]` verification -> `Issue detected.` only.
-
-This changes presentation only. Canonical backend verification, idempotency, source locks, preissue gates, scheduler checks, and recovery behavior remain mandatory. Detailed explanation belongs to the Web App / persistent Review unless the learner explicitly asks for it in a separate Chat turn.
+Minimal output never permits skipping canonical issue, receipt, source-lock, scheduler, or recovery checks.
 
 ## 30. Normal hot-path readback
 
@@ -1250,4 +221,3 @@ Operational normal-flow reads follow `NORMAL_HOTPATH_READBACK_V1` in `H3_WEB_CHA
 Normal flow does not re-read GitHub `main`, `HANGUL_INFRA_STATUS_CURRENT`, manifest, or canonical release files on every learner request. Read those only for drift, canonical change, mismatch, recovery, or explicit audit.
 
 Connector/tool implementations must batch independent reads in one tool turn (for example with `Promise.all`) rather than serialize them. No new runtime aggregation Sheet/tab is authorized.
-

@@ -41,7 +41,6 @@ jobs:
               'WebAppPreissue.js',
               'WebAppReceipt.js',
               'WebAppReviewPersistence.js',
-              'MaintenanceR305.js',
               'H3_WEB_CHAT_CONTRACT.md',
               'H3_REVIEW_ARCHITECTURE.md',
               'Index.html',
@@ -215,7 +214,7 @@ jobs:
               sys.exit(1)
           PY
 
-      - name: Check R3-02 SYSTEM_TEST transaction isolation
+      - name: Check SYSTEM_TEST transaction isolation
         shell: bash
         run: |
           python3 - <<'PY'
@@ -280,7 +279,7 @@ jobs:
                   raise SystemExit(f'Forbidden direct learner-sheet access in transaction function: {forbidden}')
           PY
 
-      - name: Check R3-03 staged production transaction
+      - name: Check production transaction and scheduler contract
         shell: bash
         run: |
           python3 - <<'PY'
@@ -459,7 +458,7 @@ jobs:
           assert(k1.provenance.retest.required === false, 'K1 retest evidence mismatch.');
           NODE
 
-      - name: Check R3-04 chat receipt and trigger contract
+      - name: Check Web receipt and targeted dispatch
         shell: bash
         run: |
           python3 - <<'PY'
@@ -559,7 +558,7 @@ jobs:
             throw new Error('Malformed receipt was accepted.');
           }
           NODE
-      - name: Check R3-05 canonical production Web App patch
+      - name: Check production rendering and source-lock
         shell: bash
         run: |
           python3 - <<'PY'
@@ -667,49 +666,6 @@ jobs:
           if (JSON.stringify(result).includes('answer_key'))
             throw new Error('Answer key leaked to render payload.');
           NODE
-      - name: Check R3-05 Drive canonical finalizer isolation
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          text = Path('MaintenanceR305.js').read_text(encoding='utf-8')
-
-          required = [
-              'function r305FinalizeCanonicalDrive()',
-              "'16iG5UOvw1nbX7oxbyza3BXVxt5GKQ8v8'",
-              "'15N6ehVwMhoC3F-xd8ziv0UhYwys8rr7i'",
-              "'1mFT97QOUeJCvAdr6TzMFVg-gJvOpUj4V'",
-              "'1mVvKCqMdjKB8l6akShRsI8WR8Quhufjp'",
-              "'1Z6DrPRfLz1pNfF2mrCILWqAjfoTnLLHI'",
-              "'H3-LISTENING-RENDER-RULES-20260919-V17'",
-              "'H3-SOURCE-MANIFEST-20260919-V30'",
-              "'H3-SOURCE-SET-20260919-R30'",
-              "'e084a28358a1c4d8dffb2d955202ad132e3796dfbe3b79a5ce13f7bb6f2ba37c'",
-              "'hangul_source_manifest_v1__20260919R30.txt'",
-              'R305_RENDER_CANONICAL_PREFLIGHT_FAILED',
-              'R305_MANIFEST_READBACK_FAILED',
-              'R305_CURRENT_READBACK_FAILED',
-          ]
-          for needle in required:
-              if needle not in text:
-                  raise SystemExit(f'R3-05 maintenance invariant missing: {needle}')
-
-          forbidden = [
-              'SpreadsheetApp',
-              'listening_log_v1',
-              'listening_state_v1',
-              'listening_policy_v1',
-              'listening_k1_ready_v1',
-              'listening_set_payload_v1',
-          ]
-          for needle in forbidden:
-              if needle in text:
-                  raise SystemExit(f'Learner runtime access forbidden in R3-05 maintenance: {needle}')
-
-          if text.count('setContent(') != 2:
-              raise SystemExit('R3-05 maintenance must have exactly two canonical setContent writes.')
-          PY
       - name: Check audio storage slim-down invariants
         shell: bash
         run: |
@@ -750,499 +706,7 @@ jobs:
 
           PY
 
-      - name: Check 5L audio set fast path
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          code = Path('Code.js').read_text(encoding='utf-8')
-
-          start = code.index('function processListeningAudioSet_(')
-          end = code.index('function snapshotListeningSet_(', start)
-          process_set = code[start:end]
-          if 'runListeningSetBatch_(' not in process_set:
-              raise SystemExit('Normal 5L path does not enter the set batch runner.')
-          if 'runListeningJob_(' in process_set:
-              raise SystemExit('Normal 5L path still calls the serial member runner.')
-
-          start = code.index('function runListeningSetBatch_(')
-          end = code.index('function listeningPlanTextByRole_(', start)
-          batch = code[start:end]
-          for needle in [
-              'UrlFetchApp.fetchAll(',
-              'azureTtsFetchAllRequest_(',
-              'azureTtsBlobFromResponse_(',
-              'assertListeningBatchCurrent_(',
-              'verifyDoneListeningItem_(',
-          ]:
-              if needle not in batch:
-                  raise SystemExit(f'5L batch invariant missing: {needle}')
-          if 'currentListeningRow_(' in batch:
-              raise SystemExit('5L batch path reintroduced member-level row resolution.')
-          if batch.count('SpreadsheetApp.flush();') != 2:
-              raise SystemExit('5L happy path must contain exactly two explicit flushes.')
-          for legacy in [
-              'function combinedListeningSetSpec_(',
-              'HQ_LISTENING_SET_AUDIO_VERSION',
-          ]:
-              if legacy in code:
-                  raise SystemExit(f'Legacy combined-audio code remains: {legacy}')
-
-          synth_start = code.index('function synthesize_(')
-          synth_end = code.index('function azureTtsRequest_(', synth_start)
-          synth = code[synth_start:synth_end]
-          if 'azureTtsRequest_(' not in synth or 'azureTtsBlobFromResponse_(' not in synth:
-              raise SystemExit('Serial and batch TTS do not share canonical request/response helpers.')
-          PY
-
-          node <<'NODE'
-          const fs = require('fs');
-          const vm = require('vm');
-          const crypto = require('crypto');
-          const source = fs.readFileSync('Code.js', 'utf8');
-          const assert = (condition, message) => {
-            if (!condition) throw new Error(message);
-          };
-
-          class MockBlob {
-            constructor(bytes, mime) {
-              this.bytes = bytes;
-              this.mime = mime;
-              this.name = '';
-            }
-            setName(name) { this.name = name; return this; }
-          }
-
-          let nextFileId = 1;
-          class MockFile {
-            constructor(name, description) {
-              this.name = name;
-              this.description = description || '';
-              this.id = 'F' + nextFileId++;
-              this.url = 'https://drive.test/' + this.id;
-            }
-            getId() { return this.id; }
-            getUrl() { return this.url; }
-            getName() { return this.name; }
-            setName(name) { this.name = name; return this; }
-            getDescription() { return this.description; }
-            setDescription(value) { this.description = value; return this; }
-            getSize() { return 256; }
-            getMimeType() { return 'audio/mpeg'; }
-            isTrashed() { return false; }
-          }
-
-          class MockFolder {
-            constructor() {
-              this.files = [];
-              this.createCalls = 0;
-              this.failOnCreateCall = null;
-            }
-            getFilesByName(name) {
-              const matches = this.files.filter(file => file.getName() === name);
-              let index = 0;
-              return {
-                hasNext: () => index < matches.length,
-                next: () => matches[index++]
-              };
-            }
-            createFile(blob) {
-              this.createCalls++;
-              if (this.failOnCreateCall === this.createCalls) {
-                this.failOnCreateCall = null;
-                throw new Error('simulated Drive interruption');
-              }
-              const file = new MockFile(blob.name, '');
-              this.files.push(file);
-              return file;
-            }
-          }
-
-          class MockRange {
-            constructor(sheet, row, column, rowCount, columnCount) {
-              this.sheet = sheet;
-              this.row = row;
-              this.column = column;
-              this.rowCount = rowCount || 1;
-              this.columnCount = columnCount || 1;
-            }
-            matrix(sourceValue) {
-              const out = [];
-              for (let r = 0; r < this.rowCount; r++) {
-                const row = [];
-                for (let c = 0; c < this.columnCount; c++) {
-                  row.push(sourceValue(this.row - 2 + r, this.column - 1 + c));
-                }
-                out.push(row);
-              }
-              return out;
-            }
-            getDisplayValues() {
-              return this.matrix((r, c) => String(this.sheet.rows[r][c] || ''));
-            }
-            getFormulas() { return this.matrix(() => ''); }
-            getNotes() {
-              return this.matrix((r, c) => c === 0 ? (this.sheet.notes[r] || '') : '');
-            }
-            getNote() {
-              return this.column === 1 ? (this.sheet.notes[this.row - 2] || '') : '';
-            }
-            setNote(note) {
-              assert(this.column === 1, 'Only A-cell notes are supported.');
-              this.sheet.notes[this.row - 2] = note;
-              return this;
-            }
-            setValue(value) {
-              this.sheet.rows[this.row - 2][this.column - 1] = String(value);
-              return this;
-            }
-            clearContent() {
-              for (let r = 0; r < this.rowCount; r++) {
-                for (let c = 0; c < this.columnCount; c++) {
-                  this.sheet.rows[this.row - 2 + r][this.column - 1 + c] = '';
-                }
-              }
-              return this;
-            }
-            setValues(values) {
-              for (let r = 0; r < this.rowCount; r++) {
-                for (let c = 0; c < this.columnCount; c++) {
-                  this.sheet.rows[this.row - 2 + r][this.column - 1 + c] = String(values[r][c]);
-                }
-              }
-              return this;
-            }
-          }
-
-          class MockSheet {
-            constructor(rows) {
-              this.rows = rows;
-              this.notes = rows.map(() => '');
-            }
-            getLastRow() { return this.rows.length + 1; }
-            getRange(row, column, rowCount, columnCount) {
-              return new MockRange(this, row, column, rowCount, columnCount);
-            }
-          }
-
-          const numberSegment = n => ({
-            role: 'choice_number' + n,
-            text: ['マルイチ','マルニ','マルサン','マルヨン'][n - 1],
-            repeat: 1,
-            pause_ms_after: 900
-          });
-          const choiceSegment = (n, repeat) => ({
-            role: 'choice' + n,
-            text: '선택 ' + n + '입니다.',
-            repeat,
-            pause_ms_after: 3200
-          });
-
-          function plans() {
-            const k1 = [];
-            for (let n = 1; n <= 4; n++) {
-              k1.push(numberSegment(n), choiceSegment(n, 2));
-            }
-            const pair = [
-              {role:'prompt', text:'질문입니다.', repeat:1, pause_ms_after:3200},
-              {role:'prompt', text:'질문입니다.', repeat:1, pause_ms_after:5200}
-            ];
-            for (let n = 1; n <= 4; n++) {
-              pair.push(numberSegment(n), choiceSegment(n, 1), choiceSegment(n, 1));
-            }
-            const passage = text => [
-              {role:'passage', text, repeat:1, pause_ms_after:2200},
-              {role:'replay_cue', text:'もう一度読みます', repeat:1, pause_ms_after:2200},
-              {role:'passage', text, repeat:1, pause_ms_after:3200}
-            ];
-            return {
-              K1:k1,
-              K2:pair,
-              K3:JSON.parse(JSON.stringify(pair)),
-              K4:passage('네 번째 지문입니다.'),
-              K5:passage('다섯 번째 지문입니다.')
-            };
-          }
-
-          function makeRows(parentSetId) {
-            const bySection = plans();
-            return ['K1','K2','K3','K4','K5'].map((section, index) => [
-              'H3-L-20260920-' + String(index + 1).padStart(3, '0'),
-              'pending',
-              '2026-09-20T00:00:00.000Z',
-              parentSetId,
-              '1',
-              section,
-              'H3-' + section + '-SK001',
-              JSON.stringify(bySection[section]),
-              '', '', '', '', '', '',
-              'listening_audio_v1'
-            ]);
-          }
-
-          function makeRuntime(parentSetId) {
-            nextFileId = 1;
-            const sheet = new MockSheet(makeRows(parentSetId));
-            const folder = new MockFolder();
-            const calls = {fetchAll:[], fetch:0, flush:0, script:0};
-            let azureFailureIndex = null;
-            let gateMode = 'ok';
-            const bytes = Array(256).fill(0);
-            bytes[0] = 73;
-            bytes[1] = 68;
-            bytes[2] = 51;
-
-            const ctx = vm.createContext({
-              console: {
-                log: console.log,
-                error: () => {}
-              },
-              JSON,
-              String,
-              Number,
-              Array,
-              Object,
-              Date,
-              Math,
-              Set,
-              RegExp,
-              SpreadsheetApp: {flush: () => { calls.flush++; }},
-              DriveApp: {
-                getFolderById: () => folder,
-                getFileById: id => {
-                  const file = folder.files.find(item => item.getId() === id);
-                  if (!file) throw new Error('missing file');
-                  return file;
-                }
-              },
-              UrlFetchApp: {
-                fetch: () => {
-                  calls.fetch++;
-                  throw new Error('serial fetch forbidden');
-                },
-                fetchAll: requests => {
-                  calls.fetchAll.push(requests);
-                  return requests.map((_request, index) => ({
-                    getResponseCode: () => index === azureFailureIndex ? 500 : 200,
-                    getContentText: () => index === azureFailureIndex ? 'failed' : '',
-                    getContent: () => bytes.slice()
-                  }));
-                }
-              },
-              Utilities: {
-                DigestAlgorithm: {SHA_256:'SHA_256'},
-                Charset: {UTF_8:'UTF_8'},
-                computeDigest: (_algorithm, text) => Array.from(
-                  crypto.createHash('sha256').update(String(text), 'utf8').digest()
-                ),
-                newBlob: (content, mime) => new MockBlob(content, mime)
-              }
-            });
-
-            vm.runInContext(source, ctx, {filename:'Code.js'});
-            ctx.shuffle_ = values => {
-              const preferred = values.find(value => value.label === 'JiMin');
-              return [preferred].concat(values.filter(value => value !== preferred));
-            };
-            ctx.assertBoundK1ReadyForSet_ = () => {
-              if (gateMode === 'invalid') throw new Error('invalid K1_READY');
-              if (gateMode === 'mutate') {
-                sheet.rows[2][7] = JSON.stringify([
-                  {role:'prompt',text:'변경입니다.',repeat:1,pause_ms_after:1000}
-                ]);
-              }
-              return {};
-            };
-            ctx.persistListeningSetScript_ = (_setId, members) => {
-              calls.script++;
-              assert(
-                members.length === 5 && members.every(member => member.values[1] === 'done'),
-                'script persisted before all members were done'
-              );
-              return {file_id:'SCRIPT', url:'https://drive.test/SCRIPT'};
-            };
-
-            return {
-              ctx,
-              sheet,
-              folder,
-              calls,
-              config: {
-                AZURE_SPEECH_REGION:'test',
-                AZURE_SPEECH_KEY:'secret',
-                VOICE_FOLDER_ID:'legacy'
-              },
-              setAzureFailure: value => { azureFailureIndex = value; },
-              setGateMode: value => { gateMode = value; }
-            };
-          }
-
-          function runSet(runtime) {
-            const parentSetId = runtime.sheet.rows[0][3];
-            const members = runtime.ctx.snapshotListeningSet_(runtime.sheet, parentSetId);
-            const seed = runtime.ctx.readListeningSnapshotJob_(members[0], true);
-            return runtime.ctx.processListeningAudioSet_(runtime.sheet, seed, runtime.config);
-          }
-
-          function addReusable(runtime, count) {
-            const parentSetId = runtime.sheet.rows[0][3];
-            const members = runtime.ctx.snapshotListeningSet_(runtime.sheet, parentSetId);
-            for (let i = 0; i < count; i++) {
-              const job = runtime.ctx.readListeningSnapshotJob_(members[i], true);
-              const state = {
-                id:job.id,
-                hash:job.hash,
-                folderId:'1xeDF4AYNhykK1YPTh5rckyTmsGHvihaF',
-                voice:'JiMin',
-                audioVersion:vm.runInContext('HQ_LISTENING_AUDIO_VERSION', runtime.ctx),
-                stage:'prepared',
-                attempts:0
-              };
-              const spec = runtime.ctx.listeningAudioSpec_(job, state);
-              runtime.folder.files.push(new MockFile(spec.tempName, spec.description));
-            }
-          }
-
-          // CASE 1: five pending, five missing.
-          {
-            const rt = makeRuntime('H3-FASTPATH-CASE1');
-            const result = runSet(rt);
-            assert(result.status === 'done', 'CASE1 did not finish');
-            assert(
-              rt.calls.fetchAll.length === 1 && rt.calls.fetchAll[0].length === 5,
-              'CASE1 did not use one five-request fetchAll'
-            );
-            assert(rt.calls.fetch === 0, 'CASE1 used serial fetch');
-            assert(rt.sheet.rows.every(row => row[1] === 'done'), 'CASE1 has non-done rows');
-            assert(rt.calls.flush === 2, 'CASE1 should use two happy-path flushes');
-          }
-
-          // CASE 2: two verified reusable + three missing.
-          {
-            const rt = makeRuntime('H3-FASTPATH-CASE2');
-            addReusable(rt, 2);
-            const reusedIds = rt.folder.files.map(file => file.getId());
-            const result = runSet(rt);
-            assert(result.status === 'done', 'CASE2 did not finish');
-            assert(
-              rt.calls.fetchAll.length === 1 && rt.calls.fetchAll[0].length === 3,
-              'CASE2 fetchAll size mismatch'
-            );
-            assert(
-              reusedIds.every(id => rt.folder.files.some(file => file.getId() === id)),
-              'CASE2 replaced reusable audio'
-            );
-            assert(rt.folder.files.length === 5, 'CASE2 created duplicate audio');
-          }
-
-          // CASE 3: all five already done and verified.
-          {
-            const rt = makeRuntime('H3-FASTPATH-CASE3');
-            assert(runSet(rt).status === 'done', 'CASE3 setup failed');
-            const beforeFetch = rt.calls.fetchAll.length;
-            const beforeFiles = rt.folder.files.length;
-            const result = runSet(rt);
-            assert(result.status === 'done', 'CASE3 verified rerun failed');
-            assert(rt.calls.fetchAll.length === beforeFetch, 'CASE3 regenerated audio');
-            assert(rt.folder.files.length === beforeFiles, 'CASE3 created files');
-          }
-
-          // CASE 4: invalid K1_READY fails before Azure and Drive mutation.
-          {
-            const rt = makeRuntime('H3-FASTPATH-CASE4');
-            rt.setGateMode('invalid');
-            let failed = false;
-            try { runSet(rt); } catch (_error) { failed = true; }
-            assert(failed, 'CASE4 accepted invalid K1_READY');
-            assert(
-              rt.calls.fetchAll.length === 0 && rt.folder.createCalls === 0,
-              'CASE4 mutated Azure/Drive'
-            );
-          }
-
-          // CASE 5: immutable mismatch fails before Azure.
-          {
-            const rt = makeRuntime('H3-FASTPATH-CASE5');
-            rt.setGateMode('mutate');
-            const result = runSet(rt);
-            assert(result.status === 'error', 'CASE5 mismatch did not fail');
-            assert(
-              rt.calls.fetchAll.length === 0 && rt.folder.createCalls === 0,
-              'CASE5 reached Azure/Drive'
-            );
-          }
-
-          // CASE 6: one Azure response fails; no false done or Drive file.
-          {
-            const rt = makeRuntime('H3-FASTPATH-CASE6');
-            const immutable = rt.sheet.rows.map(
-              row => [row[0],row[2],row[3],row[4],row[5],row[6],row[7],row[14]]
-            );
-            rt.setAzureFailure(2);
-            const result = runSet(rt);
-            assert(result.status === 'error', 'CASE6 batch failure did not fail');
-            assert(rt.sheet.rows.every(row => row[1] === 'error'), 'CASE6 published false done');
-            assert(rt.folder.files.length === 0, 'CASE6 created files before validating responses');
-            assert(
-              JSON.stringify(immutable) === JSON.stringify(rt.sheet.rows.map(
-                row => [row[0],row[2],row[3],row[4],row[5],row[6],row[7],row[14]]
-              )),
-              'CASE6 changed immutable evidence'
-            );
-          }
-
-          // CASE 7: interruption after one file; rerun reuses it without duplication.
-          {
-            const rt = makeRuntime('H3-FASTPATH-CASE7');
-            rt.folder.failOnCreateCall = 2;
-            const interrupted = runSet(rt);
-            assert(
-              interrupted.status === 'error' && rt.folder.files.length === 1,
-              'CASE7 interruption setup failed'
-            );
-            const firstId = rt.folder.files[0].getId();
-            rt.sheet.rows.forEach(row => {
-              if (row[1] === 'error') row[1] = 'pending';
-            });
-            const recovered = runSet(rt);
-            assert(recovered.status === 'done', 'CASE7 recovery failed');
-            assert(rt.folder.files.length === 5, 'CASE7 duplicate/conflicting output');
-            assert(
-              rt.folder.files.some(file => file.getId() === firstId),
-              'CASE7 did not reuse first saved file'
-            );
-            assert(rt.calls.fetchAll[1].length === 4, 'CASE7 regenerated recovered audio');
-          }
-
-          // CASE 8: 5W dispatch remains on runJob_.
-          {
-            const start = source.indexOf('function processPendingAudioForSet(');
-            const end = source.indexOf('function processLatestPendingAudioJob()', start);
-            const dispatch = source.slice(start, end);
-            assert(
-              dispatch.includes("normalizedMode === '5W'") && dispatch.includes('return runJob_('),
-              'CASE8 5W dispatch changed'
-            );
-          }
-
-          // CASE 9: SCRIPT_TXT stays outside the learner issue critical path.
-          {
-            const rt = makeRuntime('H3-FASTPATH-CASE9');
-            const result = runSet(rt);
-            assert(result.status === 'done', 'CASE9 did not finish');
-            assert(rt.calls.script === 0, 'CASE9 unexpectedly materialized SCRIPT_TXT');
-            assert(
-              !Object.prototype.hasOwnProperty.call(result, 'script_file_id') &&
-              !Object.prototype.hasOwnProperty.call(result, 'script_url'),
-              'CASE9 returned SCRIPT_TXT fields from the learner issue path'
-            );
-          }
-
-          console.log('5L audio fast-path regression checks passed.');
-          NODE
-
-      - name: Check R3-06 fresh SYSTEM_TEST E2E fixture
+      - name: Check allowlisted SYSTEM_TEST fixture
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1300,7 +764,7 @@ jobs:
             throw new Error('R3-06 SYSTEM_TEST allowlist behavior mismatch.');
           }
           NODE
-      - name: Check R3-07 production preissue gate
+      - name: Check production preissue gate
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1354,7 +818,7 @@ jobs:
               raise SystemExit('R3-07 preissue gate must not be exposed as a learner Web GET route.')
           PY
 
-      - name: Check R3-11 normal live production arm
+      - name: Check normal-live production gate
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1407,7 +871,7 @@ jobs:
               raise SystemExit('R3-11 production render is not aligned to canonical V21.')
           PY
 
-      - name: Check R3-08 production client mode routing
+      - name: Check production client mode routing
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1440,7 +904,7 @@ jobs:
                   )
           PY
 
-      - name: Check R3-08 production txn-id provenance binder
+      - name: Check transaction provenance binder
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1497,67 +961,7 @@ jobs:
           }
           NODE
 
-      - name: Check R3-09B review architecture freeze
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(
-              encoding='utf-8'
-          )
-          operations = Path('OPERATIONS.md').read_text(encoding='utf-8')
-          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
-
-          required_architecture = [
-              'H3-R3-09B-REVIEW-ARCHITECTURE-20260919-V2',
-              'Status: R3_CLOSED_NORMAL_LIVE',
-              'listening_explanation_payload_v1',
-              'listening_review_binding_v1',
-              'mode=REVIEW&txn_id={TXN_ID}',
-              'REVIEW_REPLAY',
-              'LEGACY_POSTCOMMIT_BACKFILL',
-              'R3-09C = REVIEW_PERSISTENCE_IMPLEMENTATION',
-              'R3-10  = FULL_E2E_AUDIT including persistent review',
-              'POSTGRADE_DEFAULT_VIEW=REVIEW',
-              'DEFAULT_FILTER=NEEDS_REVIEW',
-              'IMMEDIATE_REVIEW_BUILDER=PERSISTENT_REVIEW_BUILDER',
-              'RECEIPT_UI=TECHNICAL_DETAILS_COLLAPSED',
-          ]
-          for needle in required_architecture:
-              if needle not in architecture:
-                  raise SystemExit(
-                      f'R3-09B architecture invariant missing: {needle}'
-                  )
-
-          forbidden_architecture = [
-              'production journal write = allowed',
-              'scheduler/retest write = allowed',
-              'counter/pointer advance = allowed',
-          ]
-          for needle in forbidden_architecture:
-              if needle in architecture:
-                  raise SystemExit(
-                      f'R3-09B unsafe review invariant present: {needle}'
-                  )
-
-          if '## 16. R3-09B persistent review architecture freeze' not in operations:
-              raise SystemExit('OPERATIONS does not reference R3-09B.')
-
-          if '## 10. R3-09B frozen review target' not in chat:
-              raise SystemExit('Web/Chat contract does not record R3-09B target.')
-
-          if 'sending the receipt to Chat is optional' not in architecture:
-              raise SystemExit('R3-09B receipt ownership transition is missing.')
-
-          if 'R3-09B V2 UI freeze' not in operations:
-              raise SystemExit('OPERATIONS does not record R3-09B V2 UI freeze.')
-
-          if 'R3-09B changes documentation/architecture only' not in operations:
-              raise SystemExit('R3-09B active-runtime boundary is missing.')
-          PY
-
-      - name: Check R3-09C review persistence
+      - name: Check persistent Review storage and source-lock
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1583,8 +987,8 @@ jobs:
               if needle not in source:
                   raise SystemExit(f'R3-09C persistence invariant missing: {needle}')
 
-          if '## 17. R3-09C review persistence implementation' not in operations:
-              raise SystemExit('OPERATIONS does not record R3-09C persistence.')
+          if '## 9. Current production and Review invariants' not in operations:
+              raise SystemExit('OPERATIONS lacks the current Review runtime contract.')
 
           forbidden = [
               'listening_state_v1).set',
@@ -1631,7 +1035,7 @@ jobs:
           }
           NODE
 
-      - name: Check R3-09D persistent Review Web UI
+      - name: Check persistent Review routes and Web UI
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1714,14 +1118,14 @@ jobs:
           if "'PERSISTENT_REVIEW_V1'" not in render:
               raise SystemExit('Production render transport does not advertise persistent Review.')
 
-          if '## 18. R3-09D review Web UI and route implementation' not in operations:
-              raise SystemExit('OPERATIONS does not record R3-09D.')
+          if '## 9. Current production and Review invariants' not in operations:
+              raise SystemExit('OPERATIONS lacks the current Review runtime contract.')
 
           if 'Status: R3_CLOSED_NORMAL_LIVE' not in architecture:
               raise SystemExit('Review architecture staged status is not R3-09D.')
 
-          if '## 11. R3-09D persistent Review implementation' not in chat:
-              raise SystemExit('Web/Chat contract does not record R3-09D.')
+          if '## 9. Persistent Review and replay' not in chat:
+              raise SystemExit('Web/Chat contract lacks persistent Review.')
 
           if 'function renderPersistentReview(' not in client:
               raise SystemExit('R3-09D persistent Review renderer is missing.')
@@ -1774,7 +1178,7 @@ jobs:
           }
           NODE
 
-      - name: Check R3-09D Review history index fix
+      - name: Check Review history index isolation
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1820,7 +1224,7 @@ jobs:
               )
           PY
 
-      - name: Check R3-09D UTF-8 Review hashing
+      - name: Check UTF-8 Review hashing
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1885,62 +1289,7 @@ jobs:
               raise SystemExit('UTF-8 SHA-256 regression fixture failed.')
           PY
 
-      - name: Check R3-09D device validation close
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
-          operations = Path('OPERATIONS.md').read_text(encoding='utf-8')
-          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
-          client = Path('Client.html').read_text(encoding='utf-8')
-
-          required_arch = [
-              'Status: R3_CLOSED_NORMAL_LIVE',
-              '## 17. R3-09D device validation',
-              'RESULT=PASS_DEVICE_VALIDATED',
-              'persistent history shows 5L #2',
-              'Q1 renders exact source-bound K1 image',
-              'Q1 renders inline audio control',
-              'Q1 shows learner answer `④ ?` and correct answer `③`',
-              'NEXT=R3-09E REVIEW_REPLAY_LIBRARY_DEVICE_VALIDATION',
-          ]
-          for needle in required_arch:
-              if needle not in architecture:
-                  raise SystemExit(
-                      f'R3-09D device-validation architecture evidence missing: {needle}'
-                  )
-
-          required_ops = [
-              '### R3-09D device validation close',
-              '`RESULT=PASS_DEVICE_VALIDATED`',
-              'HOME/REVIEW access causes zero learner-runtime mutation',
-              'Next stage: R3-09E `REVIEW_REPLAY_LIBRARY_DEVICE_VALIDATION`',
-          ]
-          for needle in required_ops:
-              if needle not in operations:
-                  raise SystemExit(
-                      f'R3-09D device-validation operations evidence missing: {needle}'
-                  )
-
-          if '### R3-09D device validation' not in chat:
-              raise SystemExit('Web/Chat contract does not record R3-09D device validation.')
-
-          if '### R3-09D device validation' not in chat:
-              raise SystemExit('R3-09D device validation evidence missing.')
-
-          forbidden = [
-              'R3-09D does not claim PC validation, REVIEW_REPLAY validation, or normal-live activation. Those remain later gates.',
-          ]
-          for needle in forbidden:
-              if needle not in architecture:
-                  raise SystemExit(
-                      'R3-09D scope boundary statement missing.'
-                  )
-          PY
-
-      - name: Check R3-09E REVIEW_REPLAY read-only contract
+      - name: Check REVIEW_REPLAY read-only contract
         shell: bash
         run: |
           python3 - <<'PY'
@@ -2067,17 +1416,17 @@ jobs:
 
           for needle in [
               'Status: R3_CLOSED_NORMAL_LIVE',
-              '## 18. R3-09E REVIEW_REPLAY implementation',
-              'RESULT=IMPLEMENTED_AWAITING_DEVICE_VALIDATION',
+              '## 9. REVIEW_REPLAY',
+              'RUNTIME_WRITE_COUNT=0',
           ]:
               if needle not in architecture:
                   raise SystemExit(f'R3-09E architecture evidence missing: {needle}')
 
-          if '## 19. R3-09E REVIEW_REPLAY implementation' not in operations:
-              raise SystemExit('OPERATIONS does not record R3-09E implementation.')
+          if '## 9. Current production and Review invariants' not in operations:
+              raise SystemExit('OPERATIONS lacks the current replay contract.')
 
-          if '## 12. R3-09E REVIEW_REPLAY staged implementation' not in chat:
-              raise SystemExit('Web/Chat contract does not record R3-09E.')
+          if '## 9. Persistent Review and replay' not in chat:
+              raise SystemExit('Web/Chat contract lacks REVIEW_REPLAY.')
           PY
 
           node <<'NODE'
@@ -2111,7 +1460,7 @@ jobs:
           }
           NODE
 
-      - name: Check R3-09E learner UI refinement
+      - name: Check current Review learner UI
         shell: bash
         run: |
           python3 - <<'PY'
@@ -2193,7 +1542,7 @@ jobs:
                   )
 
           for needle in [
-              '## 19. R3-09E UI refinement',
+              '## 13. Current learner UI contract',
               'Q1 ×',
               'exactly one Review card is visible at a time',
               'The standalone `再挑戦` explanatory block above the questions is removed.',
@@ -2203,61 +1552,14 @@ jobs:
                       f'R3-09E UI contract evidence missing: {needle}'
                   )
 
-          if '### R3-09E learner UI refinement' not in operations:
-              raise SystemExit('OPERATIONS does not record R3-09E UI refinement.')
+          if '## 9. Current production and Review invariants' not in operations:
+              raise SystemExit('OPERATIONS lacks the current Review UI contract.')
 
-          if '### R3-09E refined learner surface' not in chat:
-              raise SystemExit('Web/Chat contract does not record R3-09E refined surface.')
+          if '## 9. Persistent Review and replay' not in chat:
+              raise SystemExit('Web/Chat contract lacks the current Review surface.')
           PY
 
-      - name: Check R3-09E close
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
-          operations = Path('OPERATIONS.md').read_text(encoding='utf-8')
-          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
-
-          for needle in [
-              'Status: R3_CLOSED_NORMAL_LIVE',
-              '## 20. R3-09E close',
-              'RESULT=PASS_DEVICE_VALIDATED_ZERO_MUTATION',
-              'L03_PRODUCTION_TXN_COUNT=1',
-              'L03_LEARNER_LOG_ROWS=5',
-              'REVIEW_BINDING=LOCKED',
-              'NEXT=R3-10 FULL_E2E_AUDIT',
-          ]:
-              if needle not in architecture:
-                  raise SystemExit(
-                      f'R3-09E close architecture evidence missing: {needle}'
-                  )
-
-          for needle in [
-              '### R3-09E close',
-              'R3-09E is `PASS_DEVICE_VALIDATED_ZERO_MUTATION`',
-              '`NEXT=R3-10 FULL_E2E_AUDIT`',
-              'Normal-live production remains blocked until R3-10 passes',
-          ]:
-              if needle not in operations:
-                  raise SystemExit(
-                      f'R3-09E close operations evidence missing: {needle}'
-                  )
-
-          for needle in [
-              '### R3-09E close',
-              'one COMMITTED production transaction only',
-              'five learner log rows only',
-              'Next stage is R3-10 full E2E audit',
-          ]:
-              if needle not in chat:
-                  raise SystemExit(
-                      f'R3-09E close Web/Chat evidence missing: {needle}'
-                  )
-          PY
-
-      - name: Check R3-10B scheduler refresh
+      - name: Check scheduler overload V3 behavior
         shell: bash
         run: |
           node <<'NODE'
@@ -2353,191 +1655,6 @@ jobs:
             }
           }
           NODE
-
-      - name: Check R3-10 close
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
-          arch = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
-          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
-          prod = Path('WebAppProduction.js').read_text(encoding='utf-8')
-          pre = Path('WebAppPreissue.js').read_text(encoding='utf-8')
-
-          for needle in [
-              '### R3-10B repair / R3-10 close',
-              'RESULT=PASS',
-              'BLOCKING=0',
-              'B1_SCHEDULER_REFRESH=PASS',
-              'B2_PC_GATE=PASS_POLICY_NONBLOCKING',
-              'OVERLOAD_PLAN_SCHEMA=H3_LISTENING_OVERLOAD_PLAN_V2',
-              'NEXT=R3-11 NORMAL_LIVE_ACTIVATION',
-          ]:
-              if needle not in ops:
-                  raise SystemExit(f'R3-10 close operations evidence missing: {needle}')
-
-          for needle in [
-              '## 22. R3-10 close',
-              'BLOCKING=0',
-              'PC_VALIDATION=OPTIONAL_NONBLOCKING_BY_DEFAULT',
-              '3:K4,4:K1,5:K3,6:K2,7:K5',
-          ]:
-              if needle not in arch:
-                  raise SystemExit(f'R3-10 close architecture evidence missing: {needle}')
-
-          for needle in [
-              '## 14. R3-10 device release policy',
-              'PC validation is optional and nonblocking by default.',
-              'Canonical Listening render source: `H3-LISTENING-RENDER-RULES-20260920-V19`',
-          ]:
-              if needle not in chat:
-                  raise SystemExit(f'R3-10 device policy evidence missing: {needle}')
-
-          for needle in [
-              'H3_LISTENING_OVERLOAD_PLAN_V3',
-              'function h3ProdBuildOverloadPlan_(',
-              "'OVERLOAD_PLAN_JSON'",
-          ]:
-              if needle not in prod:
-                  raise SystemExit(f'R3-10 scheduler implementation missing: {needle}')
-
-          for needle in [
-              'PREISSUE_OVERLOAD_PLAN_MISSING',
-              'PREISSUE_OVERLOAD_PLAN_STALE',
-              'PREISSUE_OVERLOAD_PLAN_BLOCKED',
-          ]:
-              if needle not in pre:
-                  raise SystemExit(f'R3-10 preissue scheduler gate missing: {needle}')
-          PY
-
-      - name: Check R3-11 activation contract
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          prod = Path('WebAppProduction.js').read_text(encoding='utf-8')
-          pre = Path('WebAppPreissue.js').read_text(encoding='utf-8')
-          render = Path('WebAppProductionRender.js').read_text(encoding='utf-8')
-          ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
-          arch = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
-          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
-
-          for needle in [
-              "var H3_R3_PRODUCTION_GATE_MODE =\n  'NORMAL_LIVE_ACTIVE';",
-              "'NORMAL_LIVE_PRODUCTION_GATE_MISMATCH'",
-              'STATE_NEXT_SET_NO_MISMATCH',
-          ]:
-              if needle not in prod:
-                  raise SystemExit(f'R3-11 production contract missing: {needle}')
-
-          if 'H3_R3_PRODUCTION_COMMIT_SET_ID' in prod:
-              raise SystemExit('R3-11 still contains fixed production SET_ID arm.')
-
-          for needle in [
-              "'NORMAL_LIVE'",
-              'H3_R3_PRODUCTION_GATE_MODE',
-              'PREISSUE_OVERLOAD_PLAN_MISSING',
-              'PREISSUE_OVERLOAD_PLAN_STALE',
-              'PREISSUE_OVERLOAD_PLAN_BLOCKED',
-              'PREISSUE_RECOVERY_REQUIRED_EXISTS',
-          ]:
-              if needle not in pre:
-                  raise SystemExit(f'R3-11 preissue contract missing: {needle}')
-
-          if 'H3-LISTENING-RENDER-RULES-20260920-V21' not in render:
-              raise SystemExit('R3-11 render version mismatch.')
-
-          for doc, needle in [
-              (ops, '## 21. R3-11 NORMAL_LIVE_ACTIVATION'),
-              (arch, '## 23. R3-11 normal-live activation'),
-              (chat, '## 15. R3-11 normal-live ownership'),
-          ]:
-              if needle not in doc:
-                  raise SystemExit(f'R3-11 documentation missing: {needle}')
-          PY
-
-      - name: Check R3-11 close
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          arch = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
-          ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
-          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
-
-          for needle in [
-              'Status: R3_CLOSED_NORMAL_LIVE',
-              '## 24. R3-11 close',
-              'PRODUCTION_GATE=NORMAL_LIVE_ACTIVE',
-              'PRODUCTION_PREP_MODE=NORMAL_LIVE',
-              'LISTENING_POLICY_ID=H3-LISTEN-POLICY-20260920-V7',
-              'NEXT_LISTENING_SET_NO=3',
-              'FIXED_SET_ARM=NONE',
-          ]:
-              if needle not in arch:
-                  raise SystemExit(f'R3-11 close architecture evidence missing: {needle}')
-
-          for needle in [
-              '### R3-11 close',
-              'R3-11 is `PASS_NORMAL_LIVE_ACTIVE`',
-              'PRODUCTION_GATE=NORMAL_LIVE_ACTIVE',
-              'PRODUCTION_PREP_MODE=NORMAL_LIVE',
-              'No set no.3 payload',
-          ]:
-              if needle not in ops:
-                  raise SystemExit(f'R3-11 close operations evidence missing: {needle}')
-
-          for needle in [
-              '### R3-11 close',
-              '`5L` may now prepare the canonical next Listening set',
-              'the scheduler requires K4 as the set-3 retest slot',
-          ]:
-              if needle not in chat:
-                  raise SystemExit(f'R3-11 close Web/Chat evidence missing: {needle}')
-          PY
-
-      - name: Check R3-12 infra close
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          arch = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
-          ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
-          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
-
-          for needle in [
-              'Status: R3_CLOSED_NORMAL_LIVE',
-              '## 25. R3-12 infrastructure close',
-              'R3_STATUS=R3_CLOSED_NORMAL_LIVE',
-              'PRODUCTION_GATE=NORMAL_LIVE_ACTIVE',
-              'NEXT_LISTENING_SET_NO=3',
-          ]:
-              if needle not in arch:
-                  raise SystemExit(f'R3-12 architecture close evidence missing: {needle}')
-
-          for needle in [
-              '## 22. R3-12 INFRA_CLOSE',
-              'Drive source-manifest maintenance',
-              'immutable release copy of the current Listening render canonical',
-              'archival must preserve file IDs/URLs',
-              'no learner runtime/history/scheduler drift',
-          ]:
-              if needle not in ops:
-                  raise SystemExit(f'R3-12 operations close evidence missing: {needle}')
-
-          for needle in [
-              '## 16. R3 close',
-              '`5L`: normal-live Listening Web App flow',
-              'The next `5L` request prepares set no.3',
-          ]:
-              if needle not in chat:
-                  raise SystemExit(f'R3-12 Web/Chat close evidence missing: {needle}')
-          PY
 
       - name: Check learner URL authority
         shell: bash
@@ -3217,6 +2334,498 @@ jobs:
           print('Minimal learner-facing Chat output contract: PASS')
           PY
 
+      - name: Check 5L audio set fast path
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          code = Path('Code.js').read_text(encoding='utf-8')
+
+          start = code.index('function processListeningAudioSet_(')
+          end = code.index('function snapshotListeningSet_(', start)
+          process_set = code[start:end]
+          if 'runListeningSetBatch_(' not in process_set:
+              raise SystemExit('Normal 5L path does not enter the set batch runner.')
+          if 'runListeningJob_(' in process_set:
+              raise SystemExit('Normal 5L path still calls the serial member runner.')
+
+          start = code.index('function runListeningSetBatch_(')
+          end = code.index('function listeningPlanTextByRole_(', start)
+          batch = code[start:end]
+          for needle in [
+              'UrlFetchApp.fetchAll(',
+              'azureTtsFetchAllRequest_(',
+              'azureTtsBlobFromResponse_(',
+              'assertListeningBatchCurrent_(',
+              'verifyDoneListeningItem_(',
+          ]:
+              if needle not in batch:
+                  raise SystemExit(f'5L batch invariant missing: {needle}')
+          if 'currentListeningRow_(' in batch:
+              raise SystemExit('5L batch path reintroduced member-level row resolution.')
+          if batch.count('SpreadsheetApp.flush();') != 2:
+              raise SystemExit('5L happy path must contain exactly two explicit flushes.')
+          for legacy in [
+              'function combinedListeningSetSpec_(',
+              'HQ_LISTENING_SET_AUDIO_VERSION',
+          ]:
+              if legacy in code:
+                  raise SystemExit(f'Legacy combined-audio code remains: {legacy}')
+
+          synth_start = code.index('function synthesize_(')
+          synth_end = code.index('function azureTtsRequest_(', synth_start)
+          synth = code[synth_start:synth_end]
+          if 'azureTtsRequest_(' not in synth or 'azureTtsBlobFromResponse_(' not in synth:
+              raise SystemExit('Serial and batch TTS do not share canonical request/response helpers.')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+          const source = fs.readFileSync('Code.js', 'utf8');
+          const assert = (condition, message) => {
+            if (!condition) throw new Error(message);
+          };
+
+          class MockBlob {
+            constructor(bytes, mime) {
+              this.bytes = bytes;
+              this.mime = mime;
+              this.name = '';
+            }
+            setName(name) { this.name = name; return this; }
+          }
+
+          let nextFileId = 1;
+          class MockFile {
+            constructor(name, description) {
+              this.name = name;
+              this.description = description || '';
+              this.id = 'F' + nextFileId++;
+              this.url = 'https://drive.test/' + this.id;
+            }
+            getId() { return this.id; }
+            getUrl() { return this.url; }
+            getName() { return this.name; }
+            setName(name) { this.name = name; return this; }
+            getDescription() { return this.description; }
+            setDescription(value) { this.description = value; return this; }
+            getSize() { return 256; }
+            getMimeType() { return 'audio/mpeg'; }
+            isTrashed() { return false; }
+          }
+
+          class MockFolder {
+            constructor() {
+              this.files = [];
+              this.createCalls = 0;
+              this.failOnCreateCall = null;
+            }
+            getFilesByName(name) {
+              const matches = this.files.filter(file => file.getName() === name);
+              let index = 0;
+              return {
+                hasNext: () => index < matches.length,
+                next: () => matches[index++]
+              };
+            }
+            createFile(blob) {
+              this.createCalls++;
+              if (this.failOnCreateCall === this.createCalls) {
+                this.failOnCreateCall = null;
+                throw new Error('simulated Drive interruption');
+              }
+              const file = new MockFile(blob.name, '');
+              this.files.push(file);
+              return file;
+            }
+          }
+
+          class MockRange {
+            constructor(sheet, row, column, rowCount, columnCount) {
+              this.sheet = sheet;
+              this.row = row;
+              this.column = column;
+              this.rowCount = rowCount || 1;
+              this.columnCount = columnCount || 1;
+            }
+            matrix(sourceValue) {
+              const out = [];
+              for (let r = 0; r < this.rowCount; r++) {
+                const row = [];
+                for (let c = 0; c < this.columnCount; c++) {
+                  row.push(sourceValue(this.row - 2 + r, this.column - 1 + c));
+                }
+                out.push(row);
+              }
+              return out;
+            }
+            getDisplayValues() {
+              return this.matrix((r, c) => String(this.sheet.rows[r][c] || ''));
+            }
+            getFormulas() { return this.matrix(() => ''); }
+            getNotes() {
+              return this.matrix((r, c) => c === 0 ? (this.sheet.notes[r] || '') : '');
+            }
+            getNote() {
+              return this.column === 1 ? (this.sheet.notes[this.row - 2] || '') : '';
+            }
+            setNote(note) {
+              assert(this.column === 1, 'Only A-cell notes are supported.');
+              this.sheet.notes[this.row - 2] = note;
+              return this;
+            }
+            setValue(value) {
+              this.sheet.rows[this.row - 2][this.column - 1] = String(value);
+              return this;
+            }
+            clearContent() {
+              for (let r = 0; r < this.rowCount; r++) {
+                for (let c = 0; c < this.columnCount; c++) {
+                  this.sheet.rows[this.row - 2 + r][this.column - 1 + c] = '';
+                }
+              }
+              return this;
+            }
+            setValues(values) {
+              for (let r = 0; r < this.rowCount; r++) {
+                for (let c = 0; c < this.columnCount; c++) {
+                  this.sheet.rows[this.row - 2 + r][this.column - 1 + c] = String(values[r][c]);
+                }
+              }
+              return this;
+            }
+          }
+
+          class MockSheet {
+            constructor(rows) {
+              this.rows = rows;
+              this.notes = rows.map(() => '');
+            }
+            getLastRow() { return this.rows.length + 1; }
+            getRange(row, column, rowCount, columnCount) {
+              return new MockRange(this, row, column, rowCount, columnCount);
+            }
+          }
+
+          const numberSegment = n => ({
+            role: 'choice_number' + n,
+            text: ['マルイチ','マルニ','マルサン','マルヨン'][n - 1],
+            repeat: 1,
+            pause_ms_after: 900
+          });
+          const choiceSegment = (n, repeat) => ({
+            role: 'choice' + n,
+            text: '선택 ' + n + '입니다.',
+            repeat,
+            pause_ms_after: 3200
+          });
+
+          function plans() {
+            const k1 = [];
+            for (let n = 1; n <= 4; n++) {
+              k1.push(numberSegment(n), choiceSegment(n, 2));
+            }
+            const pair = [
+              {role:'prompt', text:'질문입니다.', repeat:1, pause_ms_after:3200},
+              {role:'prompt', text:'질문입니다.', repeat:1, pause_ms_after:5200}
+            ];
+            for (let n = 1; n <= 4; n++) {
+              pair.push(numberSegment(n), choiceSegment(n, 1), choiceSegment(n, 1));
+            }
+            const passage = text => [
+              {role:'passage', text, repeat:1, pause_ms_after:2200},
+              {role:'replay_cue', text:'もう一度読みます', repeat:1, pause_ms_after:2200},
+              {role:'passage', text, repeat:1, pause_ms_after:3200}
+            ];
+            return {
+              K1:k1,
+              K2:pair,
+              K3:JSON.parse(JSON.stringify(pair)),
+              K4:passage('네 번째 지문입니다.'),
+              K5:passage('다섯 번째 지문입니다.')
+            };
+          }
+
+          function makeRows(parentSetId) {
+            const bySection = plans();
+            return ['K1','K2','K3','K4','K5'].map((section, index) => [
+              'H3-L-20260920-' + String(index + 1).padStart(3, '0'),
+              'pending',
+              '2026-09-20T00:00:00.000Z',
+              parentSetId,
+              '1',
+              section,
+              'H3-' + section + '-SK001',
+              JSON.stringify(bySection[section]),
+              '', '', '', '', '', '',
+              'listening_audio_v1'
+            ]);
+          }
+
+          function makeRuntime(parentSetId) {
+            nextFileId = 1;
+            const sheet = new MockSheet(makeRows(parentSetId));
+            const folder = new MockFolder();
+            const calls = {fetchAll:[], fetch:0, flush:0, script:0};
+            let azureFailureIndex = null;
+            let gateMode = 'ok';
+            const bytes = Array(256).fill(0);
+            bytes[0] = 73;
+            bytes[1] = 68;
+            bytes[2] = 51;
+
+            const ctx = vm.createContext({
+              console: {
+                log: console.log,
+                error: () => {}
+              },
+              JSON,
+              String,
+              Number,
+              Array,
+              Object,
+              Date,
+              Math,
+              Set,
+              RegExp,
+              SpreadsheetApp: {flush: () => { calls.flush++; }},
+              DriveApp: {
+                getFolderById: () => folder,
+                getFileById: id => {
+                  const file = folder.files.find(item => item.getId() === id);
+                  if (!file) throw new Error('missing file');
+                  return file;
+                }
+              },
+              UrlFetchApp: {
+                fetch: () => {
+                  calls.fetch++;
+                  throw new Error('serial fetch forbidden');
+                },
+                fetchAll: requests => {
+                  calls.fetchAll.push(requests);
+                  return requests.map((_request, index) => ({
+                    getResponseCode: () => index === azureFailureIndex ? 500 : 200,
+                    getContentText: () => index === azureFailureIndex ? 'failed' : '',
+                    getContent: () => bytes.slice()
+                  }));
+                }
+              },
+              Utilities: {
+                DigestAlgorithm: {SHA_256:'SHA_256'},
+                Charset: {UTF_8:'UTF_8'},
+                computeDigest: (_algorithm, text) => Array.from(
+                  crypto.createHash('sha256').update(String(text), 'utf8').digest()
+                ),
+                newBlob: (content, mime) => new MockBlob(content, mime)
+              }
+            });
+
+            vm.runInContext(source, ctx, {filename:'Code.js'});
+            ctx.shuffle_ = values => {
+              const preferred = values.find(value => value.label === 'JiMin');
+              return [preferred].concat(values.filter(value => value !== preferred));
+            };
+            ctx.assertBoundK1ReadyForSet_ = () => {
+              if (gateMode === 'invalid') throw new Error('invalid K1_READY');
+              if (gateMode === 'mutate') {
+                sheet.rows[2][7] = JSON.stringify([
+                  {role:'prompt',text:'변경입니다.',repeat:1,pause_ms_after:1000}
+                ]);
+              }
+              return {};
+            };
+            ctx.persistListeningSetScript_ = (_setId, members) => {
+              calls.script++;
+              assert(
+                members.length === 5 && members.every(member => member.values[1] === 'done'),
+                'script persisted before all members were done'
+              );
+              return {file_id:'SCRIPT', url:'https://drive.test/SCRIPT'};
+            };
+
+            return {
+              ctx,
+              sheet,
+              folder,
+              calls,
+              config: {
+                AZURE_SPEECH_REGION:'test',
+                AZURE_SPEECH_KEY:'secret',
+                VOICE_FOLDER_ID:'legacy'
+              },
+              setAzureFailure: value => { azureFailureIndex = value; },
+              setGateMode: value => { gateMode = value; }
+            };
+          }
+
+          function runSet(runtime) {
+            const parentSetId = runtime.sheet.rows[0][3];
+            const members = runtime.ctx.snapshotListeningSet_(runtime.sheet, parentSetId);
+            const seed = runtime.ctx.readListeningSnapshotJob_(members[0], true);
+            return runtime.ctx.processListeningAudioSet_(runtime.sheet, seed, runtime.config);
+          }
+
+          function addReusable(runtime, count) {
+            const parentSetId = runtime.sheet.rows[0][3];
+            const members = runtime.ctx.snapshotListeningSet_(runtime.sheet, parentSetId);
+            for (let i = 0; i < count; i++) {
+              const job = runtime.ctx.readListeningSnapshotJob_(members[i], true);
+              const state = {
+                id:job.id,
+                hash:job.hash,
+                folderId:'1xeDF4AYNhykK1YPTh5rckyTmsGHvihaF',
+                voice:'JiMin',
+                audioVersion:vm.runInContext('HQ_LISTENING_AUDIO_VERSION', runtime.ctx),
+                stage:'prepared',
+                attempts:0
+              };
+              const spec = runtime.ctx.listeningAudioSpec_(job, state);
+              runtime.folder.files.push(new MockFile(spec.tempName, spec.description));
+            }
+          }
+
+          // CASE 1: five pending, five missing.
+          {
+            const rt = makeRuntime('H3-FASTPATH-CASE1');
+            const result = runSet(rt);
+            assert(result.status === 'done', 'CASE1 did not finish');
+            assert(
+              rt.calls.fetchAll.length === 1 && rt.calls.fetchAll[0].length === 5,
+              'CASE1 did not use one five-request fetchAll'
+            );
+            assert(rt.calls.fetch === 0, 'CASE1 used serial fetch');
+            assert(rt.sheet.rows.every(row => row[1] === 'done'), 'CASE1 has non-done rows');
+            assert(rt.calls.flush === 2, 'CASE1 should use two happy-path flushes');
+          }
+
+          // CASE 2: two verified reusable + three missing.
+          {
+            const rt = makeRuntime('H3-FASTPATH-CASE2');
+            addReusable(rt, 2);
+            const reusedIds = rt.folder.files.map(file => file.getId());
+            const result = runSet(rt);
+            assert(result.status === 'done', 'CASE2 did not finish');
+            assert(
+              rt.calls.fetchAll.length === 1 && rt.calls.fetchAll[0].length === 3,
+              'CASE2 fetchAll size mismatch'
+            );
+            assert(
+              reusedIds.every(id => rt.folder.files.some(file => file.getId() === id)),
+              'CASE2 replaced reusable audio'
+            );
+            assert(rt.folder.files.length === 5, 'CASE2 created duplicate audio');
+          }
+
+          // CASE 3: all five already done and verified.
+          {
+            const rt = makeRuntime('H3-FASTPATH-CASE3');
+            assert(runSet(rt).status === 'done', 'CASE3 setup failed');
+            const beforeFetch = rt.calls.fetchAll.length;
+            const beforeFiles = rt.folder.files.length;
+            const result = runSet(rt);
+            assert(result.status === 'done', 'CASE3 verified rerun failed');
+            assert(rt.calls.fetchAll.length === beforeFetch, 'CASE3 regenerated audio');
+            assert(rt.folder.files.length === beforeFiles, 'CASE3 created files');
+          }
+
+          // CASE 4: invalid K1_READY fails before Azure and Drive mutation.
+          {
+            const rt = makeRuntime('H3-FASTPATH-CASE4');
+            rt.setGateMode('invalid');
+            let failed = false;
+            try { runSet(rt); } catch (_error) { failed = true; }
+            assert(failed, 'CASE4 accepted invalid K1_READY');
+            assert(
+              rt.calls.fetchAll.length === 0 && rt.folder.createCalls === 0,
+              'CASE4 mutated Azure/Drive'
+            );
+          }
+
+          // CASE 5: immutable mismatch fails before Azure.
+          {
+            const rt = makeRuntime('H3-FASTPATH-CASE5');
+            rt.setGateMode('mutate');
+            const result = runSet(rt);
+            assert(result.status === 'error', 'CASE5 mismatch did not fail');
+            assert(
+              rt.calls.fetchAll.length === 0 && rt.folder.createCalls === 0,
+              'CASE5 reached Azure/Drive'
+            );
+          }
+
+          // CASE 6: one Azure response fails; no false done or Drive file.
+          {
+            const rt = makeRuntime('H3-FASTPATH-CASE6');
+            const immutable = rt.sheet.rows.map(
+              row => [row[0],row[2],row[3],row[4],row[5],row[6],row[7],row[14]]
+            );
+            rt.setAzureFailure(2);
+            const result = runSet(rt);
+            assert(result.status === 'error', 'CASE6 batch failure did not fail');
+            assert(rt.sheet.rows.every(row => row[1] === 'error'), 'CASE6 published false done');
+            assert(rt.folder.files.length === 0, 'CASE6 created files before validating responses');
+            assert(
+              JSON.stringify(immutable) === JSON.stringify(rt.sheet.rows.map(
+                row => [row[0],row[2],row[3],row[4],row[5],row[6],row[7],row[14]]
+              )),
+              'CASE6 changed immutable evidence'
+            );
+          }
+
+          // CASE 7: interruption after one file; rerun reuses it without duplication.
+          {
+            const rt = makeRuntime('H3-FASTPATH-CASE7');
+            rt.folder.failOnCreateCall = 2;
+            const interrupted = runSet(rt);
+            assert(
+              interrupted.status === 'error' && rt.folder.files.length === 1,
+              'CASE7 interruption setup failed'
+            );
+            const firstId = rt.folder.files[0].getId();
+            rt.sheet.rows.forEach(row => {
+              if (row[1] === 'error') row[1] = 'pending';
+            });
+            const recovered = runSet(rt);
+            assert(recovered.status === 'done', 'CASE7 recovery failed');
+            assert(rt.folder.files.length === 5, 'CASE7 duplicate/conflicting output');
+            assert(
+              rt.folder.files.some(file => file.getId() === firstId),
+              'CASE7 did not reuse first saved file'
+            );
+            assert(rt.calls.fetchAll[1].length === 4, 'CASE7 regenerated recovered audio');
+          }
+
+          // CASE 8: 5W dispatch remains on runJob_.
+          {
+            const start = source.indexOf('function processPendingAudioForSet(');
+            const end = source.indexOf('function processLatestPendingAudioJob()', start);
+            const dispatch = source.slice(start, end);
+            assert(
+              dispatch.includes("normalizedMode === '5W'") && dispatch.includes('return runJob_('),
+              'CASE8 5W dispatch changed'
+            );
+          }
+
+          // CASE 9: SCRIPT_TXT stays outside the learner issue critical path.
+          {
+            const rt = makeRuntime('H3-FASTPATH-CASE9');
+            const result = runSet(rt);
+            assert(result.status === 'done', 'CASE9 did not finish');
+            assert(rt.calls.script === 0, 'CASE9 unexpectedly materialized SCRIPT_TXT');
+            assert(
+              !Object.prototype.hasOwnProperty.call(result, 'script_file_id') &&
+              !Object.prototype.hasOwnProperty.call(result, 'script_url'),
+              'CASE9 returned SCRIPT_TXT fields from the learner issue path'
+            );
+          }
+
+          console.log('5L audio fast-path regression checks passed.');
+          NODE
+
       - name: Check H3 normal hot-path invariants
         shell: bash
         run: |
@@ -3345,7 +2954,6 @@ jobs:
           node --check WebAppPreissue.js
           node --check WebAppReceipt.js
           node --check WebAppReviewPersistence.js
-          node --check MaintenanceR305.js
           python3 - <<'PY'
           from pathlib import Path
           text = Path('Client.html').read_text(encoding='utf-8').strip()

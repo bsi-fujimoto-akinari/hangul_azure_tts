@@ -1,975 +1,152 @@
 # H3 Review Architecture
 
-Version: H3-R3-09B-REVIEW-ARCHITECTURE-20260919-V2  
+Version: H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V1
 Status: R3_CLOSED_NORMAL_LIVE
 
-## 1. Purpose
+This document defines the current durable Review contract. Completed R3 phase chronology and device-validation evidence remain in Git history and Drive `06_AUDIT`.
 
-R3-09B freezes the learner-review architecture for Listening 5L before R3-10 full E2E audit.
+## 1. Authority and scope
 
-The design goal is:
+The persistent Review is the learner-facing explanation authority after a committed 5L transaction. It does not replace the production answer transaction, learner history, scheduler, retest state, K1_READY, locked payload, or individual audio authorities.
 
-```text
-issue -> answer -> COMMITTED -> full review in Web App
-                              -> persistent review reopen
-                              -> optional nonlearning replay
-```
+The implementation must not:
 
-The existing production answer transaction, learner history, scheduler, retest, K1_READY, locked set payload, and individual audio architecture remain authoritative and are not redesigned by R3-09B.
+- rewrite committed answers or learner history;
+- change score, counters, pointers, scheduler, or retest state;
+- regenerate K1 or Listening audio;
+- substitute data from another set;
+- treat replay results as learning transactions.
 
-R3-09B is architecture-only. It does not:
-- create or alter learner answers;
-- rewrite L02/L03 history;
-- advance counters or pointers;
-- change scheduler/retest state;
-- enable normal-live production;
-- change the current learner Web App behavior by itself.
+## 2. Source-of-truth model
 
-## 2. Architectural decision
+Review reconstruction requires exact agreement across:
 
-The Apps Script Web App becomes the complete learner surface for Listening:
+- `listening_web_txn_v1`: committed transaction authority;
+- `listening_log_v1`: committed per-question result/provenance;
+- locked 5L payload and source hashes;
+- `listening_explanation_payload_v1`: immutable explanation content;
+- `listening_review_binding_v1`: transaction/set/payload binding;
+- existing K1 image and K1-K5 individual audio bindings.
 
-1. issue and answering;
-2. grading;
-3. immediate full explanation;
-4. persistent review after the page has been closed;
-5. optional nonlearning replay.
+The transaction must be `COMMITTED`; the set, transaction, payload, result, explanation, item, binding, image, and audio identities must agree.
 
-Chat remains responsible for authoring/orchestration/audit and may verify a receipt, but a learner must not be required to send a receipt to Chat merely to obtain the explanation.
+## 3. Explanation payload
 
-The receipt remains useful as an audit/coordination pointer and preserves the existing backend transaction contract.
+The payload is authored before issue from the exact locked set and stored independently of browser state. It contains five ordered sections, learner-facing translations/explanations, correct-answer rationale, and source-lock hashes.
 
-## 3. Source-of-truth model
-
-Existing authorities remain unchanged:
-
-- `listening_web_txn_v1`
-  - canonical committed answer transaction;
-  - user answer vector, uncertainty, score, result, transaction identity.
-
-- `listening_log_v1`
-  - canonical learner result/history rows.
-
-- `listening_state_v1`
-  - canonical learner Listening runtime state.
-
-- `listening_set_payload_v1`
-  - immutable issued-set semantic payload, answer key, source provenance and audio binding.
-
-- `listening_k1_ready_v1`
-  - immutable bound K1 source after issue.
-
-- `listening_audio_queue_v1` + bound Drive MP3
-  - exact audio authority.
-
-R3-09B adds one new normative content source and one lightweight persistent review binding.
-
-## 4. Explanation payload
-
-New sheet:
-
-`listening_explanation_payload_v1`
-
-Row unit:
-
-`one LISTENING_SET_ID + one SECTION_KEY`
-
-Required fields:
+Canonical properties:
 
 ```text
-LISTENING_SET_ID
-SECTION_KEY
-EXPLANATION_REVISION_ID
-CREATED_AT
-STATUS
-EXPLANATION_JSON
-EXPLANATION_SHA256
-ITEM_PAYLOAD_SHA256
-RULE_VERSION
-EXPLANATION_SET_SHA256
-LOCKED_AT
-```
-
-Allowed `SECTION_KEY`:
-- K1
-- K2
-- K3
-- K4
-- K5
-
-Normal issue status:
-`LOCKED`
-
-There must be exactly five LOCKED rows for one future issued set.
-
-### 4.1 Content contract
-
-`EXPLANATION_JSON` is semantic content, not rendered HTML.
-
-It may contain:
-
-```text
-section
-body_ko
-body_ja
-choices[]
-correct_choice
-reason
-learning_blocks[]
-```
-
-`learning_blocks[]` may use the established explanation categories:
-- meaning;
-- grammar;
-- pronunciation;
-- vocabulary network;
-- collocation/related expression;
-- hanja.
-
-Rendering follows the active Listening and general quiz explanation rules. The payload must not contain scheduler/progress/storage meta commentary.
-
-### 4.2 Authoring timing
-
-For new sets after activation:
-
-```text
-final item payload
--> answer audit PASS
--> explanation authoring
--> explanation audit
--> explanation LOCKED
--> explanation exact readback/hash
--> audio/source-lock/preissue
--> learner issue
-```
-
-The explanation is prepared before learner issue but is never exposed before grading.
-
-This gives immediate postgrade review without generating explanation after the learner has already answered.
-
-### 4.3 Hash contract
-
-Each section has `EXPLANATION_SHA256`.
-
-`EXPLANATION_SET_SHA256` is computed from canonical compact JSON containing:
-
-```text
-LISTENING_SET_ID
-ITEM_PAYLOAD_SHA256
-RULE_VERSION
-ordered K1-K5 SECTION_KEY + EXPLANATION_REVISION_ID + EXPLANATION_SHA256
-```
-
-Order is exactly K1,K2,K3,K4,K5.
-
-Any mismatch is a STOP condition for future sets after the review architecture is activated.
-
-### 4.4 Immutability and corrections
-
-A LOCKED explanation row is immutable.
-
-Do not overwrite an issued explanation to improve wording later.
-
-A correction, if required, must be an append-only new `EXPLANATION_REVISION_ID`. The transaction-specific review binding determines the exact revision used for reproducibility.
-
-Correction-overlay UX is outside R3-09B v1.
-
-## 5. Persistent review binding
-
-New sheet:
-
-`listening_review_binding_v1`
-
-Row unit:
-
-`one committed production TXN_ID`
-
-Required fields:
-
-```text
-TXN_ID
-LISTENING_SET_ID
-LISTENING_SET_NO
-CREATED_AT
-STATUS
-RESULT_SHA256
-ITEM_PAYLOAD_SHA256
-EXPLANATION_SET_SHA256
-AUDIO_BINDING_SHA256
-K1_IMAGE_SHA256
-REVIEW_CONTRACT_ID
-REVIEW_BINDING_SHA256
-LOCKED_AT
-```
-
-Normal status:
-`LOCKED`
-
-This sheet does not replace the production journal.
-
-The production journal remains the answer authority. The review binding exists only to make exact review reconstruction explicit and stable.
-
-### 5.1 Binding hash
-
-`REVIEW_BINDING_SHA256` is computed from canonical compact JSON containing:
-
-```text
-TXN_ID
-LISTENING_SET_ID
-LISTENING_SET_NO
-RESULT_SHA256
-ITEM_PAYLOAD_SHA256
-EXPLANATION_SET_SHA256
-AUDIO_BINDING_SHA256
-K1_IMAGE_SHA256
-REVIEW_CONTRACT_ID
-```
-
-### 5.2 Commit relationship
-
-For new production transactions after activation, a COMMITTED transaction must not be returned to the learner unless the exact review binding can be read back and verified.
-
-Implementation may use PREPARED/LOCKED staging, but the invariant is:
-
-```text
-COMMITTED learner transaction
-=> exact persistent review is reopenable
-```
-
-A review-binding failure must never silently produce a transaction that is reported as successfully reviewable.
-
-The detailed transaction implementation is R3-09C scope.
-
-## 6. Review reconstruction
-
-Persistent review must be reconstructed from canonical persisted sources, never from browser memory.
-
-Exact inputs:
-
-```text
-TXN_ID
--> listening_web_txn_v1 exact COMMITTED row
--> exact LISTENING_SET_ID
--> listening_review_binding_v1 exact LOCKED row
--> listening_set_payload_v1 exact issued row
--> bound K1_READY
--> exact individual audio binding
--> exact five explanation rows / revisions
-```
-
-All hashes must match the review binding.
-
-Browser-local state is never the source of truth.
-
-Closing Safari, the ChatGPT in-app browser, or the Web App must not destroy the ability to reopen review.
-
-## 7. Web routes
-
-### 7.1 Learner launcher
-
-The parameterless Web App remains the preferred learner URL.
-
-It should expose two top-level destinations after implementation:
-
-- current learning;
-- review history.
-
-### 7.2 Persistent review route
-
-Authorized read-only route:
-
-```text
-mode=REVIEW&txn_id={TXN_ID}
-```
-
-Requirements:
-- exact existing COMMITTED production transaction;
-- exact LOCKED review binding;
-- all source-lock hashes pass;
-- no learner write;
-- no counter/pointer/scheduler mutation.
-
-An unknown, mismatched, non-COMMITTED, or hash-invalid transaction is a STOP condition.
-
-### 7.3 Internal navigation
-
-Normal learner navigation from the launcher/history list may construct the review route internally.
-
-Chat does not need to expose a long query-string URL for ordinary operation.
-
-## 8. Immediate postgrade review UI
-
-After successful COMMITTED grading, the same Web App transitions directly into full review mode.
-
-Top summary:
-
-```text
-score
-Q1-Q5 result strip
-filter: all / wrong / uncertain / correct
-```
-
-Per-question review block:
-
-```text
-Qx [display] result
-
-your answer
-correct answer
-uncertain marker when applicable
-
-inline audio player
-
-script / visible question surface
-
-full explanation
-- reason
-- needed grammar
-- pronunciation when learning-relevant
-- vocabulary network
-- collocation / contrast
-- hanja when relevant
-```
-
-K1 additionally retains the exact verified image.
-
-K2/K3 scripts that were hidden before grading become visible only after grading.
-
-### 8.1 Default emphasis
-
-For immediate review:
-- ×: explanation expanded;
-- △: explanation expanded;
-- ○: explanation may be collapsed by default but remains one tap away.
-
-The learner may freely expand/collapse any section.
-
-This is a presentation default only; it never changes learner history.
-
-
-## 8A. Frozen Review UI contract (V2)
-
-The learner-facing Review UI is frozen as follows.
-
-### 8A.1 Immediate postgrade landing
-
-```text
+SCHEMA=H3_PERSISTENT_REVIEW_PAYLOAD_V1
+ITEM_COUNT=5
+IMMUTABLE=true
 POSTGRADE_DEFAULT_VIEW=REVIEW
 DEFAULT_FILTER=NEEDS_REVIEW
-EXPAND_DEFAULT=WRONG,UNCERTAIN
-COLLAPSE_DEFAULT=CORRECT
 IMMEDIATE_REVIEW_BUILDER=PERSISTENT_REVIEW_BUILDER
 RECEIPT_UI=TECHNICAL_DETAILS_COLLAPSED
 ```
 
-Immediately after a successful COMMITTED transaction, the page must render the exact same persistent Review payload that a later reopen uses.
+Semantic hashes use canonical key ordering and explicit UTF-8 SHA-256. Any correction creates an explicit replacement/overlay contract; silent mutation of a committed payload is prohibited.
 
-A separate transient postgrade-only explanation implementation is prohibited.
+## 4. Persistent binding
 
-The initial filter preserves original Q1-Q5 order and hides only fully-correct `○` questions. The learner may switch to `ALL` at any time.
+`listening_review_binding_v1` binds exactly one committed TXN_ID and SET_ID to the explanation payload, result hash, locked item hash, image/audio identities, and binding hash. Duplicate or ambiguous bindings are invalid.
 
-### 8A.2 Summary surface
+Binding creation may occur only after exact source readback. It is metadata persistence, not a second learning transaction, and must not alter learner state.
 
-The top Review summary contains only learner-useful information:
+## 5. Reconstruction and HOME index
 
-```text
-5L set number
-score
-wrong count
-uncertain count
-Q1-Q5 result strip
-filter: 要復習 / 全問
-```
+HOME lists committed Review entries newest first and exposes at least date/time, 5L number, score, wrong count, and uncertainty count. Filters may include all, wrong, and uncertain.
 
-Do not make SET_ID, TXN_ID, hashes, scheduler state, or source metadata primary learner UI.
+HOME uses a lightweight eligibility index. It must not perform full payload reconstruction or deep hash validation. Opening a Review performs full source-lock validation through `buildPersistentReviewPayload_()` before revealing content.
 
-### 8A.3 Per-question Review card
+The current-learning resolver excludes committed sets and registered legacy Review sets. It may expose only an `ISSUED`, uncommitted, production-renderable set.
 
-Each question is one self-contained vertical Review card containing, in this order:
+## 6. Routes and launcher
+
+The learner launcher is the parameterless canonical Web App URL. Server boot resolves an active safe set as LISTENING; otherwise it renders HOME.
+
+Controlled internal routes remain available for diagnostics and in-app navigation:
 
 ```text
-Qx [section display] + result + inline audio control
-user answer + uncertain marker
-correct answer
-exact problem/script surface
-full explanation
+mode=SYSTEM_TEST&set_id={SET_ID}
+mode=LISTENING&set_id={SET_ID}
+mode=REVIEW&txn_id={TXN_ID}
+mode=REVIEW_REPLAY&txn_id={TXN_ID}
 ```
 
-For K1 the exact verified image is displayed in the same card.
+These routes are not the normal Chat handoff URL.
 
-For K2/K3 the Korean prompt/choices that were hidden before grading become visible after grading.
+## 7. Persistent Review UI
 
-For K4/K5 the passage, visible choices, Japanese/Korean surfaces, and explanation remain in one card.
+After grading, the Web App opens the persistent Review immediately. The learner sees one question card at a time, compact progress such as `Q1 ×`, source-bound media, the learner answer, the correct answer, translation, and explanation.
 
-Audio, script, and explanation must not require navigation to separate pages.
+Exactly one Review card is visible at a time. Navigation is provided by compact progress controls plus `再挑戦` and `ホーム`. Technical receipt/hash details remain collapsed by default.
 
-### 8A.4 Explanation presentation
+Audio and images are loaded from the original bound artifacts. Review must not generate or replace media.
 
-For `×` and `△`, full explanation is expanded by default.
+## 8. Review history library
 
-For `○`, full explanation is collapsed by default but remains immediately expandable.
+The parameterless HOME provides read-only access to committed Review entries. Selecting an entry opens its exact persistent Review. No learner-facing delete or edit operation exists.
 
-The full explanation follows the active H3 explanation rules and may include:
-- reason / decisive cue;
-- meaning;
-- grammar;
-- pronunciation only when H3/準2 learning value exists;
-- vocabulary network;
-- collocation / same-context contrast;
-- Hanja when relevant.
+Chat receipt submission is optional for ordinary learning because the Web App owns postgrade Review. Chat may verify receipts for audit/troubleshooting but must never repeat the backend mutation.
 
-System metadata, scheduler commentary, source-lock hashes, and progress diagnostics are not learner-facing explanation content.
+## 9. REVIEW_REPLAY
 
-### 8A.5 Audio behavior
+REVIEW_REPLAY reuses the original locked set and media for transient, nonlearning practice.
 
-The compact inline audio player remains on the question-title row when device width permits.
+Before local replay grading it hides the correct answer, prior answer, explanation, and protected Listening script content. After all local answers are supplied, it may reveal the already-persisted Review.
 
-Rules:
-- exact bound K1-K5 MP3 only;
-- one active player at a time;
-- replay freely during Review;
-- Drive link is fallback only;
-- playback-speed controls and sentence-level seeking are deferred from v1.
-
-### 8A.6 Technical details
-
-Receipt and transaction identifiers are retained but collapsed under a learner-secondary technical-details disclosure.
+Required result contract:
 
 ```text
-[技術情報]
-SET_ID
-TXN_ID
-receipt copy control
+SCHEMA=H3_REVIEW_REPLAY_RESULT_V1
+NONLEARNING=true
+PERSISTED=false
+RUNTIME_WRITE_COUNT=0
 ```
 
-The receipt must not interrupt the normal Review flow.
+Replay must not write learner history, `listening_state_v1`, scheduler/retest state, counters, pointers, production journals, K1_READY, payloads, or audio. It must never be interpreted as a formal retest.
 
-### 8A.7 Review history UI
+## 10. Failure policy
 
-The parameterless launcher Review library uses the minimum v1 filters:
+Persistent Review is fail-closed. STOP on:
 
-```text
-すべて
-要復習あり
-```
-
-Each history entry shows:
-- date/time;
-- 5L set number;
-- score;
-- wrong count;
-- uncertain count;
-- Review action;
-- Replay action when available.
-
-Default order is newest first.
-
-### 8A.8 Builder identity
-
-Both entry paths MUST call one server-side semantic builder:
-
-```text
-immediate COMMITTED result
-  -> TXN_ID
-  -> persistent Review builder
-  -> Review renderer
-
-later Review history / deep link
-  -> TXN_ID
-  -> the same persistent Review builder
-  -> the same Review renderer
-```
-
-This is a hard reproducibility invariant. Browser-local answer state must never be required to reconstruct the Review page.
-
-## 9. Review history library
-
-The parameterless launcher must provide a read-only review library derived from committed production transactions with valid review bindings.
-
-Minimum list information:
-
-```text
-date/time
-5L set number
-score
-wrong count
-uncertain count
-```
-
-Default order:
-newest first.
-
-Minimum filters:
-- all;
-- has wrong;
-- has uncertain.
-
-Selecting an entry opens the exact persistent REVIEW surface.
-
-No delete/edit operation is learner-facing in v1.
-
-## 10. REVIEW_REPLAY
-
-REVIEW_REPLAY is an optional nonlearning practice mode launched from a persistent review.
-
-Purpose:
-re-answer the same locked Listening surface before revealing its stored explanation.
-
-Rules:
-
-```text
-source = exact original set/audio
-new audio generation = prohibited
-new K1 generation = prohibited
-learning history write = prohibited
-listening_state write = prohibited
-scheduler/retest write = prohibited
-counter/pointer advance = prohibited
-production journal write = prohibited
-K1_READY mutation = prohibited
-```
-
-The replay hides:
-- correct answer;
-- prior user answer;
-- explanation;
-- K2/K3 scripts before local replay grading.
-
-After local replay completion, it may reveal the persistent review content.
-
-R3-09B v1 does not require replay-attempt persistence. Losing an unfinished replay on page close is acceptable because the canonical review itself remains permanently reopenable.
-
-Replay results must never be interpreted as a formal retest.
-
-## 11. Receipt and Chat ownership after activation
-
-The four-line receipt grammar remains unchanged:
-
-```text
-[H3_WEB_SYNC]
-SET_ID={LISTENING_SET_ID}
-TXN_ID=H3TX-YYYYMMDD-NNNNNN
-STATUS=COMMITTED
-```
-
-After review architecture activation:
-- the Web App renders the full explanation immediately;
-- sending the receipt to Chat is optional for the learner;
-- Chat may verify the receipt for audit/troubleshooting/coordination;
-- Chat must not duplicate backend answer/history writes;
-- a later `5L` request reads current backend state and does not require the previous receipt to have been pasted.
-
-This ownership change becomes active only after R3-09C/R3-09D implementation and verification.
-
-## 12. Legacy L03 compatibility
-
-L03 is already COMMITTED before R3-09B and therefore has no preissue explanation payload or review binding.
-
-R3-09B freezes the compatibility rule:
-
-- do not rewrite L03 answer history;
-- do not rewrite its production transaction;
-- do not change counters/pointers;
-- R3-09C may create a postcommit explanation payload and review binding for L03 only after exact transaction/set/source readback;
-- the backfill is review metadata, not a learning transaction;
-- the backfill must be explicitly marked `LEGACY_POSTCOMMIT_BACKFILL`;
-- no inferred answer or source data is permitted.
-
-L03 becomes the first real persistent-review validation fixture after implementation.
-
-## 13. Failure policy
-
-Persistent review is fail-closed.
-
-STOP conditions include:
-- missing transaction;
-- transaction not COMMITTED;
-- SET_ID mismatch;
-- missing or duplicate review binding;
-- missing explanation section;
-- explanation hash mismatch;
-- item payload hash mismatch;
-- audio binding mismatch;
-- K1 image hash mismatch;
+- missing, duplicate, non-COMMITTED, or mismatched transaction/binding;
+- explanation, result, item, or binding hash mismatch;
+- image/audio identity mismatch;
 - cross-set source mixing;
-- unresolved production RECOVERY_REQUIRED.
+- unresolved `RECOVERY_REQUIRED`;
+- any attempt to reconstruct missing facts by inference.
 
-On STOP:
-- do not fabricate explanation;
-- do not substitute another set;
-- do not regenerate learner history;
-- report a review-source-lock failure.
+On STOP, do not fabricate content, substitute another set, regenerate history, or reveal partially validated Review data.
 
-## 14. Storage
+## 11. Storage
 
-The existing 5L script TXT remains:
+The semantic Listening script remains `03_AUDIO/02_5L/{LISTENING_SET_ID}.txt` as a convenience/audit artifact. It is not the explanation authority. Canonical Review content is stored in Sheets and reconstructed by the Web App.
 
-`03_AUDIO/02_5L/{LISTENING_SET_ID}.txt`
+## 12. Current runtime contract
 
-It is a semantic listening script convenience/audit artifact, not the canonical explanation store.
+The active implementation includes:
 
-R3-09B does not require new Drive explanation TXT files.
+- persistent payload and binding validation;
+- UTF-8 canonical hashing;
+- parameterless HOME/current-learning resolution;
+- persistent Review media retrieval;
+- read-only Review history;
+- zero-write REVIEW_REPLAY;
+- normal-live production with no fixed-set arm;
+- fail-closed preissue for recovery, overload scheduling, and audio parity.
 
-Canonical review content is persisted in Sheets and reconstructed by the Web App.
+Current production behavior is audited directly from runtime code. Completed phase labels are not active runtime requirements.
 
-## 15. R3 phase plan
+## 13. Current learner UI contract
 
-```text
-R3-09B = REVIEW_ARCHITECTURE_FREEZE
-R3-09C = REVIEW_PERSISTENCE_IMPLEMENTATION
-R3-09D = REVIEW_WEB_UI_AND_ROUTE_IMPLEMENTATION
-R3-09E = REVIEW_REPLAY_LIBRARY_DEVICE_VALIDATION
-R3-10  = FULL_E2E_AUDIT including persistent review
-R3-11  = NORMAL_LIVE_ACTIVATION
-```
-
-R3-10 must not PASS until:
-- a committed learner transaction reopens after browser close;
-- audio/script/explanation are all exact-source-bound;
-- a review history entry reopens the same content;
-- REVIEW route is read-only;
-- REVIEW_REPLAY causes zero learner-runtime mutation;
-- iPhone and PC validation pass.
-
-## 16. R3-09B exit criteria
-
-R3-09B is PASS when:
-- this architecture is merged to protected main;
-- repository audit passes;
-- OPERATIONS.md references this contract;
-- H3_WEB_CHAT_CONTRACT.md records the target ownership transition;
-- no Apps Script learner behavior is changed by the freeze;
-- no learner Sheet/runtime/history write is performed;
-- next stage is R3-09C, not R3-10.
-
-## 17. R3-09D device validation
-
-R3-09D persistent Review was validated on iPhone in the ChatGPT in-app browser.
-
-Validated learner path:
-
-```text
-close previous Web App page
--> open parameterless HOME
--> persistent history shows 5L #2
--> tap 復習する
--> persistent L03 Review reopens from TXN_ID
-```
-
-Observed Review surface:
-- summary shows `3 / 5`;
-- result strip shows `Q1 × / Q2 △ / Q3 × / Q4 ○ / Q5 △`;
-- default filter is `要復習`, with `全問` available;
-- Q1 renders exact source-bound K1 image;
-- Q1 renders inline audio control;
-- Q1 shows learner answer `④ ?` and correct answer `③`;
-- persistent Review renders after browser/page closure and reopen;
-- prior `REVIEW_ITEM_PAYLOAD_SHA_MISMATCH` was eliminated by explicit UTF-8 semantic hashing.
-
-Canonical runtime readback after validation:
-- `listening_review_binding_v1` for `H3TX-20260919-000005` remains `LOCKED`;
-- learner answer/history/state/counters/pointers were not mutated by HOME or REVIEW access;
-- Review remains read-only.
-
-R3-09D exit:
-
-```text
-RESULT=PASS_DEVICE_VALIDATED
-NEXT=R3-09E REVIEW_REPLAY_LIBRARY_DEVICE_VALIDATION
-```
-
-R3-09D does not claim PC validation, REVIEW_REPLAY validation, or normal-live activation. Those remain later gates.
-
-## 18. R3-09E REVIEW_REPLAY implementation
-
-R3-09E implements the optional nonlearning replay surface defined in section 10.
-
-Replay entry points:
-- persistent Review -> `もう一度この5問を解く`;
-- HOME review-history entry -> `再挑戦`;
-- diagnostic deep route -> `mode=REVIEW_REPLAY&txn_id=<TXN_ID>`.
-
-Server contract:
-
-```text
-TXN_ID
--> exact COMMITTED transaction
--> exact LOCKED review binding
--> full persistent source-lock validation
--> replay issue payload
-```
-
-The replay issue payload contains only what is required to re-answer the original surface:
-- exact K1 source-bound image;
-- exact K1-K5 bound audio;
-- four choice IDs;
-- K4 Japanese visible choices;
-- K5 Korean visible choices.
-
-Before replay grading it does NOT expose:
-- prior learner answers;
-- correct answers;
-- explanations;
-- K2/K3 scripts.
-
-Replay grading is server-side but read-only:
-- validates all five answers;
-- reads the exact persisted Review source;
-- computes local `○/△/×` and score;
-- writes no production transaction;
-- writes no learner history;
-- writes no Listening state;
-- writes no scheduler/retest data;
-- advances no counter/pointer.
-
-After local grading, the response returns the same canonical persistent Review payload and a transient comparison:
-
-```text
-今回 {replay_score}/5
-元回答 {original_score}/5
-```
-
-The replay result itself is not persisted and must never be interpreted as a formal retest.
-
-R3-09E implementation state:
-
-```text
-RESULT=IMPLEMENTED_AWAITING_DEVICE_VALIDATION
-VALIDATION_TARGET=L03 / H3TX-20260919-000005
-NEXT=R3-09E iPhone replay + zero-mutation validation
-```
-
-PC validation and the final full E2E audit remain R3-10 scope.
-
-## 19. R3-09E UI refinement
-
-The iPhone validation feedback refines the learner UI without changing any runtime or persistence authority.
-
-### HOME
-
-HOME is compacted into:
-- one compact H3 5L header;
-- one inline current-5L status row;
-- one Review library card;
-- compact history rows with `復習` / `再挑戦` actions.
-
-The previous large explanatory hero/current-learning blocks are retired.
-
-### Persistent Review
-
-Persistent Review no longer uses a score/count/filter summary header.
-
-The primary Review navigation is exactly five question buttons:
-
-```text
-Q1 ×
-Q2 △
-Q3 ×
-Q4 ○
-Q5 △
-```
-
-Rules:
-- exactly one Review card is visible at a time;
-- tapping a Q button switches the visible card;
-- button text includes the persisted result;
-- the active Q button is visibly selected;
-- Review still renders exact image/audio/script/answer/explanation from the persistent source lock;
-- no `3/5`, wrong-count, uncertain-count, or `要復習/全問` Review header is shown.
-
-Review footer labels:
-- `再挑戦`;
-- `ホーム`.
-
-### REVIEW_REPLAY
-
-The standalone `再挑戦` explanatory block above the questions is removed.
-
-Replay begins directly with the same Q1-Q5 question navigation used by normal issue/replay surfaces. The nonlearning/write-zero contract is unchanged.
-
-R3-09E remains `IMPLEMENTED_AWAITING_DEVICE_VALIDATION` until this refined UI is revalidated on iPhone.
-
-## 20. R3-09E close
-
-R3-09E is closed after the learner replay/library path and the refined learner surface were accepted on iPhone, followed by an independent canonical zero-mutation readback.
-
-Canonical close readback for L03 / `H3TX-20260919-000005`:
-- `listening_web_txn_v1`: exactly one L03 transaction, still `COMMITTED`;
-- transaction ID remains `H3TX-20260919-000005`;
-- `listening_log_v1`: exactly five L03 learner rows, K1-K5 only;
-- `listening_state_v1`: `LISTENING_ISSUE_NO=2`, `NEXT_LISTENING_SET_NO=3`, `LAST_LISTENING_SET_ID=H3-20260919-L03`;
-- `listening_review_binding_v1`: exact L03 binding remains `LOCKED`;
-- `listening_set_payload_v1`: L03 remains `ISSUED`;
-- `listening_k1_ready_v1`: `H3-K1R-20260919-002` remains `CONSUMED`;
-- no replay transaction, learner-log row, counter, pointer, scheduler, retest, K1_READY, payload, or Review-binding mutation was created by HOME / REVIEW / REVIEW_REPLAY access.
-
-The replay attempt itself remains intentionally nonpersistent, so zero-mutation is verified from the absence of any additional canonical write surface rather than by a replay-history record.
-
-Device / UI evidence boundary:
-- the iPhone path for HOME, persistent Review, and REVIEW_REPLAY was observed during R3-09D/R3-09E validation;
-- the refined UI was merged and audited after learner feedback;
-- the user then authorized continuation of R3-09E;
-- canonical backend zero-mutation was independently re-read after that continuation.
-
-R3-09E exit:
-
-```text
-RESULT=PASS_DEVICE_VALIDATED_ZERO_MUTATION
-L03_PRODUCTION_TXN_COUNT=1
-L03_LEARNER_LOG_ROWS=5
-REVIEW_BINDING=LOCKED
-LISTENING_ISSUE_NO=2
-NEXT_LISTENING_SET_NO=3
-LAST_LISTENING_SET_ID=H3-20260919-L03
-NEXT=R3-10 FULL_E2E_AUDIT
-```
-
-R3-09E does not activate normal live production. R3-10 must still perform the full cross-layer E2E audit, including PC validation, before R3-11 normal-live activation.
-
-## 21. R3-10 audit status
-
-R3-10 has completed the current cross-layer read-only audit but has not passed.
-
-```text
-RESULT=BLOCKED_2
-R3-10-B1=Listening overload/retest plan remains stale after the committed L03 score
-R3-10-B2=PC persistent Review/Replay validation is still pending
-NORMAL_LIVE_ACTIVATION=BLOCKED
-```
-
-All of the following are currently PASS:
-- production transaction uniqueness / COMMITTED state;
-- learner history cardinality;
-- counters and valid-count updates;
-- per-section retest provenance;
-- artifact existence and source-lock binding;
-- persistent Review reopening on iPhone;
-- REVIEW_REPLAY zero-mutation behavior;
-- same-fingerprint idempotency and different-fingerprint conflict code paths;
-- no unresolved production recovery row.
-
-The scheduler blocker is not a learner-history corruption. It is a post-score planning synchronization gap: `NEXT_LISTENING_SET_NO` advanced to 3 while the stored `OVERLOAD_PLAN_JSON` remains a set-2 plan.
-
-R3-10 may close only after the scheduler plan is safely regenerated/persisted and the current persistent Review/Replay surface passes PC validation.
-
-## 22. R3-10 close
-
-The R3-10 interim blockers are closed.
-
-```text
-RESULT=PASS
-BLOCKING=0
-SCHEDULER_PLAN=H3_LISTENING_OVERLOAD_PLAN_V2
-NEXT_SET_NO=3
-NEXT_RETEST=K4
-PC_VALIDATION=OPTIONAL_NONBLOCKING_BY_DEFAULT
-NEXT=R3-11 NORMAL_LIVE_ACTIVATION
-```
-
-Scheduler close evidence:
-- the production transaction now recomputes and persists the next Listening retest plan after every scored 5L;
-- preissue rejects missing/stale/blocked scheduler plans;
-- the existing L03 state was backfilled from canonical history only;
-- learner answer/history/score/counter/pointer values were not rewritten;
-- the post-L03 plan is feasible with normal slots `3:K4,4:K1,5:K3,6:K2,7:K5` and no supplemental/overflow.
-
-Device policy after R3-10:
-- mobile/iPhone remains the primary learner-device validation surface;
-- PC validation is not a default blocker;
-- require PC only on explicit request or for a PC-specific change.
-
-Normal-live activation remains outside R3-10 and requires R3-11.
-
-## 23. R3-11 normal-live activation
-
-R3-11 activates the persistent Review architecture for ordinary future Listening production sets, not only the controlled L03 E2E set.
-
-```text
-PRODUCTION_GATE=NORMAL_LIVE_ACTIVE
-PRODUCTION_PREP_MODE=NORMAL_LIVE
-FIXED_SET_ARM=NONE
-NEXT_LISTENING_SET_NO=3
-CURRENT_LAST_SET=H3-20260919-L03
-```
-
-For every future normal-live set:
-- production issue/submit remains source-locked;
-- successful COMMITTED grading creates/locks the persistent Review binding;
-- postgrade and later reopen use the same Review builder;
-- REVIEW_REPLAY remains read-only/nonpersistent;
-- scheduler state is recomputed after each scored 5L;
-- normal live does not relax K1 image/audio/hash/recovery/idempotency gates.
-
-R3-11 activation itself performs no learner issue, grading, counter advancement, or Review creation.
-
-## 24. R3-11 close
-
-R3-11 normal-live activation is complete.
-
-Live canonical readback after Apps Script HEAD synchronization:
-
-```text
-RESULT=PASS
-PRODUCTION_GATE=NORMAL_LIVE_ACTIVE
-PRODUCTION_PREP_MODE=NORMAL_LIVE
-LISTENING_POLICY_ID=H3-LISTEN-POLICY-20260920-V7
-LISTENING_ISSUE_NO=2
-NEXT_LISTENING_SET_NO=3
-LAST_LISTENING_SET_ID=H3-20260919-L03
-OVERLOAD_STATUS=LISTENING_OVERLOAD_PLAN_READY
-FIXED_SET_ARM=NONE
-```
-
-Retired current-runtime controls:
-- `PREP_TARGET_SET_ID` is blank;
-- `R3_07_PREP_TARGET_SET_ID` is blank;
-- `E2E_TARGET_SET_ID` is blank;
-- `E2E_TARGET_K1_READY_ID` is blank.
-
-Activation integrity:
-- Apps Script main source was audited before runtime gate change;
-- Apps Script HEAD sync succeeded before Sheet activation;
-- production code contains no hard-coded production SET_ID arm;
-- no new 5L payload was generated or issued;
-- production transaction count remains 1;
-- learner log row count remains 10 total / 5 for L03;
-- learner counters, last-set pointer, scheduler plan and committed L03 history are unchanged.
-
-The system is now ready for the next ordinary `5L` learner request. That later request begins preparation of set no.3; R3-11 itself does not issue it.
-
-## 25. R3-12 infrastructure close
-
-R3 closes with normal-live Listening production active.
-
-```text
-R3_STATUS=R3_CLOSED_NORMAL_LIVE
-NORMAL_LIVE=ACTIVE
-PRODUCTION_GATE=NORMAL_LIVE_ACTIVE
-PRODUCTION_PREP_MODE=NORMAL_LIVE
-NEXT_LISTENING_SET_NO=3
-LAST_LISTENING_SET_ID=H3-20260919-L03
-R3_BLOCKING=0
-```
-
-R3-12 is infrastructure-only. It does not:
-- issue set no.3;
-- change learner answers/history;
-- change counters, valid-counts, pointer, scheduler, or retest obligations;
-- create Review/replay learning writes;
-- alter the production transaction path.
-
-R3-12 close duties:
-- snapshot the current V19 Listening render canonical as an immutable Drive release;
-- update the compact source manifest to the V19 release/current R3 close status;
-- snapshot the final CURRENT state;
-- archive superseded Chat-attached R2 HTML learner-surface diagnostics without changing their Drive IDs;
-- leave historical SYSTEM_TEST fixtures, status snapshots, learner history, and production artifacts intact.
-
-The next ordinary learner action is a `5L` request for set no.3 under the already-active normal-live path.
+HOME shows the current 5L when safe and a compact Review list; exactly one Review card is visible at a time. The standalone `再挑戦` explanatory block above the questions is removed. Replay uses the same compact question surface and reveals persistent Review only after local completion.
 
 ## 26. Legacy pre-Web Review compatibility
 
-One historical pre-Web set remains intentionally reviewable:
+The historical set below remains intentionally reviewable:
 
 ```text
 SET_ID=H3-20260919-L02
@@ -981,33 +158,8 @@ ORIGINAL_SCORE=1/5
 UNCERTAINTY_KNOWN=false
 ```
 
-This is a permanent compatibility surface, not an active migration stage.
+`listening_legacy_review_v1` stores its immutable binding. The original result is reconstructed from canonical `listening_log_v1`; no synthetic Web transaction or TXN_ID is created. HOME merges the entry with transaction-backed history and excludes the set from current-learning resolution.
 
-Required runtime:
-- `listening_legacy_review_v1` stores the immutable legacy binding.
-- The original result is re-derived from canonical `listening_log_v1`; no synthetic Web transaction is created.
-- HOME merges the legacy entry with transaction-backed Review history.
-- Registered legacy sets are excluded from current-learning resolution.
-- Review, media, and nonlearning replay use internal `legacy_review_id` routing.
-- Learner navigation remains parameterless; legacy IDs are not learner URL parameters.
-- Historical uncertainty that was never stored is rendered as unknown (`?—`).
-- Replay remains transient and must not mutate learner history, score, counters, pointers, scheduler, K1_READY, payload, or audio.
+Review/media/replay use internal `legacy_review_id` routing without learner URL parameters. Unknown historical uncertainty is rendered as `?—`. Replay is transient and must not mutate learner history, score, counters, pointers, scheduler, K1_READY, payload, or audio.
 
-The following one-shot migration helpers were removed after successful migration because repository-wide dependency scan found no runtime references:
-- `validateLegacyPersistentReviewBinding_()`
-- `h3LegacyReviewPhase2Preview_()`
-
-Phase-specific CI gates were replaced by one durable legacy Review compatibility audit. Detailed Phase 1-3 migration evidence remains recoverable from Git history and Drive `06_AUDIT`.
-
-## 27. Legacy 5L #1 migration close
-
-The three-stage 5L #1 backfill/migration is closed.
-
-Closure evidence:
-- learner-device HOME screenshot confirms the parameterless app shows Review history in order 5L #3, #2, #1;
-- 5L #1 is shown as `1/5`, `×4`, `?—`;
-- backend source/binding/hash checks passed before closure;
-- repository audit and Apps Script synchronization remain required after the slim-down commit;
-- no L02 synthetic `listening_web_txn_v1` row or transaction-backed Review binding may be introduced.
-
-Future work must treat the legacy layer as ordinary compatibility code. Reopening the completed migration stages is prohibited unless a new defect is demonstrated.
+One-shot migration helpers are absent from active code. Detailed migration and validation evidence remains recoverable from Git history and Drive `06_AUDIT`.

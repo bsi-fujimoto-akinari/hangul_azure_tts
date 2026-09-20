@@ -1050,3 +1050,38 @@ For the canonical parameterless learner URL, `h3WebBootRequest_()` now resolves 
 - Explicit `mode=LISTENING&set_id=...` remains internal/diagnostic only.
 
 This preserves the short URL while removing the extra HOME tap for an active learner set.
+
+## 24. Listening audio reliability patch
+
+A live iPhone 5L #3 session exposed a mobile audio UX defect:
+- while Q3 audio was playing, a background media prefetch failed with `NetworkError: Connection failure due to HTTP 0`;
+- the failure was rendered as a global page error even though the active Q3 audio remained playable;
+- automatic question transitions could leave the previous question audio playing when the next audio source was not yet attached;
+- revisiting/auto-entering a question could preserve a nonzero playback position.
+
+L04 K3 source audit confirmed that the canonical audio source itself was valid:
+- locked K3 item contains one prompt and four choices;
+- queue `AUDIO_PLAN_JSON` contains the prompt twice followed by each choice twice;
+- generated MP3 duration is 58.824 s;
+- non-silence exists from the start and again after the first repeat gap, consistent with the two prompt segments.
+
+Therefore L04 audio source/binding is not rewritten.
+
+V20 client behavior:
+- moving between questions always pauses audio from the previous question;
+- automatic answer-to-next-question navigation restarts the next question from its beginning;
+- background prefetch errors never create a global red page error;
+- media RPC failure receives one automatic retry;
+- after retry exhaustion, failure is shown only on that question's audio control with Drive fallback;
+- an active question may retry media loading again when revisited.
+
+V20 preissue behavior:
+- K1 queue `AUDIO_PLAN_JSON` must equal the bound K1_READY TTS segment list exactly;
+- K2/K3 queue projection must contain exactly two prompt segments followed by two segments for each of choices 1-4;
+- K2/K3 prompt/choice text must equal the locked item payload exactly;
+- all K2/K3 split segments must use `repeat=1`;
+- any projection mismatch blocks learner issue before exposure.
+
+Canonical render contract: `H3-LISTENING-RENDER-RULES-20260920-V20`.
+
+This patch does not rewrite the already-issued L04 payload, audio queue row, MP3, answers, history, scheduler, counter, pointer, or production transaction.

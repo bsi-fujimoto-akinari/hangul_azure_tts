@@ -1372,269 +1372,6 @@ function getPersistentReviewMediaPayload_(
   };
 }
 
-function h3ReviewHistoryEntries_(
-  spreadsheet
-) {
-  var bindingSheet =
-    spreadsheet.getSheetByName(
-      H3_REVIEW_BINDING_SHEET
-    );
-  var txnSheet =
-    spreadsheet.getSheetByName(
-      H3_WEB_PROD_TXN_SHEET
-    );
-
-  h3ReviewRequireExactHeader_(
-    bindingSheet,
-    H3_REVIEW_BINDING_HEADERS,
-    'REVIEW_BINDING'
-  );
-
-  if (!txnSheet) {
-    throw new Error(
-      'REVIEW_TXN_SHEET_MISSING'
-    );
-  }
-
-  var bindingTable =
-    h3ReviewTable_(
-      bindingSheet
-    );
-  var txnTable =
-    h3ReviewTable_(
-      txnSheet
-    );
-
-  h3ProdRequireColumns_(
-    txnTable,
-    [
-      'TXN_ID',
-      'SET_ID',
-      'LISTENING_SET_NO',
-      'MODE',
-      'RAW_INPUT_JSON',
-      'STATUS',
-      'RESULT_JSON',
-      'COMMITTED_AT'
-    ],
-    H3_WEB_PROD_TXN_SHEET
-  );
-
-  var txnById = {};
-  txnTable.rows.forEach(
-    function (row) {
-      var txnId = String(
-        row[txnTable.map.TXN_ID] ||
-        ''
-      );
-      if (!txnId) return;
-
-      if (txnById[txnId]) {
-        txnById[txnId] =
-          'DUPLICATE';
-        return;
-      }
-
-      txnById[txnId] = row;
-    }
-  );
-
-  var entries = [];
-
-  bindingTable.rows.forEach(
-    function (row) {
-      var map =
-        bindingTable.map;
-      var txnId = String(
-        row[map.TXN_ID] || ''
-      );
-
-      if (
-        !txnId ||
-        String(
-          row[map.STATUS] || ''
-        ) !== 'LOCKED' ||
-        !String(
-          row[map.LOCKED_AT] || ''
-        )
-      ) {
-        return;
-      }
-
-      var txnRow =
-        txnById[txnId];
-
-      if (
-        !txnRow ||
-        txnRow === 'DUPLICATE'
-      ) {
-        return;
-      }
-
-      if (
-        String(
-          txnRow[
-            txnTable.map.MODE
-          ] || ''
-        ) !== 'LISTENING' ||
-        String(
-          txnRow[
-            txnTable.map.STATUS
-          ] || ''
-        ) !== 'COMMITTED'
-      ) {
-        return;
-      }
-
-      var setId = String(
-        row[
-          map.LISTENING_SET_ID
-        ] || ''
-      );
-      var setNo = Number(
-        row[
-          map.LISTENING_SET_NO
-        ]
-      );
-
-      if (
-        String(
-          txnRow[
-            txnTable.map.SET_ID
-          ] || ''
-        ) !== setId ||
-        Number(
-          txnRow[
-            txnTable.map
-              .LISTENING_SET_NO
-          ]
-        ) !== setNo
-      ) {
-        return;
-      }
-
-      var result;
-      var rawInput;
-      try {
-        result =
-          h3ProdParseJson_(
-            txnRow[
-              txnTable.map.RESULT_JSON
-            ],
-            'REVIEW_HISTORY_RESULT_INVALID'
-          );
-        rawInput =
-          h3ProdParseJson_(
-            txnRow[
-              txnTable.map.RAW_INPUT_JSON
-            ],
-            'REVIEW_HISTORY_INPUT_INVALID'
-          );
-      } catch (err) {
-        return;
-      }
-
-      if (
-        !result ||
-        result.txn_id !== txnId ||
-        result.set_id !== setId ||
-        result.status !==
-          'COMMITTED' ||
-        !Array.isArray(
-          result.summary
-        ) ||
-        result.summary.length !== 5 ||
-        !rawInput ||
-        rawInput.mode !==
-          'LISTENING' ||
-        rawInput.set_id !==
-          setId ||
-        !Array.isArray(
-          rawInput.answers
-        ) ||
-        rawInput.answers.length !== 5
-      ) {
-        return;
-      }
-
-      var wrongCount = 0;
-      result.summary.forEach(
-        function (item) {
-          if (
-            item.result === '×'
-          ) {
-            wrongCount += 1;
-          }
-        }
-      );
-
-      var uncertainCount = 0;
-      rawInput.answers.forEach(
-        function (item) {
-          if (item.uncertain) {
-            uncertainCount += 1;
-          }
-        }
-      );
-
-      entries.push({
-        txn_id: txnId,
-        set_id: setId,
-        listening_set_no:
-          setNo,
-        committed_at: String(
-          txnRow[
-            txnTable.map.COMMITTED_AT
-          ] || ''
-        ),
-        score: Number(
-          result.score
-        ),
-        total: Number(
-          result.total
-        ),
-        wrong_count:
-          wrongCount,
-        uncertain_count:
-          uncertainCount,
-        needs_review:
-          result.summary.some(
-            function (item) {
-              return (
-                item.result !== '○'
-              );
-            }
-          ),
-        review_open_validation:
-          'FULL_SOURCE_LOCK_ON_OPEN'
-      });
-    }
-  );
-
-  entries.sort(function (a, b) {
-    var at =
-      String(a.committed_at || '');
-    var bt =
-      String(b.committed_at || '');
-
-    if (at !== bt) {
-      return at < bt ? 1 : -1;
-    }
-
-    return (
-      Number(
-        b.listening_set_no || 0
-      ) -
-      Number(
-        a.listening_set_no || 0
-      )
-    );
-  });
-
-  return entries.slice(0, 50);
-}
-
-
 function h3LegacyReviewResultFromLog_(
   spreadsheet,
   source
@@ -2441,6 +2178,269 @@ function h3LegacyReviewPhase2Preview_() {
       )
   };
 }
+
+function h3ReviewHistoryEntries_(
+  spreadsheet
+) {
+  var bindingSheet =
+    spreadsheet.getSheetByName(
+      H3_REVIEW_BINDING_SHEET
+    );
+  var txnSheet =
+    spreadsheet.getSheetByName(
+      H3_WEB_PROD_TXN_SHEET
+    );
+
+  h3ReviewRequireExactHeader_(
+    bindingSheet,
+    H3_REVIEW_BINDING_HEADERS,
+    'REVIEW_BINDING'
+  );
+
+  if (!txnSheet) {
+    throw new Error(
+      'REVIEW_TXN_SHEET_MISSING'
+    );
+  }
+
+  var bindingTable =
+    h3ReviewTable_(
+      bindingSheet
+    );
+  var txnTable =
+    h3ReviewTable_(
+      txnSheet
+    );
+
+  h3ProdRequireColumns_(
+    txnTable,
+    [
+      'TXN_ID',
+      'SET_ID',
+      'LISTENING_SET_NO',
+      'MODE',
+      'RAW_INPUT_JSON',
+      'STATUS',
+      'RESULT_JSON',
+      'COMMITTED_AT'
+    ],
+    H3_WEB_PROD_TXN_SHEET
+  );
+
+  var txnById = {};
+  txnTable.rows.forEach(
+    function (row) {
+      var txnId = String(
+        row[txnTable.map.TXN_ID] ||
+        ''
+      );
+      if (!txnId) return;
+
+      if (txnById[txnId]) {
+        txnById[txnId] =
+          'DUPLICATE';
+        return;
+      }
+
+      txnById[txnId] = row;
+    }
+  );
+
+  var entries = [];
+
+  bindingTable.rows.forEach(
+    function (row) {
+      var map =
+        bindingTable.map;
+      var txnId = String(
+        row[map.TXN_ID] || ''
+      );
+
+      if (
+        !txnId ||
+        String(
+          row[map.STATUS] || ''
+        ) !== 'LOCKED' ||
+        !String(
+          row[map.LOCKED_AT] || ''
+        )
+      ) {
+        return;
+      }
+
+      var txnRow =
+        txnById[txnId];
+
+      if (
+        !txnRow ||
+        txnRow === 'DUPLICATE'
+      ) {
+        return;
+      }
+
+      if (
+        String(
+          txnRow[
+            txnTable.map.MODE
+          ] || ''
+        ) !== 'LISTENING' ||
+        String(
+          txnRow[
+            txnTable.map.STATUS
+          ] || ''
+        ) !== 'COMMITTED'
+      ) {
+        return;
+      }
+
+      var setId = String(
+        row[
+          map.LISTENING_SET_ID
+        ] || ''
+      );
+      var setNo = Number(
+        row[
+          map.LISTENING_SET_NO
+        ]
+      );
+
+      if (
+        String(
+          txnRow[
+            txnTable.map.SET_ID
+          ] || ''
+        ) !== setId ||
+        Number(
+          txnRow[
+            txnTable.map
+              .LISTENING_SET_NO
+          ]
+        ) !== setNo
+      ) {
+        return;
+      }
+
+      var result;
+      var rawInput;
+      try {
+        result =
+          h3ProdParseJson_(
+            txnRow[
+              txnTable.map.RESULT_JSON
+            ],
+            'REVIEW_HISTORY_RESULT_INVALID'
+          );
+        rawInput =
+          h3ProdParseJson_(
+            txnRow[
+              txnTable.map.RAW_INPUT_JSON
+            ],
+            'REVIEW_HISTORY_INPUT_INVALID'
+          );
+      } catch (err) {
+        return;
+      }
+
+      if (
+        !result ||
+        result.txn_id !== txnId ||
+        result.set_id !== setId ||
+        result.status !==
+          'COMMITTED' ||
+        !Array.isArray(
+          result.summary
+        ) ||
+        result.summary.length !== 5 ||
+        !rawInput ||
+        rawInput.mode !==
+          'LISTENING' ||
+        rawInput.set_id !==
+          setId ||
+        !Array.isArray(
+          rawInput.answers
+        ) ||
+        rawInput.answers.length !== 5
+      ) {
+        return;
+      }
+
+      var wrongCount = 0;
+      result.summary.forEach(
+        function (item) {
+          if (
+            item.result === '×'
+          ) {
+            wrongCount += 1;
+          }
+        }
+      );
+
+      var uncertainCount = 0;
+      rawInput.answers.forEach(
+        function (item) {
+          if (item.uncertain) {
+            uncertainCount += 1;
+          }
+        }
+      );
+
+      entries.push({
+        txn_id: txnId,
+        set_id: setId,
+        listening_set_no:
+          setNo,
+        committed_at: String(
+          txnRow[
+            txnTable.map.COMMITTED_AT
+          ] || ''
+        ),
+        score: Number(
+          result.score
+        ),
+        total: Number(
+          result.total
+        ),
+        wrong_count:
+          wrongCount,
+        uncertain_count:
+          uncertainCount,
+        needs_review:
+          result.summary.some(
+            function (item) {
+              return (
+                item.result !== '○'
+              );
+            }
+          ),
+        review_open_validation:
+          'FULL_SOURCE_LOCK_ON_OPEN'
+      });
+    }
+  );
+
+  entries.sort(function (a, b) {
+    var at =
+      String(a.committed_at || '');
+    var bt =
+      String(b.committed_at || '');
+
+    if (at !== bt) {
+      return at < bt ? 1 : -1;
+    }
+
+    return (
+      Number(
+        b.listening_set_no || 0
+      ) -
+      Number(
+        a.listening_set_no || 0
+      )
+    );
+  });
+
+  return entries.slice(0, 50);
+}
+
 
 function h3ReviewCurrentLearning_(
   spreadsheet

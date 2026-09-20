@@ -1,6 +1,6 @@
 # H3 Review Architecture
 
-Version: H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V6
+Version: H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V7
 Status: R3_CLOSED_NORMAL_LIVE
 
 This document defines the current durable Review contract. Completed R3 phase chronology and device-validation evidence remain in Git history and Drive `06_AUDIT`.
@@ -66,7 +66,7 @@ Binding creation may occur only after exact source readback. It is metadata pers
 
 ## 5. Reconstruction and HOME index
 
-HOME lists committed Review entries newest first and exposes provider-appropriate identity plus date/time, score, wrong count, and uncertainty count. Filters may include all, wrong, and uncertain.
+HOME lists committed Review entries newest first and exposes provider-appropriate identity plus date/time, score, wrong count, uncertainty count, and computed Review level. Provider filtering is the exclusive `L / W` control; sorting is `Newest / Priority`.
 
 HOME uses the derived `review_home_index_v1` as its only history source. The table stores one ACTIVE row per `KIND + SET_ID` with stable set number, stored answer timestamp, score/count metadata, Review locator/source mode, and precomputed `BASE_PRIORITY`. It is a display index only: it is not learner history, transaction authority, Review payload authority, or scheduler state.
 
@@ -167,7 +167,7 @@ ORIGINAL_SCORE=1/5
 UNCERTAINTY_KNOWN=false
 ```
 
-`listening_legacy_review_v1` stores its immutable binding. The original result is reconstructed from canonical `listening_log_v1`; no synthetic Web transaction or TXN_ID is created. HOME merges the entry with transaction-backed history and excludes the set from current-learning resolution.
+`listening_legacy_review_v1` stores its immutable binding. The original result is reconstructable from canonical `listening_log_v1`; no synthetic Web transaction or TXN_ID is created. For HOME, its lightweight metadata is represented only through `review_home_index_v1`; opening the legacy Review still uses the immutable legacy binding and full source validation.
 
 Review/media use internal `legacy_review_id` routing without learner URL parameters. Unknown historical uncertainty is rendered as `?—`. Replay is retired; legacy history remains Review-only and must not mutate learner history, score, counters, pointers, scheduler, K1_READY, payload, or audio.
 
@@ -201,7 +201,7 @@ the active Written provider.
 
 ## 28A. Written HOME and Review UI
 
-HOME merges immutable legacy Written history and production Written history.
+HOME does not read legacy or production Written Review tables directly. Their lightweight metadata is represented in `review_home_index_v1`; legacy and production persistent tables remain the authority only when opening the exact Review.
 Every Written entry carries `review_kind=WRITTEN`, preserves
 score/uncertainty metadata, and advertises
 `replay_capability=unavailable`.

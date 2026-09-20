@@ -2024,13 +2024,6 @@ function processListeningAudioSet_(
     };
   }
 
-  const script =
-    persistListeningSetScript_(
-      seed.parentSetId,
-      members,
-      c
-    );
-
   return {
     status: 'done',
     queue: 'listening_set',
@@ -2039,11 +2032,7 @@ function processListeningAudioSet_(
     listening_set_no:
       setNos[0],
     audio_mode:
-      'INDIVIDUAL_K1_K5_ONLY',
-    script_file_id:
-      script.file_id,
-    script_url:
-      script.url
+      'INDIVIDUAL_K1_K5_ONLY'
   };
 }
 
@@ -2353,6 +2342,79 @@ function persistListeningSetScript_(
     fileName,
     content,
     'HANGUL_5L_SCRIPT_V1'
+  );
+}
+
+
+/**
+ * Explicit/best-effort 5L semantic script materializer.
+ *
+ * This helper is intentionally outside the learner issue critical path.
+ * Callers may use it for review/audit artifact recovery after all five
+ * source-locked split audio rows are done.
+ */
+function persistListeningSetScript(
+  parentSetId
+) {
+  const setId =
+    String(parentSetId || '')
+      .trim();
+
+  if (
+    !setId ||
+    setId.length > 128 ||
+    /[\x00-\x1F]/
+      .test(setId)
+  ) {
+    throw new Error(
+      'Invalid LISTENING_SET_ID for script materialization.'
+    );
+  }
+
+  const c = config_();
+  const sheet =
+    listeningAudioSheet_(
+      c,
+      true
+    );
+  const members =
+    collectListeningSetRows_(
+      sheet,
+      setId
+    );
+
+  if (
+    members.length !==
+      HQ_LISTENING_SET_SIZE ||
+    members.some(
+      x => x.values[1] !== 'done'
+    )
+  ) {
+    throw new Error(
+      '5L script materialization requires exactly five done rows.'
+    );
+  }
+
+  const sections =
+    members
+      .map(x => x.values[5])
+      .sort();
+
+  if (
+    JSON.stringify(sections) !==
+    JSON.stringify([
+      'K1','K2','K3','K4','K5'
+    ])
+  ) {
+    throw new Error(
+      '5L script materialization requires exactly one K1-K5 row.'
+    );
+  }
+
+  return persistListeningSetScript_(
+    setId,
+    members,
+    c
   );
 }
 

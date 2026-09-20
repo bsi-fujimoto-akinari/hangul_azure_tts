@@ -2191,6 +2191,103 @@ jobs:
           }
           NODE
 
+      - name: Check parameterless direct boot
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+          review = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
+          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
+
+          boot_start = web.index('function h3WebBootRequest_(e)')
+          boot_end = web.index('function h3Sha256Hex_', boot_start)
+          boot = web[boot_start:boot_end]
+
+          for needle in [
+              'Object.keys(params)',
+              'SpreadsheetApp.openById(',
+              'h3ReviewCurrentLearning_(',
+              "mode = 'LISTENING';",
+              'current.set_id',
+          ]:
+              if needle not in boot:
+                  raise SystemExit(
+                      f'Parameterless direct boot invariant missing: {needle}'
+                  )
+
+          for needle in [
+              'function h3ReviewCurrentLearning_(',
+              "=== 'ISSUED'",
+              '!committed[setId]',
+              'buildProductionRenderPayload_({',
+          ]:
+              if needle not in review:
+                  raise SystemExit(
+                      f'Current-learning safety invariant missing: {needle}'
+                  )
+
+          for doc, needle in [
+              (ops, '### Parameterless direct boot'),
+              (ops, 'boot directly as LISTENING'),
+              (chat, '### Parameterless direct boot'),
+              (chat, 'the learner does not need to tap'),
+          ]:
+              if needle not in doc:
+                  raise SystemExit(
+                      f'Parameterless direct boot documentation missing: {needle}'
+                  )
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const source = fs.readFileSync('WebApp.js', 'utf8');
+
+          function runWithCurrent(current) {
+            const ctx = vm.createContext({
+              console,
+              Object,
+              SpreadsheetApp: {
+                openById: () => ({})
+              },
+              h3ReviewCurrentLearning_: () => current
+            });
+            vm.runInContext(source, ctx, {filename:'WebApp.js'});
+            return vm.runInContext(
+              'h3WebBootRequest_({parameter:{}})',
+              ctx
+            );
+          }
+
+          const active = runWithCurrent({
+            set_id: 'H3-20260920-L04',
+            listening_set_no: 3
+          });
+
+          if (
+            active.mode !== 'LISTENING' ||
+            active.set_id !== 'H3-20260920-L04'
+          ) {
+            throw new Error(
+              'Parameterless active-set boot did not resolve to LISTENING.'
+            );
+          }
+
+          const empty = runWithCurrent(null);
+          if (
+            empty.mode !== 'HOME' ||
+            empty.set_id !== null
+          ) {
+            throw new Error(
+              'Parameterless no-active-set boot did not fall back to HOME.'
+            );
+          }
+          NODE
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

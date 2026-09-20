@@ -46,7 +46,7 @@ SYSTEM_TEST reads `listening_web_test_txn_v1`, requires `MODE=SYSTEM_TEST`, and 
 
 5L reads `listening_web_txn_v1`, requires `MODE=LISTENING`, verifies the exact five `listening_log_v1` rows and `listening_state_v1` transition, and then relies on the Web App's persistent Review for ordinary explanation.
 
-The written journal/readback contract must be explicitly defined before 5W Web transactions use this receipt; Chat must not invent it.
+5W reads `written_web_txn_v1`, requires `MODE=WRITTEN`, exact committed queue-E poststate identity, and a matching `written_answer_sync_v1` row with `STATUS=COMMITTED` and `PHASE=CORE_COMPLETE`. The sync journal plan/hash and exact next-stage identity must agree with current `generation_log_v1`, `skill_queue_v1`, `generation_state_v1`, and `written_set_stage_v1`. Any `RECOVERY_REQUIRED`, mixed pre/post state, or missing CORE_COMPLETE sync is a STOP condition. Chat must never repeat backend generation-log, skill-queue, scheduler, or pointer mutations.
 
 ## 5. Failure behavior
 

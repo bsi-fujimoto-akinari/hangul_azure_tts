@@ -39,6 +39,7 @@ jobs:
               'WebAppProduction.js',
               'WebAppTransactionCommon.js',
               'WebAppWrittenProduction.js',
+              'WebAppWrittenAnswerSync.js',
               'WebAppProductionRender.js',
               'WebAppPreissue.js',
               'WebAppReceipt.js',
@@ -66,7 +67,7 @@ jobs:
           unexpected = sorted(tracked - allowed)
           missing = sorted({
               '.clasp.json', '.gitignore', 'Code.js',
-              'WebApp.js', 'WebAppFixture.js', 'WebAppProduction.js', 'WebAppTransactionCommon.js', 'WebAppWrittenProduction.js', 'ListeningBackendOrchestrator.js', 'WebAppProductionRender.js', 'WebAppPreissue.js', 'WebAppReceipt.js', 'Index.html',
+              'WebApp.js', 'WebAppFixture.js', 'WebAppProduction.js', 'WebAppTransactionCommon.js', 'WebAppWrittenProduction.js', 'WebAppWrittenAnswerSync.js', 'ListeningBackendOrchestrator.js', 'WebAppProductionRender.js', 'WebAppPreissue.js', 'WebAppReceipt.js', 'Index.html',
               'Stylesheet.html', 'Client.html', 'appsscript.json'
           } - tracked)
 
@@ -4354,6 +4355,321 @@ jobs:
             throw new Error('H3_WEB_SYNC roundtrip regression.');
           }
           console.log('H3_WEB_SYNC WRITTEN-compatible roundtrip: PASS');
+          NODE
+
+      - name: Check 5W Answer Sync production
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          sync = Path('WebAppWrittenAnswerSync.js').read_text(encoding='utf-8')
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+          written = Path('WebAppWrittenProduction.js').read_text(encoding='utf-8')
+
+          required = [
+              "var H3_WRITTEN_ANSWER_SYNC_SHEET =",
+              "'written_answer_sync_v1'",
+              "'H3_WRITTEN_ANSWER_SYNC_BACKEND-20260920-V1'",
+              "function h3WrittenSyncTxnRecord_(",
+              "function h3WrittenSyncQueueContext_(",
+              "function h3WrittenSyncBuildSkillTransition_(",
+              "function h3WrittenSyncBuildSchedulerPlan_(",
+              "function h3WrittenSyncBuildPlan_(",
+              "function h3WrittenSyncSnapshot_(",
+              "function h3WrittenSyncRecover_(",
+              "function h3WrittenAnswerSync_(",
+              "'RETEST_WRONG'",
+              "'RETEST_UNCERTAIN'",
+              "'CORRECT_ONCE'",
+              "'STABLE'",
+              "H3_WRITTEN_ACTIVE_WRONG_CAP = 5",
+              "H3_WRITTEN_RETEST_CAP_NORMAL = 2",
+              "H3_WRITTEN_RETEST_CAP_RISK = 3",
+              "H3_WRITTEN_RETEST_CAP_20Q = 8",
+              "'WRITTEN_SYNC_RUNTIME_MIXED'",
+              "'WRITTEN_SYNC_POSTSTATE_HASH_MISMATCH'",
+              "'READY_TO_PATCH'",
+          ]
+          # Runtime version contains WRITTEN-ANSWER-SYNC-BACKEND, but is prefixed H3-WRITTEN.
+          required[2] = "H3-WRITTEN-ANSWER-SYNC-BACKEND-20260920-V1"
+          for needle in required:
+              if needle not in sync:
+                  raise SystemExit(f'Answer Sync invariant missing: {needle}')
+
+          if "h3WrittenAnswerSync_(\n        writtenResult.txn_id" not in web:
+              raise SystemExit('WRITTEN submit is not connected to Answer Sync.')
+          if "var H3_WRITTEN_PRODUCTION_COMMIT_ENABLED = true;" not in written:
+              raise SystemExit('WRITTEN transaction D3 gate regressed.')
+
+          # Answer Sync must not rewrite queue/history or create Drive artifacts.
+          for forbidden in [
+              "queueSheet\n      .getRange",
+              "DriveApp.",
+              "appendRow([\n      txnId,\n      context.setId",  # D3 ownership remains in WrittenProduction only
+          ]:
+              if forbidden in sync:
+                  raise SystemExit(f'Answer Sync forbidden mutation surface: {forbidden}')
+
+          # Scheduler/runtime targets are explicit and bounded.
+          for target in [
+              "'generation_log_v1'",
+              "'skill_queue_v1'",
+              "'source_block_plan_v1'",
+              "'written_set_stage_v1'",
+              "'generation_state_v1'",
+          ]:
+              if target not in sync:
+                  raise SystemExit(f'Answer Sync target missing: {target}')
+
+          print('5W Answer Sync static contract: PASS')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+
+          const source = fs.readFileSync(
+            'WebAppWrittenAnswerSync.js',
+            'utf8'
+          );
+
+          const context = vm.createContext({
+            console,
+            h3Sha256Hex_: value =>
+              crypto.createHash('sha256')
+                .update(String(value), 'utf8')
+                .digest('hex'),
+            h3WrittenHeaderMap_: header =>
+              Object.fromEntries(header.map((name, i) => [String(name), i])),
+            H3_WEB_WRITTEN_SECTIONS: ['D2','D3','D4','D5','D6']
+          });
+
+          vm.runInContext(source, context, {
+            filename:'WebAppWrittenAnswerSync.js'
+          });
+
+          const run = expression =>
+            vm.runInContext(expression, context);
+          const copy = value =>
+            JSON.parse(JSON.stringify(value));
+          const assert = (condition, message) => {
+            if (!condition) throw new Error(message);
+          };
+
+          function transition(previous, event, previousSurface) {
+            context.__previous = previous;
+            context.__event = event;
+            context.__surface = previousSurface;
+            return copy(run(
+              'h3WrittenSyncBuildSkillTransition_(__previous,__event,__surface)'
+            ));
+          }
+
+          const baseEvent = {
+            skillId:'H3-P2-SK999',
+            setId:'H3-20260920-01',
+            qNo:1,
+            section:'D2',
+            bucket:'TOWMI',
+            surfaceHash:'surface-new',
+            answeredAt:'2026-09-20T17:30:00+09:00',
+            uncertain:false,
+            mark:'○'
+          };
+
+          const first = transition(null, baseEvent, null);
+          assert(first.EFFECTIVE_STATE === 'CORRECT_ONCE', '○ must become CORRECT_ONCE.');
+          assert(first.CORRECT_SPACED_COUNT === '1', 'First ○ count mismatch.');
+
+          const second = transition(
+            Object.assign({}, first, {
+              LAST_ISSUED_SET_ID:'H3-20260919-01',
+              LAST_RESULT:'○',
+              CORRECT_SPACED_COUNT:'1'
+            }),
+            Object.assign({}, baseEvent, {
+              setId:'H3-20260920-02',
+              surfaceHash:'surface-b'
+            }),
+            {
+              setId:'H3-20260919-01',
+              result:'○',
+              surfaceHash:'surface-a'
+            }
+          );
+          assert(second.EFFECTIVE_STATE === 'STABLE', 'Second spaced ○ must become STABLE.');
+          assert(second.STABILITY_STATUS === 'STABLE', 'Stable flag mismatch.');
+
+          const uncertain = transition(
+            Object.assign({}, first),
+            Object.assign({}, baseEvent, {
+              mark:'△',
+              uncertain:true
+            }),
+            null
+          );
+          assert(uncertain.EFFECTIVE_STATE === 'RETEST_UNCERTAIN', '△ state mismatch.');
+          assert(uncertain.CORRECT_SPACED_COUNT === '0', '△ must reset spaced evidence.');
+          assert(uncertain.RETEST_MIN_GAP_SETS === '2' && uncertain.RETEST_MAX_GAP_SETS === '5', '△ window mismatch.');
+
+          const wrong = transition(
+            Object.assign({}, first),
+            Object.assign({}, baseEvent, {
+              mark:'×',
+              uncertain:true
+            }),
+            null
+          );
+          assert(wrong.EFFECTIVE_STATE === 'RETEST_WRONG', '× state mismatch.');
+          assert(wrong.CORRECT_SPACED_COUNT === '0', '× must reset spaced evidence.');
+          assert(wrong.RETEST_MIN_GAP_SETS === '1' && wrong.RETEST_MAX_GAP_SETS === '3', '× window mismatch.');
+          assert(Number(wrong.WRONG_COUNT) === 1, '× counter mismatch.');
+          assert(Number(wrong.UNCERTAIN_COUNT) === 1, '×? uncertainty counter mismatch.');
+
+          const sourceHeader = [
+            'BLOCK_VARIANT','SET_OFFSET','Q_NO','SECTION',
+            'PRIMARY_BUCKET','TARGET_POOL','SELECTION_RULE','NOTES'
+          ];
+          const sourceMap = Object.fromEntries(
+            sourceHeader.map((name, i) => [name, i])
+          );
+          const displays = {
+            D2:'筆2／語彙',D3:'筆3／文法',D4:'筆4／置換',
+            D5:'筆5／共通',D6:'筆6／応答'
+          };
+          const pattern = [
+            ['TOWMI','TOWMI','OFFICIAL','NEWFMT','OFFICIAL'],
+            ['TOWMI','ERROR','TOWMI','OFFICIAL','TOWMI'],
+            ['TOWMI','TOWMI','OFFICIAL','OFFICIAL','TOWMI'],
+            ['TOWMI','TOWMI','TOWMI','ERROR','OFFICIAL']
+          ];
+          const sections = ['D2','D3','D4','D5','D6'];
+          const sourceRows = [];
+          let sourceRowNo = 2;
+          pattern.forEach((set, offsetIndex) => {
+            set.forEach((bucket, qIndex) => {
+              const values = [
+                '1',
+                String(offsetIndex + 1),
+                String(qIndex + 1),
+                displays[sections[qIndex]],
+                bucket,
+                'CORE',
+                'RULE',
+                ''
+              ];
+              sourceRows.push({
+                rowNumber:sourceRowNo++,
+                values:values.slice(),
+                object:Object.fromEntries(
+                  sourceHeader.map((name, i) => [name, values[i]])
+                )
+              });
+            });
+          });
+
+          context.__schedulerContext = {
+            sourceRows,
+            sourcePlan:{
+              headers:sourceHeader,
+              map:sourceMap,
+              rows:sourceRows.map(r => ({
+                rowNumber:r.rowNumber,
+                values:r.values.slice()
+              }))
+            },
+            stages:{
+              headers:[
+                'STAGE_ID','BLOCK_NO','SET_OFFSET','STATUS',
+                'QUESTIONS_LOG_TEMPLATE','ANSWER_KEY_JSON','QUESTION_META_JSON',
+                'Q1_AUDIO','Q2_AUDIO','Q3_AUDIO','Q4_AUDIO',
+                'Q5A1','Q5B1','Q5A2','SLOT_PATCH_JSON',
+                'ANSWER_POSITION_JSON','PRON_AUDIT_JSON','APPROVED_SOURCE',
+                'POLICY_ID','SOURCE_SNAPSHOT_ID','ACTUAL_SET_ID',
+                'CREATED_AT','ISSUED_AT','NOTES'
+              ],
+              rows:[],
+              map:{
+                STAGE_ID:0,BLOCK_NO:1,SET_OFFSET:2,STATUS:3,
+                QUESTION_META_JSON:6
+              }
+            },
+            nextBlockNo:2,
+            nextSetOffset:1
+          };
+          context.__projected = {
+            A:{object:{
+              SKILL_ID:'A',STATE_OVERRIDE:'RETEST_WRONG;SECTION=D3;DUE_MIN=1;DUE_MAX=3;ORIGIN_BUCKET=TOWMI',
+              EFFECTIVE_STATE:'RETEST_WRONG',ELIGIBLE_OVERRIDE:'ELIGIBLE',
+              LAST_ISSUED_SET_ID:'H3-20260920-01',LAST_DAILY_ID:'H3-20260920-01-Q2',LAST_RESULT:'×'
+            }},
+            B:{object:{
+              SKILL_ID:'B',STATE_OVERRIDE:'RETEST_UNCERTAIN;SECTION=D6;DUE_MIN=2;DUE_MAX=5;ORIGIN_BUCKET=OFFICIAL',
+              EFFECTIVE_STATE:'RETEST_UNCERTAIN',ELIGIBLE_OVERRIDE:'ELIGIBLE',
+              LAST_ISSUED_SET_ID:'H3-20260919-03',LAST_DAILY_ID:'H3-20260919-03-Q5',LAST_RESULT:'△'
+            }}
+          };
+          context.__history = [
+            'H3-20260919-03',
+            'H3-20260920-01',
+            'H3-20260920-02'
+          ];
+          context.__latest = {
+            A:{bucket:'TOWMI'},
+            B:{bucket:'OFFICIAL'}
+          };
+          const schedule = copy(run(
+            'h3WrittenSyncBuildSchedulerPlan_(__schedulerContext,__projected,__history,__latest)'
+          ));
+          assert(schedule.assigned.length === 2, 'Normal retest cap fixture should assign two.');
+          assert(schedule.assigned[0].skillId === 'A', 'EDF/× priority mismatch.');
+          assert(schedule.ratio.TOWMI === 11 && schedule.ratio.OFFICIAL === 6 &&
+                 schedule.ratio.ERROR === 2 && schedule.ratio.NEWFMT === 1,
+                 '20Q source ratio changed.');
+
+          // Ratio-safe D5 swap: offset1 NEWFMT -> future offset2 OFFICIAL.
+          context.__projectedSwap = {
+            C:{object:{
+              SKILL_ID:'C',STATE_OVERRIDE:'RETEST_WRONG;SECTION=D5;DUE_MIN=1;DUE_MAX=3;ORIGIN_BUCKET=OFFICIAL',
+              EFFECTIVE_STATE:'RETEST_WRONG',ELIGIBLE_OVERRIDE:'ELIGIBLE',
+              LAST_ISSUED_SET_ID:'H3-20260920-01',LAST_DAILY_ID:'H3-20260920-01-Q4',LAST_RESULT:'×'
+            }}
+          };
+          context.__latestSwap = {C:{bucket:'OFFICIAL'}};
+          const swap = copy(run(
+            'h3WrittenSyncBuildSchedulerPlan_(__schedulerContext,__projectedSwap,__history,__latestSwap)'
+          ));
+          assert(swap.assigned.length === 1, 'Ratio-safe swap did not assign retest.');
+          assert(swap.swaps.length === 1, 'Expected one D5 ratio-safe swap.');
+          assert(swap.ratio.TOWMI === 11 && swap.ratio.OFFICIAL === 6 &&
+                 swap.ratio.ERROR === 2 && swap.ratio.NEWFMT === 1,
+                 'Swap failed to preserve 20Q ratio.');
+
+          // Snapshot expected-post is deterministic and bounded to exact write targets.
+          context.__pre = {
+            object:{
+              schema:'H3_WRITTEN_ANSWER_SYNC_SNAPSHOT_V1',
+              rows:[
+                {sheet:'generation_log_v1',row:2,width:2,values:['a','b']},
+                {sheet:'skill_queue_v1',row:3,width:2,values:['c','d']}
+              ]
+            }
+          };
+          context.__plan = {
+            writes:[
+              {sheet:'generation_log_v1',rowNumber:2,values:['x','y']},
+              {sheet:'skill_queue_v1',rowNumber:3,values:['m','n']}
+            ]
+          };
+          const post = copy(run(
+            'h3WrittenSyncExpectedPost_(__pre,__plan)'
+          ));
+          assert(post.object.rows[0].values.join(',') === 'x,y', 'Expected post gen row mismatch.');
+          assert(post.object.rows[1].values.join(',') === 'm,n', 'Expected post skill row mismatch.');
+
+          console.log('5W Answer Sync pure transition/scheduler tests: PASS');
           NODE
 
       - name: Check Listening audio source attestation

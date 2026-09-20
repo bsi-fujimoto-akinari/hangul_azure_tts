@@ -164,7 +164,7 @@ SCRIPT_TXT is not a preissue prerequisite. When needed for Review/audit convenie
 - Preissue is fail-closed for source-lock, recovery, scheduler overload, and audio parity.
 - Production transactions are atomic and idempotent, with journal and receipt integrity.
 - Persistent Review is reconstructed only from committed, locked, hash-valid sources.
-- HOME history uses a lightweight index; opening Review performs full source-lock validation.
+- HOME history reads only derived `review_home_index_v1`; `BASE_PRIORITY` is refreshed after committed answers, HOME computes only elapsed-time pressure, and opening Review performs full source-lock validation.
 - `REVIEW_REPLAY` is retired; active providers fail closed on replay requests.
 - SYSTEM_TEST remains an explicit allowlisted diagnostic route and must not mutate learner runtime.
 - HOME shows only the Review library. Each history card opens Review directly; provider selection is exclusive `L/W`, sorting is `Newest/Priority`, priority uses `H3_REVIEW_LEVEL_V2`, and the segmented control block is sticky. Review shows one question card at a time with compact progress and a full-width `ホーム` control.
@@ -329,18 +329,19 @@ before grading only.
 ## H3 Web / Review active manifest
 
 ```text
-MANIFEST_ID=H3-WEB-REVIEW-MANIFEST-20260920-V4
-ACTIVE_WEB_CHAT_CONTRACT=H3-WEB-CHAT-CURRENT-20260920-V5
+MANIFEST_ID=H3-WEB-REVIEW-MANIFEST-20260920-V5
+ACTIVE_WEB_CHAT_CONTRACT=H3-WEB-CHAT-CURRENT-20260920-V6
 ACTIVE_WEB_CHAT_CONTRACT_PATH=H3_WEB_CHAT_CONTRACT.md
-ACTIVE_WEB_CHAT_CONTRACT_BLOB_SHA=6724cfe7be87f79c3a3a524e164b44e59a15ae47
-ACTIVE_REVIEW_ARCHITECTURE=H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V5
+ACTIVE_WEB_CHAT_CONTRACT_BLOB_SHA=94ce43f904923d873bcf0a75b7fd915d3ca42ac4
+ACTIVE_REVIEW_ARCHITECTURE=H3-REVIEW-ARCHITECTURE-CURRENT-20260920-V6
 ACTIVE_REVIEW_ARCHITECTURE_PATH=H3_REVIEW_ARCHITECTURE.md
-ACTIVE_REVIEW_ARCHITECTURE_BLOB_SHA=3273073ee433795502cd8fd8f9e173d30f90ddb3
+ACTIVE_REVIEW_ARCHITECTURE_BLOB_SHA=1c7fd297ef5e6f373f74e2bb1d1a6f038f0edea8
 ACTIVE_WRITTEN_PRODUCTION_REVIEW_CONTRACT=H3-WRITTEN-PRODUCTION-REVIEW-CONTRACT-20260920-V1
 ACTIVE_WRITTEN_PRODUCTION_REVIEW_SCHEMA=H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1
 ACTIVE_WRITTEN_REVIEW_PAYLOAD_SHEET=written_review_payload_v1
 ACTIVE_WRITTEN_REVIEW_BINDING_SHEET=written_review_binding_v1
 ACTIVE_REVIEW_LEVEL_CONTRACT=H3_REVIEW_LEVEL_V2
+ACTIVE_REVIEW_HOME_INDEX_SHEET=review_home_index_v1
 LEARNER_CONTENT_AUTHORITY=WEB_APP_REVIEW_ONLY
 ```
 

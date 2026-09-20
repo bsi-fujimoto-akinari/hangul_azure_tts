@@ -1,187 +1,256 @@
 # H3 Reading Activation Core Contract
 
-Version: H3-READING-ACTIVATION-CORE-20260921-V2
-Status: PREISSUE_CAPABLE_ROUTE_INACTIVE
+Version: H3-READING-ACTIVATION-CORE-20260921-V3
+Status: SECTION_AWARE_PREISSUE_CAPABLE_ROUTE_INACTIVE
 
 ## 1. Scope
 
-This contract advances the staged P8 Reading pilot from a pure source/render prototype to a production-compatible activation core without issuing a learner set.
-
-It defines Reading-owned runtime identity, stage identity, transaction shape, submission normalization, preissue validation, committed-result projection, and current-learning candidate rules.
-
-This contract permits bounded Reading-only stage/schema materialization through `PREISSUE_READY`. It still does not issue any learner set, register a Web route, write learner answers/history, expose Reading through HOME, or persist Reading Review.
-
-## 2. Provider and surface identity
+This contract generalizes the Reading activation core from the existing P8 pilot to the complete 3級 Reading family:
 
 ```text
-provider_kind=WRITTEN
-surface_family=READING
-level=3級
-section_key=H3-P8
+section_key = H3-P8 | H3-P9 | H3-P10
+provider_kind = WRITTEN
+surface_family = READING
+level = 3級
 ```
 
-Reading remains a Written-provider surface but is not the 5W surface. It never inherits the D2-D6 fixed cardinality or the 5W 11/6/2/1 source-ratio policy.
+It defines section-aware runtime identity, stage identity, transaction shape, preissue validation, committed-result projection, and current-learning candidate rules.
+
+This contract permits bounded Reading-only stage materialization through `PREISSUE_READY`. It does not itself issue a learner set, enable Client submission, integrate Review/HOME, or activate scheduler/queue state.
+
+The already materialized P8 stage remains the only live Reading stage:
+
+```text
+ISSUE_NO=1
+STAGE_ID=READ-P8-20260921-001
+SET_ID=H3-20260921-R001
+STATUS=PREISSUE_READY
+```
+
+## 2. Reading source compatibility
+
+A locked source bundle must satisfy the common Reading source-lock contract and must use one of:
+
+- `H3-P8`
+- `H3-P9`
+- `H3-P10`
+
+The section in every question must match the locked bundle section. Skill IDs may be reused across Reading sections when canonical taxonomy maps them that way.
+
+P8 source and locked hashes remain immutable compatibility sentinels:
+
+```text
+P8 source_binding_sha256
+= a8c3a7c038fa251e195463a13157fb3683882ddef30d677d9962c58ff120761e
+
+P8 locked_bundle_sha256
+= df49acc7d2495bdbf786020e0e462786d42fc8aa30deba30d73d30b0c6a03f08
+```
 
 ## 3. Identity scope and allocation
 
-Reading owns its own issue sequence.
+Reading owns one ISSUE_NO sequence and one SET_ID allocation namespace across P8/P9/P10.
 
 ```text
 ISSUE_NO = ordinal within surface_family=READING
-STAGE_ID = Reading preparation identity
-SET_ID   = immutable learner-set identity allocated before stage lock
+
+SET_ID
+= H3-YYYYMMDD-RNNN
+
+STAGE_ID
+= READ-P{8|9|10}-YYYYMMDD-NNN
 ```
 
-Historical 5W and 5L ISSUE_NO values remain unchanged.
-
-Reading allocation is deterministic and independent of ISSUE_NO:
-
-```text
-SET_ID   = H3-YYYYMMDD-RNNN
-STAGE_ID = READ-P8-YYYYMMDD-NNN
-```
+Rules:
 
 - `YYYYMMDD` is the Asia/Tokyo allocation date.
-- `NNN` is the next unused Reading allocation serial for that date.
-- the `RNNN` suffix is an allocation serial, never the learner-facing ISSUE_NO;
-- ISSUE_NO is `max(existing Reading ISSUE_NO)+1`;
-- allocation scans the canonical Reading stage authority and fails closed on malformed or duplicate existing identities;
-- before the allocator runs, coordination still reports `SET_ID=PENDING_ALLOCATION`; no caller may predict the next ID.
+- `NNN` is the next unused Reading allocation serial for that date across all Reading sections.
+- SET_ID serial is shared across P8/P9/P10; it is not section-local.
+- STAGE_ID section must match the locked source section.
+- STAGE_ID date and serial must exactly match SET_ID date and serial.
+- ISSUE_NO is `max(existing Reading ISSUE_NO)+1`.
+- allocation fails closed on malformed, duplicate, or stage/set-parity-invalid historical identities.
+- before allocation, coordination reports `SET_ID=PENDING_ALLOCATION`; callers must not predict an ID.
 
-The first pilot may be materialized only after the exact source bundle has been freshly verified against the official source authorities.
+The legacy helper `h3ReadingAllocateIdentityFromStageRows_(datePart, rows)` remains as a P8 compatibility wrapper.
 
-## 4. Future physical authorities
+The general helper is:
 
-The activation core reserves the following authorities for a later bounded live-schema phase:
+```text
+h3ReadingAllocateIdentityForSection_(
+  sectionKey,
+  datePart,
+  rows
+)
+```
+
+## 4. Physical authorities
+
+Reading runtime authorities remain:
 
 - `reading_stage_v1`
 - `reading_web_txn_v1`
 - `reading_log_v1`
 
-The global H3TX allocator includes `reading_web_txn_v1` in its namespace scan. Missing physical sheet is valid before activation and contributes zero rows.
+The global H3TX allocator includes `reading_web_txn_v1`.
 
-No physical sheet is created in this phase.
+The stage table is section-neutral. SECTION_KEY distinguishes P8/P9/P10.
 
 ## 5. Stage contract
 
-A Reading stage binds exactly one locked Reading bundle to:
+A Reading stage binds one locked Reading bundle to:
 
 - ISSUE_NO
 - STAGE_ID
 - SET_ID
-- level
-- section_key
-- item_count
-- source_binding_sha256
-- locked_bundle_sha256
-- locked_bundle_json
+- STATUS
+- LEVEL
+- SECTION_KEY
+- ITEM_COUNT
+- SOURCE_BINDING_SHA256
+- LOCKED_BUNDLE_SHA256
+- LOCKED_BUNDLE_JSON
+- CREATED_AT
+- LOCKED_AT
+- ISSUED_AT
+- COMMITTED_AT
 
-Staged status begins as `LOCKED`. The stage persists the canonical locked bundle JSON itself, not only its hashes. A preissue validator may project `PREISSUE_READY` only when the exact locked bundle, stored JSON, stage identity, source binding, cardinality, and transaction state all agree. The stored JSON must canonicalize byte-for-byte to the fresh locked bundle and hash to `LOCKED_BUNDLE_SHA256`.
+Stage status begins as `LOCKED`. Preissue projects `PREISSUE_READY` only when exact source/hash/identity parity passes.
 
-The P8 pilot has item_count=2 and one shared passage.
+Stored `LOCKED_BUNDLE_JSON` must canonicalize to the fresh locked bundle and hash to `LOCKED_BUNDLE_SHA256`.
 
-## 6. Submission contract
+## 6. Materialization contracts
 
-Reading learner submission uses the common envelope:
+P8 compatibility materialization remains:
+
+```text
+h3ReadingBuildMaterializationPlan_(
+  datePart,
+  existingStages,
+  locked,
+  timestamp
+)
+```
+
+It is a wrapper for `H3-P8`.
+
+Section-aware materialization is:
+
+```text
+h3ReadingBuildSectionMaterializationPlan_(
+  sectionKey,
+  datePart,
+  existingStages,
+  locked,
+  timestamp
+)
+```
+
+The requested section must exactly equal `locked.section_key`.
+
+The section-aware plan returns schema:
+
+```text
+H3_READING_SECTION_MATERIALIZATION_PLAN_V1
+```
+
+No P9/P10 live materialization is authorized solely by this contract.
+
+## 7. Submission contract
+
+Reading learner submission remains:
 
 ```text
 schema=H3_WEB_SUBMIT_V1
 mode=WRITTEN
 provider_kind=WRITTEN
 surface_family=READING
-set_id=<exact set>
+set_id=<exact Reading SET_ID>
 answers=[
   {question_key, answer, uncertain},
   ...
 ]
 ```
 
-Question order is not inferred from repeated section=P8 values. Exact `question_key` is mandatory.
+Question identity is always `question_key`; repeated section names are never browser answer-state keys.
 
-## 7. Transaction contract
+## 8. Transaction contract
 
-The future `reading_web_txn_v1` journal is Reading-owned and uses the global H3TX namespace.
+`reading_web_txn_v1` remains the Reading-owned journal and uses the global H3TX namespace.
 
 Transaction fingerprint covers:
 
-- mode/provider/surface
+- provider/mode/surface
 - exact SET_ID
 - ordered question_key
 - answer position
 - explicit uncertainty
 
-The source binding is the exact locked Reading bundle source-binding hash.
+The source binding is the locked Reading bundle source-binding hash.
 
-This phase constructs and validates the transaction plan only. It does not append a journal row.
+Production commit is separately gated by `H3_READING_PRODUCTION_COMMIT_ENABLED_`.
 
-## 8. Preissue gate
+## 9. Preissue gate
 
-Reading preissue fails closed unless all of the following hold:
+Preissue fails closed unless:
 
-- stage schema/status/identity valid;
-- locked bundle schema is `H3_READING_LOCKED_BUNDLE_V1`;
-- provider/surface/level/section match;
-- stage item_count equals locked item count;
-- stage source-binding hash equals locked source-binding hash;
-- stage locked-bundle hash equals a fresh canonical hash of the locked bundle;
-- SET_ID is explicit and nonblank;
-- no committed Reading transaction is already bound to the exact SET_ID.
+- stage schema/identity are valid;
+- section is P8/P9/P10;
+- STAGE_ID section matches SECTION_KEY;
+- STAGE_ID date+serial match SET_ID date+serial;
+- locked bundle schema/provider/surface/level/section agree;
+- item_count agrees;
+- source-binding hash agrees;
+- locked-bundle hash agrees;
+- stored locked JSON canonicalizes to the exact locked bundle;
+- SET_ID is explicit;
+- no committed Reading transaction already binds the set;
+- stage has not already been issued or committed.
 
-The gate does not mutate any source.
+## 10. Result and retest projection
 
-## 9. Result and retest projection
+Exact grading delegates to `h3ReadingGrade_`.
 
-The activation core delegates exact grading to `h3ReadingGrade_`.
+Retest evidence remains question-level:
 
-A committed-result projection uses:
+- item_id
+- question_key
+- skill_id
+- result
+- passage_id
+- passage_sha256
 
-- `H3_WEB_SUBMIT_RESULT_V1`
-- mode=WRITTEN
-- provider_kind=WRITTEN
-- surface_family=READING
-- exact SET_ID / STAGE_ID / TXN_ID
-- score/total
-- per-question question_key/item_id/skill/result/uncertainty
-- source_binding_sha256
-- common four-line H3 Web receipt
+The shared passage remains provenance/context and is not itself a mastery key.
 
-Retest evidence remains question-level. The shared passage is provenance only and never a mastery key.
+## 11. Current-learning boundary
 
-## 10. Current-learning candidate boundary
+`h3ReadingCurrentLearning_` may resolve exactly one ISSUED, uncommitted, source-valid Reading stage. This contract does not merge Reading into parameterless HOME resolution.
 
-The pure candidate builder accepts only a stage that is:
-
-- `ISSUED`;
-- bound to an explicit SET_ID;
-- uncommitted;
-- source/hash-valid against the locked bundle.
-
-It returns a provider-neutral current-learning candidate but does not register it in HOME or provider routing.
-
-## 11. Explicit non-goals
+## 12. Explicit non-goals
 
 This phase does not:
 
-- append any learner transaction or answer log row;
-- activate a Reading GET/submit route;
-- modify `WebApp.js` dispatch;
-- modify HOME or Review provider persistence;
-- modify 5W transaction, Answer Sync, queue, scheduler, or ratio policy;
-- activate P8 skills in `skill_queue_v1`;
-- modify P9/P10;
-- modify Translation or 準2級;
-- issue or score any learner attempt.
+- create P9/P10 live stage rows;
+- allocate live P9/P10 SET_IDs;
+- issue P8, P9, or P10;
+- enable Reading Client submission;
+- enable Reading production commit;
+- integrate Reading Review/HOME;
+- activate P8/P9/P10 skill_queue rows;
+- modify 5W transaction, Answer Sync, source ratio, scheduler, history, pointer, or Review content;
+- modify Translation or 準2級.
 
-## 12. Next activation phase
+## 13. Next activation boundary
 
-After this core is merged and audited, the next bounded phase is:
+The next learner-facing Reading step remains serialized with Review/HOME work:
 
 ```text
-exact P8 PREISSUE_READY readback
-→ Reading route + transaction persistence wiring
-→ Review/HOME integration
-→ one pilot issue
+Reading Review/HOME persistence contract
+→ current-learning arbitration including READING
+→ enable Reading Client submit + production commit
+→ exact issue transition
+→ one P8 pilot issue
 → committed transaction/log verification
 ```
 
-Review/HOME integration remains serialized against any concurrent historical 5W Review write work.
+Until that shared boundary is available, P9/P10 may continue only as source-locked repository pilots and pure section-aware materialization tests.

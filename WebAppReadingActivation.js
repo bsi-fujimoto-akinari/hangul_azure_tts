@@ -6,7 +6,7 @@
  */
 
 var H3_READING_ACTIVATION_CONTRACT_ID_ =
-  'H3-READING-ACTIVATION-CORE-20260921-V2';
+  'H3-READING-ACTIVATION-CORE-20260921-V3';
 
 var H3_READING_STAGE_SCHEMA_ =
   'H3_READING_STAGE_V1';
@@ -189,33 +189,165 @@ function h3ReadingSetIdFromDateSerial_(
 }
 
 
-function h3ReadingStageIdFromDateSerial_(
-  sectionKey,
-  datePart,
-  serial
+function h3ReadingSectionCode_(
+  sectionKey
 ) {
+  var normalized =
+    String(sectionKey || '');
+
   if (
-    String(sectionKey || '') !==
-      'H3-P8'
+    [
+      'H3-P8',
+      'H3-P9',
+      'H3-P10'
+    ].indexOf(normalized) < 0
   ) {
     throw new Error(
       'READING_STAGE_SECTION_INVALID'
     );
   }
 
-  return (
-    'READ-P8-' +
-    String(datePart) +
-    '-' +
-    h3ReadingPad3_(serial)
+  return normalized.replace(
+    'H3-',
+    ''
   );
 }
 
 
-function h3ReadingAllocateIdentityFromStageRows_(
+function h3ReadingStageIdFromDateSerial_(
+  sectionKey,
+  datePart,
+  serial
+) {
+  var code =
+    h3ReadingSectionCode_(
+      sectionKey
+    );
+  var date =
+    String(datePart || '');
+  var normalizedSerial =
+    Number(serial);
+
+  if (
+    !/^\d{8}$/.test(date) ||
+    !Number.isInteger(normalizedSerial) ||
+    normalizedSerial < 1 ||
+    normalizedSerial > 999
+  ) {
+    throw new Error(
+      'READING_STAGE_ID_ALLOCATION_INVALID'
+    );
+  }
+
+  return (
+    'READ-' +
+    code +
+    '-' +
+    date +
+    '-' +
+    h3ReadingPad3_(
+      normalizedSerial
+    )
+  );
+}
+
+
+function h3ReadingParseSetId_(
+  setId
+) {
+  var match =
+    /^H3-(\d{8})-R(\d{3})$/
+      .exec(
+        String(setId || '')
+      );
+
+  if (!match) {
+    throw new Error(
+      'READING_SET_ID_FORMAT_INVALID'
+    );
+  }
+
+  return {
+    date_part:
+      match[1],
+    serial:
+      Number(match[2])
+  };
+}
+
+
+function h3ReadingParseStageId_(
+  stageId
+) {
+  var match =
+    /^READ-(P8|P9|P10)-(\d{8})-(\d{3})$/
+      .exec(
+        String(stageId || '')
+      );
+
+  if (!match) {
+    throw new Error(
+      'READING_STAGE_ID_FORMAT_INVALID'
+    );
+  }
+
+  return {
+    section_key:
+      'H3-' + match[1],
+    date_part:
+      match[2],
+    serial:
+      Number(match[3])
+  };
+}
+
+
+function h3ReadingValidateIdentityParity_(
+  sectionKey,
+  stageId,
+  setId
+) {
+  var expectedSection =
+    'H3-' +
+    h3ReadingSectionCode_(
+      sectionKey
+    );
+  var stage =
+    h3ReadingParseStageId_(
+      stageId
+    );
+  var set =
+    h3ReadingParseSetId_(
+      setId
+    );
+
+  if (
+    stage.section_key !==
+      expectedSection ||
+    stage.date_part !==
+      set.date_part ||
+    stage.serial !==
+      set.serial
+  ) {
+    throw new Error(
+      'READING_IDENTITY_PARITY_INVALID'
+    );
+  }
+
+  return true;
+}
+
+
+function h3ReadingAllocateIdentityForSection_(
+  sectionKey,
   datePart,
   rows
 ) {
+  var normalizedSection =
+    'H3-' +
+    h3ReadingSectionCode_(
+      sectionKey
+    );
   if (!/^\d{8}$/.test(String(datePart || ''))) {
     throw new Error(
       'READING_ALLOCATION_DATE_INVALID'
@@ -269,23 +401,44 @@ function h3ReadingAllocateIdentityFromStageRows_(
       seenSet[setId] = true;
       seenStage[stageId] = true;
 
-      var match =
-        /^H3-(\d{8})-R(\d{3})$/
-          .exec(setId);
-      if (!match) {
+      var setParsed =
+        h3ReadingParseSetId_(
+          setId
+        );
+      var stageParsed =
+        h3ReadingParseStageId_(
+          stageId
+        );
+
+      if (
+        stageParsed.date_part !==
+          setParsed.date_part ||
+        stageParsed.serial !==
+          setParsed.serial
+      ) {
         throw new Error(
-          'READING_ALLOCATION_EXISTING_SET_FORMAT_INVALID'
+          'READING_ALLOCATION_EXISTING_IDENTITY_PARITY_INVALID'
         );
       }
 
       if (
-        match[1] ===
+        row.section_key &&
+        String(row.section_key) !==
+          stageParsed.section_key
+      ) {
+        throw new Error(
+          'READING_ALLOCATION_EXISTING_SECTION_MISMATCH'
+        );
+      }
+
+      if (
+        setParsed.date_part ===
           String(datePart)
       ) {
         maxDateSerial =
           Math.max(
             maxDateSerial,
-            Number(match[2])
+            setParsed.serial
           );
       }
     }
@@ -303,7 +456,7 @@ function h3ReadingAllocateIdentityFromStageRows_(
   return h3ReadingActivationIdentity_(
     maxIssueNo + 1,
     h3ReadingStageIdFromDateSerial_(
-      'H3-P8',
+      normalizedSection,
       datePart,
       nextSerial
     ),
@@ -311,6 +464,18 @@ function h3ReadingAllocateIdentityFromStageRows_(
       datePart,
       nextSerial
     )
+  );
+}
+
+
+function h3ReadingAllocateIdentityFromStageRows_(
+  datePart,
+  rows
+) {
+  return h3ReadingAllocateIdentityForSection_(
+    'H3-P8',
+    datePart,
+    rows
   );
 }
 
@@ -402,7 +567,13 @@ function h3ReadingBuildStage_(
     locked.surface_family !==
       'READING' ||
     locked.level !== '3級' ||
-    locked.section_key !== 'H3-P8' ||
+    [
+      'H3-P8',
+      'H3-P9',
+      'H3-P10'
+    ].indexOf(
+      locked.section_key
+    ) < 0 ||
     !Array.isArray(
       locked.items
     ) ||
@@ -412,6 +583,12 @@ function h3ReadingBuildStage_(
       'READING_STAGE_LOCK_INVALID'
     );
   }
+
+  h3ReadingValidateIdentityParity_(
+    locked.section_key,
+    identity.stage_id,
+    identity.set_id
+  );
 
   return {
     schema:
@@ -473,6 +650,11 @@ function h3ReadingValidateStageLock_(
 
   h3ReadingActivationIdentity_(
     stage.issue_no,
+    stage.stage_id,
+    stage.set_id
+  );
+  h3ReadingValidateIdentityParity_(
+    stage.section_key,
     stage.stage_id,
     stage.set_id
   );
@@ -627,14 +809,32 @@ function h3ReadingStageRowValues_(
 }
 
 
-function h3ReadingBuildMaterializationPlan_(
+function h3ReadingBuildSectionMaterializationPlan_(
+  sectionKey,
   datePart,
   existingStages,
   locked,
   timestamp
 ) {
+  var normalizedSection =
+    'H3-' +
+    h3ReadingSectionCode_(
+      sectionKey
+    );
+
+  if (
+    !locked ||
+    locked.section_key !==
+      normalizedSection
+  ) {
+    throw new Error(
+      'READING_MATERIALIZATION_SECTION_MISMATCH'
+    );
+  }
+
   var identity =
-    h3ReadingAllocateIdentityFromStageRows_(
+    h3ReadingAllocateIdentityForSection_(
+      normalizedSection,
       datePart,
       existingStages
     );
@@ -672,9 +872,11 @@ function h3ReadingBuildMaterializationPlan_(
 
   return {
     schema:
-      'H3_READING_MATERIALIZATION_PLAN_V1',
+      'H3_READING_SECTION_MATERIALIZATION_PLAN_V1',
     activation_contract_id:
       H3_READING_ACTIVATION_CONTRACT_ID_,
+    section_key:
+      normalizedSection,
     identity:
       identity,
     stage:
@@ -686,6 +888,28 @@ function h3ReadingBuildMaterializationPlan_(
     preissue:
       preissue
   };
+}
+
+
+function h3ReadingBuildMaterializationPlan_(
+  datePart,
+  existingStages,
+  locked,
+  timestamp
+) {
+  var plan =
+    h3ReadingBuildSectionMaterializationPlan_(
+      'H3-P8',
+      datePart,
+      existingStages,
+      locked,
+      timestamp
+    );
+
+  plan.schema =
+    'H3_READING_MATERIALIZATION_PLAN_V1';
+
+  return plan;
 }
 
 

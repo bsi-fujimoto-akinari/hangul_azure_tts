@@ -5866,9 +5866,12 @@ jobs:
               raise SystemExit('Reading repeated section still aliases browser answer state.')
 
           for needle in [
-              "H3-READING-ACTIVATION-CORE-20260921-V2",
+              "H3-READING-ACTIVATION-CORE-20260921-V3",
               "function h3ReadingAllocateIdentityFromStageRows_(",
+              "function h3ReadingAllocateIdentityForSection_(",
               "function h3ReadingBuildMaterializationPlan_(",
+              "function h3ReadingBuildSectionMaterializationPlan_(",
+              "function h3ReadingValidateIdentityParity_(",
               "'LOCKED_BUNDLE_JSON'",
           ]:
               if needle not in activation and needle not in activation_contract:
@@ -6006,13 +6009,21 @@ jobs:
             activation.result !== 'PASS' ||
             activation.source_group_id !== '245' ||
             activation.item_count !== 2 ||
-            activation.checks !== 16 ||
+            activation.checks !== 22 ||
             activation.contract_id !==
-              'H3-READING-ACTIVATION-CORE-20260921-V2' ||
+              'H3-READING-ACTIVATION-CORE-20260921-V3' ||
             activation.allocated_set_id !==
               'H3-20260921-R001' ||
             activation.allocated_stage_id !==
               'READ-P8-20260921-001' ||
+            activation.p9_allocated_set_id !==
+              'H3-20260921-R002' ||
+            activation.p9_allocated_stage_id !==
+              'READ-P9-20260921-002' ||
+            activation.p10_allocated_set_id !==
+              'H3-20260921-R003' ||
+            activation.p10_allocated_stage_id !==
+              'READ-P10-20260921-003' ||
             !/^[0-9a-f]{64}$/.test(
               activation.locked_bundle_sha256
             ) ||

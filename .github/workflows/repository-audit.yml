@@ -1157,7 +1157,9 @@ jobs:
             'WebAppReviewListeningAdapter.js'
           ].map(name => fs.readFileSync(name, 'utf8')).join('\n');
 
-          const spreadsheet = {};
+          const spreadsheet = {
+            getSheetByName: () => null
+          };
           const context = vm.createContext({
             console,
             SpreadsheetApp: {
@@ -1224,13 +1226,26 @@ jobs:
               return Number(b.listening_set_no || 0) - Number(a.listening_set_no || 0);
             })
             .slice(0, 50);
+          baselineHistory.forEach(entry => {
+            entry.review_kind = 'LISTENING';
+            entry.review_level =
+              Number(entry.wrong_count || 0) * 12 +
+              (
+                entry.uncertainty_known === false
+                  ? 0
+                  : Number(entry.uncertain_count || 0) * 6
+              );
+            entry.review_level_contract = 'H3_REVIEW_LEVEL_V1';
+          });
           const expectedHome = {
             schema:'H3_WEB_HOME_V1',
             mode:'HOME',
             read_only:true,
             current_learning:current,
             review_history:baselineHistory,
-            review_filters:['ALL','NEEDS_REVIEW']
+            review_filters:['LISTENING','WRITTEN'],
+            review_sorts:['RECENT','REVIEW_LEVEL'],
+            review_level_contract:'H3_REVIEW_LEVEL_V1'
           };
           assert.deepStrictEqual(
             JSON.parse(JSON.stringify(actualHome)),
@@ -1269,18 +1284,18 @@ jobs:
             call("h3ReviewMediaRequest_({mode:'REVIEW',legacy_review_id:'L'})"),
             {route:'legacy-media'}
           );
-          assert.deepStrictEqual(
-            call("h3ReviewRenderRequest_({mode:'REVIEW_REPLAY',txn_id:'T'})"),
-            {route:'replay'}
-          );
-          assert.deepStrictEqual(
-            call("h3ReviewMediaRequest_({mode:'REVIEW_REPLAY',txn_id:'T'})"),
-            {route:'replay-media'}
-          );
-          assert.deepStrictEqual(
-            call("h3ReviewSubmitRequest_({mode:'REVIEW_REPLAY',txn_id:'T'})"),
-            {route:'replay-grade',runtime_write_count:0}
-          );
+          for (const expression of [
+            "h3ReviewRenderRequest_({mode:'REVIEW_REPLAY',txn_id:'T'})",
+            "h3ReviewMediaRequest_({mode:'REVIEW_REPLAY',txn_id:'T'})",
+            "h3ReviewSubmitRequest_({mode:'REVIEW_REPLAY',txn_id:'T'})"
+          ]) {
+            assert.throws(
+              () => vm.runInContext(expression, context),
+              error =>
+                String(error.message) ===
+                'REVIEW_REPLAY_RETIRED'
+            );
+          }
 
           context.h3ListeningReviewCurrentLearning_ = originalCurrent;
           context.h3ReviewTable_ = value => value;
@@ -2015,7 +2030,10 @@ jobs:
           const context = vm.createContext({
             console,
             SpreadsheetApp:{
-              openById:()=>({id:'RUNTIME'})
+              openById:()=>({
+                id:'RUNTIME',
+                getSheetByName:()=>null
+              })
             },
             H3_WEB_RUNTIME_SPREADSHEET_ID:'RUNTIME',
             h3ListeningReviewProvider_:()=>({
@@ -2182,7 +2200,8 @@ jobs:
               "app.payload.txn_id || null",
               "'技術情報'",
               "'ホーム'",
-              "'再挑戦'",
+              "'review-controls-sticky'",
+              "'復習Lv'",
           ]
           for needle in required_client:
               if needle not in client:
@@ -2209,7 +2228,7 @@ jobs:
           if 'Status: R3_CLOSED_NORMAL_LIVE' not in architecture:
               raise SystemExit('Review architecture staged status is not R3-09D.')
 
-          if '## 9. Persistent Review and replay' not in chat:
+          if '## 9. Persistent Review' not in chat:
               raise SystemExit('Web/Chat contract lacks persistent Review.')
 
           if 'function renderPersistentReview(' not in client:
@@ -2566,7 +2585,6 @@ jobs:
               "'review-progress-button'",
               'part.result',
               'function setReviewPage(',
-              "'再挑戦'",
               "'ホーム'",
           ]:
               if needle not in review:
@@ -2601,12 +2619,14 @@ jobs:
           home = client[home_start:home_end]
 
           for needle in [
-              "'home-title-row'",
-              "'home-current-strip'",
+              "'review-controls-sticky'",
               "'review-history-heading'",
               "'review-history-score'",
-              "'復習'",
-              "'再挑戦'",
+              "'聞きとり'",
+              "'筆記'",
+              "'復習Lv'",
+              'entry.written_set_no',
+              'openReviewHistoryEntry_(',
           ]:
               if needle not in home:
                   raise SystemExit(
@@ -2614,12 +2634,14 @@ jobs:
                   )
 
           for needle in [
-              '.home-current-strip',
+              '.review-controls-sticky',
+              'position: sticky',
               '.review-history-heading',
               '.review-progress',
               '.review-progress-button.current',
               '.persistent-review-card.review-active',
               '.review-footer-actions',
+              'grid-template-columns: minmax(0, 1fr)',
           ]:
               if needle not in style:
                   raise SystemExit(
@@ -2630,7 +2652,7 @@ jobs:
               '## 13. Current learner UI contract',
               'Q1 ×',
               'exactly one Review card is visible at a time',
-              'The standalone `再挑戦` explanatory block above the questions is removed.',
+              'History cards are directly tappable',
           ]:
               if needle not in architecture:
                   raise SystemExit(
@@ -2640,8 +2662,8 @@ jobs:
           if '## 9. Current production and Review invariants' not in operations:
               raise SystemExit('OPERATIONS lacks the current Review UI contract.')
 
-          if '## 9. Persistent Review and replay' not in chat:
-              raise SystemExit('Web/Chat contract lacks the current Review surface.')
+          if 'H3_REVIEW_LEVEL_V1' not in chat:
+              raise SystemExit('Web/Chat contract lacks the current HOME priority contract.')
           PY
 
       - name: Check scheduler overload V3 behavior
@@ -2780,7 +2802,6 @@ jobs:
               "params.mode ===\n      'LISTENING'",
               "params.mode ===\n      'SYSTEM_TEST'",
               "params.mode ===\n      'REVIEW'",
-              "params.mode ===\n      'REVIEW_REPLAY'",
           ]:
               if needle not in code:
                   raise SystemExit(f'Learner route allowlist missing: {needle}')
@@ -2796,10 +2817,10 @@ jobs:
 
           for needle in [
               'function renderHome(payload)',
-              'payload.current_learning',
-              "'現在の5L'",
-              "'開く'",
-              'loadLearningSet(',
+              "'review-controls-sticky'",
+              "'聞きとり'",
+              "'筆記'",
+              "'復習Lv'",
           ]:
               if needle not in client:
                   raise SystemExit(f'HOME learner-open invariant missing: {needle}')

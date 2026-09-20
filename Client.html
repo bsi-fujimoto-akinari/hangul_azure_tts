@@ -1681,6 +1681,18 @@
       return;
     }
 
+    if (
+      result.mode === 'WRITTEN' &&
+      result.after_sync &&
+      result.after_sync.schema ===
+        'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1'
+    ) {
+      renderPersistentReview(
+        result.after_sync
+      );
+      return;
+    }
+
     var root =
       document.getElementById(
         'result'

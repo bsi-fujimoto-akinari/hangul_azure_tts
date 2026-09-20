@@ -63,6 +63,8 @@ Fresh binding requires `STATUS=READY`, blank `CONSUMED_AT`, blank `BOUND_LISTENI
 
 Consumption is post-issue only and changes only `STATUS=CONSUMED` and `CONSUMED_AT`. Audio completion, AUDIO_BOUND state, or a failed issue must not consume K1_READY. Missing or ambiguous state is a STOP condition; never infer, rebuild, or rebind it.
 
+`K1_READY_ONE_SHOT_V1`: persist uses one exact A:M readback; bind keeps one full prebind payload/image-SHA validation followed by one exact A:M post-bind readback. When only column L changed as authorized, do not repeat the Drive image blob/SHA validation.
+
 ## 7. Learner triggers, targeted audio, and receipts
 
 - `K1`: prepare and verify persistent K1_READY only.
@@ -105,6 +107,8 @@ Audio storage is:
 ```
 
 New 5L sets use K1-K5 individual audio only. Do not create new combined 5L audio. Preserve file IDs and URLs when moving verified artifacts. Hot canonical files retain current gates, hashes, pointers, and contracts; completed detail belongs in release/audit storage or Git history.
+
+SCRIPT_TXT is not a preissue prerequisite. When needed for Review/audit convenience, materialize it explicitly after the five audio rows are done with `persistListeningSetScript(SET_ID)`; failure to create this noncanonical TXT must not invalidate an otherwise-valid learner issue.
 
 ## 9. Current production and Review invariants
 

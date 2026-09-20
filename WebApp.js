@@ -9,7 +9,7 @@ function h3WebDoGet_(e) {
   template.bootJson = JSON.stringify(h3WebBootRequest_(e));
   return template
     .evaluate()
-    .setTitle('H3 5L')
+    .setTitle('H3')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
 }
 
@@ -35,6 +35,12 @@ function getListeningWebSet(request) {
     return buildProductionRenderPayload_(request);
   }
 
+  if (request && request.mode === 'WRITTEN') {
+    return buildWrittenProductionRenderPayload_(
+      request
+    );
+  }
+
   validateSystemTestRenderRequest_(request);
   return buildSystemTestRenderPayload_(
     request.set_id
@@ -56,6 +62,12 @@ function getListeningWebMedia(request) {
 
   if (request && request.mode === 'LISTENING') {
     return getProductionMediaPayload_(request);
+  }
+
+  if (request && request.mode === 'WRITTEN') {
+    throw new Error(
+      'WRITTEN_MEDIA_UNAVAILABLE'
+    );
   }
 
   return getSystemTestMediaPayload_(request);
@@ -151,6 +163,14 @@ function h3WebBootRequest_(e) {
         params.set_id
       );
     } else if (
+      params.mode === 'WRITTEN' &&
+      params.set_id
+    ) {
+      mode = 'WRITTEN';
+      setId = String(
+        params.set_id
+      );
+    } else if (
       params.mode === 'SYSTEM_TEST' &&
       h3SystemTestSetIdAllowed_(
         params.set_id
@@ -172,7 +192,18 @@ function h3WebBootRequest_(e) {
       );
 
     if (current) {
-      mode = 'LISTENING';
+      mode = String(
+        current.mode ||
+        'LISTENING'
+      );
+      if (
+        ['LISTENING', 'WRITTEN']
+          .indexOf(mode) < 0
+      ) {
+        throw new Error(
+          'CURRENT_LEARNING_MODE_INVALID'
+        );
+      }
       setId = String(
         current.set_id
       );

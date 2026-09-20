@@ -2738,20 +2738,17 @@ jobs:
           ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
 
           def body(text, name, next_name=None):
+              start_marker = f'function {name}('
+              start = text.find(start_marker)
+              if start < 0:
+                  raise SystemExit(f'Could not isolate {name}: start marker missing.')
               if next_name:
-                  pattern = (
-                      rf"function {re.escape(name)}\(.*?"
-                      rf"\n\}}\n\nfunction {re.escape(next_name)}\("
-                  )
-              else:
-                  pattern = rf"function {re.escape(name)}\(.*?\n\}}\n"
-              match = re.search(pattern, text, re.S)
-              if not match:
-                  raise SystemExit(f'Could not isolate {name}.')
-              value = match.group(0)
-              if next_name:
-                  value = value.rsplit(f'\n\nfunction {next_name}(', 1)[0]
-              return value
+                  end_marker = f'function {next_name}('
+                  end = text.find(end_marker, start + len(start_marker))
+                  if end < 0:
+                      raise SystemExit(f'Could not isolate {name}: next marker missing.')
+                  return text[start:end]
+              return text[start:]
 
           process_set = body(
               code,

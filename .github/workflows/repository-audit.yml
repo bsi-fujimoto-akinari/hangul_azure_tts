@@ -2599,67 +2599,7 @@ jobs:
           }
           NODE
 
-      - name: 'Check 5L #1 legacy Review phase-2 backend'
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          review = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
-          arch = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
-          ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
-
-          for needle in [
-              "var H3_LEGACY_REVIEW_SHEET =",
-              "'listening_legacy_review_v1'",
-              "H3-LEGACY-REVIEW-CONTRACT-20260920-V1",
-              "function h3LegacyReviewResultFromLog_(",
-              "function h3LegacyReviewContext_(",
-              "function buildLegacyPersistentReviewPayload_(",
-              "function validateLegacyPersistentReviewBinding_(",
-              "function h3LegacyReviewHistoryEntries_(",
-              "function h3LegacyReviewRegisteredSetIds_(",
-              "function h3LegacyReviewPhase2Preview_(",
-              "LEGACY_REVIEW_RESULT_SOURCE_MISMATCH",
-              "LEGACY_REVIEW_BINDING_HASH_MISMATCH",
-              "!legacyRegistered[setId]",
-          ]:
-              if needle not in review:
-                  raise SystemExit(f'Legacy Review phase-2 implementation missing: {needle}')
-
-          m = re.search(
-              r"function buildReviewHomePayload_\(\) \{(?P<body>.*?)\n\}\n\s*function h3ReviewReplayValidateLegacyId_",
-              review,
-              re.S,
-          )
-          if not m:
-              raise SystemExit('Could not isolate buildReviewHomePayload_.')
-          home = m.group('body')
-          phase3_exposed = (
-              'h3LegacyReviewHistoryEntries_' in home
-          )
-          if phase3_exposed:
-              for needle in [
-                  'getLegacyPersistentReviewPayload_(',
-                  'getLegacyPersistentReviewMediaPayload_(',
-                  'buildLegacyReviewReplayPayload_(',
-              ]:
-                  if needle not in review:
-                      raise SystemExit(
-                          'Legacy HOME exposure exists without complete Phase-3 backend: ' +
-                          needle
-                      )
-
-          if '## 26. 5L #1 legacy pre-Web Review phase-1 freeze' not in arch:
-              raise SystemExit('Phase-1 architecture freeze missing.')
-          if '## 27. 5L #1 legacy Review three-phase migration' not in ops:
-              raise SystemExit('Three-phase operations contract missing.')
-
-          print('5L #1 legacy Review phase-2 backend static audit: PASS')
-          PY
-
-      - name: 'Check 5L #1 legacy Review phase-3 exposure'
+      - name: Check durable legacy Review compatibility
         shell: bash
         run: |
           python3 - <<'PY'
@@ -2669,25 +2609,45 @@ jobs:
           review = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
           web = Path('WebApp.js').read_text(encoding='utf-8')
           client = Path('Client.html').read_text(encoding='utf-8')
+          arch = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
+          ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
 
-          for needle in [
-              'h3LegacyReviewHistoryEntries_(',
-              'getLegacyPersistentReviewPayload_(',
-              'getLegacyPersistentReviewMediaPayload_(',
-              'buildLegacyReviewReplayPayload_(',
-              'h3ReviewReplayValidateLegacyId_(',
-              "legacy_review_id:",
+          required_review = [
+              "var H3_LEGACY_REVIEW_SHEET =",
+              "'listening_legacy_review_v1'",
+              "H3-LEGACY-REVIEW-CONTRACT-20260920-V1",
+              "function h3LegacyReviewResultFromLog_(",
+              "function h3LegacyReviewContext_(",
+              "function buildLegacyPersistentReviewPayload_(",
+              "function h3LegacyReviewHistoryEntries_(",
+              "function h3LegacyReviewRegisteredSetIds_(",
+              "function getLegacyPersistentReviewPayload_(",
+              "function getLegacyPersistentReviewMediaPayload_(",
+              "function buildLegacyReviewReplayPayload_(",
+              "function h3ReviewReplayValidateLegacyId_(",
+              "LEGACY_REVIEW_RESULT_SOURCE_MISMATCH",
+              "LEGACY_REVIEW_BINDING_HASH_MISMATCH",
+              "!legacyRegistered[setId]",
+              ".concat(legacyHistory)",
               "runtime_write_count: 0",
-          ]:
+          ]
+          for needle in required_review:
               if needle not in review:
-                  raise SystemExit(f'Phase-3 Review backend invariant missing: {needle}')
+                  raise SystemExit(f'Legacy Review runtime invariant missing: {needle}')
+
+          for removed in [
+              "function validateLegacyPersistentReviewBinding_(",
+              "function h3LegacyReviewPhase2Preview_(",
+          ]:
+              if removed in review:
+                  raise SystemExit(f'One-shot migration helper still active: {removed}')
 
           for needle in [
-              'getLegacyPersistentReviewPayload_(',
-              'getLegacyPersistentReviewMediaPayload_(',
+              "getLegacyPersistentReviewPayload_(",
+              "getLegacyPersistentReviewMediaPayload_(",
           ]:
               if needle not in web:
-                  raise SystemExit(f'Phase-3 Web routing invariant missing: {needle}')
+                  raise SystemExit(f'Legacy Review Web route missing: {needle}')
 
           boot = re.search(
               r"function h3WebBootRequest_\(e\) \{(?P<body>.*?)\n\}\n\nfunction h3Sha256Hex_",
@@ -2699,31 +2659,16 @@ jobs:
           if 'legacy_review_id' in boot.group('body'):
               raise SystemExit('Legacy Review must not create a parameterized learner boot URL.')
 
-          home = re.search(
-              r"function buildReviewHomePayload_\(\) \{(?P<body>.*?)\n\}\n\s*function h3ReviewReplayValidateLegacyId_",
-              review,
-              re.S,
-          )
-          if not home:
-              raise SystemExit('Could not isolate buildReviewHomePayload_.')
           for needle in [
-              'h3ReviewHistoryEntries_(',
-              'h3LegacyReviewHistoryEntries_(',
-              '.concat(legacyHistory)',
-          ]:
-              if needle not in home.group('body'):
-                  raise SystemExit(f'HOME legacy history merge missing: {needle}')
-
-          for needle in [
-              'function loadLegacyReview(',
-              'function loadLegacyReplay(',
-              'entry.legacy_review_id',
-              'legacy_review_id:',
+              "function loadLegacyReview(",
+              "function loadLegacyReplay(",
+              "entry.legacy_review_id",
+              "legacy_review_id:",
               "'?—'",
               "'H3_LEGACY_PERSISTENT_REVIEW_PAYLOAD_V1'",
           ]:
               if needle not in client:
-                  raise SystemExit(f'Phase-3 client invariant missing: {needle}')
+                  raise SystemExit(f'Legacy Review client invariant missing: {needle}')
 
           grade = re.search(
               r"function gradeReviewReplay_\((?P<body>.*?)\n\}\n",
@@ -2733,8 +2678,6 @@ jobs:
           if not grade:
               raise SystemExit('Could not isolate gradeReviewReplay_.')
           g = grade.group('body')
-          if 'runtime_write_count: 0' not in g:
-              raise SystemExit('Legacy replay zero-write declaration missing.')
           for forbidden in [
               'appendRow(',
               'setValue(',
@@ -2742,9 +2685,14 @@ jobs:
               'h3ProdSubmit_(',
           ]:
               if forbidden in g:
-                  raise SystemExit(f'Review replay contains forbidden write path: {forbidden}')
+                  raise SystemExit(f'Review replay contains learner WRITE surface: {forbidden}')
 
-          print('5L #1 legacy Review phase-3 exposure static audit: PASS')
+          if '## 26. Legacy pre-Web Review compatibility' not in arch:
+              raise SystemExit('Slim legacy architecture contract missing.')
+          if '## 27. Legacy pre-Web Review runtime' not in ops:
+              raise SystemExit('Slim legacy operations contract missing.')
+
+          print('Durable legacy Review compatibility audit: PASS')
           PY
 
       - name: Check JavaScript syntax

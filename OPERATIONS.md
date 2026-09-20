@@ -1244,3 +1244,34 @@ Required validation:
 - iPhone ChatGPT in-app browser validation passes.
 
 Any failed gate leaves the legacy entry hidden and does not affect ordinary 5L production.
+
+## 28. 5L #1 legacy Review phase-2 close
+
+Status: `PASS`.
+
+Runtime/source changes completed:
+- GitHub PR #57 merged;
+- Apps Script source synchronized from audited main;
+- `listening_legacy_review_v1` created with one LOCKED L02 row;
+- five L02 explanation rows appended to `listening_explanation_payload_v1`;
+- `h3ReviewCurrentLearning_()` excludes registered `LEGACY_PRE_WEB` sets;
+- legacy history preview exists server-side but is not returned by HOME.
+
+No-write invariants preserved:
+- no synthetic `listening_web_txn_v1` row;
+- no L02 row in `listening_review_binding_v1`;
+- no learner-history rewrite;
+- no score rewrite;
+- no Listening set counter / valid-count / pointer change;
+- no scheduler/retest mutation;
+- no K1_READY mutation;
+- no payload/image/audio regeneration.
+
+Phase 3 remains required before learner exposure:
+1. merge legacy entries into HOME history;
+2. add legacy Review route/media/replay routing;
+3. show unknown historical uncertainty as unknown rather than zero;
+4. validate exact Review reopen/replay zero-mutation;
+5. validate on iPhone ChatGPT in-app browser.
+
+Until Phase 3 PASS, the L02 legacy registry is backend-only.

@@ -50,6 +50,7 @@ jobs:
               'ListeningBackendOrchestrator.js',
               'H3_WEB_CHAT_CONTRACT.md',
               'H3_REVIEW_ARCHITECTURE.md',
+    'H3_WEB_REVIEW_MANIFEST_CURRENT.txt',
               'Index.html',
               'Stylesheet.html',
               'Client.html',

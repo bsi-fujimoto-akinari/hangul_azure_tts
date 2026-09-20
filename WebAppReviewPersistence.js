@@ -3798,7 +3798,7 @@ function validateWrittenPersistentReviewBinding_(
       'H3_WRITTEN_REVIEW_PERSISTENCE_GATE_V1',
     status: 'PASS',
     read_only: true,
-    provider_active: false,
+    provider_active: true,
     set_id:
       payload.set_id,
     review_binding_sha256:
@@ -4032,7 +4032,7 @@ function validateWrittenPersistentReviewBackfill_() {
       'H3_WRITTEN_REVIEW_BACKFILL_GATE_V1',
     status: 'PASS',
     read_only: true,
-    provider_active: false,
+    provider_active: true,
     set_count:
       results.length,
     sets: results

@@ -2767,6 +2767,88 @@ jobs:
           if '## 9. Current production and Review invariants' not in operations:
               raise SystemExit('OPERATIONS lacks the current Review UI contract.')
 
+          # 5W Written Review explanations are structural, not disclosures.
+          helper_start = client.index('function isWritten5WReview_()')
+          card_start = client.index('function buildPersistentReviewCard(')
+          helper = client[helper_start:card_start]
+          card_end = client.index('function appendReviewTranslations(', card_start)
+          card = client[card_start:card_end]
+
+          for needle in [
+              "payload.kind === 'WRITTEN'",
+              "family === '5W'",
+              "isWritten5W ? 'section' : 'details'",
+              "container.open =",
+              "part.result !== '○'",
+              "'summary'",
+              "'解説'",
+          ]:
+              if needle not in helper:
+                  raise SystemExit(
+                      f'5W Review visibility helper invariant missing: {needle}'
+                  )
+
+          if helper.index('return container;') > helper.index('container.open ='):
+              raise SystemExit(
+                  'Written 5W Review reaches disclosure open-state logic.'
+              )
+
+          for forbidden in [
+              "document.createElement(\n        'details'\n      )",
+              "details.open =",
+          ]:
+              if forbidden in card:
+                  raise SystemExit(
+                      f'5W Review card still owns global disclosure behavior: {forbidden}'
+                  )
+
+          for needle in [
+              "buildReviewExplanationContainer_(",
+              "'review-explanation-body'",
+          ]:
+              if needle not in card:
+                  raise SystemExit(
+                      f'5W Review explanation body invariant missing: {needle}'
+                  )
+
+          if ".review-explanation-written" not in style:
+              raise SystemExit(
+                  'Written 5W Review scoped style is missing.'
+              )
+          if "white-space: pre-line;" not in style:
+              raise SystemExit(
+                  'Structured Written Review newlines are not preserved.'
+              )
+
+          # Technical information remains an independent disclosure.
+          if "document.createElement(\n        'details'\n      )" not in review:
+              raise SystemExit(
+                  'Review technical information is no longer a DETAILS disclosure.'
+              )
+          if "'review-technical'" not in review or "'技術情報'" not in review:
+              raise SystemExit(
+                  'Review technical disclosure contract changed.'
+              )
+
+          # Active learning must not depend on the 5W Review-only helper.
+          if 'isWritten5WReview_' in questions or 'review-explanation-written' in questions:
+              raise SystemExit(
+                  '5W Review-only visibility logic leaked into active learning.'
+              )
+
+          # Architecture must freeze scope and content-layer boundary.
+          for needle in [
+              '## 33. 5W Written Review explanation visibility and structured text',
+              'structurally always visible',
+              'Listening Review keeps its existing explanation disclosure behavior',
+              'active-learning rendering/answer behavior is unchanged',
+              'must preserve stored newline boundaries',
+          ]:
+              if needle not in architecture:
+                  raise SystemExit(
+                      f'5W Review canonical architecture invariant missing: {needle}'
+                  )
+
           if 'H3_REVIEW_LEVEL_V2' not in chat:
               raise SystemExit('Web/Chat contract lacks the current HOME priority contract.')
           PY

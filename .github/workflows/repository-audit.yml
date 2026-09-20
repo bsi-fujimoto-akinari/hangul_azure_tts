@@ -2725,6 +2725,126 @@ jobs:
           print('Minimal learner-facing Chat output contract: PASS')
           PY
 
+      - name: Check H3 normal hot-path invariants
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          code = Path('Code.js').read_text(encoding='utf-8')
+          preissue = Path('WebAppPreissue.js').read_text(encoding='utf-8')
+          contract = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
+          ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
+
+          def body(text, name, next_name=None):
+              if next_name:
+                  pattern = (
+                      rf"function {re.escape(name)}\(.*?"
+                      rf"\n\}}\n\nfunction {re.escape(next_name)}\("
+                  )
+              else:
+                  pattern = rf"function {re.escape(name)}\(.*?\n\}}\n"
+              match = re.search(pattern, text, re.S)
+              if not match:
+                  raise SystemExit(f'Could not isolate {name}.')
+              value = match.group(0)
+              if next_name:
+                  value = value.rsplit(f'\n\nfunction {next_name}(', 1)[0]
+              return value
+
+          process_set = body(
+              code,
+              'processListeningAudioSet_',
+              'listeningPlanTextByRole_',
+          )
+          for forbidden in [
+              'persistListeningSetScript_(',
+              'script_file_id',
+              'script_url',
+          ]:
+              if forbidden in process_set:
+                  raise SystemExit(
+                      f'5L audio critical path still requires SCRIPT_TXT: {forbidden}'
+                  )
+
+          for required in [
+              'function persistListeningSetScript_(',
+              'function persistListeningSetScript(',
+              'HANGUL_5L_SCRIPT_V1',
+          ]:
+              if required not in code:
+                  raise SystemExit(
+                      f'Deferred SCRIPT_TXT helper missing: {required}'
+                  )
+
+          if 'function h3PreissueRequireScript_(' not in preissue:
+              raise SystemExit('Explicit SCRIPT_TXT audit helper was removed.')
+
+          preissue_gate = body(
+              preissue,
+              'h3ProdValidatePreissueSet_',
+              'validateProductionPreissueSet',
+          )
+          for forbidden in [
+              'h3PreissueRequireScript_(',
+              'script_file_id',
+          ]:
+              if forbidden in preissue_gate:
+                  raise SystemExit(
+                      f'Production preissue still hard-requires SCRIPT_TXT: {forbidden}'
+                  )
+
+          bind = body(
+              code,
+              'bindK1ReadyToListeningSet_',
+              'assertBoundK1ReadyForSet_',
+          )
+          if bind.count('validateK1ReadyPayload_(') != 1:
+              raise SystemExit(
+                  'K1 bind must perform exactly one full payload/image validation before bind.'
+              )
+          for required in [
+              'const before =',
+              'const after =',
+              "after.status !== 'READY'",
+              "after.consumedAt !== ''",
+              'after.boundListeningSetId !== setId',
+              'if (i === 11)',
+              'K1_READY bind changed an unrelated field.',
+          ]:
+              if required not in bind:
+                  raise SystemExit(
+                      f'K1 bind exact readback invariant missing: {required}'
+                  )
+
+          for required in [
+              '## 23. NORMAL_HOTPATH_READBACK_V1',
+              '### A. K1 preparation readback',
+              '### B. 5L preparation and preissue readback',
+              '### C. H3_WEB_SYNC receipt verification readback',
+              '## 24. K1_READY_ONE_SHOT_V1',
+              'SCRIPT_TXT is explicitly outside the learner issue critical path',
+          ]:
+              if required not in contract:
+                  raise SystemExit(
+                      f'Hot-path canonical contract missing: {required}'
+                  )
+
+          for required in [
+              '## 30. Normal hot-path readback',
+              'K1_READY_ONE_SHOT_V1',
+              'persistListeningSetScript(SET_ID)',
+              'SCRIPT_TXT is not a preissue prerequisite',
+          ]:
+              if required not in ops:
+                  raise SystemExit(
+                      f'Hot-path operations contract missing: {required}'
+                  )
+
+          print('H3 normal hot-path audit: PASS')
+          PY
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

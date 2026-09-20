@@ -1,6 +1,6 @@
 # H3 Web / Chat Contract
 
-Version: H3-WEB-CHAT-CURRENT-20260920-V2
+Version: H3-WEB-CHAT-CURRENT-20260920-V3
 
 This document defines the current learner trigger, Web handoff, receipt, and minimal Chat response contract. Completed migration chronology remains in Git history.
 
@@ -94,6 +94,10 @@ choices, display headings, and source-binding identity. It never exposes
 `answer_pos`, `answer_text`, the answer key, or explanation before grading.
 Written current-learning has no pre-answer media dependency.
 
+For newly authored or unissued 5W sets, each question in `QUESTION_META_JSON` must also carry issue-locked Review authoring metadata. The Review object must include a Japanese body translation, exactly four choice translations whose Korean text exactly matches the issued choices, a nonblank rationale, and a learning-block array. Written render and new-submit fail closed when this metadata is missing or mismatched. Because `QUESTION_META_JSON` participates in `H3_WRITTEN_SOURCE_BINDING_V1`, the learner-facing explanation is source-locked before answer submission.
+
+Already issued or committed sets are immutable. A historical production repair may populate only the dedicated production Review payload/binding tables from already committed source/result evidence; it must not rewrite the issued stage, queue answer history, scheduler, counters, or pointers.
+
 The 5W UI keeps D2-D6 dynamic section order, renders Korean line breaks exactly,
 shows the `?` uncertainty control, and requires an explicit `採点` action
 after all five answers are selected. `リセット` is available only before
@@ -114,7 +118,7 @@ For 5L, SCRIPT_TXT is explicitly outside the learner issue critical path. Audio 
 
 Committed 5L answers open the persistent Review built from exact transaction, payload, binding, image, and audio sources. HOME lists committed Reviews. Opening a Review performs full source-lock validation.
 
-For 5W, a committed production answer must also materialize an immediate persistent Written Review and make the exact committed set available from HOME. A missing production Written Review is an implementation defect and must not be worked around by reproducing explanation or script content in Chat.
+For 5W, a committed production answer must also materialize an immediate persistent Written Review and make the exact committed set available from HOME. The production sequence is `WRITTEN COMMIT → Answer Sync CORE_COMPLETE → Written Review PREPARED/LOCKED → immediate Review response`. The Review binding must agree with the exact Written TXN_ID/SET_ID/STAGE_ID, result hash, Written source-binding hash, Review payload hash, and production Review contract. A missing or hash-invalid production Written Review is an implementation defect and must not be worked around by reproducing explanation or script content in Chat.
 
 REVIEW_REPLAY is nonlearning, reuses the original locked media, hides protected answers/explanation until local completion, and performs zero learner-runtime writes. Detailed invariants are in `H3_REVIEW_ARCHITECTURE.md`.
 

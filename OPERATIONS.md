@@ -392,7 +392,7 @@ TXN_ID=H3TX-YYYYMMDD-NNNNNN
 STATUS=COMMITTED
 ```
 
-Chat treats this as a pointer to canonical backend state, not as sufficient proof by itself. Chat must read back the authoritative journal/state, verify the committed transaction, and only then generate post-answer learner-facing output. Chat never duplicates the backend answer/history mutation.
+Chat treats this as a pointer to canonical backend state, not as sufficient proof by itself. Chat must read back the authoritative journal/state and verify the committed transaction. On PASS it replies exactly `問題なし`; on verification failure it replies exactly `問題あり`. Ordinary post-answer explanation is owned by the Web App / persistent Review. Chat never duplicates the backend answer/history mutation.
 
 The full frozen R3-04 contract is `H3_WEB_CHAT_CONTRACT.md`.
 
@@ -1022,7 +1022,7 @@ Normal 5L handoff:
 2. obtain the exact issued SET_ID;
 3. call/read `getListeningLearnerUrl(SET_ID)`;
 4. require `handoff_mode=HOME_PARAMETERLESS`;
-5. return only its `url` field.
+5. return only its `url` field, with no label, preamble, postamble, progress text, or audit commentary.
 
 The helper validates that the target set itself is production-renderable before returning HOME. HOME then independently resolves the latest `ISSUED`, uncommitted renderable set and exposes `現在の5L -> 開く`.
 
@@ -1224,3 +1224,14 @@ Device evidence supplied by the learner confirms the parameterless app HOME rend
 Closure uses that device evidence together with existing source-lock/hash checks and the durable static/runtime gates. Separate physical-device replay/audio operation is no longer a blocking migration gate after the learner explicitly requested closure; media bindings and zero-write replay remain protected by the durable runtime audit and normal defect handling.
 
 This closure does not remove the legacy compatibility layer itself. It removes only migration-only helpers, phase-specific CI, and migration-stage detail from hot canonical documentation.
+
+
+## 29. Minimal learner-facing Chat output
+
+Normal production Chat surfaces are intentionally minimal:
+
+- successful `5L` trigger -> the exact parameterless Web App URL only;
+- verified `[H3_WEB_SYNC]` -> `問題なし` only;
+- failed `[H3_WEB_SYNC]` verification -> `問題あり` only.
+
+This changes presentation only. Canonical backend verification, idempotency, source locks, preissue gates, scheduler checks, and recovery behavior remain mandatory. Detailed explanation belongs to the Web App / persistent Review unless the learner explicitly asks for it in a separate Chat turn.

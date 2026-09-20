@@ -2695,6 +2695,36 @@ jobs:
           print('Durable legacy Review compatibility audit: PASS')
           PY
 
+      - name: Check minimal learner-facing Chat output contract
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          contract = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
+          ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
+
+          required = [
+              '## 22. Minimal Chat output contract',
+              '問題なし',
+              '問題あり',
+              'parameterless Web App URL and nothing else',
+          ]
+          for needle in required:
+              if needle not in contract:
+                  raise SystemExit(f'Minimal Chat output contract missing: {needle}')
+
+          for needle in [
+              'successful `5L` trigger -> the exact parameterless Web App URL only',
+              'verified `[H3_WEB_SYNC]` -> `問題なし` only',
+              'failed `[H3_WEB_SYNC]` verification -> `問題あり` only',
+          ]:
+              if needle not in ops:
+                  raise SystemExit(f'Operations minimal-output rule missing: {needle}')
+
+          print('Minimal learner-facing Chat output contract: PASS')
+          PY
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

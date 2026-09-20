@@ -2647,6 +2647,94 @@ jobs:
           print('5L #1 legacy Review phase-2 backend static audit: PASS')
           PY
 
+      - name: Check 5L #1 legacy Review phase-3 exposure
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          review = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+          client = Path('Client.html').read_text(encoding='utf-8')
+
+          for needle in [
+              'h3LegacyReviewHistoryEntries_(',
+              'getLegacyPersistentReviewPayload_(',
+              'getLegacyPersistentReviewMediaPayload_(',
+              'buildLegacyReviewReplayPayload_(',
+              'h3ReviewReplayValidateLegacyId_(',
+              "legacy_review_id:",
+              "runtime_write_count: 0",
+          ]:
+              if needle not in review:
+                  raise SystemExit(f'Phase-3 Review backend invariant missing: {needle}')
+
+          for needle in [
+              'getLegacyPersistentReviewPayload_(',
+              'getLegacyPersistentReviewMediaPayload_(',
+          ]:
+              if needle not in web:
+                  raise SystemExit(f'Phase-3 Web routing invariant missing: {needle}')
+
+          boot = re.search(
+              r"function h3WebBootRequest_\(e\) \{(?P<body>.*?)\n\}\n\nfunction h3Sha256Hex_",
+              web,
+              re.S,
+          )
+          if not boot:
+              raise SystemExit('Could not isolate h3WebBootRequest_.')
+          if 'legacy_review_id' in boot.group('body'):
+              raise SystemExit('Legacy Review must not create a parameterized learner boot URL.')
+
+          home = re.search(
+              r"function buildReviewHomePayload_\(\) \{(?P<body>.*?)\n\}\n\nfunction h3ReviewReplayValidateLegacyId_",
+              review,
+              re.S,
+          )
+          if not home:
+              raise SystemExit('Could not isolate buildReviewHomePayload_.')
+          for needle in [
+              'h3ReviewHistoryEntries_(',
+              'h3LegacyReviewHistoryEntries_(',
+              '.concat(legacyHistory)',
+          ]:
+              if needle not in home.group('body'):
+                  raise SystemExit(f'HOME legacy history merge missing: {needle}')
+
+          for needle in [
+              'function loadLegacyReview(',
+              'function loadLegacyReplay(',
+              'entry.legacy_review_id',
+              'app.payload.legacy_review_id',
+              "'?—'",
+              "'H3_LEGACY_PERSISTENT_REVIEW_PAYLOAD_V1'",
+          ]:
+              if needle not in client:
+                  raise SystemExit(f'Phase-3 client invariant missing: {needle}')
+
+          grade = re.search(
+              r"function gradeReviewReplay_\((?P<body>.*?)\n\}\n",
+              review,
+              re.S,
+          )
+          if not grade:
+              raise SystemExit('Could not isolate gradeReviewReplay_.')
+          g = grade.group('body')
+          if 'runtime_write_count: 0' not in g:
+              raise SystemExit('Legacy replay zero-write declaration missing.')
+          for forbidden in [
+              'appendRow(',
+              'setValue(',
+              'setValues(',
+              'h3ProdSubmit_(',
+          ]:
+              if forbidden in g:
+                  raise SystemExit(f'Review replay contains forbidden write path: {forbidden}')
+
+          print('5L #1 legacy Review phase-3 exposure static audit: PASS')
+          PY
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

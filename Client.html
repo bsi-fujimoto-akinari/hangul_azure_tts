@@ -1300,6 +1300,21 @@
   function submitAnswers() {
     if (!allAnswered() || app.locked || app.submitting) return;
 
+    if (
+      [
+        'LISTENING',
+        'SYSTEM_TEST',
+        'WRITTEN'
+      ].indexOf(
+        app.payload && app.payload.mode
+      ) < 0
+    ) {
+      showError(
+        'この画面からは回答を送信できません。'
+      );
+      return;
+    }
+
     app.submitting = true;
     setInteractiveDisabled(true);
     updateLiveSummary();
@@ -1450,13 +1465,29 @@
         var tr =
           document.createElement('tr');
 
+        var displayedAnswer =
+          String(
+            row.answer
+          ) +
+          (
+            result.mode ===
+              'WRITTEN' &&
+            row.uncertain
+              ? '?'
+              : ''
+          );
+
         [
           'Q' + (index + 1),
-          row.answer,
+          displayedAnswer,
           String(
             row.correct_answer
           ),
-          row.result
+          (
+            row.result ||
+            row.mark ||
+            ''
+          )
         ].forEach(
           function (value) {
             var td =

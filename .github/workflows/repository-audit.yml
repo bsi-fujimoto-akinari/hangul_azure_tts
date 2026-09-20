@@ -567,7 +567,7 @@ jobs:
           prod = Path('WebAppProduction.js').read_text(encoding='utf-8')
 
           required = [
-              "H3-LISTENING-RENDER-RULES-20260920-V19",
+              "H3-LISTENING-RENDER-RULES-20260920-V20",
               "H3-L5E2E-R3-WEB-SURFACE-CONTRACT-20260919-V1",
               'function buildProductionRenderPayload_(',
               'function getProductionMediaPayload_(',
@@ -652,7 +652,7 @@ jobs:
           ctx.__req = {schema:'H3_WEB_RENDER_REQUEST_V1',mode:'LISTENING',set_id:'H3-20260919-L03'};
           const result = vm.runInContext('buildProductionRenderPayload_(__req)',ctx);
 
-          if (result.canonical_render_version !== 'H3-LISTENING-RENDER-RULES-20260920-V19')
+          if (result.canonical_render_version !== 'H3-LISTENING-RENDER-RULES-20260920-V20')
             throw new Error('Render version mismatch.');
           if (result.questions[1].visible_choices !== null || result.questions[2].visible_choices !== null)
             throw new Error('K2/K3 pregrade text leak.');
@@ -907,8 +907,8 @@ jobs:
               if retired in gate:
                   raise SystemExit(f'Retired preissue one-set invariant remains: {retired}')
 
-          if "H3-LISTENING-RENDER-RULES-20260920-V19" not in render:
-              raise SystemExit('R3-11 production render is not aligned to canonical V19.')
+          if "H3-LISTENING-RENDER-RULES-20260920-V20" not in render:
+              raise SystemExit('R3-11 production render is not aligned to canonical V20.')
           PY
 
       - name: Check R3-08 production client mode routing
@@ -922,7 +922,7 @@ jobs:
           required = [
               "mode: app.payload.mode,",
               ".getListeningWebMedia({",
-              "schema: 'H3_WEB_MEDIA_REQUEST_V1'",
+              "'H3_WEB_MEDIA_REQUEST_V1'",
               "schema: 'H3_WEB_SUBMIT_V1'",
           ]
           for needle in required:
@@ -1943,7 +1943,7 @@ jobs:
               if needle not in pre:
                   raise SystemExit(f'R3-11 preissue contract missing: {needle}')
 
-          if 'H3-LISTENING-RENDER-RULES-20260920-V19' not in render:
+          if 'H3-LISTENING-RENDER-RULES-20260920-V20' not in render:
               raise SystemExit('R3-11 render version mismatch.')
 
           for doc, needle in [
@@ -2289,6 +2289,114 @@ jobs:
             throw new Error(
               'Parameterless no-active-set boot did not fall back to HOME.'
             );
+          }
+          NODE
+
+      - name: Check Listening audio reliability V20
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          client = Path('Client.html').read_text(encoding='utf-8')
+          pre = Path('WebAppPreissue.js').read_text(encoding='utf-8')
+          render = Path('WebAppProductionRender.js').read_text(encoding='utf-8')
+          ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
+          chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
+
+          for needle in [
+              'app.mediaRetryCount = {};',
+              'function ensureAudioLoaded(',
+              'background === true',
+              'retries < 1',
+              'function resetAudioAsset(',
+              'playAudioAssetNow(nextSection, true)',
+              'setActiveIndex(nextIndex, true)',
+              'pauseOtherAudio(null);',
+          ]:
+              if needle not in client:
+                  raise SystemExit(f'V20 client audio invariant missing: {needle}')
+
+          if "showError('音声準備エラー:" in client:
+              raise SystemExit('Background audio prefetch can still create a global learner error.')
+
+          for needle in [
+              'function h3PreissueRequireAudioProjection_(',
+              "'PREISSUE_K1_AUDIO_PROJECTION_MISMATCH'",
+              "'PREISSUE_AUDIO_PROJECTION_LENGTH_MISMATCH:'",
+              "'PREISSUE_AUDIO_PROJECTION_MISMATCH:'",
+              'tts_segments:',
+              'items,',
+              'k1Info',
+          ]:
+              if needle not in pre:
+                  raise SystemExit(f'V20 preissue audio projection invariant missing: {needle}')
+
+          if 'H3-LISTENING-RENDER-RULES-20260920-V20' not in render:
+              raise SystemExit('V20 render version missing.')
+
+          if '## 24. Listening audio reliability patch' not in ops:
+              raise SystemExit('V20 operations incident record missing.')
+
+          if '## 18. Listening audio reliability' not in chat:
+              raise SystemExit('V20 Web/Chat contract missing.')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const source = fs.readFileSync('WebAppPreissue.js', 'utf8');
+          const start = source.indexOf(
+            'function h3PreissueRequireAudioProjection_('
+          );
+          const end = source.indexOf(
+            'function h3PreissueRequireQueue_(',
+            start
+          );
+          if (start < 0 || end < 0) {
+            throw new Error('Audio projection helper extraction failed.');
+          }
+
+          const helper = source.slice(start, end);
+          const ctx = vm.createContext({console, JSON, String, Number, Array});
+          vm.runInContext(helper, ctx);
+
+          const prompt = '문장';
+          const choices = ['하나','둘','셋','넷'];
+          const plan = [
+            {role:'prompt',text:prompt,repeat:1,pause_ms_after:3200},
+            {role:'prompt',text:prompt,repeat:1,pause_ms_after:5200},
+            {role:'choice1',text:choices[0],repeat:1,pause_ms_after:3200},
+            {role:'choice1',text:choices[0],repeat:1,pause_ms_after:3200},
+            {role:'choice2',text:choices[1],repeat:1,pause_ms_after:3200},
+            {role:'choice2',text:choices[1],repeat:1,pause_ms_after:3200},
+            {role:'choice3',text:choices[2],repeat:1,pause_ms_after:3200},
+            {role:'choice3',text:choices[2],repeat:1,pause_ms_after:3200},
+            {role:'choice4',text:choices[3],repeat:1,pause_ms_after:3200},
+            {role:'choice4',text:choices[3],repeat:1,pause_ms_after:3200},
+          ];
+
+          ctx.__raw = JSON.stringify(plan);
+          ctx.__items = {K3:{prompt,choices}};
+          vm.runInContext(
+            "h3PreissueRequireAudioProjection_('K3', __raw, __items, null)",
+            ctx
+          );
+
+          const bad = plan.slice(2);
+          ctx.__bad = JSON.stringify(bad);
+          let rejected = false;
+          try {
+            vm.runInContext(
+              "h3PreissueRequireAudioProjection_('K3', __bad, __items, null)",
+              ctx
+            );
+          } catch (_e) {
+            rejected = true;
+          }
+          if (!rejected) {
+            throw new Error('Prompt-less K3 audio projection was accepted.');
           }
           NODE
 

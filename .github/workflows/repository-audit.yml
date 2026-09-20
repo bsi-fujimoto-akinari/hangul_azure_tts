@@ -45,6 +45,8 @@ jobs:
               'WebAppProductionRender.js',
               'WebAppReadingPilot.js',
               'WebAppReadingPilotAudit.js',
+              'WebAppReadingActivation.js',
+              'WebAppReadingActivationAudit.js',
               'WebAppPreissue.js',
               'WebAppReceipt.js',
               'WebAppReviewCore.js',
@@ -56,6 +58,7 @@ jobs:
               'H3_REVIEW_ARCHITECTURE.md',
               'H3_LEARNING_SURFACE_CONTRACT.md',
               'H3_READING_P8_PILOT_CONTRACT.md',
+              'H3_READING_ACTIVATION_CONTRACT.md',
               'Index.html',
               'Stylesheet.html',
               'Client.html',
@@ -4717,11 +4720,13 @@ jobs:
               if needle not in client:
                   raise SystemExit(f'WRITTEN result/Review UI invariant missing: {needle}')
 
-          # Global allocator must scan all three journals and tolerate an absent written tab.
+          # Global allocator must scan all committed/staged learning journals and
+          # tolerate an absent future journal before physical activation.
           for sheet in [
               'listening_web_test_txn_v1',
               'listening_web_txn_v1',
               'written_web_txn_v1',
+              'reading_web_txn_v1',
           ]:
               if sheet not in common:
                   raise SystemExit(f'Global H3TX allocator missing journal: {sheet}')
@@ -4969,7 +4974,8 @@ jobs:
           context.__journals = {
             listening_web_test_txn_v1:[['H3TX-20260920-000005']],
             listening_web_txn_v1:[['H3TX-20260920-000009']],
-            written_web_txn_v1:[['H3TX-20260920-000002']]
+            written_web_txn_v1:[['H3TX-20260920-000002']],
+            reading_web_txn_v1:[['H3TX-20260920-000008']]
           };
           assert(
             run("h3NextWebTxnIdFromRows_('20260920',__journals)") === 'H3TX-20260920-000010',
@@ -5866,7 +5872,9 @@ jobs:
           [
             'WebAppSurfaceCommon.js',
             'WebAppReadingPilot.js',
-            'WebAppReadingPilotAudit.js'
+            'WebAppReadingPilotAudit.js',
+            'WebAppReadingActivation.js',
+            'WebAppReadingActivationAudit.js'
           ].forEach(name => {
             vm.runInContext(
               fs.readFileSync(name, 'utf8'),
@@ -5894,9 +5902,29 @@ jobs:
             );
           }
 
+          const activation = vm.runInContext(
+            'auditReadingActivationCoreV1_()',
+            context
+          );
+
+          if (
+            activation.result !== 'PASS' ||
+            activation.source_group_id !== '245' ||
+            activation.item_count !== 2 ||
+            activation.checks !== 10
+          ) {
+            throw new Error(
+              'Reading activation core pure audit mismatch: ' +
+              JSON.stringify(activation)
+            );
+          }
+
           console.log(
-            'P8 Reading pilot pure audit: PASS',
-            JSON.stringify(result)
+            'P8 Reading pilot + activation core pure audits: PASS',
+            JSON.stringify({
+              pilot: result,
+              activation: activation
+            })
           );
           NODE
 
@@ -5915,6 +5943,8 @@ jobs:
           node --check WebAppProductionRender.js
           node --check WebAppReadingPilot.js
           node --check WebAppReadingPilotAudit.js
+          node --check WebAppReadingActivation.js
+          node --check WebAppReadingActivationAudit.js
           node --check WebAppPreissue.js
           node --check WebAppReceipt.js
           node --check WebAppReviewCore.js

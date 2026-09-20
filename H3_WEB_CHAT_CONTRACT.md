@@ -26,7 +26,7 @@ TXN_ID=H3TX-YYYYMMDD-NNNNNN
 STATUS=COMMITTED
 ```
 
-The receipt contains no score, answers, answer key, explanation, or journal name. The grammar is shared by SYSTEM_TEST, 5L production, and future 5W production.
+The receipt contains no score, answers, answer key, explanation, or journal name. The grammar is shared by SYSTEM_TEST, 5L production, and 5W production.
 
 ## 4. Receipt verification
 
@@ -157,7 +157,7 @@ The learner surface remains five K1-K5 slots. Normal sets allow at most one rete
 
 ## 22. Minimal Chat output contract
 
-After a successful `5L` issue, Chat returns the parameterless Web App URL and nothing else.
+After a successful `5L` or `5W` issue, Chat returns the parameterless Web App URL and nothing else.
 
 After authoritative `[H3_WEB_SYNC]` verification, Chat returns exactly one of:
 

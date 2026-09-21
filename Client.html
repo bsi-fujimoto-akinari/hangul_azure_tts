@@ -1701,6 +1701,26 @@
             return;
           }
 
+          if (
+            index <
+              app.payload.questions.length -
+                1
+          ) {
+            var nextIndex =
+              index + 1;
+            setActiveIndex(
+              nextIndex,
+              true
+            );
+            playAudioAssetNow(
+              audioKeyForIndex_(
+                nextIndex
+              ),
+              true
+            );
+            return;
+          }
+
           var firstMissing =
             questionKeys.findIndex(
               function (key) {

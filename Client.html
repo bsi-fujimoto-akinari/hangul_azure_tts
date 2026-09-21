@@ -509,6 +509,25 @@
   }
 
 
+  function questionDisplayLabel_(
+    display,
+    family
+  ) {
+    var normalized =
+      String(display || '')
+        .trim()
+        .replace(/／/g, '/');
+
+    if (normalized) {
+      return normalized;
+    }
+
+    return surfaceLearnerLabel_(
+      family
+    );
+  }
+
+
   function readingPassageDisplayText_(text) {
     var source =
       String(text || '');
@@ -1685,7 +1704,10 @@
         );
       title.textContent =
         'Q' + qNo + ' ' +
-        (surfaceLabel || q.display);
+        questionDisplayLabel_(
+          q.display,
+          app.surfaceFamily
+        );
 
       var uncertain = el('button', 'uncertain');
       uncertain.type = 'button';
@@ -3228,7 +3250,11 @@
       'Q' +
       (index + 1) +
       ' ' +
-      (reviewSurfaceLabel || part.display) +
+      questionDisplayLabel_(
+        part.display,
+        app.payload &&
+          app.payload.surface_family
+      ) +
       '　' +
       part.result;
     head.appendChild(title);

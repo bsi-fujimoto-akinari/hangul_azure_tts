@@ -6642,7 +6642,7 @@ jobs:
               'non-renderable',
               'H3_TRANSLATION_PRODUCTION_COMMIT_ENABLED_=true',
               'Review LOCKED',
-              'HOME upsert',
+              'review_home_index_v1 upsert',
               'Review open validation',
           ]:
               if needle not in production_contract:

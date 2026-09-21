@@ -119,9 +119,48 @@ function submitListeningWebAnswers(request) {
       request.surface_family ===
         'READING'
     ) {
-      return h3ReadingSubmit_(
-        request
-      );
+      var readingResult =
+        h3ReadingSubmit_(
+          request
+        );
+
+      readingResult.after_sync =
+        h3SurfaceReviewEnsure_(
+          'READING',
+          readingResult.txn_id
+        );
+
+      readingResult.home_index_sync =
+        h3ReviewHomeIndexUpsertAfterCommit_(
+          readingResult,
+          readingResult.after_sync
+        );
+
+      var readingReviewReadback =
+        h3SurfaceReviewOpen_({
+          surface_family:
+            'READING',
+          set_id:
+            readingResult.set_id
+        });
+
+      if (
+        h3ReviewHash_(
+          readingReviewReadback
+        ) !==
+        h3ReviewHash_(
+          readingResult.after_sync
+        )
+      ) {
+        throw new Error(
+          'READING_REVIEW_POSTCOMMIT_OPEN_MISMATCH'
+        );
+      }
+
+      readingResult.after_sync =
+        readingReviewReadback;
+
+      return readingResult;
     }
 
     if (

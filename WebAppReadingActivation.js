@@ -1168,6 +1168,8 @@ function h3ReadingBuildCommittedResult_(
     level:
       stage.level,
     persisted: true,
+    status:
+      'COMMITTED',
     set_id:
       stage.set_id,
     stage_id:

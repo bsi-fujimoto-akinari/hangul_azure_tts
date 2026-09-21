@@ -5900,6 +5900,18 @@ jobs:
               if target not in sync:
                   raise SystemExit(f'Answer Sync target missing: {target}')
 
+          for projection_guard in [
+              "startColumn:\n          item.existing ? 6 : 1",
+              "? item.values.slice(5)\n            : item.values.slice()",
+              "write.startColumn || 1",
+              "row.startColumn || 1",
+          ]:
+              if projection_guard not in sync:
+                  raise SystemExit(
+                      'Answer Sync projection-column guard missing: ' +
+                      projection_guard
+                  )
+
           print('5W Answer Sync static contract: PASS')
           PY
 
@@ -6134,22 +6146,31 @@ jobs:
             object:{
               schema:'H3_WRITTEN_ANSWER_SYNC_SNAPSHOT_V1',
               rows:[
-                {sheet:'generation_log_v1',row:2,width:2,values:['a','b']},
-                {sheet:'skill_queue_v1',row:3,width:2,values:['c','d']}
+                {sheet:'generation_log_v1',row:2,startColumn:1,width:2,values:['a','b']},
+                {sheet:'skill_queue_v1',row:3,startColumn:6,width:2,values:['c','d']}
               ]
             }
           };
           context.__plan = {
             writes:[
               {sheet:'generation_log_v1',rowNumber:2,values:['x','y']},
-              {sheet:'skill_queue_v1',rowNumber:3,values:['m','n']}
+              {sheet:'skill_queue_v1',rowNumber:3,startColumn:6,values:['m','n']}
             ]
           };
           const post = copy(run(
             'h3WrittenSyncExpectedPost_(__pre,__plan)'
           ));
           assert(post.object.rows[0].values.join(',') === 'x,y', 'Expected post gen row mismatch.');
+          assert(post.object.rows[0].startColumn === 1, 'Legacy default start column mismatch.');
           assert(post.object.rows[1].values.join(',') === 'm,n', 'Expected post skill row mismatch.');
+          assert(post.object.rows[1].startColumn === 6, 'Skill queue dynamic start column mismatch.');
+
+          context.__writes = context.__plan.writes;
+          const targets = copy(run(
+            'h3WrittenSyncUniqueTargets_(__writes)'
+          ));
+          assert(targets[0].startColumn === 1, 'Generation target start column mismatch.');
+          assert(targets[1].startColumn === 6, 'Skill queue target must begin at column F.');
 
           console.log('5W Answer Sync pure transition/scheduler tests: PASS');
           NODE

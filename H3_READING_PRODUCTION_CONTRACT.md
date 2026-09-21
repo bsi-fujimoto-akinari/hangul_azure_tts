@@ -77,7 +77,7 @@ A successful Reading result opens `H3_PERSISTENT_READING_REVIEW_PAYLOAD_V1` only
 
 For the live 2-question Reading surface:
 
-- learner-facing family labels use `2R / Reading`; Translation uses `2T / Translation`, not the Japanese family labels;
+- HOME family cards use `2R` / `2T`, while learner and Review question titles use the source-bound section display (`筆8/読解`, `筆11/翻訳`, `筆12/翻訳`) in the same style as 5W (`筆2/語彙`, etc.);
 - Reading receives the same explicit Reset / Grade controls as other Written learner surfaces;
 - this UI repair does not alter the existing P8 issue timestamp, stage status, or learner source binding;
 - the shared Reading passage is rendered in a bordered card with the same outer width as the question card;

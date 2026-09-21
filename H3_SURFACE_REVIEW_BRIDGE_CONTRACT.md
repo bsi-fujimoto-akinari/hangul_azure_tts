@@ -156,3 +156,21 @@ family transaction COMMITTED
 
 F2 must also finalize learner-facing Reading explanation blocks before P8 issue.
 F3 must implement the Translation learner renderer before P11 issue.
+## RS-01B Reading P9/P10 explanation compatibility
+
+Repository-only additive compatibility is defined for the frozen P9/P10 pilot bindings:
+
+```text
+P9 source_binding_sha256=eb2cdc555f9d70255d65cc34349fae8bec42265e69d69f636da544a83b9ab17d
+P10 source_binding_sha256=c67e214de5583546d76d585dda847343bb29d03461b3b044f3d3b935a9242361
+explanation_contract=H3-READING-P9P10-EXPLANATION-20260921-V1
+```
+
+The compatibility is additive and fail-closed:
+
+- existing P8 uses H3-READING-P8-EXPLANATION-20260921-V1 unchanged;
+- P9/P10 use the new explanation contract only for the exact frozen source binding;
+- exact section, passage hash, item hash, skill ID, and source binding are required;
+- authored explanation provenance is SOURCE_LINKED_AUTHORED, not publisher commentary;
+- wrong source binding, item hash, section, or explanation contract is rejected;
+- no learner stage, history, score, scheduler, retest, skill queue, or HOME state is written by this repository-only compatibility patch.

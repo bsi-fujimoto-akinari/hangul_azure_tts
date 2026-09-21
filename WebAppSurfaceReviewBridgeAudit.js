@@ -105,6 +105,162 @@ function auditSurfaceReviewBridgeV1_() {
     'READING_PERSISTENT_ENVELOPE'
   );
 
+
+  var p9Locked =
+    h3ReadingLockBundle_(
+      h3ReadingP9PilotFixture_()
+    );
+  var p9Grade =
+    h3ReadingGrade_(
+      p9Locked,
+      [
+        {
+          question_key:
+            'OFF-H3-P9-001',
+          answer: 4,
+          uncertain: false
+        },
+        {
+          question_key:
+            'OFF-H3-P9-002',
+          answer: 3,
+          uncertain: true
+        }
+      ]
+    );
+  var p9Reading =
+    h3SurfaceReviewBuildReadingPayload_({
+      family: 'READING',
+      txn_id:
+        'H3TX-20260921-900004',
+      set_id:
+        'H3-20260921-R002',
+      stage_id:
+        'READ-P9-20260921-002',
+      committed_at:
+        '2026-09-21T12:15:00+09:00',
+      source_binding_sha256:
+        p9Locked.source_binding_sha256,
+      result_sha256:
+        'd'.repeat(64),
+      grade:
+        p9Grade,
+      stage: {
+        issue_no: 2,
+        section_key: 'H3-P9'
+      },
+      locked:
+        p9Locked
+    });
+  h3SurfaceReviewValidatePayload_(
+    p9Reading,
+    h3SurfaceReviewConfig_(
+      'READING'
+    )
+  );
+  h3SurfaceReviewBridgeAssert_(
+    p9Reading.sections.every(
+      function (section) {
+        return (
+          section.explanation.contract_id ===
+            H3_READING_P9_P10_EXPLANATION_CONTRACT_ID_ &&
+          section.explanation.source_binding_sha256 ===
+            H3_READING_P9_SOURCE_BINDING_SHA256_
+        );
+      }
+    ),
+    'READING_P9_EXPLANATION_CONTRACT'
+  );
+
+  var p10Locked =
+    h3ReadingLockBundle_(
+      h3ReadingP10PilotFixture_()
+    );
+  var p10Grade =
+    h3ReadingGrade_(
+      p10Locked,
+      [
+        {
+          question_key:
+            'OFF-H3-P10-001',
+          answer: 3,
+          uncertain: false
+        },
+        {
+          question_key:
+            'OFF-H3-P10-002',
+          answer: 3,
+          uncertain: false
+        }
+      ]
+    );
+  var p10Reading =
+    h3SurfaceReviewBuildReadingPayload_({
+      family: 'READING',
+      txn_id:
+        'H3TX-20260921-900005',
+      set_id:
+        'H3-20260921-R003',
+      stage_id:
+        'READ-P10-20260921-003',
+      committed_at:
+        '2026-09-21T12:20:00+09:00',
+      source_binding_sha256:
+        p10Locked.source_binding_sha256,
+      result_sha256:
+        'e'.repeat(64),
+      grade:
+        p10Grade,
+      stage: {
+        issue_no: 3,
+        section_key: 'H3-P10'
+      },
+      locked:
+        p10Locked
+    });
+  h3SurfaceReviewValidatePayload_(
+    p10Reading,
+    h3SurfaceReviewConfig_(
+      'READING'
+    )
+  );
+  h3SurfaceReviewBridgeAssert_(
+    p10Reading.sections.every(
+      function (section) {
+        return (
+          section.explanation.contract_id ===
+            H3_READING_P9_P10_EXPLANATION_CONTRACT_ID_ &&
+          section.explanation.source_binding_sha256 ===
+            H3_READING_P10_SOURCE_BINDING_SHA256_
+        );
+      }
+    ),
+    'READING_P10_EXPLANATION_CONTRACT'
+  );
+
+  var wrongContract =
+    JSON.parse(
+      JSON.stringify(p9Reading)
+    );
+  wrongContract.sections[0]
+    .explanation.contract_id =
+      H3_READING_P8_EXPLANATION_CONTRACT_ID_;
+  var wrongContractRejected = false;
+  try {
+    h3SurfaceReviewValidatePayload_(
+      wrongContract,
+      h3SurfaceReviewConfig_(
+        'READING'
+      )
+    );
+  } catch (_err) {
+    wrongContractRejected = true;
+  }
+  h3SurfaceReviewBridgeAssert_(
+    wrongContractRejected,
+    'READING_P9_WRONG_CONTRACT_REJECTED'
+  );
+
   var translationLocked =
     h3TranslationLockBundle_(
       h3TranslationP11Fixture_()
@@ -412,7 +568,7 @@ function auditSurfaceReviewBridgeV1_() {
     schema:
       'H3_SURFACE_REVIEW_BRIDGE_AUDIT_V1',
     result: 'PASS',
-    checks: 8,
+    checks: 11,
     reading_item_count:
       reading.item_count,
     translation_item_count:

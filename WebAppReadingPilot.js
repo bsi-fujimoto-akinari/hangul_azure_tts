@@ -23,6 +23,15 @@ var H3_READING_REVIEW_SCHEMA_ =
 var H3_READING_P8_EXPLANATION_CONTRACT_ID_ =
   'H3-READING-P8-EXPLANATION-20260921-V1';
 
+var H3_READING_P9_P10_EXPLANATION_CONTRACT_ID_ =
+  'H3-READING-P9P10-EXPLANATION-20260921-V1';
+
+var H3_READING_P9_SOURCE_BINDING_SHA256_ =
+  'eb2cdc555f9d70255d65cc34349fae8bec42265e69d69f636da544a83b9ab17d';
+
+var H3_READING_P10_SOURCE_BINDING_SHA256_ =
+  'c67e214de5583546d76d585dda847343bb29d03461b3b044f3d3b935a9242361';
+
 
 function h3ReadingCanonicalize_(value) {
   if (Array.isArray(value)) {
@@ -708,6 +717,135 @@ function h3ReadingBuildRetestEvents_(
 }
 
 
+
+var H3_READING_P9_P10_EXPLANATION_OVERLAY_V1_ = {
+  'eb2cdc555f9d70255d65cc34349fae8bec42265e69d69f636da544a83b9ab17d': {
+    section_key: 'H3-P9',
+    passage_id: 'H3-P9-G1293',
+    passage_sha256:
+      'ca4f46f0469f458234ae0d59c5b9c38cda0a7956f43f381bc724aaf44bf66af4',
+    source_batch_id:
+      'd8da720b-9110-43c0-bc95-5b5d6f348cfa',
+    items: {
+      'OFF-H3-P9-001': {
+        item_sha256:
+          'c395587ae39ee0f59dad96f1338c495794586eae24f748931d12c72a18dddd1e',
+        skill_id: 'H3-P9-SK001',
+        explanation: {
+          reason:
+            '部長は字幕チームの増員について、事情をよりよく知るパク課長に一任しています。④「私よりはパク課長の方が事情をよく知っているだろうから」が、その直後の「パク課長が全部担当してください」につながるため最も適切です。',
+          learning_blocks: [
+            {
+              form: '-(으)ㄹ 테니',
+              usage:
+                '話し手の判断・見込みを理由として示し、後続の依頼や指示につなげます。알 테니 で「知っているだろうから」。'
+            },
+            {
+              form: '사정을 잘 알다',
+              usage:
+                '「事情をよく知っている」。人や組織の内部事情に詳しいことを表します。'
+            },
+            {
+              form: '맡아서 하다',
+              usage:
+                '「引き受けて担当する」。전부 맡아서 해 주세요 で「全部担当してください」。'
+            }
+          ]
+        }
+      },
+      'OFF-H3-P9-002': {
+        item_sha256:
+          '47560ec74717a0bf7cf9cea0aa5c87fcfe1f1e97d6cbe48b03997f9b413344f4',
+        skill_id: 'H3-P8-SK003',
+        explanation: {
+          reason:
+            '対話では、業務量が増えて現在の職員が大変なため「직원을 더 뽑아야 할 거 같다」と提案し、部長も「그렇게 하죠」と同意しています。したがって③「この会社は追加で人を採用しようとしている」が一致します。',
+          learning_blocks: [
+            {
+              form: '직원을 더 뽑다',
+              usage:
+                '「職員をさらに採用する」。뽑다 は人材を「選ぶ・採用する」の意味でもよく使います。'
+            },
+            {
+              form: '그렇게 하죠',
+              usage:
+                '相手の提案を受けて「そうしましょう」と同意する表現です。'
+            },
+            {
+              form: '내용과 일치하다',
+              usage:
+                '内容一致問題では、本文に明示された事実と選択肢を一つずつ照合します。'
+            }
+          ]
+        }
+      }
+    }
+  },
+  'c67e214de5583546d76d585dda847343bb29d03461b3b044f3d3b935a9242361': {
+    section_key: 'H3-P10',
+    passage_id: 'H3-P10-G706',
+    passage_sha256:
+      '4d01fa4a0604cccb832cdf33d27184a47744fe89a1d7a677dada56657bb40623',
+    source_batch_id:
+      '392f64a1-f584-44ab-a333-8821b328423f',
+    items: {
+      'OFF-H3-P10-001': {
+        item_sha256:
+          'e49e7d932fe9a5296f21bf0a6602371f7fb016406195717e96ab13c083159ac3',
+        skill_id: 'H3-P8-SK001',
+        explanation: {
+          reason:
+            '空欄の後は「夏が来る前に急いで買った」と続くため、空欄には早めに買う理由が必要です。①暑くなりそう、②夏になると高くなりそう、④そのまま使うと止まりそう、はいずれも理由になります。③「インターネットではいつでも安く買えそう」は急ぐ理由にならないため、適切ではありません。',
+          learning_blocks: [
+            {
+              form: '-(으)ㄹ 것 같아서',
+              usage:
+                '「～しそうなので、～だと思うので」。見込みを理由として後続の行動につなげます。'
+            },
+            {
+              form: '서둘러',
+              usage:
+                '「急いで」。서두르다 の副詞的な形で、行動を早めることを表します。'
+            },
+            {
+              form: '그대로 계속 사용하다',
+              usage:
+                '「そのまま使い続ける」。故障しかけた機器などの文脈でも使われます。'
+            }
+          ]
+        }
+      },
+      'OFF-H3-P10-002': {
+        item_sha256:
+          'c5b6b8c40393eb38b947f2f5ad4dbf549fc40f1d837ee3b826b8d032a40d8894',
+        skill_id: 'H3-P8-SK003',
+        explanation: {
+          reason:
+            '本文冒頭の「재작년 여름부터 에어컨 상태가 좋지 않았다」は、エアコンの状態が悪くなったのが一昨年の夏からだという意味なので③が一致します。購入は店頭ではなくインターネット、ポイントはためるためではなく既にためたものを使うため、到着は翌日ではなく三日後です。',
+          learning_blocks: [
+            {
+              form: '재작년',
+              usage:
+                '「一昨年」。時間関係を問う内容一致問題では重要な手掛かりです。'
+            },
+            {
+              form: '그동안 모아 둔 포인트',
+              usage:
+                '「その間ためておいたポイント」。-아/어 두다 は後で使うためにしておくことを表します。'
+            },
+            {
+              form: '사흘 후',
+              usage:
+                '「三日後」。사흘 は固有語で「3日」です。'
+            }
+          ]
+        }
+      }
+    }
+  }
+};
+
+
 function h3ReadingP8Explanation_(
   locked,
   item
@@ -814,6 +952,118 @@ function h3ReadingP8Explanation_(
 }
 
 
+function h3ReadingP9P10Explanation_(
+  locked,
+  item
+) {
+  var binding =
+    String(
+      locked &&
+      locked.source_binding_sha256 ||
+      ''
+    );
+  var spec =
+    H3_READING_P9_P10_EXPLANATION_OVERLAY_V1_[
+      binding
+    ];
+
+  if (
+    !spec ||
+    !locked ||
+    !locked.passage ||
+    locked.section_key !==
+      spec.section_key ||
+    locked.source_batch_id !==
+      spec.source_batch_id ||
+    locked.passage.passage_id !==
+      spec.passage_id ||
+    locked.passage.passage_sha256 !==
+      spec.passage_sha256 ||
+    !item ||
+    item.passage_id !==
+      spec.passage_id ||
+    item.passage_sha256 !==
+      spec.passage_sha256
+  ) {
+    throw new Error(
+      'READING_P9P10_EXPLANATION_SOURCE_BINDING_INVALID'
+    );
+  }
+
+  var itemSpec =
+    spec.items[
+      String(item.item_id || '')
+    ];
+
+  if (
+    !itemSpec ||
+    item.item_sha256 !==
+      itemSpec.item_sha256 ||
+    item.skill_id !==
+      itemSpec.skill_id
+  ) {
+    throw new Error(
+      'READING_P9P10_EXPLANATION_ITEM_MISMATCH:' +
+        String(item.item_id || '')
+    );
+  }
+
+  return {
+    schema:
+      'H3_READING_EXPLANATION_V1',
+    contract_id:
+      H3_READING_P9_P10_EXPLANATION_CONTRACT_ID_,
+    source_binding_sha256:
+      binding,
+    passage_sha256:
+      item.passage_sha256,
+    item_sha256:
+      item.item_sha256,
+    provenance_mode:
+      'SOURCE_LINKED_AUTHORED',
+    choices:
+      item.choices_ko.map(
+        function (choice, index) {
+          return {
+            ko: choice,
+            ja: item.choices_ja[index]
+          };
+        }
+      ),
+    reason:
+      itemSpec.explanation.reason,
+    learning_blocks:
+      JSON.parse(
+        JSON.stringify(
+          itemSpec.explanation
+            .learning_blocks
+        )
+      )
+  };
+}
+
+
+function h3ReadingExplanationForItem_(
+  locked,
+  item
+) {
+  if (
+    locked &&
+    locked.section_key === 'H3-P8'
+  ) {
+    return h3ReadingP8Explanation_(
+      locked,
+      item
+    );
+  }
+
+  return h3ReadingP9P10Explanation_(
+    locked,
+    item
+  );
+}
+
+
 function h3ReadingBuildReviewSection_(
   locked,
   item,
@@ -905,7 +1155,7 @@ function h3ReadingBuildReviewSection_(
     script_text:
       rendered,
     explanation:
-      h3ReadingP8Explanation_(
+      h3ReadingExplanationForItem_(
         locked,
         item
       ),

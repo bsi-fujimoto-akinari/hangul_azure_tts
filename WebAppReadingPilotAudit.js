@@ -552,6 +552,26 @@ function auditReadingP9P10PilotV1_() {
   );
 
   h3ReadingPilotAuditAssert_(
+    p9.source_binding_sha256 ===
+      H3_READING_P9_SOURCE_BINDING_SHA256_ &&
+      p9.passage.passage_sha256 ===
+        'ca4f46f0469f458234ae0d59c5b9c38cda0a7956f43f381bc724aaf44bf66af4' &&
+      p9.items[0].item_sha256 ===
+        'c395587ae39ee0f59dad96f1338c495794586eae24f748931d12c72a18dddd1e' &&
+      p9.items[1].item_sha256 ===
+        '47560ec74717a0bf7cf9cea0aa5c87fcfe1f1e97d6cbe48b03997f9b413344f4' &&
+      p10.source_binding_sha256 ===
+        H3_READING_P10_SOURCE_BINDING_SHA256_ &&
+      p10.passage.passage_sha256 ===
+        '4d01fa4a0604cccb832cdf33d27184a47744fe89a1d7a677dada56657bb40623' &&
+      p10.items[0].item_sha256 ===
+        'e49e7d932fe9a5296f21bf0a6602371f7fb016406195717e96ab13c083159ac3' &&
+      p10.items[1].item_sha256 ===
+        'c5b6b8c40393eb38b947f2f5ad4dbf549fc40f1d837ee3b826b8d032a40d8894',
+    'P9_P10_EXACT_HASH_LOCK'
+  );
+
+  h3ReadingPilotAuditAssert_(
     p9.items[1].skill_id ===
       'H3-P8-SK003' &&
       p10.items[0].skill_id ===
@@ -682,6 +702,90 @@ function auditReadingP9P10PilotV1_() {
     'P10_RETEST_PROVENANCE'
   );
 
+
+  var p9Review =
+    h3ReadingBuildReviewProjection_(
+      p9,
+      p9Grade
+    );
+  var p10Review =
+    h3ReadingBuildReviewProjection_(
+      p10,
+      p10Grade
+    );
+
+  h3ReadingPilotAuditAssert_(
+    p9Review.sections.every(
+      function (section) {
+        return (
+          section.explanation &&
+          section.explanation.contract_id ===
+            H3_READING_P9_P10_EXPLANATION_CONTRACT_ID_ &&
+          section.explanation.source_binding_sha256 ===
+            H3_READING_P9_SOURCE_BINDING_SHA256_ &&
+          section.explanation.provenance_mode ===
+            'SOURCE_LINKED_AUTHORED'
+        );
+      }
+    ) &&
+      p10Review.sections.every(
+        function (section) {
+          return (
+            section.explanation &&
+            section.explanation.contract_id ===
+              H3_READING_P9_P10_EXPLANATION_CONTRACT_ID_ &&
+            section.explanation.source_binding_sha256 ===
+              H3_READING_P10_SOURCE_BINDING_SHA256_ &&
+            section.explanation.provenance_mode ===
+              'SOURCE_LINKED_AUTHORED'
+          );
+        }
+      ),
+    'P9_P10_REVIEW_EXPLANATION'
+  );
+
+  var wrongBindingRejected = false;
+  var wrongBinding =
+    JSON.parse(
+      JSON.stringify(p9)
+    );
+  wrongBinding.source_binding_sha256 =
+    H3_READING_P10_SOURCE_BINDING_SHA256_;
+  try {
+    h3ReadingExplanationForItem_(
+      wrongBinding,
+      wrongBinding.items[0]
+    );
+  } catch (_err) {
+    wrongBindingRejected = true;
+  }
+  h3ReadingPilotAuditAssert_(
+    wrongBindingRejected,
+    'P9_EXPLANATION_WRONG_BINDING_REJECTED'
+  );
+
+  var wrongItemRejected = false;
+  var wrongItem =
+    JSON.parse(
+      JSON.stringify(
+        p10.items[0]
+      )
+    );
+  wrongItem.item_sha256 =
+    '0'.repeat(64);
+  try {
+    h3ReadingExplanationForItem_(
+      p10,
+      wrongItem
+    );
+  } catch (_err2) {
+    wrongItemRejected = true;
+  }
+  h3ReadingPilotAuditAssert_(
+    wrongItemRejected,
+    'P10_EXPLANATION_WRONG_ITEM_REJECTED'
+  );
+
   h3ReadingPilotAuditAssert_(
     p8.source_binding_sha256 !==
       p9.source_binding_sha256 &&
@@ -698,7 +802,7 @@ function auditReadingP9P10PilotV1_() {
     result:
       'PASS',
     checks:
-      11,
+      15,
     p8_source_binding_sha256:
       p8.source_binding_sha256,
     p9_group_id:

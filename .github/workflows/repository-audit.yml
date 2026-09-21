@@ -6846,7 +6846,7 @@ jobs:
 
           if (
             family.result !== 'PASS' ||
-            family.checks !== 11 ||
+            family.checks !== 15 ||
             family.p8_source_binding_sha256 !==
               'a8c3a7c038fa251e195463a13157fb3683882ddef30d677d9962c58ff120761e' ||
             family.p9_group_id !== '1293' ||
@@ -7426,7 +7426,7 @@ jobs:
             result.result !== 'PASS' ||
             result.schema !==
               'H3_SURFACE_REVIEW_BRIDGE_AUDIT_V1' ||
-            result.checks !== 8 ||
+            result.checks !== 11 ||
             result.reading_item_count !== 2 ||
             result.translation_item_count !== 2 ||
             result.translation_direction !==

@@ -6260,8 +6260,9 @@ jobs:
               'function validateReadingPayload_(',
               'function renderReadingSurface_(',
               "family === 'READING'",
-              "app.surfaceFamily === '5W'",
               "app.surfaceFamily ===\n        'READING'",
+              'if (allAnswered())',
+              'submitAnswers();',
           ]:
               if needle not in client:
                   raise SystemExit(f'Reading client boundary missing: {needle}')

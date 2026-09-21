@@ -934,8 +934,11 @@
 
   .review-history-heading {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 8px;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
   }
 
   .review-history-heading h4,
@@ -944,16 +947,22 @@
   }
 
   .review-history-heading h4 {
+    flex: 0 0 auto;
     font-size: 16px;
   }
 
   .review-history-score {
+    flex: 0 0 auto;
     font-size: 13px;
     font-weight: 800;
   }
 
   .review-history-date {
-    margin-top: 4px !important;
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 12px;
     color: var(--review-primary);
   }
@@ -1218,6 +1227,16 @@
     .review-history-item {
       grid-template-columns: 1fr;
       gap: 9px;
+    }
+
+    .review-history-heading {
+      gap: 6px;
+    }
+
+    .review-history-icon {
+      width: 20px;
+      height: 20px;
+      flex: 0 0 20px;
     }
 
     .review-history-actions {

@@ -2162,6 +2162,7 @@ jobs:
           written = Path('WebAppReviewWrittenAdapter.js').read_text(encoding='utf-8')
           persistence = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
           client = Path('Client.html').read_text(encoding='utf-8')
+          style = Path('Stylesheet.html').read_text(encoding='utf-8')
           web = Path('WebApp.js').read_text(encoding='utf-8')
 
           for needle in [

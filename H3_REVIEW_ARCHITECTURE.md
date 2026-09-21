@@ -348,3 +348,31 @@ physical `review_home_index_v1.ANSWERED_AT` may be repaired to the same serializ
 for index consistency, while precision/evidence authority remains exclusively in the
 versioned sidecar.
 
+## 36. Reading / Translation persistent Review bridge
+
+F1 is frozen by `H3-SURFACE-REVIEW-BRIDGE-20260921-V1`.
+
+Reading and Translation remain `provider_kind=WRITTEN` learner surfaces and
+use dedicated persistent Review authorities:
+
+- `reading_review_payload_v1` / `reading_review_binding_v1`
+- `translation_review_payload_v1` / `translation_review_binding_v1`
+
+The 5W explanation overlay and 5W ANSWERED_AT sidecar remain 5W-only and are
+not generalized to these families.
+
+Reading Review preserves one grouped shared passage and exact passage hash
+binding. Translation Review preserves exact `translation_direction` and
+`answer_type`. Both use dynamic `item_count` rather than a five-item
+assumption.
+
+HOME remains lightweight-index-only. Reading/Translation entries retain
+`KIND=WRITTEN` plus the exact `SURFACE_FAMILY`/level. Review opening for
+these families requires explicit `surface_family`.
+
+Current-learning arbitration is fail-closed at both boundaries: more than one
+5W/Reading/Translation Written candidate is an error, and simultaneous
+Listening plus Written-provider candidates are also an error.
+
+F1 itself keeps P8/P11 PREISSUE_READY, both production commit gates disabled,
+and all learner-facing issue/submit/scheduler paths inactive.

@@ -167,7 +167,7 @@ SCRIPT_TXT is not a preissue prerequisite. When needed for Review/audit convenie
 - HOME history reads only derived `review_home_index_v1`; `BASE_PRIORITY` is refreshed after committed answers, HOME computes only elapsed-time pressure, and opening Review performs full source-lock validation.
 - `REVIEW_REPLAY` is retired; active providers fail closed on replay requests.
 - SYSTEM_TEST remains an explicit allowlisted diagnostic route and must not mutate learner runtime.
-- HOME shows only the Review library. Each history card opens Review directly; provider selection is exclusive `L/W`, sorting is `Newest/Priority`, priority uses `H3_REVIEW_LEVEL_V2`, and the segmented control block is sticky. Review shows one question card at a time with compact progress and a full-width `ホーム` control.
+- HOME shows only the Review library. Each history card opens Review directly; filtering is `ALL/L/W` with default `ALL`, sorting is `Newest/Priority` with default `Newest`, and priority uses globally normalized `H3_REVIEW_PRIORITY_V3`. History cards omit the textual wrong/uncertainty/priority summary and retain the compact 0–100 priority bar. The segmented control block is sticky. Review shows one question card at a time with compact progress and a full-width `ホーム` control.
 
 Detailed Review storage, reconstruction, failure, retired-replay, HOME priority, and legacy rules are in `H3_REVIEW_ARCHITECTURE.md`.
 

@@ -244,6 +244,109 @@
     );
   }
 
+  function validateTranslationPayload_(
+    payload
+  ) {
+    var direction =
+      String(
+        payload.translation_direction ||
+        ''
+      );
+    var answerType =
+      String(
+        payload.answer_type || ''
+      );
+    var sourceLanguage =
+      String(
+        payload.source_language || ''
+      );
+    var choiceLanguage =
+      String(
+        payload.choice_language || ''
+      );
+
+    if (
+      ['KR_TO_JP', 'JP_TO_KR']
+        .indexOf(direction) < 0 ||
+      answerType !== 'MULTIPLE_CHOICE'
+    ) {
+      throw new Error(
+        'TRANSLATION_PAYLOAD_METADATA_INVALID'
+      );
+    }
+
+    if (
+      (
+        direction === 'KR_TO_JP' &&
+        (
+          sourceLanguage !== 'KO' ||
+          choiceLanguage !== 'JA'
+        )
+      ) ||
+      (
+        direction === 'JP_TO_KR' &&
+        (
+          sourceLanguage !== 'JA' ||
+          choiceLanguage !== 'KO'
+        )
+      )
+    ) {
+      throw new Error(
+        'TRANSLATION_PAYLOAD_LANGUAGE_INVALID'
+      );
+    }
+
+    var seen = {};
+    payload.questions.forEach(
+      function (question, index) {
+        var key =
+          questionKeyFor_(
+            question,
+            index
+          );
+        var choiceIds =
+          question &&
+          question.choice_ids;
+        var choices =
+          question &&
+          question.visible_choices;
+
+        if (
+          !question ||
+          !question.item_id ||
+          !question.question_key ||
+          seen[key] ||
+          String(
+            question.translation_direction ||
+            ''
+          ) !== direction ||
+          String(
+            question.answer_type || ''
+          ) !== answerType ||
+          !Array.isArray(choiceIds) ||
+          choiceIds.length !== 4 ||
+          choiceIds.some(
+            function (value, choiceIndex) {
+              return (
+                Number(value) !==
+                choiceIndex + 1
+              );
+            }
+          ) ||
+          !Array.isArray(choices) ||
+          choices.length !== 4
+        ) {
+          throw new Error(
+            'TRANSLATION_QUESTION_IDENTITY_INVALID'
+          );
+        }
+
+        seen[key] = true;
+      }
+    );
+  }
+
+
   function validateLearningPayloadShape_(payload) {
     var questions =
       payload && payload.questions;
@@ -333,6 +436,10 @@
         validateReadingPayload_(
           payload
         );
+      } else {
+        validateTranslationPayload_(
+          payload
+        );
       }
 
       return family;
@@ -420,6 +527,47 @@
     );
   }
 
+  function renderTranslationSurface_(
+    payload
+  ) {
+    renderQuestions(
+      payload.questions
+    );
+
+    var root =
+      document.getElementById(
+        'questions'
+      );
+    var block =
+      el(
+        'section',
+        'question-prompt translation-context'
+      );
+    var title =
+      el(
+        'h2',
+        'question-title'
+      );
+    title.textContent =
+      '翻訳';
+    block.appendChild(title);
+
+    var direction =
+      document.createElement('p');
+    direction.textContent =
+      payload.translation_direction ===
+        'KR_TO_JP'
+        ? '韓国語 → 日本語'
+        : '日本語 → 韓国語';
+    block.appendChild(direction);
+
+    root.insertBefore(
+      block,
+      root.firstChild
+    );
+  }
+
+
   function renderLearningSurface_(
     payload,
     family
@@ -436,6 +584,13 @@
 
     if (family === 'READING') {
       renderReadingSurface_(
+        payload
+      );
+      return;
+    }
+
+    if (family === 'TRANSLATION') {
+      renderTranslationSurface_(
         payload
       );
       return;
@@ -1561,7 +1716,11 @@
       app.payload &&
       app.payload.mode ===
         'WRITTEN' &&
-      app.surfaceFamily === '5W'
+      (
+        app.surfaceFamily === '5W' ||
+        app.surfaceFamily ===
+          'TRANSLATION'
+      )
     ) {
       appendWrittenControls_(
         root
@@ -2099,9 +2258,7 @@
 
     if (
       app.surfaceFamily ===
-        'READING' ||
-      app.surfaceFamily ===
-        'TRANSLATION'
+        'READING'
     ) {
       showError(
         'この学習形式の回答送信はまだ有効化されていません。'
@@ -2128,6 +2285,10 @@
     setInteractiveDisabled(true);
     updateLiveSummary();
 
+    var isTranslation =
+      app.surfaceFamily ===
+        'TRANSLATION';
+
     var request = {
       schema: 'H3_WEB_SUBMIT_V1',
       mode: app.payload.mode,
@@ -2137,14 +2298,47 @@
       legacy_review_id:
         app.payload
           .legacy_review_id || null,
-      answers: sections.map(function (section) {
-        return {
-          section: section,
-          answer: app.answers[section],
-          uncertain: !!app.uncertain[section]
-        };
-      })
+      answers:
+        isTranslation
+          ? questionKeys.map(
+              function (questionKey) {
+                return {
+                  question_key:
+                    questionKey,
+                  answer:
+                    app.answers[
+                      questionKey
+                    ],
+                  uncertain:
+                    !!app.uncertain[
+                      questionKey
+                    ]
+                };
+              }
+            )
+          : sections.map(
+              function (section) {
+                return {
+                  section: section,
+                  answer:
+                    app.answers[
+                      section
+                    ],
+                  uncertain:
+                    !!app.uncertain[
+                      section
+                    ]
+                };
+              }
+            )
     };
+
+    if (isTranslation) {
+      request.provider_kind =
+        'WRITTEN';
+      request.surface_family =
+        'TRANSLATION';
+    }
 
     google.script.run
       .withSuccessHandler(function (result) {
@@ -2224,8 +2418,12 @@
     if (
       result.mode === 'WRITTEN' &&
       result.after_sync &&
-      result.after_sync.schema ===
-        'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1'
+      [
+        'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1',
+        'H3_PERSISTENT_TRANSLATION_REVIEW_PAYLOAD_V1'
+      ].indexOf(
+        result.after_sync.schema
+      ) >= 0
     ) {
       renderPersistentReview(
         result.after_sync
@@ -2365,9 +2563,121 @@
     root.appendChild(copy);
   }
 
+  function normalizeTranslationReview_(
+    review
+  ) {
+    if (
+      !review ||
+      review.surface_family !==
+        'TRANSLATION'
+    ) {
+      return review;
+    }
+
+    if (
+      review.schema !==
+        'H3_PERSISTENT_TRANSLATION_REVIEW_PAYLOAD_V1' ||
+      !Array.isArray(
+        review.questions
+      ) ||
+      Number(
+        review.item_count
+      ) !== review.questions.length
+    ) {
+      throw new Error(
+        'TRANSLATION_REVIEW_PAYLOAD_INVALID'
+      );
+    }
+
+    var normalized = {};
+    Object.keys(review).forEach(
+      function (key) {
+        normalized[key] =
+          review[key];
+      }
+    );
+
+    normalized.sections =
+      review.questions.map(
+        function (question) {
+          var section =
+            String(
+              question.section || ''
+            );
+          var sectionNo =
+            section.replace(
+              /^P/,
+              ''
+            );
+          var choices =
+            Array.isArray(
+              question.choices
+            )
+              ? question.choices
+              : [];
+
+          return {
+            section: section,
+            display:
+              '筆' +
+              sectionNo +
+              '／翻訳',
+            result:
+              question.mark,
+            user_answer_position:
+              Number(
+                question.user_answer
+              ),
+            correct_answer_position:
+              Number(
+                question.correct_answer
+              ),
+            uncertain_known:
+              true,
+            uncertain:
+              !!question
+                .explicit_uncertainty,
+            script_text:
+              [
+                String(
+                  question.question_text ||
+                  ''
+                )
+              ].concat(
+                choices.map(
+                  function (
+                    choice,
+                    choiceIndex
+                  ) {
+                    return (
+                      circled[
+                        choiceIndex
+                      ] +
+                      ' ' +
+                      String(choice)
+                    );
+                  }
+                )
+              ).join('\n'),
+            explanation: null,
+            audio_asset_key: null,
+            audio_fallback_url: null
+          };
+        }
+      );
+
+    return normalized;
+  }
+
+
   function renderPersistentReview(
     review
   ) {
+    review =
+      normalizeTranslationReview_(
+        review
+      );
+
     resetForPayload();
     app.payload = review;
     app.locked = true;

@@ -2365,6 +2365,74 @@
     root.appendChild(copy);
   }
 
+  function appendReadingReviewPassage_(
+    root,
+    review
+  ) {
+    if (
+      !review ||
+      review.surface_family !==
+        'READING'
+    ) {
+      return;
+    }
+
+    var passage =
+      review.passage || {};
+
+    if (
+      !passage.passage_id ||
+      !passage.passage_sha256 ||
+      !passage.text_ko ||
+      !passage.text_ja
+    ) {
+      throw new Error(
+        'READING_REVIEW_PASSAGE_INVALID'
+      );
+    }
+
+    var block =
+      el(
+        'section',
+        'question-prompt reading-passage review-reading-passage'
+      );
+    block.dataset.passageId =
+      passage.passage_id;
+
+    var title =
+      el(
+        'h2',
+        'question-title'
+      );
+    title.textContent =
+      '本文';
+    block.appendChild(title);
+
+    var ko =
+      el(
+        'div',
+        'reading-passage-text'
+      );
+    ko.textContent =
+      passage.text_ko;
+    block.appendChild(ko);
+
+    var ja =
+      el(
+        'div',
+        'review-translation'
+      );
+    var jaText =
+      document.createElement('p');
+    jaText.textContent =
+      '→ ' + passage.text_ja;
+    ja.appendChild(jaText);
+    block.appendChild(ja);
+
+    root.appendChild(block);
+  }
+
+
   function renderPersistentReview(
     review
   ) {
@@ -2384,6 +2452,11 @@
     root.textContent = '';
     root.classList.remove(
       'hidden'
+    );
+
+    appendReadingReviewPassage_(
+      root,
+      review
     );
 
     var pager =

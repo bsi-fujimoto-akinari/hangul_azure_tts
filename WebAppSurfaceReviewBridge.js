@@ -660,7 +660,12 @@ function h3SurfaceReviewValidatePayload_(
       !payload.passage.passage_id ||
       !payload.passage.passage_sha256 ||
       !payload.passage.text_ko ||
-      !payload.passage.text_ja
+      !payload.passage.text_ja ||
+      !Array.isArray(
+        payload.sections
+      ) ||
+      payload.sections.length !==
+        payload.questions.length
     ) {
       throw new Error(
         'READING_REVIEW_PASSAGE_MISSING'
@@ -677,6 +682,28 @@ function h3SurfaceReviewValidatePayload_(
         ) {
           throw new Error(
             'READING_REVIEW_PASSAGE_BINDING_MISMATCH'
+          );
+        }
+      }
+    );
+
+    payload.sections.forEach(
+      function (section) {
+        if (
+          !section.explanation ||
+          section.explanation.contract_id !==
+            H3_READING_P8_EXPLANATION_CONTRACT_ID_ ||
+          section.explanation.source_binding_sha256 !==
+            payload.source_binding_sha256 ||
+          section.explanation.passage_sha256 !==
+            payload.passage.passage_sha256 ||
+          section.passage_id !==
+            payload.passage.passage_id ||
+          section.passage_sha256 !==
+            payload.passage.passage_sha256
+        ) {
+          throw new Error(
+            'READING_REVIEW_EXPLANATION_BINDING_MISMATCH'
           );
         }
       }

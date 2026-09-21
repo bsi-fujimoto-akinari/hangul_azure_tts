@@ -20,6 +20,9 @@ var H3_READING_RENDER_SCHEMA_ =
 var H3_READING_REVIEW_SCHEMA_ =
   'H3_READING_REVIEW_PROJECTION_V1';
 
+var H3_READING_P8_EXPLANATION_CONTRACT_ID_ =
+  'H3-READING-P8-EXPLANATION-20260921-V1';
+
 
 function h3ReadingCanonicalize_(value) {
   if (Array.isArray(value)) {
@@ -705,6 +708,213 @@ function h3ReadingBuildRetestEvents_(
 }
 
 
+function h3ReadingP8Explanation_(
+  locked,
+  item
+) {
+  if (
+    !locked ||
+    locked.section_key !== 'H3-P8' ||
+    locked.source_binding_sha256 !==
+      'a8c3a7c038fa251e195463a13157fb3683882ddef30d677d9962c58ff120761e' ||
+    !item ||
+    item.passage_id !==
+      locked.passage.passage_id ||
+    item.passage_sha256 !==
+      locked.passage.passage_sha256
+  ) {
+    throw new Error(
+      'READING_P8_EXPLANATION_SOURCE_BINDING_INVALID'
+    );
+  }
+
+  var specs = {
+    'OFF-H3-P8-001': {
+      reason:
+        '前文は「一日くらい休めればちょうどよい」と述べた後、実際には休みにくい状況を受けて「心に余裕を持って木曜日を耐えてみよう」と続きます。①②④はいずれも休めない事情を表しますが、③は「そうするのが嫌だから」という本人の意思で、文脈上の制約とは合いません。',
+      learning_blocks: [
+        {
+          form: '-(으)니',
+          usage:
+            '理由・原因を表す「～なので」。この設問では、後続の判断「마음의 여유를 가지고 … 견뎌 봅시다」の理由を作ります。'
+        },
+        {
+          form: '사정',
+          usage:
+            '事情、都合。그럴 사정이 안 되다 は「そうできる事情・都合ではない」という意味です。'
+        },
+        {
+          form: '자기 마음대로',
+          usage:
+            '自分の思いどおりに、勝手に。자기 마음대로 쉴 수 없다 で「勝手に休むことはできない」。'
+        }
+      ]
+    },
+    'OFF-H3-P8-002': {
+      reason:
+        '本文の中心は、一般に月曜日がつらいと思われている一方、研究では木曜日のほうが疲労を強く感じやすいと確認された、という対比です。したがって①が本文全体を最もよく表します。②は内容が広すぎ、③の「風邪との比較」は本文になく、④は「木曜日に休もう」という主張ではありません。',
+      learning_blocks: [
+        {
+          form: '월요병 / 목요병',
+          usage:
+            '本文では「月曜病」という一般的なイメージと、木曜日の疲労感を対比しています。タイトル選択ではこの対比が中心情報です。'
+        },
+        {
+          form: '무기력에 빠지다',
+          usage:
+            '「無気力に陥る」。疲労がたまった結果として述べられています。'
+        },
+        {
+          form: '견디다',
+          usage:
+            '「耐える、持ちこたえる」。목요일을 잘 견뎌 봅시다 で「木曜日をうまく乗り切ってみましょう」。'
+        }
+      ]
+    }
+  };
+
+  var spec =
+    specs[String(item.item_id || '')];
+
+  if (!spec) {
+    throw new Error(
+      'READING_P8_EXPLANATION_ITEM_UNSUPPORTED'
+    );
+  }
+
+  return {
+    schema:
+      'H3_READING_EXPLANATION_V1',
+    contract_id:
+      H3_READING_P8_EXPLANATION_CONTRACT_ID_,
+    source_binding_sha256:
+      locked.source_binding_sha256,
+    passage_sha256:
+      item.passage_sha256,
+    item_sha256:
+      item.item_sha256,
+    choices:
+      item.choices_ko.map(
+        function (choice, index) {
+          return {
+            ko: choice,
+            ja: item.choices_ja[index]
+          };
+        }
+      ),
+    reason:
+      spec.reason,
+    learning_blocks:
+      JSON.parse(
+        JSON.stringify(
+          spec.learning_blocks
+        )
+      )
+  };
+}
+
+
+function h3ReadingBuildReviewSection_(
+  locked,
+  item,
+  result
+) {
+  if (
+    !result ||
+    result.question_key !==
+      item.question_key
+  ) {
+    throw new Error(
+      'READING_REVIEW_SECTION_RESULT_INVALID'
+    );
+  }
+
+  var symbols = [
+    '①', '②', '③', '④'
+  ];
+  var choiceSurface =
+    item.choices_ko.map(
+      function (choice, index) {
+        return {
+          position: index + 1,
+          symbol: symbols[index],
+          text: choice
+        };
+      }
+    );
+  var rendered = [
+    item.question_text
+  ].concat(
+    choiceSurface.map(
+      function (choice) {
+        return (
+          choice.symbol +
+          ' ' +
+          choice.text
+        );
+      }
+    )
+  ).join('\n');
+
+  return {
+    section:
+      item.section,
+    display:
+      item.display,
+    result:
+      result.mark,
+    user_answer:
+      result.answer,
+    user_answer_position:
+      result.answer,
+    user_answer_text:
+      item.choices_ko[
+        result.answer - 1
+      ],
+    correct_answer:
+      result.correct_answer,
+    correct_answer_position:
+      result.correct_answer,
+    correct_answer_text:
+      item.choices_ko[
+        result.correct_answer - 1
+      ],
+    uncertain_known: true,
+    uncertain:
+      !!result.uncertain,
+    item_id:
+      item.item_id,
+    question_key:
+      item.question_key,
+    skill_id:
+      item.skill_id,
+    passage_id:
+      item.passage_id,
+    passage_sha256:
+      item.passage_sha256,
+    item_sha256:
+      item.item_sha256,
+    question_surface: {
+      rendered: rendered,
+      body:
+        item.question_text,
+      choices:
+        choiceSurface,
+      dialogue_components: []
+    },
+    script_text:
+      rendered,
+    explanation:
+      h3ReadingP8Explanation_(
+        locked,
+        item
+      ),
+    audio_asset_key: null,
+    audio_fallback_url: null
+  };
+}
+
+
 function h3ReadingBuildReviewProjection_(
   locked,
   grade
@@ -750,6 +960,27 @@ function h3ReadingBuildReviewProjection_(
       text_ja:
         locked.passage.passage_ja
     },
+    sections:
+      locked.items.map(
+        function (item) {
+          var result =
+            resultByKey[
+              item.question_key
+            ];
+
+          if (!result) {
+            throw new Error(
+              'READING_REVIEW_RESULT_MISSING'
+            );
+          }
+
+          return h3ReadingBuildReviewSection_(
+            locked,
+            item,
+            result
+          );
+        }
+      ),
     questions:
       locked.items.map(
         function (item) {

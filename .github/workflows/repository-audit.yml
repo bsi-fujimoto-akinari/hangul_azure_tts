@@ -2920,7 +2920,7 @@ jobs:
               '## 34. Written 5W approved explanation overlay',
               'sections[].explanation',
               'must not alter score',
-              'Listening Review retains its existing disclosure',
+              'provider-specific translation and source-lock behavior remains unchanged',
           ]:
               if needle not in architecture:
                   raise SystemExit(f'Explanation overlay architecture invariant missing: {needle}')

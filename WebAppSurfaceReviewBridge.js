@@ -837,6 +837,8 @@ function h3TranslationReviewApplyExplanationOverlay_(
 
   if (
     locked &&
+    typeof H3_TRANSLATION_V2_LOCKED_SCHEMA_ !==
+      'undefined' &&
     locked.schema ===
       H3_TRANSLATION_V2_LOCKED_SCHEMA_
   ) {

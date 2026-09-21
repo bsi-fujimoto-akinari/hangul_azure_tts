@@ -231,7 +231,7 @@ function submitListeningWebAnswers(request) {
           translationReview
         );
 
-      translationResult.after_sync =
+      var translationReviewReadback =
         h3SurfaceReviewOpen_({
           surface_family:
             'TRANSLATION',
@@ -241,7 +241,7 @@ function submitListeningWebAnswers(request) {
 
       if (
         h3ReviewHash_(
-          translationResult.after_sync
+          translationReviewReadback
         ) !==
         h3ReviewHash_(
           translationReview
@@ -251,6 +251,14 @@ function submitListeningWebAnswers(request) {
           'TRANSLATION_REVIEW_OPEN_VALIDATION_MISMATCH'
         );
       }
+
+      translationResult.after_sync =
+        h3SurfaceReviewOpenForLearner_({
+          surface_family:
+            'TRANSLATION',
+          set_id:
+            translationResult.set_id
+        });
 
       return translationResult;
     }

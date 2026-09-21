@@ -185,6 +185,55 @@ function h3SurfaceReviewParseJson_(
 }
 
 
+function h3SurfaceReviewComparableResult_(
+  surfaceFamily,
+  storedResult,
+  expectedResult
+) {
+  var family =
+    String(surfaceFamily || '');
+
+  if (family !== 'TRANSLATION') {
+    return expectedResult;
+  }
+
+  var hasStoredStatus =
+    Object.prototype.hasOwnProperty.call(
+      storedResult || {},
+      'status'
+    );
+
+  if (hasStoredStatus) {
+    return expectedResult;
+  }
+
+  if (
+    !expectedResult ||
+    expectedResult.status !== 'COMMITTED' ||
+    String(
+      storedResult &&
+      storedResult.receipt || ''
+    ).split('\n').indexOf(
+      'STATUS=COMMITTED'
+    ) < 0
+  ) {
+    throw new Error(
+      'SURFACE_REVIEW_TRANSLATION_LEGACY_RESULT_INVALID'
+    );
+  }
+
+  var compatible =
+    JSON.parse(
+      JSON.stringify(
+        expectedResult
+      )
+    );
+  delete compatible.status;
+
+  return compatible;
+}
+
+
 function h3SurfaceReviewTxnContext_(
   spreadsheet,
   surfaceFamily,
@@ -367,9 +416,20 @@ function h3SurfaceReviewTxnContext_(
           normalizedTxnId
         );
 
+  var comparableExpectedResult =
+    h3SurfaceReviewComparableResult_(
+      family,
+      storedResult,
+      expectedResult
+    );
+  var comparableResultSha256 =
+    h3ReviewHash_(
+      comparableExpectedResult
+    );
+
   if (
     h3ReviewHash_(storedResult) !==
-      h3ReviewHash_(expectedResult) ||
+      comparableResultSha256 ||
     Number(row[map.SCORE] || 0) !==
       Number(grade.score)
   ) {
@@ -409,9 +469,10 @@ function h3SurfaceReviewTxnContext_(
     source_binding_sha256:
       sourceBindingSha256,
     raw_input: normalized,
-    result: expectedResult,
+    result:
+      comparableExpectedResult,
     result_sha256:
-      h3ReviewHash_(expectedResult),
+      comparableResultSha256,
     grade: grade,
     stage: context.stage,
     locked: context.locked

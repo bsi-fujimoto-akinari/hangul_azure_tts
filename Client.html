@@ -2779,33 +2779,23 @@
             uncertain:
               !!question
                 .explicit_uncertainty,
+            question_text:
+              String(
+                question.question_text ||
+                ''
+              ),
+            target_segment:
+              String(
+                question.target_segment ||
+                ''
+              ),
+            choices:
+              choices.slice(),
             script_text:
-              [
-                String(
-                  question.question_text ||
-                  ''
-                ),
-                '［訳す部分］' +
-                  String(
-                    question.target_segment ||
-                    ''
-                  )
-              ].concat(
-                choices.map(
-                  function (
-                    choice,
-                    choiceIndex
-                  ) {
-                    return (
-                      circled[
-                        choiceIndex
-                      ] +
-                      ' ' +
-                      String(choice)
-                    );
-                  }
-                )
-              ).join('\n'),
+              String(
+                question.question_text ||
+                ''
+              ),
             explanation:
               question.explanation ||
               null,
@@ -3420,6 +3410,342 @@
     }
   }
 
+  function reviewTwoDigitNo_(
+    index
+  ) {
+    return (
+      '0' +
+      String(Number(index) + 1)
+    ).slice(-2);
+  }
+
+
+  function writtenReviewDisplayLabel_(
+    part
+  ) {
+    var section =
+      String(
+        part && part.section || ''
+      );
+    var labels = {
+      D2: '筆2／語彙',
+      D3: '筆3／文法',
+      D4: '筆4／置換',
+      D5: '筆5／共通',
+      D6: '筆6／応答'
+    };
+
+    if (labels[section]) {
+      return labels[section];
+    }
+
+    return String(
+      part && part.display || section
+    ).replace(/\//g, '／');
+  }
+
+
+  function reviewCardTitleText_(
+    part,
+    index
+  ) {
+    var payload =
+      app.payload || {};
+    var family =
+      String(
+        payload.surface_family || ''
+      );
+
+    if (
+      payload.kind === 'WRITTEN' &&
+      (
+        !family ||
+        family === '5W'
+      )
+    ) {
+      return (
+        reviewTwoDigitNo_(index) +
+        ' ［' +
+        writtenReviewDisplayLabel_(
+          part
+        ) +
+        '］ ' +
+        part.result
+      );
+    }
+
+    if (
+      payload.kind === 'WRITTEN' &&
+      family === 'TRANSLATION'
+    ) {
+      return (
+        reviewTwoDigitNo_(index) +
+        ' ［' +
+        questionDisplayLabel_(
+          part.display,
+          family
+        ).replace(/\//g, '／') +
+        '］ ' +
+        part.result
+      );
+    }
+
+    return (
+      'Q' +
+      (index + 1) +
+      ' ' +
+      questionDisplayLabel_(
+        part.display,
+        family
+      ) +
+      '　' +
+      part.result
+    );
+  }
+
+
+  function appendBracketUnderlines_(
+    node,
+    text
+  ) {
+    var source =
+      String(text || '');
+    var pattern =
+      /\[([^\]\n]+)\]|［([^］\n]+)］/g;
+    var cursor = 0;
+    var match;
+
+    while (
+      (match = pattern.exec(source))
+    ) {
+      node.appendChild(
+        document.createTextNode(
+          source.slice(
+            cursor,
+            match.index
+          )
+        )
+      );
+
+      var underline =
+        document.createElement('u');
+      underline.textContent =
+        match[1] || match[2] || '';
+      node.appendChild(
+        underline
+      );
+
+      cursor =
+        match.index +
+        match[0].length;
+    }
+
+    node.appendChild(
+      document.createTextNode(
+        source.slice(cursor)
+      )
+    );
+  }
+
+
+  function appendChoicesToReviewScript_(
+    node,
+    choices
+  ) {
+    (
+      Array.isArray(choices)
+        ? choices
+        : []
+    ).forEach(
+      function (choice, index) {
+        var symbol =
+          choice &&
+          typeof choice === 'object'
+            ? String(
+                choice.symbol ||
+                circled[index] ||
+                ''
+              )
+            : String(
+                circled[index] || ''
+              );
+        var text =
+          choice &&
+          typeof choice === 'object'
+            ? String(
+                choice.text || ''
+              )
+            : String(choice || '');
+
+        node.appendChild(
+          document.createTextNode(
+            '\n' +
+            symbol +
+            ' ' +
+            text
+          )
+        );
+      }
+    );
+  }
+
+
+  function appendTranslationReviewScript_(
+    node,
+    part
+  ) {
+    var fullText =
+      String(
+        part.question_text || ''
+      );
+    var target =
+      String(
+        part.target_segment || ''
+      );
+    var targetIndex =
+      fullText.indexOf(target);
+
+    if (
+      !fullText ||
+      !target ||
+      targetIndex < 0
+    ) {
+      throw new Error(
+        'TRANSLATION_REVIEW_TARGET_SEGMENT_MISMATCH'
+      );
+    }
+
+    node.appendChild(
+      document.createTextNode(
+        fullText.slice(
+          0,
+          targetIndex
+        )
+      )
+    );
+
+    var underline =
+      document.createElement('u');
+    underline.textContent =
+      target;
+    node.appendChild(underline);
+
+    node.appendChild(
+      document.createTextNode(
+        fullText.slice(
+          targetIndex +
+          target.length
+        )
+      )
+    );
+
+    appendChoicesToReviewScript_(
+      node,
+      part.choices
+    );
+  }
+
+
+  function appendWritten5WReviewScript_(
+    node,
+    part
+  ) {
+    var surface =
+      part.question_surface || {};
+    var body =
+      String(surface.body || '');
+    var choices =
+      Array.isArray(surface.choices)
+        ? surface.choices
+        : [];
+
+    if (!body) {
+      var fallback =
+        String(
+          surface.rendered ||
+          part.script_text ||
+          ''
+        );
+      body = fallback.replace(
+        /^Q\d+\s+\[[^\n]+\]\r?\n/,
+        ''
+      );
+      if (choices.length) {
+        var firstChoice =
+          body.search(
+            /\n[①②③④]\s/
+          );
+        if (firstChoice >= 0) {
+          body =
+            body.slice(
+              0,
+              firstChoice
+            );
+        }
+      }
+    }
+
+    if (part.section === 'D4') {
+      appendBracketUnderlines_(
+        node,
+        body
+      );
+    } else {
+      node.appendChild(
+        document.createTextNode(
+          body
+        )
+      );
+    }
+
+    appendChoicesToReviewScript_(
+      node,
+      choices
+    );
+  }
+
+
+  function appendReviewScript_(
+    node,
+    part
+  ) {
+    var payload =
+      app.payload || {};
+    var family =
+      String(
+        payload.surface_family || ''
+      );
+
+    if (
+      payload.kind === 'WRITTEN' &&
+      family === 'TRANSLATION'
+    ) {
+      appendTranslationReviewScript_(
+        node,
+        part
+      );
+      return;
+    }
+
+    if (
+      payload.kind === 'WRITTEN' &&
+      (
+        !family ||
+        family === '5W'
+      )
+    ) {
+      appendWritten5WReviewScript_(
+        node,
+        part
+      );
+      return;
+    }
+
+    node.textContent =
+      part.script_text;
+  }
+
+
   function isWritten5WReview_() {
     var payload =
       app.payload || {};
@@ -3487,22 +3813,11 @@
       );
     var title =
       document.createElement('h3');
-    var reviewSurfaceLabel =
-      surfaceLearnerLabel_(
-        app.payload &&
-        app.payload.surface_family
-      );
     title.textContent =
-      'Q' +
-      (index + 1) +
-      ' ' +
-      questionDisplayLabel_(
-        part.display,
-        app.payload &&
-          app.payload.surface_family
-      ) +
-      '　' +
-      part.result;
+      reviewCardTitleText_(
+        part,
+        index
+      );
     head.appendChild(title);
 
     if (part.audio_asset_key) {
@@ -3601,44 +3916,49 @@
       card.appendChild(image);
     }
 
-    var scriptTitle =
-      document.createElement('h4');
-    scriptTitle.className =
-      'review-block-title';
     var reviewFamily =
       String(
         app.payload &&
         app.payload.surface_family || ''
       );
-    scriptTitle.textContent =
-      reviewFamily === 'READING'
-        ? '設問'
-        : (
-            reviewFamily === 'TRANSLATION'
-              ? '原文・訳す部分'
-              : (
-                  app.payload &&
-                  app.payload.kind ===
-                    'WRITTEN'
-                    ? '問題'
-                    : '問題・スクリプト'
-                )
-          );
-    card.appendChild(
-      scriptTitle
-    );
+
+    if (
+      reviewFamily !==
+        'TRANSLATION'
+    ) {
+      var scriptTitle =
+        document.createElement('h4');
+      scriptTitle.className =
+        'review-block-title';
+      scriptTitle.textContent =
+        reviewFamily === 'READING'
+          ? '設問'
+          : (
+              app.payload &&
+              app.payload.kind ===
+                'WRITTEN'
+                ? '問題'
+                : '問題・スクリプト'
+            );
+      card.appendChild(
+        scriptTitle
+      );
+    }
 
     var script =
       document.createElement('pre');
     script.className =
       'review-section-script';
-    script.textContent =
-      part.script_text;
+    appendReviewScript_(
+      script,
+      part
+    );
     card.appendChild(script);
 
     appendReviewTranslations(
       card,
-      part.explanation
+      part.explanation,
+      part
     );
 
     var explanationContainer =
@@ -3723,7 +4043,8 @@
 
   function appendReviewTranslations(
     card,
-    explanation
+    explanation,
+    part
   ) {
     if (!explanation) return;
 
@@ -3763,9 +4084,29 @@
     if (hasBody) {
       var body =
         document.createElement('p');
-      body.textContent =
-        '→ ' +
-        explanation.body_ja;
+      body.appendChild(
+        document.createTextNode(
+          '→ '
+        )
+      );
+
+      if (
+        isWritten5WReview_() &&
+        part &&
+        part.section === 'D4'
+      ) {
+        appendBracketUnderlines_(
+          body,
+          explanation.body_ja
+        );
+      } else {
+        body.appendChild(
+          document.createTextNode(
+            explanation.body_ja
+          )
+        );
+      }
+
       translation.appendChild(body);
     }
 

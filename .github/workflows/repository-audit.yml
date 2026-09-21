@@ -6876,6 +6876,9 @@ jobs:
               "H3_TRANSLATION_PERSISTENT_REVIEW_SCHEMA_",
               "'READING_PRODUCTION_WEB'",
               "'TRANSLATION_PRODUCTION_WEB'",
+              "'REVIEW_HOME_INDEX_SURFACE_FAMILY_COLUMN_MISSING'",
+              "writtenFamily === '5W'",
+              "'WRITTEN',\n                    '5W'",
           ]:
               if needle not in persistence:
                   raise SystemExit(f'F1 HOME upsert invariant missing: {needle}')

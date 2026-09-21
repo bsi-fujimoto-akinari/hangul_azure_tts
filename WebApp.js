@@ -92,9 +92,15 @@ function getListeningWebMedia(request) {
 }
 
 function completeReviewSession(request) {
-  return h3ReviewCompleteSession_(
-    request
-  );
+  try {
+    return h3ReviewCompleteSession_(
+      request
+    );
+  } catch (err) {
+    return h3ReviewCompletionFailureResult_(
+      err
+    );
+  }
 }
 
 

@@ -1327,7 +1327,7 @@ jobs:
           );
           assert.strictEqual(
             actualHome.review_home_index_contract,
-            'H3_REVIEW_HOME_INDEX_V3_COMPAT'
+            'H3_REVIEW_HOME_INDEX_V4_COMPAT'
           );
           assert.strictEqual(
             actualHome.learning_surface_schema,
@@ -1627,6 +1627,7 @@ jobs:
               learning_surface_schema:
                 'H3_LEARNING_SURFACE_V1',
               provider_kind:'LISTENING',
+              kind:'LISTENING',
               surface_family:'5L',
               level:'3級'
             }
@@ -1638,6 +1639,7 @@ jobs:
               learning_surface_schema:
                 'H3_LEARNING_SURFACE_V1',
               provider_kind:'LISTENING',
+              kind:'LISTENING',
               surface_family:'5L',
               level:'3級'
             }
@@ -1807,6 +1809,7 @@ jobs:
               route:'txn-review',
               learning_surface_schema:'H3_LEARNING_SURFACE_V1',
               provider_kind:'LISTENING',
+              kind:'LISTENING',
               surface_family:'5L',
               level:'3級'
             }
@@ -1818,6 +1821,7 @@ jobs:
               route:'legacy-review',
               learning_surface_schema:'H3_LEARNING_SURFACE_V1',
               provider_kind:'LISTENING',
+              kind:'LISTENING',
               surface_family:'5L',
               level:'3級'
             }
@@ -8191,4 +8195,701 @@ jobs:
           }
 
           console.log('Audio semantic regression checks passed.');
+          NODE
+
+
+      - name: Audit Review completion remediation contract
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const assert = require('assert');
+
+          const client = fs.readFileSync('Client.html', 'utf8');
+          const core = fs.readFileSync('WebAppReviewCore.js', 'utf8');
+          const persistence = fs.readFileSync(
+            'WebAppReviewPersistence.js',
+            'utf8'
+          );
+          const webapp = fs.readFileSync('WebApp.js', 'utf8');
+
+          assert(
+            client.includes("review.provider_kind ||") &&
+            client.includes("review.kind"),
+            'Client completion identity does not prefer provider_kind.'
+          );
+          assert(
+            client.includes("'H3_REVIEW_COMPLETE_REQUEST_V2'"),
+            'Client completion request schema is not V2.'
+          );
+          assert(
+            core.includes("'LAST_REVIEW_COMPLETION_KEY'") &&
+            core.includes("'H3_REVIEW_HOME_INDEX_V4_COMPAT'"),
+            'Review HOME index V4 contract is missing.'
+          );
+          assert(
+            persistence.includes('function migrateReviewHomeIndexV4()'),
+            'Review HOME index V4 migration is missing.'
+          );
+          assert(
+            webapp.includes(
+              'h3ReviewCompletionFailureResult_'
+            ),
+            'Review completion wrapper does not return typed failures.'
+          );
+
+          const clientJs = client
+            .replace(/^<script>\s*/, '')
+            .replace(/\s*<\/script>\s*$/, '')
+            .replace(
+              /\}\)\(\);\s*$/,
+              [
+                'globalThis.__reviewCompletionTest = {',
+                '  app: app,',
+                '  reviewCompletionRequest_: reviewCompletionRequest_,',
+                '  attemptReviewCompletion_: attemptReviewCompletion_,',
+                '  reviewCompletionProviderKind_: reviewCompletionProviderKind_',
+                '};',
+                '})();'
+              ].join('\n')
+            );
+
+          const classList = {
+            add() {},
+            remove() {},
+            contains() { return false; }
+          };
+          const context = {
+            console,
+            Uint8Array,
+            Array,
+            Number,
+            String,
+            Object,
+            Math,
+            JSON,
+            encodeURIComponent,
+            setTimeout() {},
+            navigator: {
+              userAgent: '',
+              maxTouchPoints: 0
+            },
+            window: {
+              innerWidth: 390,
+              screen: {
+                width: 390,
+                height: 844
+              },
+              matchMedia() {
+                return {
+                  matches: false,
+                  addEventListener() {},
+                  addListener() {}
+                };
+              },
+              crypto: {
+                getRandomValues(bytes) {
+                  for (
+                    let i = 0;
+                    i < bytes.length;
+                    i += 1
+                  ) {
+                    bytes[i] = i + 1;
+                  }
+                  return bytes;
+                }
+              },
+              console
+            },
+            document: {
+              addEventListener() {},
+              body: {
+                classList
+              },
+              documentElement: {
+                style: {
+                  setProperty() {}
+                }
+              }
+            },
+            google: {
+              script: {
+                run: null
+              }
+            }
+          };
+          context.globalThis = context;
+          vm.createContext(context);
+          vm.runInContext(clientJs, context);
+
+          const clientApi =
+            context.__reviewCompletionTest;
+          assert(clientApi);
+
+          const reviews = [
+            {
+              label: '5L current',
+              review: {
+                provider_kind: 'LISTENING',
+                surface_family: '5L',
+                set_id: 'H3-L',
+                txn_id: 'TX-L',
+                sections: [{}, {}, {}, {}, {}]
+              },
+              kind: 'LISTENING',
+              source: 'TX-L'
+            },
+            {
+              label: '5W',
+              review: {
+                provider_kind: 'WRITTEN',
+                kind: 'WRITTEN',
+                surface_family: '5W',
+                set_id: 'H3-W',
+                sections: [{}, {}, {}, {}, {}]
+              },
+              kind: 'WRITTEN',
+              source: 'H3-W'
+            },
+            {
+              label: '2R',
+              review: {
+                provider_kind: 'WRITTEN',
+                kind: 'WRITTEN',
+                surface_family: 'READING',
+                set_id: 'H3-R',
+                sections: [{}, {}]
+              },
+              kind: 'WRITTEN',
+              source: 'H3-R'
+            },
+            {
+              label: '2T',
+              review: {
+                provider_kind: 'WRITTEN',
+                kind: 'WRITTEN',
+                surface_family: 'TRANSLATION',
+                set_id: 'H3-T',
+                sections: [{}, {}]
+              },
+              kind: 'WRITTEN',
+              source: 'H3-T'
+            }
+          ];
+
+          reviews.forEach(spec => {
+            clientApi.app.reviewCompletionEventKey =
+              null;
+            const request =
+              clientApi.reviewCompletionRequest_(
+                spec.review
+              );
+            assert.strictEqual(
+              request.review_kind,
+              spec.kind,
+              spec.label + ' provider identity mismatch.'
+            );
+            assert.strictEqual(
+              request.review_source_id,
+              spec.source,
+              spec.label + ' source identity mismatch.'
+            );
+            assert.match(
+              request.completion_event_key,
+              /^H3RC-[0-9a-f]{32}$/,
+              spec.label + ' completion key invalid.'
+            );
+          });
+
+          const commonContext = {
+            console,
+            JSON,
+            Number,
+            String,
+            Object,
+            Array,
+            Math,
+            Date,
+            SpreadsheetApp: {},
+            Utilities: {}
+          };
+          commonContext.globalThis =
+            commonContext;
+          vm.createContext(commonContext);
+          vm.runInContext(core, commonContext);
+
+          const listeningPayload = {
+            surface_family: '5L',
+            level: '3級',
+            sections: [{}, {}, {}, {}, {}]
+          };
+          commonContext
+            .h3ReviewAttachSurfaceMetadata_(
+              { kind: 'LISTENING' },
+              listeningPayload
+            );
+          assert.strictEqual(
+            listeningPayload.provider_kind,
+            'LISTENING'
+          );
+          assert.strictEqual(
+            listeningPayload.kind,
+            'LISTENING'
+          );
+
+          const completeStart =
+            client.indexOf(
+              'function completeReviewAndLoadHome_'
+            );
+          const completeEnd =
+            client.indexOf(
+              'function renderPersistentReview',
+              completeStart
+            );
+          const completeSource =
+            client.slice(
+              completeStart,
+              completeEnd
+            );
+          const attemptIndex =
+            completeSource.indexOf(
+              'attemptReviewCompletion_'
+            );
+          const homeIndex =
+            completeSource.lastIndexOf(
+              'loadHome();'
+            );
+          assert(
+            attemptIndex >= 0 &&
+            homeIndex > attemptIndex,
+            'Full Review HOME navigation is not independent of completion result.'
+          );
+          assert(
+            !completeSource.includes(
+              'setLoading(true)'
+            ) &&
+            !completeSource.includes(
+              'showError('
+            ),
+            'Cooldown persistence still blocks learner navigation.'
+          );
+
+          function installRunSequence(sequence) {
+            let calls = 0;
+            let successHandler = null;
+            let failureHandler = null;
+            const runner = {
+              withSuccessHandler(fn) {
+                successHandler = fn;
+                return runner;
+              },
+              withFailureHandler(fn) {
+                failureHandler = fn;
+                return runner;
+              },
+              completeReviewSession(request) {
+                calls += 1;
+                const next = sequence.shift();
+                if (!next) {
+                  throw new Error(
+                    'Missing fake RPC result.'
+                  );
+                }
+                if (next.type === 'failure') {
+                  failureHandler(
+                    new Error('transport')
+                  );
+                } else {
+                  successHandler(next.value);
+                }
+              }
+            };
+            context.google.script.run =
+              runner;
+            return () => calls;
+          }
+
+          const request = {
+            schema:
+              'H3_REVIEW_COMPLETE_REQUEST_V2',
+            review_kind: 'LISTENING',
+            surface_family: '5L',
+            set_id: 'H3-L',
+            review_source_id: 'TX-L',
+            viewed_count: 5,
+            completion_event_key:
+              'H3RC-0102030405060708090a0b0c0d0e0f10'
+          };
+          clientApi.app.payload = {
+            mode: 'REVIEW'
+          };
+
+          let calls = installRunSequence([
+            {
+              type: 'success',
+              value: {
+                schema:
+                  'H3_REVIEW_COMPLETE_RESULT_V2',
+                status: 'ERROR',
+                error_class: 'VALIDATION',
+                retryable: false
+              }
+            }
+          ]);
+          clientApi.attemptReviewCompletion_(
+            request,
+            0
+          );
+          assert.strictEqual(
+            calls(),
+            1,
+            'Validation error was retried.'
+          );
+
+          calls = installRunSequence([
+            {
+              type: 'success',
+              value: {
+                schema:
+                  'H3_REVIEW_COMPLETE_RESULT_V2',
+                status: 'ERROR',
+                error_class: 'TRANSIENT',
+                retryable: true
+              }
+            },
+            {
+              type: 'success',
+              value: {
+                schema:
+                  'H3_REVIEW_COMPLETE_RESULT_V2',
+                status: 'RECORDED',
+                set_id: 'H3-L',
+                completion_event_key:
+                  request.completion_event_key
+              }
+            }
+          ]);
+          clientApi.attemptReviewCompletion_(
+            request,
+            0
+          );
+          assert.strictEqual(
+            calls(),
+            2,
+            'Transient error did not retry exactly once.'
+          );
+
+          calls = installRunSequence([
+            {
+              type: 'failure'
+            },
+            {
+              type: 'success',
+              value: {
+                schema:
+                  'H3_REVIEW_COMPLETE_RESULT_V2',
+                status: 'ALREADY_RECORDED',
+                set_id: 'H3-L',
+                completion_event_key:
+                  request.completion_event_key
+              }
+            }
+          ]);
+          clientApi.attemptReviewCompletion_(
+            request,
+            0
+          );
+          assert.strictEqual(
+            calls(),
+            2,
+            'Transport failure did not retry exactly once.'
+          );
+
+          const timestamps = [
+            '2026-09-21T10:00:00.000Z',
+            '2026-09-21T10:05:00.000Z'
+          ];
+          let dateIndex = 0;
+          class FakeDate extends Date {
+            constructor(...args) {
+              if (args.length) {
+                super(...args);
+              } else {
+                super(
+                  timestamps[
+                    Math.min(
+                      dateIndex,
+                      timestamps.length - 1
+                    )
+                  ]
+                );
+                dateIndex += 1;
+              }
+            }
+          }
+
+          const serverContext = {
+            console,
+            JSON,
+            Number,
+            String,
+            Object,
+            Array,
+            Math,
+            Date: FakeDate,
+            H3_WEB_RUNTIME_SPREADSHEET_ID:
+              'RUNTIME'
+          };
+          serverContext.globalThis =
+            serverContext;
+          vm.createContext(serverContext);
+          vm.runInContext(core, serverContext);
+          vm.runInContext(
+            persistence,
+            serverContext
+          );
+
+          const headers = [
+            'KIND',
+            'SET_ID',
+            'SET_NO',
+            'ANSWERED_AT',
+            'SCORE',
+            'TOTAL',
+            'WRONG_COUNT',
+            'UNCERTAINTY_KNOWN',
+            'UNCERTAIN_COUNT',
+            'BASE_PRIORITY',
+            'REVIEW_SOURCE_ID',
+            'SOURCE_MODE',
+            'STATUS',
+            'SURFACE_FAMILY',
+            'LEVEL',
+            'LAST_REVIEWED_AT',
+            'LAST_REVIEW_COMPLETION_KEY'
+          ];
+          const map =
+            Object.fromEntries(
+              headers.map(
+                (name, index) => [
+                  name,
+                  index
+                ]
+              )
+            );
+          const row = [
+            'LISTENING',
+            'H3-L',
+            1,
+            '2026-09-21T09:00:00Z',
+            2,
+            5,
+            3,
+            'TRUE',
+            0,
+            60,
+            'TX-L',
+            'LISTENING_PRODUCTION_WEB',
+            'ACTIVE',
+            '5L',
+            '3級',
+            '',
+            ''
+          ];
+          const sheet = {
+            getRange(
+              rowNumber,
+              column,
+              rowCount,
+              columnCount
+            ) {
+              return {
+                setValues(values) {
+                  assert.strictEqual(
+                    rowNumber,
+                    2
+                  );
+                  assert.strictEqual(
+                    column,
+                    map.LAST_REVIEWED_AT + 1
+                  );
+                  assert.strictEqual(
+                    rowCount,
+                    1
+                  );
+                  assert.strictEqual(
+                    columnCount,
+                    2
+                  );
+                  row[
+                    map.LAST_REVIEWED_AT
+                  ] = values[0][0];
+                  row[
+                    map.LAST_REVIEW_COMPLETION_KEY
+                  ] = values[0][1];
+                }
+              };
+            }
+          };
+          const table = {
+            header: headers,
+            map,
+            rows: [row]
+          };
+          serverContext
+            .h3ReviewHomeIndexTable_ =
+            () => ({
+              schema_version:
+                'H3_REVIEW_HOME_INDEX_V4',
+              sheet,
+              table
+            });
+          serverContext
+            .h3ReviewHomeIndexFind_ =
+            () => ({
+              rowNumber: 2,
+              row
+            });
+          serverContext.SpreadsheetApp = {
+            openById() {
+              return {};
+            },
+            flush() {}
+          };
+          let lockAvailable = true;
+          serverContext.LockService = {
+            getScriptLock() {
+              return {
+                tryLock() {
+                  return lockAvailable;
+                },
+                releaseLock() {}
+              };
+            }
+          };
+
+          const serverRequest = {
+            schema:
+              'H3_REVIEW_COMPLETE_REQUEST_V2',
+            review_kind: 'LISTENING',
+            surface_family: '5L',
+            set_id: 'H3-L',
+            review_source_id: 'TX-L',
+            viewed_count: 5,
+            completion_event_key:
+              request.completion_event_key
+          };
+
+          const first =
+            serverContext
+              .h3ReviewCompleteSession_(
+                serverRequest
+              );
+          assert.strictEqual(
+            first.status,
+            'RECORDED'
+          );
+          const firstTimestamp =
+            row[map.LAST_REVIEWED_AT];
+
+          const duplicate =
+            serverContext
+              .h3ReviewCompleteSession_(
+                serverRequest
+              );
+          assert.strictEqual(
+            duplicate.status,
+            'ALREADY_RECORDED'
+          );
+          assert.strictEqual(
+            row[map.LAST_REVIEWED_AT],
+            firstTimestamp,
+            'Same-event retry advanced cooldown timestamp.'
+          );
+
+          const laterRequest = {
+            ...serverRequest,
+            completion_event_key:
+              'H3RC-1112131415161718191a1b1c1d1e1f20'
+          };
+          const later =
+            serverContext
+              .h3ReviewCompleteSession_(
+                laterRequest
+              );
+          assert.strictEqual(
+            later.status,
+            'RECORDED'
+          );
+          assert.strictEqual(
+            row[
+              map.LAST_REVIEW_COMPLETION_KEY
+            ],
+            laterRequest.completion_event_key,
+            'Later Review completion was incorrectly suppressed.'
+          );
+
+          const beforeInvalid =
+            row.slice();
+          try {
+            serverContext
+              .h3ReviewCompleteSession_({
+                ...serverRequest,
+                completion_event_key: ''
+              });
+            assert.fail(
+              'Invalid completion identity was accepted.'
+            );
+          } catch (err) {
+            const failure =
+              serverContext
+                .h3ReviewCompletionFailureResult_(
+                  err
+                );
+            assert.strictEqual(
+              failure.error_class,
+              'VALIDATION'
+            );
+            assert.strictEqual(
+              failure.retryable,
+              false
+            );
+          }
+          assert.deepStrictEqual(
+            row,
+            beforeInvalid,
+            'Validation failure mutated cooldown state.'
+          );
+
+          lockAvailable = false;
+          try {
+            serverContext
+              .h3ReviewCompleteSession_({
+                ...serverRequest,
+                completion_event_key:
+                  'H3RC-2122232425262728292a2b2c2d2e2f30'
+              });
+            assert.fail(
+              'Lock contention was accepted.'
+            );
+          } catch (err) {
+            const failure =
+              serverContext
+                .h3ReviewCompletionFailureResult_(
+                  err
+                );
+            assert.strictEqual(
+              failure.error_class,
+              'TRANSIENT'
+            );
+            assert.strictEqual(
+              failure.retryable,
+              true
+            );
+          }
+
+          console.log(
+            'Review completion remediation contract checks passed.'
+          );
           NODE

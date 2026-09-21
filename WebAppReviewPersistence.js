@@ -6340,6 +6340,11 @@ function h3ReviewHomeIndexRawRow_(
     LAST_REVIEWED_AT:
       String(
         entry.last_reviewed_at || ''
+      ),
+    LAST_REVIEW_COMPLETION_KEY:
+      String(
+        entry.last_review_completion_key ||
+        ''
       )
   };
 
@@ -6626,16 +6631,147 @@ function migrateReviewHomeIndexV3() {
 }
 
 
+function migrateReviewHomeIndexV4() {
+  var lock =
+    LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    var spreadsheet =
+      SpreadsheetApp.openById(
+        H3_WEB_RUNTIME_SPREADSHEET_ID
+      );
+    var indexed =
+      h3ReviewHomeIndexTable_(
+        spreadsheet
+      );
+
+    if (
+      indexed.schema_version ===
+        'H3_REVIEW_HOME_INDEX_V4'
+    ) {
+      return {
+        schema:
+          'H3_REVIEW_HOME_INDEX_MIGRATION_V4',
+        status: 'ALREADY_V4',
+        rows:
+          indexed.table.rows.length
+      };
+    }
+
+    if (
+      indexed.schema_version !==
+        'H3_REVIEW_HOME_INDEX_V3'
+    ) {
+      throw new Error(
+        'REVIEW_HOME_INDEX_V4_MIGRATION_SOURCE_INVALID'
+      );
+    }
+
+    indexed.sheet
+      .getRange(
+        1,
+        H3_REVIEW_HOME_INDEX_HEADERS_V3_
+          .length + 1
+      )
+      .setValue(
+        'LAST_REVIEW_COMPLETION_KEY'
+      );
+
+    SpreadsheetApp.flush();
+
+    var readback =
+      h3ReviewHomeIndexTable_(
+        spreadsheet
+      );
+
+    if (
+      readback.schema_version !==
+        'H3_REVIEW_HOME_INDEX_V4'
+    ) {
+      throw new Error(
+        'REVIEW_HOME_INDEX_V4_MIGRATION_READBACK_INVALID'
+      );
+    }
+
+    return {
+      schema:
+        'H3_REVIEW_HOME_INDEX_MIGRATION_V4',
+      status: 'PASS',
+      rows:
+        readback.table.rows.length
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+function h3ReviewCompletionError_(
+  code,
+  errorClass,
+  retryable
+) {
+  var err =
+    new Error(String(code || ''));
+
+  err.h3_review_error_code =
+    String(code || '');
+  err.h3_review_error_class =
+    String(errorClass || 'UNCLASSIFIED');
+  err.h3_review_retryable =
+    retryable === true;
+
+  return err;
+}
+
+
+function h3ReviewCompletionFailureResult_(
+  err
+) {
+  var code =
+    err &&
+    err.h3_review_error_code
+      ? String(
+          err.h3_review_error_code
+        )
+      : 'REVIEW_COMPLETE_UNCLASSIFIED_RUNTIME';
+  var errorClass =
+    err &&
+    err.h3_review_error_class
+      ? String(
+          err.h3_review_error_class
+        )
+      : 'UNCLASSIFIED';
+  var retryable =
+    errorClass === 'TRANSIENT' &&
+    err &&
+    err.h3_review_retryable === true;
+
+  return {
+    schema:
+      'H3_REVIEW_COMPLETE_RESULT_V2',
+    status: 'ERROR',
+    error_code: code,
+    error_class:
+      errorClass,
+    retryable: retryable
+  };
+}
+
+
 function h3ReviewCompleteSession_(
   request
 ) {
   if (
     !request ||
     request.schema !==
-      'H3_REVIEW_COMPLETE_REQUEST_V1'
+      'H3_REVIEW_COMPLETE_REQUEST_V2'
   ) {
-    throw new Error(
-      'REVIEW_COMPLETE_REQUEST_INVALID'
+    throw h3ReviewCompletionError_(
+      'REVIEW_COMPLETE_REQUEST_INVALID',
+      'VALIDATION',
+      false
     );
   }
 
@@ -6659,6 +6795,10 @@ function h3ReviewCompleteSession_(
     Number(
       request.viewed_count || 0
     );
+  var completionEventKey =
+    String(
+      request.completion_event_key || ''
+    );
 
   if (
     ['LISTENING', 'WRITTEN']
@@ -6667,18 +6807,32 @@ function h3ReviewCompleteSession_(
     !reviewSourceId ||
     !surfaceFamily ||
     !Number.isInteger(viewedCount) ||
-    viewedCount < 1
+    viewedCount < 1 ||
+    !/^H3RC-[0-9a-f]{32}$/.test(
+      completionEventKey
+    )
   ) {
-    throw new Error(
-      'REVIEW_COMPLETE_IDENTITY_INVALID'
+    throw h3ReviewCompletionError_(
+      'REVIEW_COMPLETE_IDENTITY_INVALID',
+      'VALIDATION',
+      false
     );
   }
 
   var lock =
     LockService.getScriptLock();
-  lock.waitLock(30000);
+  var locked = false;
 
   try {
+    if (!lock.tryLock(30000)) {
+      throw h3ReviewCompletionError_(
+        'REVIEW_COMPLETE_LOCK_BUSY',
+        'TRANSIENT',
+        true
+      );
+    }
+    locked = true;
+
     var spreadsheet =
       SpreadsheetApp.openById(
         H3_WEB_RUNTIME_SPREADSHEET_ID
@@ -6690,10 +6844,12 @@ function h3ReviewCompleteSession_(
 
     if (
       indexed.schema_version !==
-        'H3_REVIEW_HOME_INDEX_V3'
+        'H3_REVIEW_HOME_INDEX_V4'
     ) {
-      throw new Error(
-        'REVIEW_COMPLETE_HOME_INDEX_V3_REQUIRED'
+      throw h3ReviewCompletionError_(
+        'REVIEW_COMPLETE_HOME_INDEX_V4_REQUIRED',
+        'INTEGRITY',
+        false
       );
     }
 
@@ -6705,8 +6861,10 @@ function h3ReviewCompleteSession_(
       );
 
     if (!found) {
-      throw new Error(
-        'REVIEW_COMPLETE_HOME_ENTRY_MISSING'
+      throw h3ReviewCompletionError_(
+        'REVIEW_COMPLETE_HOME_ENTRY_MISSING',
+        'INTEGRITY',
+        false
       );
     }
 
@@ -6743,8 +6901,64 @@ function h3ReviewCompleteSession_(
       total < 1 ||
       viewedCount !== total
     ) {
-      throw new Error(
-        'REVIEW_COMPLETE_VALIDATION_MISMATCH'
+      throw h3ReviewCompletionError_(
+        'REVIEW_COMPLETE_VALIDATION_MISMATCH',
+        'INTEGRITY',
+        false
+      );
+    }
+
+    var storedCompletionKey =
+      String(
+        row[
+          map.LAST_REVIEW_COMPLETION_KEY
+        ] || ''
+      );
+    var storedCompletedAt =
+      String(
+        row[
+          map.LAST_REVIEWED_AT
+        ] || ''
+      );
+
+    if (
+      storedCompletionKey ===
+        completionEventKey
+    ) {
+      if (!storedCompletedAt) {
+        throw h3ReviewCompletionError_(
+          'REVIEW_COMPLETE_DUPLICATE_STATE_INVALID',
+          'INTEGRITY',
+          false
+        );
+      }
+
+      return {
+        schema:
+          'H3_REVIEW_COMPLETE_RESULT_V2',
+        status: 'ALREADY_RECORDED',
+        review_kind: kind,
+        surface_family:
+          surfaceFamily,
+        set_id: setId,
+        completion_event_key:
+          completionEventKey,
+        last_reviewed_at:
+          storedCompletedAt,
+        retryable: false,
+        scheduler_mutation_count: 0,
+        learner_history_mutation_count: 0
+      };
+    }
+
+    if (
+      map.LAST_REVIEW_COMPLETION_KEY !==
+        map.LAST_REVIEWED_AT + 1
+    ) {
+      throw h3ReviewCompletionError_(
+        'REVIEW_COMPLETE_V4_COLUMN_ORDER_INVALID',
+        'INTEGRITY',
+        false
       );
     }
 
@@ -6754,9 +6968,14 @@ function h3ReviewCompleteSession_(
     indexed.sheet
       .getRange(
         found.rowNumber,
-        map.LAST_REVIEWED_AT + 1
+        map.LAST_REVIEWED_AT + 1,
+        1,
+        2
       )
-      .setValue(completedAt);
+      .setValues([[
+        completedAt,
+        completionEventKey
+      ]]);
 
     SpreadsheetApp.flush();
 
@@ -6778,28 +6997,41 @@ function h3ReviewCompleteSession_(
           readback.table.map
             .LAST_REVIEWED_AT
         ] || ''
-      ) !== completedAt
+      ) !== completedAt ||
+      String(
+        stored.row[
+          readback.table.map
+            .LAST_REVIEW_COMPLETION_KEY
+        ] || ''
+      ) !== completionEventKey
     ) {
-      throw new Error(
-        'REVIEW_COMPLETE_READBACK_MISMATCH'
+      throw h3ReviewCompletionError_(
+        'REVIEW_COMPLETE_READBACK_MISMATCH',
+        'INTEGRITY',
+        false
       );
     }
 
     return {
       schema:
-        'H3_REVIEW_COMPLETE_RESULT_V1',
+        'H3_REVIEW_COMPLETE_RESULT_V2',
       status: 'RECORDED',
       review_kind: kind,
       surface_family:
         surfaceFamily,
       set_id: setId,
+      completion_event_key:
+        completionEventKey,
       last_reviewed_at:
         completedAt,
+      retryable: false,
       scheduler_mutation_count: 0,
       learner_history_mutation_count: 0
     };
   } finally {
-    lock.releaseLock();
+    if (locked) {
+      lock.releaseLock();
+    }
   }
 }
 
@@ -7078,6 +7310,7 @@ function h3ReviewHomeIndexUpsertAfterCommit_(
     }
 
     entry.last_reviewed_at = '';
+    entry.last_review_completion_key = '';
     if (
       existing &&
       Object.prototype
@@ -7091,6 +7324,22 @@ function h3ReviewHomeIndexUpsertAfterCommit_(
           existing.row[
             indexed.table.map
               .LAST_REVIEWED_AT
+          ] || ''
+        );
+    }
+    if (
+      existing &&
+      Object.prototype
+        .hasOwnProperty.call(
+          indexed.table.map,
+          'LAST_REVIEW_COMPLETION_KEY'
+        )
+    ) {
+      entry.last_review_completion_key =
+        String(
+          existing.row[
+            indexed.table.map
+              .LAST_REVIEW_COMPLETION_KEY
           ] || ''
         );
     }

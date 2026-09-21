@@ -323,6 +323,19 @@ function h3ReviewAttachSurfaceMetadata_(
     metadata.learning_surface_schema;
   payload.provider_kind =
     metadata.provider_kind;
+
+  if (
+    payload.kind &&
+    String(payload.kind) !==
+      metadata.provider_kind
+  ) {
+    throw new Error(
+      'REVIEW_SURFACE_KIND_MISMATCH'
+    );
+  }
+  payload.kind =
+    metadata.provider_kind;
+
   payload.surface_family =
     metadata.surface_family;
   payload.level =
@@ -494,8 +507,14 @@ var H3_REVIEW_HOME_INDEX_HEADERS_V3_ =
       'LAST_REVIEWED_AT'
     ]);
 
+var H3_REVIEW_HOME_INDEX_HEADERS_V4_ =
+  H3_REVIEW_HOME_INDEX_HEADERS_V3_
+    .concat([
+      'LAST_REVIEW_COMPLETION_KEY'
+    ]);
+
 var H3_REVIEW_HOME_INDEX_HEADERS_ =
-  H3_REVIEW_HOME_INDEX_HEADERS_V3_;
+  H3_REVIEW_HOME_INDEX_HEADERS_V4_;
 
 
 function h3ReviewNormalizeLevel_(
@@ -1128,11 +1147,17 @@ function h3ReviewHomeIndexTable_(
     JSON.stringify(
       H3_REVIEW_HOME_INDEX_HEADERS_V3_
     );
+  var isV4 =
+    JSON.stringify(table.header) ===
+    JSON.stringify(
+      H3_REVIEW_HOME_INDEX_HEADERS_V4_
+    );
 
   if (
     !isV1 &&
     !isV2 &&
-    !isV3
+    !isV3 &&
+    !isV4
   ) {
     throw new Error(
       'REVIEW_HOME_INDEX_HEADER_MISMATCH'
@@ -1143,12 +1168,16 @@ function h3ReviewHomeIndexTable_(
     sheet: sheet,
     table: table,
     schema_version:
-      isV3
-        ? 'H3_REVIEW_HOME_INDEX_V3'
+      isV4
+        ? 'H3_REVIEW_HOME_INDEX_V4'
         : (
-            isV2
-              ? 'H3_REVIEW_HOME_INDEX_V2'
-              : 'H3_REVIEW_HOME_INDEX_V1'
+            isV3
+              ? 'H3_REVIEW_HOME_INDEX_V3'
+              : (
+                  isV2
+                    ? 'H3_REVIEW_HOME_INDEX_V2'
+                    : 'H3_REVIEW_HOME_INDEX_V1'
+                )
           )
   };
 }
@@ -1303,6 +1332,18 @@ function h3ReviewHomeIndexRowEntry_(
         ? String(
             row[
               map.LAST_REVIEWED_AT
+            ] || ''
+          )
+        : '',
+    last_review_completion_key:
+      Object.prototype
+        .hasOwnProperty.call(
+          map,
+          'LAST_REVIEW_COMPLETION_KEY'
+        )
+        ? String(
+            row[
+              map.LAST_REVIEW_COMPLETION_KEY
             ] || ''
           )
         : ''
@@ -1868,7 +1909,7 @@ function buildReviewHomePayload_() {
     review_level_contract:
       H3_REVIEW_LEVEL_CONTRACT_,
     review_home_index_contract:
-      'H3_REVIEW_HOME_INDEX_V3_COMPAT',
+      'H3_REVIEW_HOME_INDEX_V4_COMPAT',
     learning_surface_schema:
       'H3_LEARNING_SURFACE_V1',
     review_level_half_life_days:

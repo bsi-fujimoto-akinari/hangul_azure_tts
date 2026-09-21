@@ -257,6 +257,11 @@
         payload.translation_direction ||
         ''
       );
+    var profile =
+      String(
+        payload.translation_profile ||
+        ''
+      );
     var answerType =
       String(
         payload.answer_type || ''
@@ -269,11 +274,23 @@
       String(
         payload.choice_language || ''
       );
+    var isV2 = !!profile;
 
     if (
-      ['KR_TO_JP', 'JP_TO_KR']
-        .indexOf(direction) < 0 ||
-      answerType !== 'MULTIPLE_CHOICE'
+      answerType !== 'MULTIPLE_CHOICE' ||
+      (
+        isV2 &&
+        [
+          'MIXED_1_1',
+          'EDF_KR_TO_JP_2',
+          'EDF_JP_TO_KR_2'
+        ].indexOf(profile) < 0
+      ) ||
+      (
+        !isV2 &&
+        ['KR_TO_JP', 'JP_TO_KR']
+          .indexOf(direction) < 0
+      )
     ) {
       throw new Error(
         'TRANSLATION_PAYLOAD_METADATA_INVALID'
@@ -281,18 +298,21 @@
     }
 
     if (
+      !isV2 &&
       (
-        direction === 'KR_TO_JP' &&
         (
-          sourceLanguage !== 'KO' ||
-          choiceLanguage !== 'JA'
-        )
-      ) ||
-      (
-        direction === 'JP_TO_KR' &&
+          direction === 'KR_TO_JP' &&
+          (
+            sourceLanguage !== 'KO' ||
+            choiceLanguage !== 'JA'
+          )
+        ) ||
         (
-          sourceLanguage !== 'JA' ||
-          choiceLanguage !== 'KO'
+          direction === 'JP_TO_KR' &&
+          (
+            sourceLanguage !== 'JA' ||
+            choiceLanguage !== 'KO'
+          )
         )
       )
     ) {
@@ -302,6 +322,9 @@
     }
 
     var seen = {};
+    var krToJp = 0;
+    var jpToKr = 0;
+
     payload.questions.forEach(
       function (question, index) {
         var key =
@@ -315,16 +338,45 @@
         var choices =
           question &&
           question.visible_choices;
+        var itemDirection =
+          String(
+            question &&
+            question.translation_direction ||
+            ''
+          );
+        var itemSourceLanguage =
+          String(
+            question &&
+            question.source_language ||
+            ''
+          );
+        var itemChoiceLanguage =
+          String(
+            question &&
+            question.choice_language ||
+            ''
+          );
+        var itemSection =
+          String(
+            question &&
+            (
+              question.section_key ||
+              question.section
+            ) ||
+            ''
+          );
 
         if (
           !question ||
           !question.item_id ||
           !question.question_key ||
           seen[key] ||
-          String(
-            question.translation_direction ||
-            ''
-          ) !== direction ||
+          ['KR_TO_JP', 'JP_TO_KR']
+            .indexOf(itemDirection) < 0 ||
+          (
+            !isV2 &&
+            itemDirection !== direction
+          ) ||
           String(
             question.answer_type || ''
           ) !== answerType ||
@@ -359,11 +411,75 @@
           );
         }
 
+        if (
+          isV2 &&
+          (
+            (
+              itemDirection === 'KR_TO_JP' &&
+              (
+                itemSourceLanguage !== 'KO' ||
+                itemChoiceLanguage !== 'JA' ||
+                itemSection !== 'H3-P11'
+              )
+            ) ||
+            (
+              itemDirection === 'JP_TO_KR' &&
+              (
+                itemSourceLanguage !== 'JA' ||
+                itemChoiceLanguage !== 'KO' ||
+                itemSection !== 'H3-P12'
+              )
+            )
+          )
+        ) {
+          throw new Error(
+            'TRANSLATION_V2_ITEM_METADATA_INVALID'
+          );
+        }
+
+        if (isV2) {
+          if (itemDirection === 'KR_TO_JP') {
+            krToJp += 1;
+          } else {
+            jpToKr += 1;
+          }
+        }
+
         seen[key] = true;
       }
     );
-  }
 
+    if (
+      isV2 &&
+      (
+        (
+          profile === 'MIXED_1_1' &&
+          !(
+            krToJp === 1 &&
+            jpToKr === 1
+          )
+        ) ||
+        (
+          profile === 'EDF_KR_TO_JP_2' &&
+          !(
+            krToJp === 2 &&
+            jpToKr === 0
+          )
+        ) ||
+        (
+          profile === 'EDF_JP_TO_KR_2' &&
+          !(
+            krToJp === 0 &&
+            jpToKr === 2
+          )
+        )
+      )
+    ) {
+      throw new Error(
+        'TRANSLATION_V2_PROFILE_CARDINALITY_INVALID'
+      );
+    }
+  }
 
   function validateLearningPayloadShape_(payload) {
     var questions =
@@ -607,6 +723,11 @@
       document.getElementById(
         'questions'
       );
+    var isV2 =
+      !!String(
+        payload.translation_profile ||
+        ''
+      );
 
     payload.questions.forEach(
       function (question, index) {
@@ -641,6 +762,20 @@
         ) {
           throw new Error(
             'TRANSLATION_TARGET_SEGMENT_MISMATCH'
+          );
+        }
+
+        if (isV2) {
+          var itemDirection =
+            document.createElement('p');
+          itemDirection.textContent =
+            question.translation_direction ===
+              'KR_TO_JP'
+              ? '韓国語 → 日本語'
+              : '日本語 → 韓国語';
+          card.insertBefore(
+            itemDirection,
+            prompt
           );
         }
 
@@ -689,11 +824,24 @@
 
     var direction =
       document.createElement('p');
-    direction.textContent =
-      payload.translation_direction ===
-        'KR_TO_JP'
-        ? '韓国語 → 日本語'
-        : '日本語 → 韓国語';
+    if (isV2) {
+      direction.textContent =
+        payload.translation_profile ===
+          'MIXED_1_1'
+          ? '韓国語 → 日本語 / 日本語 → 韓国語'
+          : (
+              payload.translation_profile ===
+                'EDF_KR_TO_JP_2'
+                ? '韓国語 → 日本語'
+                : '日本語 → 韓国語'
+            );
+    } else {
+      direction.textContent =
+        payload.translation_direction ===
+          'KR_TO_JP'
+          ? '韓国語 → 日本語'
+          : '日本語 → 韓国語';
+    }
     block.appendChild(direction);
 
     root.insertBefore(
@@ -701,7 +849,6 @@
       root.firstChild
     );
   }
-
 
   function renderLearningSurface_(
     payload,

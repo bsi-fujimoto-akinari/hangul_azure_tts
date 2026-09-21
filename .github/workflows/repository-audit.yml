@@ -3130,6 +3130,141 @@ jobs:
           console.log('Written 5W explanation overlay audit: PASS');
           NODE
 
+      - name: Check Written 5W ANSWERED_AT backfill boundary
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          persistence = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          core = Path('WebAppReviewCore.js').read_text(encoding='utf-8')
+          architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
+
+          for needle in [
+              "'written_review_answered_at_backfill_v1'",
+              "'H3-WRITTEN-REVIEW-ANSWERED-AT-BACKFILL-20260921-V1'",
+              'function h3WrittenReviewAnsweredAtBackfillRecord_(',
+              'function h3WrittenReviewApplyAnsweredAtBackfill_(',
+              "'MINUTE_APPROX'",
+              "'USER_ASSIGNED_FALLBACK'",
+              "'CONVENTION_ONLY_NOT_OBSERVED'",
+          ]:
+              if needle not in persistence:
+                  raise SystemExit(f'ANSWERED_AT backfill invariant missing: {needle}')
+
+          if 'h3WrittenReviewAnsweredAtBackfillRecord_(' not in core:
+              raise SystemExit('HOME does not apply Written ANSWERED_AT backfill.')
+
+          for needle in [
+              '## 35. Written 5W ANSWERED_AT backfill sidecar',
+              'MINUTE + CHAT_HISTORY',
+              'MINUTE_APPROX + USER_ASSIGNED_FALLBACK',
+              'storage convention only',
+              'conflicting non-UNKNOWN timestamp fails closed',
+          ]:
+              if needle not in architecture:
+                  raise SystemExit(f'ANSWERED_AT architecture invariant missing: {needle}')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+          const context = vm.createContext({console});
+
+          [
+            'WebAppReviewCore.js',
+            'WebAppReviewWrittenAdapter.js',
+            'WebAppReviewPersistence.js'
+          ].forEach(name => vm.runInContext(
+            fs.readFileSync(name,'utf8'),
+            context,
+            {filename:name}
+          ));
+
+          context.hash_ = value =>
+            crypto.createHash('sha256')
+              .update(String(value), 'utf8')
+              .digest('hex');
+          context.h3ReviewRequireExactHeader_ = () => {};
+          context.h3ReviewTable_ = sheet => sheet;
+
+          const map = {
+            SET_ID:0,ANSWERED_AT:1,PRECISION:2,EVIDENCE:3,NOTE:4,
+            STATUS:5,CONTRACT_ID:6,RECORD_SHA256:7,LOCKED_AT:8
+          };
+          const lockedAt = '2026-09-21T09:30:00+09:00';
+          const contract = 'H3-WRITTEN-REVIEW-ANSWERED-AT-BACKFILL-20260921-V1';
+
+          function makeRow(setId, answeredAt, precision, evidence, note) {
+            const object = {
+              SET_ID:setId,ANSWERED_AT:answeredAt,PRECISION:precision,
+              EVIDENCE:evidence,NOTE:note,STATUS:'LOCKED',CONTRACT_ID:contract,
+              RECORD_SHA256:'',LOCKED_AT:lockedAt
+            };
+            object.RECORD_SHA256 = context.h3ReviewHash_(
+              context.h3WrittenReviewAnsweredAtBackfillHashObject_(object)
+            );
+            return [
+              object.SET_ID,object.ANSWERED_AT,object.PRECISION,object.EVIDENCE,
+              object.NOTE,object.STATUS,object.CONTRACT_ID,object.RECORD_SHA256,
+              object.LOCKED_AT
+            ];
+          }
+
+          let table = {map,rows:[makeRow(
+            'H3-20260913-02','2026-09-13T14:49:00+09:00',
+            'MINUTE','CHAT_HISTORY',''
+          )]};
+          const spreadsheet = {getSheetByName:name =>
+            name === 'written_review_answered_at_backfill_v1' ? table : null
+          };
+          const base = {
+            kind:'WRITTEN',set_id:'H3-20260913-02',answered_at:'UNKNOWN',
+            score:2,raw_input:'x',technical:{base:true}
+          };
+          const result = context.h3WrittenReviewApplyAnsweredAtBackfill_(spreadsheet, base);
+          if (
+            result.answered_at !== '2026-09-13T14:49:00+09:00' ||
+            result.score !== 2 ||
+            result.raw_input !== 'x' ||
+            result.technical.answered_at_backfill.precision !== 'MINUTE' ||
+            result.technical.answered_at_backfill.evidence !== 'CHAT_HISTORY'
+          ) {
+            throw new Error('Minute CHAT_HISTORY backfill projection failed.');
+          }
+
+          table = {map,rows:[makeRow(
+            'H3-20260913-01','2026-09-13T12:00:00+09:00',
+            'MINUTE_APPROX','USER_ASSIGNED_FALLBACK',
+            'Chat history timestamp could not be traced; user explicitly assigned 12:00 as fallback.'
+          )]};
+          const fallback = context.h3WrittenReviewAnsweredAtBackfillRecord_(
+            spreadsheet,'H3-20260913-01','UNKNOWN'
+          );
+          if (
+            fallback.precision !== 'MINUTE_APPROX' ||
+            fallback.evidence !== 'USER_ASSIGNED_FALLBACK' ||
+            fallback.serializedSecondPolicy !== 'CONVENTION_ONLY_NOT_OBSERVED'
+          ) {
+            throw new Error('Fallback provenance was not preserved.');
+          }
+
+          let threw = false;
+          try {
+            context.h3WrittenReviewAnsweredAtBackfillRecord_(
+              spreadsheet,'H3-20260913-01','2026-09-13T12:01:00+09:00'
+            );
+          } catch (_error) {
+            threw = true;
+          }
+          if (!threw) {
+            throw new Error('Conflicting exact timestamp did not fail closed.');
+          }
+
+          console.log('Written 5W ANSWERED_AT backfill audit: PASS');
+          NODE
+
       - name: Check scheduler overload V3 behavior
         shell: bash
         run: |

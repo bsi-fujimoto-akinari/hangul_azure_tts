@@ -79,6 +79,7 @@ For the live 2-question Reading surface:
 
 - learner-facing family labels use `2R / Reading`; Translation uses `2T / Translation`, not the Japanese family labels;
 - Reading receives the same explicit Reset / Grade controls as other Written learner surfaces;
+- this UI repair does not alter the existing P8 issue timestamp, stage status, or learner source binding;
 - the shared Reading passage is rendered in a bordered card with the same outer width as the question card;
 - raw source passage text and all source/locked hashes remain immutable;
 - if the captured source contains orphan footnote markers but no captured footnote body, the learner display may suppress only those orphan markers at render time; an explicit captured footnote body is preserved;

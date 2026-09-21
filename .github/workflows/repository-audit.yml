@@ -1327,7 +1327,7 @@ jobs:
           );
           assert.strictEqual(
             actualHome.review_home_index_contract,
-            'H3_REVIEW_HOME_INDEX_V3_COMPAT'
+            'H3_REVIEW_HOME_INDEX_V4_COMPAT'
           );
           assert.strictEqual(
             actualHome.learning_surface_schema,

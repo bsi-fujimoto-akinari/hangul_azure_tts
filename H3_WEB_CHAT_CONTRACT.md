@@ -135,9 +135,10 @@ This contract applies equally to 5L and 5W learner-facing postgrade content.
 - HOME does not render an unanswered/current-learning header. Active issued learning is resolved by parameterless boot before HOME is shown.
 - Written history receives a stable chronological `5W #N` ordinal; Listening retains `5L #N`.
 - HOME cards themselves are the Review navigation target; separate `復習` and `再挑戦` buttons are not learner-facing controls.
-- HOME filter is an exclusive `L` / `W` segmented control; exactly one provider is visible at a time. The initial provider follows the newest HOME history entry.
-- HOME sort is a compact `Newest` / `Priority` segmented control.
-- Review level uses `H3_REVIEW_LEVEL_V2` (0–100). Base weakness remains `×=12 / △=6 / ○=0` plus up to 8 points from repeated weakness on the same skill (`2×historical wrong + historical uncertain`). Time pressure then uses `F = 1 - 2^(-d/14)` where `d` is elapsed days, and the final level is `B + (100-B)×0.40×F`. Higher values mean higher review priority.
+- HOME filter is `ALL` / `L` / `W`; default is `ALL`. `L` and `W` filter by provider only.
+- HOME sort is `Newest` / `Priority`; default is `Newest`.
+- Review priority uses `H3_REVIEW_PRIORITY_V3` and is globally normalized to 0–100. Per-item weakness is `×=12 / △=6 / ○=0` plus up to 8 points from repeated weakness on the same skill. Raw weakness is first divided by `20 × item_count`, then soft-weighted by a 50:50 blend of equal-surface importance and exam-score shares `5L=40 / 5W=36 / 2R=12 / 2T=12`, and globally rescaled so the maximum remains 100. Time pressure then uses `F = 1 - 2^(-d/14)` and `P = B + (100-B)×0.40×F`. Higher values mean higher review priority.
+- HOME history cards do not render the old textual `×n / ?n / 復習優先度 n` summary. They retain score/date plus a compact normalized priority bar used for `Priority` sorting.
 - If a history entry has `answered_at=UNKNOWN`, HOME temporarily substitutes the oldest valid timestamp present in the current HOME history for ordering and Review-level age only. The learner-visible date remains `UNKNOWN`; this fallback is provisional pending historical investigation.
 - HOME history is served only from the derived `review_home_index_v1`. This index stores one ACTIVE row per provider/set plus precomputed `BASE_PRIORITY`; it is not learner history or Review authority.
 - `BASE_PRIORITY` is refreshed after a committed answer/Answer Sync, not during HOME rendering. HOME recomputes only the time-dependent forgetting component.

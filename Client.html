@@ -22,7 +22,6 @@
     reviewSort: 'REVIEW_LEVEL',
     reviewVisited: {},
     reviewCompletionPending: false,
-    reviewCompletionEventKey: null,
     reviewCompletionRefreshPending: false
   };
 
@@ -84,7 +83,6 @@
     app.reviewSort = 'REVIEW_LEVEL';
     app.reviewVisited = {};
     app.reviewCompletionPending = false;
-    app.reviewCompletionEventKey = null;
 
     document.body.classList.remove(
       'graded'
@@ -2862,18 +2860,46 @@
   }
 
 
-  function reviewCompletionEventKey_() {
+  function reviewCompletionEventKey_(
+    review
+  ) {
     if (
-      !app.reviewCompletionEventKey
+      !review ||
+      typeof review !== 'object'
     ) {
-      app.reviewCompletionEventKey =
-        newReviewCompletionEventKey_();
+      return '';
     }
 
-    return String(
-      app.reviewCompletionEventKey ||
-      ''
+    var property =
+      '__h3ReviewCompletionEventKey';
+    var existing =
+      String(
+        review[property] || ''
+      );
+
+    if (existing) {
+      return existing;
+    }
+
+    var generated =
+      newReviewCompletionEventKey_();
+
+    if (!generated) {
+      return '';
+    }
+
+    Object.defineProperty(
+      review,
+      property,
+      {
+        value: generated,
+        enumerable: false,
+        writable: false,
+        configurable: false
+      }
     );
+
+    return generated;
   }
 
 
@@ -2912,7 +2938,9 @@
       viewed_count:
         review.sections.length,
       completion_event_key:
-        reviewCompletionEventKey_()
+        reviewCompletionEventKey_(
+          review
+        )
     };
   }
 

@@ -3474,22 +3474,6 @@
       );
     }
 
-    if (
-      payload.kind === 'WRITTEN' &&
-      family === 'TRANSLATION'
-    ) {
-      return (
-        reviewTwoDigitNo_(index) +
-        ' ［' +
-        questionDisplayLabel_(
-          part.display,
-          family
-        ).replace(/\//g, '／') +
-        '］ ' +
-        part.result
-      );
-    }
-
     return (
       'Q' +
       (index + 1) +

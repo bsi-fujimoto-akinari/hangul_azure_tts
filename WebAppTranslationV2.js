@@ -145,15 +145,29 @@ function h3TranslationV2LockBundle_(source) {
   return locked;
 }
 
-function h3TranslationV2ValidateRetestSurface_(item, skillId, direction, priorSurfaceKeys) {
+function h3TranslationV2ValidateRetestSurface_(
+  item,
+  skillId,
+  direction,
+  priorSurfaceKeys,
+  priorItemIds
+) {
   var x = h3TranslationV2ValidateItem_(item,0);
   if (x.skill_id !== String(skillId || '') ||
       x.translation_direction !== String(direction || '')) {
     throw new Error('TRANSLATION_V2_RETEST_IDENTITY_MISMATCH');
   }
-  var prior = (priorSurfaceKeys || []).map(function (value) { return String(value || ''); });
+  var prior = (priorSurfaceKeys || []).map(function (value) {
+    return String(value || '');
+  });
+  var priorItems = (priorItemIds || []).map(function (value) {
+    return String(value || '');
+  });
   if (prior.indexOf(x.surface_key) >= 0) {
     throw new Error('TRANSLATION_V2_RETEST_SURFACE_REUSED');
+  }
+  if (priorItems.indexOf(x.item_id) >= 0) {
+    throw new Error('TRANSLATION_V2_RETEST_ITEM_REUSED');
   }
   return true;
 }

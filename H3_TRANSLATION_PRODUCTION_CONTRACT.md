@@ -111,6 +111,7 @@ P11 controlled learner pilot is closed as PASS with:
 - learner Review open validated from HOME
 - source-binding SHA-256 unchanged
 - Reading P8 left `PREISSUE_READY`
+- this close state was confirmed by a fresh live authority readback after learner Review-open validation
 
 P11 must not be reissued or replayed as another pilot.
 

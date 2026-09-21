@@ -2987,8 +2987,12 @@ function h3WrittenSyncBuildPlan_(
           'skill_queue_v1',
         rowNumber:
           item.rowNumber,
+        startColumn:
+          item.existing ? 6 : 1,
         values:
-          item.values.slice()
+          item.existing
+            ? item.values.slice(5)
+            : item.values.slice()
       });
     }
   );
@@ -3127,6 +3131,10 @@ function h3WrittenSyncUniqueTargets_(
           write.sheet,
         row:
           write.rowNumber,
+        startColumn:
+          Number(
+            write.startColumn || 1
+          ),
         width:
           write.values.length
       });
@@ -3174,13 +3182,19 @@ function h3WrittenSyncSnapshot_(
             target.sheet,
           row:
             target.row,
+          startColumn:
+            Number(
+              target.startColumn || 1
+            ),
           width:
             target.width,
           values:
             sheet
               .getRange(
                 target.row,
-                1,
+                Number(
+                  target.startColumn || 1
+                ),
                 1,
                 target.width
               )
@@ -3220,7 +3234,11 @@ function h3WrittenSyncExpectedPost_(
       writeMap[
         write.sheet +
         ':' +
-        write.rowNumber
+        write.rowNumber +
+        ':' +
+        Number(
+          write.startColumn || 1
+        )
       ] =
         write.values.map(
           function (value) {
@@ -3245,12 +3263,20 @@ function h3WrittenSyncExpectedPost_(
           var key =
             row.sheet +
             ':' +
-            row.row;
+            row.row +
+            ':' +
+            Number(
+              row.startColumn || 1
+            );
           return {
             sheet:
               row.sheet,
             row:
               row.row,
+            startColumn:
+              Number(
+                row.startColumn || 1
+              ),
             width:
               row.width,
             values:
@@ -3299,7 +3325,9 @@ function h3WrittenSyncApplyPlan_(
       sheet
         .getRange(
           write.rowNumber,
-          1,
+          Number(
+            write.startColumn || 1
+          ),
           1,
           write.values.length
         )
@@ -3334,7 +3362,9 @@ function h3WrittenSyncRestore_(
       sheet
         .getRange(
           row.row,
-          1,
+          Number(
+            row.startColumn || 1
+          ),
           1,
           row.width
         )

@@ -63,6 +63,7 @@ jobs:
               'WebAppTranslationProduction.js',
               'WebAppTranslationV2.js',
               'WebAppTranslationV2Audit.js',
+              'WebAppTranslationV2Production.js',
               'WebAppPreissue.js',
               'WebAppReceipt.js',
               'WebAppReviewCore.js',
@@ -7923,6 +7924,7 @@ jobs:
           node --check WebAppTranslationProduction.js
           node --check WebAppTranslationV2.js
           node --check WebAppTranslationV2Audit.js
+          node --check WebAppTranslationV2Production.js
           node --check WebAppPreissue.js
           node --check WebAppReceipt.js
           node --check WebAppReviewCore.js

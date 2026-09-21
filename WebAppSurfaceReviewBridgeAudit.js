@@ -192,6 +192,81 @@ function auditSurfaceReviewBridgeV1_() {
     'TRANSLATION_DIRECTION_TYPE'
   );
 
+  var currentTranslationResult =
+    h3TranslationBuildCommittedResult_(
+      {
+        schema:
+          H3_TRANSLATION_STAGE_SCHEMA_,
+        activation_contract_id:
+          H3_TRANSLATION_ACTIVATION_CONTRACT_ID_,
+        provider_kind: 'WRITTEN',
+        surface_family:
+          'TRANSLATION',
+        issue_no: 1,
+        stage_id:
+          'TRANS-P11-20260921-001',
+        set_id:
+          'H3-20260921-T001',
+        status: 'COMMITTED',
+        level: '3級',
+        section_key: 'H3-P11',
+        translation_direction:
+          'KR_TO_JP',
+        answer_type:
+          'MULTIPLE_CHOICE',
+        item_count: 2,
+        source_binding_sha256:
+          translationLocked
+            .source_binding_sha256,
+        locked_bundle_sha256:
+          h3TranslationLockedBundleHash_(
+            translationLocked
+          ),
+        locked_bundle_json:
+          h3TranslationLockedBundleJson_(
+            translationLocked
+          ),
+        created_at:
+          '2026-09-21T10:00:00+09:00',
+        locked_at:
+          '2026-09-21T10:00:00+09:00',
+        issued_at:
+          '2026-09-21T10:05:00+09:00',
+        committed_at:
+          '2026-09-21T12:05:00+09:00'
+      },
+      translationLocked,
+      translationGrade,
+      'H3TX-20260921-900002'
+    );
+  var legacyTranslationResult =
+    JSON.parse(
+      JSON.stringify(
+        currentTranslationResult
+      )
+    );
+  delete legacyTranslationResult.status;
+  var compatibleLegacyResult =
+    h3SurfaceReviewComparableResult_(
+      'TRANSLATION',
+      legacyTranslationResult,
+      currentTranslationResult
+    );
+
+  h3SurfaceReviewBridgeAssert_(
+    !Object.prototype.hasOwnProperty.call(
+      compatibleLegacyResult,
+      'status'
+    ) &&
+      h3ReviewHash_(
+        compatibleLegacyResult
+      ) ===
+        h3ReviewHash_(
+          legacyTranslationResult
+        ),
+    'TRANSLATION_LEGACY_RESULT_COMPATIBILITY'
+  );
+
   var readingBinding =
     h3ReviewHash_(
       h3SurfaceReviewBindingObject_(
@@ -229,7 +304,7 @@ function auditSurfaceReviewBridgeV1_() {
     schema:
       'H3_SURFACE_REVIEW_BRIDGE_AUDIT_V1',
     result: 'PASS',
-    checks: 6,
+    checks: 7,
     reading_item_count:
       reading.item_count,
     translation_item_count:

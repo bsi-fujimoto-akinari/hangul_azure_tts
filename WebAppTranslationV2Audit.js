@@ -30,11 +30,16 @@ function auditTranslationV2MixedCoreV1_() {
     override_reason:'',answer_type:'MULTIPLE_CHOICE',items:[p11,p12]
   });
   h3TranslationV2ValidateRetestSurface_(
-    p12,'H3-P11-SK017','JP_TO_KR',['OFFICIAL:OFF-H3-P12-001']);
+    p12,
+    'H3-P11-SK017',
+    'JP_TO_KR',
+    ['T|46156856bdd8d190b161e07c02870d13e81f463203fb592d1e11daa7ba410d14'],
+    ['OFF-H3-P12-001']
+  );
   var reused = false;
   try {
     h3TranslationV2ValidateRetestSurface_(
-      p12,'H3-P11-SK017','JP_TO_KR',[p12.surface_key]);
+      p12,'H3-P11-SK017','JP_TO_KR',[p12.surface_key],[]);
   } catch (err) {
     reused = String(err && err.message || err).indexOf(
       'TRANSLATION_V2_RETEST_SURFACE_REUSED') >= 0;

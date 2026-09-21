@@ -17,8 +17,9 @@ Translation mastery/retest identity remains LEVEL + TRANSLATION + SKILL_ID + TRA
 SECTION_KEY and TRANSLATION_DIRECTION are item-level authorities in V2.
 
 ## Retest surface
-A strict retest must use the same skill and same direction but a different immutable SURFACE_KEY.
-Official items use an OFFICIAL surface key.
+A strict retest must use the same skill and same direction but a different concrete question surface.
+Cross-version uniqueness checks compare both immutable SURFACE_KEY and ITEM_ID/QUESTION_KEY authority so a V1 official item cannot become a false new surface merely because V2 uses a different key representation.
+Official items use an OFFICIAL surface key for new V2 records.
 Authored retests use an AUTHORED surface key based on an immutable authored-surface hash.
 Authored retests must not copy official wording and must not claim official provenance.
 

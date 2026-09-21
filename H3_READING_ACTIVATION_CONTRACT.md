@@ -39,6 +39,9 @@ The section in every question must match the locked bundle section. Skill IDs ma
 
 P8 source and locked hashes remain immutable compatibility sentinels:
 
+Before a fresh canonical Reading source row is compared with a locked fixture, passage text is canonicalized by removing only trailing ASCII spaces from each newline-delimited line and then rejoining the unchanged lines with `\n`. No other whitespace, punctuation, character, blank-line, or ordering change is allowed. This comparison rule does not mutate the source Sheet. The locked fixture remains the canonical line-end-trimmed form, and any residual mismatch fails closed.
+
+
 ```text
 P8 source_binding_sha256
 = a8c3a7c038fa251e195463a13157fb3683882ddef30d677d9962c58ff120761e

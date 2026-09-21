@@ -89,6 +89,18 @@ The fixtures are grounded in the exact canonical rows from:
 
 A fixture is valid only when group content, item identity, choices, answer position, skill ID, site item identity, and source batch all agree.
 
+
+Reading source comparison uses one explicit text canonicalization rule before byte/hash validation:
+
+- split passage text on `\n`;
+- remove only trailing ASCII spaces from each line;
+- preserve all non-trailing whitespace, punctuation, characters, blank lines, and line order;
+- rejoin with `\n`;
+- do not otherwise rewrite, normalize, translate, or repair the source text.
+
+This rule exists only to ignore source-capture line-end padding. The canonical locked fixture is the line-end-trimmed form. A mismatch remaining after this normalization is a blocking source mismatch.
+
+
 ## 6. Hash behavior
 
 Passage hash and question item hashes are computed from canonical locked source fields. Source-binding hash includes:

@@ -272,7 +272,7 @@ function auditSurfaceReviewBridgeV1_() {
     schema:
       'H3_SURFACE_REVIEW_BRIDGE_AUDIT_V1',
     result: 'PASS',
-    checks: 7,
+    checks: 6,
     reading_item_count:
       reading.item_count,
     translation_item_count:

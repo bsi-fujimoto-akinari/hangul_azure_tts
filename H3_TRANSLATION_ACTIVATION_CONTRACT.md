@@ -1,7 +1,7 @@
 # H3 Translation Activation Core Contract
 
 Version: H3-TRANSLATION-ACTIVATION-CORE-20260921-V1
-Status: PREISSUE_CAPABLE_ROUTE_INACTIVE
+Status: F3_ACTIVATION_CORE_ACTIVE_PILOT_GATED
 
 ## 1. Scope
 
@@ -9,7 +9,7 @@ This contract advances the source-locked official P11/P12 Translation pilot to a
 
 It defines Translation-owned runtime identity, stage identity, transaction envelope, submission normalization, preissue validation, committed-result projection, and current-learning candidate rules.
 
-This phase does not create or mutate learner history, activate a learner route, register HOME/Review persistence, or issue any Translation set.
+The activation core remains source-locked and is now consumed by the F3 production route. F3 Review/HOME persistence and the learner route are enabled separately; live issue still requires the final exact preissue gate.
 
 ## 2. Provider and surface identity
 
@@ -148,33 +148,28 @@ A pure candidate may exist only for a stage that is:
 - uncommitted;
 - source/hash/direction-valid.
 
-The candidate is not registered in HOME or common provider routing in this phase.
+The candidate is registered through the F1 Written-provider arbitration. More than one current Written-family candidate fails closed.
 
 ## 11. Explicit non-goals
 
-This phase does not:
+The F3 activation boundary still does not:
 
-- create live Translation Sheet tabs;
-- create P11/P12 live stage rows;
-- issue a learner Translation set;
-- activate a server route or Client submit path;
-- persist Translation Review/HOME;
-- activate P11/P12 skill_queue rows;
+- create P12 live stage rows before P11 pilot PASS;
+- activate P11/P12 skill_queue or scheduler rows;
 - mutate 5W/5L/Reading state;
 - add free-text Translation or LLM grading;
 - modify historical 5W Review/content.
 
 ## 12. Next phase
 
-After repository audit/merge:
+F3 runtime activation order is:
 
 ```text
-Translation live schema creation
-→ exact P11 stage materialization
-→ preissue readback
-→ route/transaction persistence staging
-→ Review/HOME integration
-→ one pilot issue
+transaction COMMITTED
+→ Translation Review LOCKED
+→ HOME upsert
+→ immediate Review open validation
+→ learner success
 ```
 
-Review/HOME integration remains serialized against concurrent historical 5W Review work.
+Live P11 issue is still a separate exact preissue write. P12 materialization remains gated on P11 pilot PASS.

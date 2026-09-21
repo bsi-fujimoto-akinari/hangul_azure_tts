@@ -6682,7 +6682,7 @@ jobs:
               'TRANSLATION_TARGET_SEGMENT_MISMATCH',
               'function normalizeTranslationReview_(',
               "'H3_PERSISTENT_TRANSLATION_REVIEW_PAYLOAD_V1'",
-              "'READING' ||\n      app.surfaceFamily ===\n        'TRANSLATION'",
+              'function isQuestionKeyWrittenSurface_(',
               "request.surface_family =\n        app.surfaceFamily;",
           ]:
               if needle not in client:

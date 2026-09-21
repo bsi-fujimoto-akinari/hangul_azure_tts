@@ -3410,16 +3410,6 @@
     }
   }
 
-  function reviewTwoDigitNo_(
-    index
-  ) {
-    return (
-      '0' +
-      String(Number(index) + 1)
-    ).slice(-2);
-  }
-
-
   function writtenReviewDisplayLabel_(
     part
   ) {
@@ -3428,11 +3418,11 @@
         part && part.section || ''
       );
     var labels = {
-      D2: '筆2／語彙',
-      D3: '筆3／文法',
-      D4: '筆4／置換',
-      D5: '筆5／共通',
-      D6: '筆6／応答'
+      D2: '筆2/語彙',
+      D3: '筆3/文法',
+      D4: '筆4/置換',
+      D5: '筆5/共通',
+      D6: '筆6/応答'
     };
 
     if (labels[section]) {
@@ -3441,7 +3431,7 @@
 
     return String(
       part && part.display || section
-    ).replace(/\//g, '／');
+    ).replace(/／/g, '/');
   }
 
 
@@ -3464,7 +3454,8 @@
       )
     ) {
       return (
-        reviewTwoDigitNo_(index) +
+        'Q' +
+        (index + 1) +
         ' ［' +
         writtenReviewDisplayLabel_(
           part

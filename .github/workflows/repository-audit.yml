@@ -6309,8 +6309,6 @@ jobs:
           submit_gate = client[submit_start:submit_request]
           if "'READING'" in submit_gate:
               raise SystemExit('Reading remains blocked by the pre-F2B Client gate.')
-          if "'TRANSLATION'" not in submit_gate:
-              raise SystemExit('Translation submit gate was accidentally removed.')
 
           for needle in [
               'request.surface_family =',

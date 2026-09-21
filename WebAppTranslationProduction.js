@@ -564,6 +564,32 @@ function h3TranslationProdStoredResult_(
     );
   }
 
+  var storedStatus =
+    String(
+      record.row[
+        map.STATUS
+      ] || ''
+    );
+
+  if (
+    storedStatus !== 'COMMITTED'
+  ) {
+    throw new Error(
+      'TRANSLATION_TXN_STORED_STATUS_INVALID'
+    );
+  }
+
+  if (
+    result.status &&
+    result.status !== storedStatus
+  ) {
+    throw new Error(
+      'TRANSLATION_TXN_RESULT_STATUS_MISMATCH'
+    );
+  }
+
+  result.status = storedStatus;
+
   return result;
 }
 

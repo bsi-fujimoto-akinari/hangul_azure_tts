@@ -1,7 +1,7 @@
 # H3 Reading P8 Pilot Contract
 
 Version: H3-READING-P8-PILOT-20260920-V1
-Status: STAGED_NOT_LEARNER_ACTIVE
+Status: REVIEW_CONTENT_READY_LEARNER_INACTIVE
 
 ## 1. Purpose
 
@@ -73,7 +73,7 @@ Retest events are emitted only for △/× and carry item_id, question_key, skill
 
 Review groups the two questions under one shared passage and may expose the locked Japanese passage only postgrade. Each question keeps its own skill/result/uncertainty identity.
 
-This pilot does not yet author the final Reading explanation blocks.
+The P8 pilot has final learner-facing explanation blocks bound to the exact P8 source binding, passage hash, and item hash. Review renders the shared passage once and keeps question-level explanations separate. P9/P10 explanation content remains outside this P8 review gate.
 
 ## 8. Exact pilot fixture
 

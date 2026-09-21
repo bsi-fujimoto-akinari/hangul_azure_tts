@@ -281,13 +281,13 @@ The HOME index reader is backward compatible with the current physical V1 header
 
 Reading, Translation, and 準2級 remain inactive until their dedicated family adapters and scheduler contracts are separately enabled.
 
-## 33. 5W Written Review explanation visibility and structured text
+## 33. Review explanation visibility and structured text
 
-For `surface_family=5W` under the Written Review provider, the learner explanation is structurally always visible for `○ / △ / ×`. The explanation container is an ordinary non-disclosure block, not a `<details>` element, and it has no result-dependent open/closed state. The separate technical-information block remains a `<details>` disclosure and remains independently collapsible.
+Across learner Review surfaces (`5L | 5W | READING | TRANSLATION`), the learner explanation is structurally always visible for `○ / △ / ×`. The explanation container is an ordinary non-disclosure block, not a `<details>` element, and it has no result-dependent open/closed state. The separate technical-information block remains the Review disclosure: it uses `<details>` and remains independently collapsible.
 
-This rule is scoped to Written 5W Review. Listening Review keeps its existing explanation disclosure behavior, and active-learning rendering/answer behavior is unchanged.
+This visibility rule is presentation-only. It does not change scoring, learner history, provider routing, source authority, Review hashes, or active-learning answer behavior.
 
-Structured Written 5W learning-block text must preserve stored newline boundaries. In particular, a Hanja network stored as target, `⇒` related examples, and `≠` homophone examples on separate lines must render as the same three visual lines. The renderer must not infer or synthesize line splits when the stored content itself is one line; such content corrections belong to the source/payload layer.
+Structured Written learning-block text must preserve stored newline boundaries. In particular, a Hanja network stored as target, `⇒` related examples, and `≠` homophone examples on separate lines must render as the same three visual lines. The renderer must not infer or synthesize line splits when the stored content itself is one line; such content corrections belong to the source/payload layer.
 
 ## 34. Written 5W approved explanation overlay
 
@@ -320,8 +320,8 @@ text is bound by SHA-256
 \`9b13effe68f565a1ef1fea5c13441dddf7ef3bed5296050c3e62931db48a670f\`.
 
 Written 5W body-translation paragraphs and learning blocks preserve stored newline
-boundaries. Listening Review retains its existing disclosure and translation
-behavior.
+boundaries. Other Review families use the same always-visible explanation container;
+provider-specific translation and source-lock behavior remains unchanged.
 
 ## 35. Written 5W ANSWERED_AT backfill sidecar
 

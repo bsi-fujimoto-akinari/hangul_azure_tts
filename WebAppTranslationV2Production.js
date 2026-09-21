@@ -478,6 +478,53 @@ function h3TranslationV2ProjectSchedulerAfterCommit_(spreadsheet,context,grade,t
   };
 }
 
+function h3TranslationV2AttachSchedulerSync_(
+  result,
+  spreadsheet,
+  context,
+  grade,
+  txnId,
+  committedAt,
+  journal,
+  txnRow
+) {
+  try {
+    result.scheduler_sync =
+      h3TranslationV2ProjectSchedulerAfterCommit_(
+        spreadsheet,
+        context,
+        grade,
+        txnId,
+        committedAt
+      );
+  } catch (err) {
+    var message =
+      String(err && err.message || err);
+    if (journal && txnRow) {
+      journal
+        .getRange(txnRow,16)
+        .setValue(
+          'POSTCOMMIT_PROJECTION:' +
+          message
+        );
+      SpreadsheetApp.flush();
+    }
+    result.scheduler_sync = {
+      schema:
+        'H3_TRANSLATION_V2_SCHEDULER_SYNC_V1',
+      status:
+        'RECOVERY_REQUIRED',
+      set_id:
+        context.stage.set_id,
+      txn_id:
+        String(txnId),
+      error:
+        message
+    };
+  }
+  return result;
+}
+
 function h3TranslationV2Submit_(request) {
   var lock=LockService.getScriptLock();
   lock.waitLock(30000);
@@ -497,11 +544,21 @@ function h3TranslationV2Submit_(request) {
     if (existing.action === 'RETURN_COMMITTED') {
       var stored=h3TranslationV2StoredResult_(context,existing.record);
       var storedGrade=h3TranslationV2Grade_(context.locked,normalized.answers);
-      stored.scheduler_sync=h3TranslationV2ProjectSchedulerAfterCommit_(
-        spreadsheet,context,storedGrade,stored.txn_id,
-        String(existing.record.row[context.txnTable.map.COMMITTED_AT] || h3TranslationProdNowTokyo_())
+      return h3TranslationV2AttachSchedulerSync_(
+        stored,
+        spreadsheet,
+        context,
+        storedGrade,
+        stored.txn_id,
+        String(
+          existing.record.row[
+            context.txnTable.map.COMMITTED_AT
+          ] ||
+          h3TranslationProdNowTokyo_()
+        ),
+        context.txnTable.sheet,
+        existing.record.rowNumber
       );
-      return stored;
     }
 
     var txnId=h3NextWebTxnId_(spreadsheet);
@@ -553,19 +610,26 @@ function h3TranslationV2Submit_(request) {
       throw new Error('TRANSLATION_V2_COMMIT_READBACK_FAILED');
     }
 
-    result.scheduler_sync=h3TranslationV2ProjectSchedulerAfterCommit_(
-      spreadsheet,context,grade,txnId,now);
-    return result;
+    return h3TranslationV2AttachSchedulerSync_(
+      result,
+      spreadsheet,
+      context,
+      grade,
+      txnId,
+      now,
+      journal,
+      txnRow
+    );
   } catch (err) {
     if (journal && txnRow) {
       try {
         var status=String(journal.getRange(txnRow,12).getDisplayValue() || '');
         if (status !== 'COMMITTED') {
-          h3TranslationV2MarkRecovery_(journal,txnRow,String(err && err.message || err));
-        } else {
-          journal.getRange(txnRow,16).setValue(
-            'POSTCOMMIT_PROJECTION:' + String(err && err.message || err));
-          SpreadsheetApp.flush();
+          h3TranslationV2MarkRecovery_(
+            journal,
+            txnRow,
+            String(err && err.message || err)
+          );
         }
       } catch (_recoveryErr) {}
     }

@@ -594,7 +594,7 @@ function h3TranslationProdStoredResult_(
 }
 
 
-function h3TranslationProdMarkRecovery_
+function h3TranslationProdMarkRecovery_(
   journal,
   rowNumber,
   message

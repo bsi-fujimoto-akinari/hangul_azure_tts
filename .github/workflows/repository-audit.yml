@@ -6249,6 +6249,34 @@ jobs:
               if needle not in client:
                   raise SystemExit(f'Reading client boundary missing: {needle}')
 
+          for needle in [
+              'function readingPassageDisplayText_(',
+              "'reading-passage-card reading-passage'",
+              "return '2R / Reading';",
+              "return '2T / Translation';",
+              "app.surfaceFamily ===\n          'READING' ||",
+          ]:
+              if needle not in client:
+                  raise SystemExit(f'Reading learner UI invariant missing: {needle}')
+
+          if '.reading-passage-card' not in style:
+              raise SystemExit('Reading passage card style missing.')
+
+          explanation_start = client.index(
+              'function buildReviewExplanationContainer_('
+          )
+          explanation_end = client.index(
+              'function buildPersistentReviewCard',
+              explanation_start
+          )
+          explanation_body = client[
+              explanation_start:explanation_end
+          ]
+          if "document.createElement('details')" in explanation_body:
+              raise SystemExit('Learner explanation must not be collapsible.')
+          if "document.createElement('section')" not in explanation_body:
+              raise SystemExit('Learner explanation must be always-visible section.')
+
           if "request.mode === 'READING'" in web:
               raise SystemExit('Reading pilot was accidentally activated as a server route.')
 

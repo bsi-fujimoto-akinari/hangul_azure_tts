@@ -3542,6 +3542,8 @@ jobs:
               "'Priority'",
               "reviewKindFilter",
               "reviewKindFilter: 'ALL'",
+              "reviewSort: 'REVIEW_LEVEL'",
+              "app.reviewSort = 'REVIEW_LEVEL';",
               "復習優先度",
           ]:
               if needle not in client:

@@ -262,7 +262,24 @@ function auditReadingP8PilotV1_() {
   h3ReadingPilotAuditAssert_(
     review.passage.text_ja ===
       source.passage.passage_ja &&
-      review.questions.length === 2,
+      review.questions.length === 2 &&
+      review.sections.length === 2 &&
+      review.sections.every(
+        function (section) {
+          return (
+            section.explanation &&
+            section.explanation.contract_id ===
+              H3_READING_P8_EXPLANATION_CONTRACT_ID_ &&
+            section.explanation.source_binding_sha256 ===
+              locked.source_binding_sha256 &&
+            section.explanation.passage_sha256 ===
+              locked.passage.passage_sha256 &&
+            section.script_text.indexOf(
+              source.passage.passage_ko
+            ) < 0
+          );
+        }
+      ),
     'POSTGRADE_GROUPED_REVIEW'
   );
   h3ReadingPilotAuditAssert_(

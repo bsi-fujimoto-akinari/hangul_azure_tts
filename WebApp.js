@@ -49,6 +49,18 @@ function getListeningWebSet(request) {
       request.surface_family ===
         'TRANSLATION'
     ) {
+      if (
+        typeof h3TranslationV2HasStage_ ===
+          'function' &&
+        h3TranslationV2HasStage_(
+          request.set_id
+        )
+      ) {
+        return buildTranslationV2ProductionRenderPayload_(
+          request
+        );
+      }
+
       return buildTranslationProductionRenderPayload_(
         request
       );
@@ -181,9 +193,19 @@ function submitListeningWebAnswers(request) {
         'TRANSLATION'
     ) {
       var translationResult =
-        h3TranslationSubmit_(
-          request
-        );
+        (
+          typeof h3TranslationV2HasStage_ ===
+            'function' &&
+          h3TranslationV2HasStage_(
+            request.set_id
+          )
+        )
+          ? h3TranslationV2Submit_(
+              request
+            )
+          : h3TranslationSubmit_(
+              request
+            );
 
       var translationReviewLock =
         LockService.getScriptLock();

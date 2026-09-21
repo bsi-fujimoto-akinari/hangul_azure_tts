@@ -3569,6 +3569,263 @@ function h3WrittenReviewApplyExplanationOverlay_(
 
 
 /**
+ * Written 5W ANSWERED_AT backfill sidecar.
+ *
+ * Legacy Review payloads remain immutable. This optional, fail-closed sidecar
+ * supplies only a repaired answered_at plus explicit observation precision
+ * and evidence provenance. Serialized seconds ':00' are convention-only for
+ * MINUTE / MINUTE_APPROX observations.
+ */
+var H3_WRITTEN_REVIEW_ANSWERED_AT_BACKFILL_SHEET_ =
+  'written_review_answered_at_backfill_v1';
+
+var H3_WRITTEN_REVIEW_ANSWERED_AT_BACKFILL_CONTRACT_ID_ =
+  'H3-WRITTEN-REVIEW-ANSWERED-AT-BACKFILL-20260921-V1';
+
+var H3_WRITTEN_REVIEW_ANSWERED_AT_BACKFILL_HEADERS_ = [
+  'SET_ID',
+  'ANSWERED_AT',
+  'PRECISION',
+  'EVIDENCE',
+  'NOTE',
+  'STATUS',
+  'CONTRACT_ID',
+  'RECORD_SHA256',
+  'LOCKED_AT'
+];
+
+
+function h3WrittenReviewAnsweredAtBackfillHashObject_(
+  row
+) {
+  return {
+    ANSWERED_AT:
+      String(row.ANSWERED_AT || ''),
+    CONTRACT_ID:
+      String(row.CONTRACT_ID || ''),
+    EVIDENCE:
+      String(row.EVIDENCE || ''),
+    LOCKED_AT:
+      String(row.LOCKED_AT || ''),
+    NOTE:
+      String(row.NOTE || ''),
+    PRECISION:
+      String(row.PRECISION || ''),
+    SET_ID:
+      String(row.SET_ID || ''),
+    STATUS:
+      String(row.STATUS || '')
+  };
+}
+
+
+function h3WrittenReviewAnsweredAtBackfillTable_(
+  spreadsheet
+) {
+  var sheet =
+    spreadsheet.getSheetByName(
+      H3_WRITTEN_REVIEW_ANSWERED_AT_BACKFILL_SHEET_
+    );
+
+  if (!sheet) {
+    return null;
+  }
+
+  h3ReviewRequireExactHeader_(
+    sheet,
+    H3_WRITTEN_REVIEW_ANSWERED_AT_BACKFILL_HEADERS_,
+    'WRITTEN_REVIEW_ANSWERED_AT_BACKFILL'
+  );
+
+  return h3ReviewTable_(sheet);
+}
+
+
+function h3WrittenReviewAnsweredAtBackfillRecord_(
+  spreadsheet,
+  setId,
+  baseAnsweredAt
+) {
+  var table =
+    h3WrittenReviewAnsweredAtBackfillTable_(
+      spreadsheet
+    );
+
+  if (!table) {
+    return null;
+  }
+
+  var normalizedSetId =
+    String(setId || '').trim();
+  var rows =
+    table.rows.filter(
+      function (row) {
+        return String(
+          row[table.map.SET_ID] || ''
+        ) === normalizedSetId;
+      }
+    );
+
+  if (!rows.length) {
+    return null;
+  }
+
+  if (rows.length !== 1) {
+    throw new Error(
+      'WRITTEN_REVIEW_ANSWERED_AT_BACKFILL_DUPLICATE:' +
+        normalizedSetId
+    );
+  }
+
+  var row =
+    h3WrittenReviewStoredRowObject_(
+      table,
+      rows[0]
+    );
+  var answeredAt =
+    String(row.ANSWERED_AT || '');
+  var precision =
+    String(row.PRECISION || '');
+  var evidence =
+    String(row.EVIDENCE || '');
+  var note =
+    String(row.NOTE || '');
+  var status =
+    String(row.STATUS || '');
+  var contractId =
+    String(row.CONTRACT_ID || '');
+  var recordSha =
+    String(row.RECORD_SHA256 || '');
+  var lockedAt =
+    String(row.LOCKED_AT || '');
+
+  if (
+    !/^H3-\d{8}-\d{2,3}$/.test(
+      normalizedSetId
+    ) ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00\+09:00$/.test(
+      answeredAt
+    ) ||
+    answeredAt.slice(0, 10) !==
+      normalizedSetId.slice(3, 7) +
+      '-' +
+      normalizedSetId.slice(7, 9) +
+      '-' +
+      normalizedSetId.slice(9, 11) ||
+    status !== 'LOCKED' ||
+    contractId !==
+      H3_WRITTEN_REVIEW_ANSWERED_AT_BACKFILL_CONTRACT_ID_ ||
+    !lockedAt ||
+    !/^[0-9a-f]{64}$/.test(
+      recordSha
+    )
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_ANSWERED_AT_BACKFILL_ROW_INVALID:' +
+        normalizedSetId
+    );
+  }
+
+  if (
+    (
+      precision === 'MINUTE' &&
+      evidence === 'CHAT_HISTORY'
+    ) === false &&
+    (
+      precision === 'MINUTE_APPROX' &&
+      evidence === 'USER_ASSIGNED_FALLBACK' &&
+      note
+    ) === false
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_ANSWERED_AT_BACKFILL_PROVENANCE_INVALID:' +
+        normalizedSetId
+    );
+  }
+
+  var calculatedSha =
+    h3ReviewHash_(
+      h3WrittenReviewAnsweredAtBackfillHashObject_(
+        row
+      )
+    );
+
+  if (calculatedSha !== recordSha) {
+    throw new Error(
+      'WRITTEN_REVIEW_ANSWERED_AT_BACKFILL_HASH_MISMATCH:' +
+        normalizedSetId
+    );
+  }
+
+  var base =
+    String(baseAnsweredAt || 'UNKNOWN');
+
+  if (
+    base !== 'UNKNOWN' &&
+    base !== answeredAt
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_ANSWERED_AT_BACKFILL_CONFLICT:' +
+        normalizedSetId
+    );
+  }
+
+  return {
+    setId: normalizedSetId,
+    answeredAt: answeredAt,
+    precision: precision,
+    evidence: evidence,
+    note: note,
+    contractId: contractId,
+    recordSha256: recordSha,
+    lockedAt: lockedAt,
+    serializedSecondPolicy:
+      'CONVENTION_ONLY_NOT_OBSERVED'
+  };
+}
+
+
+function h3WrittenReviewApplyAnsweredAtBackfill_(
+  spreadsheet,
+  baseReview
+) {
+  if (
+    !baseReview ||
+    baseReview.kind !== 'WRITTEN'
+  ) {
+    return baseReview;
+  }
+
+  var backfill =
+    h3WrittenReviewAnsweredAtBackfillRecord_(
+      spreadsheet,
+      baseReview.set_id,
+      baseReview.answered_at
+    );
+
+  if (!backfill) {
+    return baseReview;
+  }
+
+  var review =
+    h3WrittenReviewClone_(
+      baseReview
+    );
+
+  review.answered_at =
+    backfill.answeredAt;
+  review.technical =
+    review.technical || {};
+  review.technical.answered_at_backfill =
+    h3WrittenReviewClone_(
+      backfill
+    );
+
+  return review;
+}
+
+
+/**
  * Historical Written Review persistent loader.
  *
  * This layer is intentionally read-only and does not register the Written
@@ -4497,11 +4754,14 @@ function getWrittenPersistentReviewPayload_(
         spreadsheet,
         setId
       );
-    return h3WrittenReviewApplyExplanationOverlay_(
+    return h3WrittenReviewApplyAnsweredAtBackfill_(
       spreadsheet,
-      productionContext.payload,
-      'WRITTEN_PRODUCTION_WEB',
-      productionContext.reviewSha256
+      h3WrittenReviewApplyExplanationOverlay_(
+        spreadsheet,
+        productionContext.payload,
+        'WRITTEN_PRODUCTION_WEB',
+        productionContext.reviewSha256
+      )
     );
   }
 
@@ -4510,13 +4770,16 @@ function getWrittenPersistentReviewPayload_(
       spreadsheet,
       setId
     );
-  return h3WrittenReviewApplyExplanationOverlay_(
+  return h3WrittenReviewApplyAnsweredAtBackfill_(
     spreadsheet,
-    h3WrittenReviewNormalizePersistent_(
-      legacyContext
-    ),
-    legacyContext.sourceMode,
-    legacyContext.reconstructionSha256
+    h3WrittenReviewApplyExplanationOverlay_(
+      spreadsheet,
+      h3WrittenReviewNormalizePersistent_(
+        legacyContext
+      ),
+      legacyContext.sourceMode,
+      legacyContext.reconstructionSha256
+    )
   );
 }
 

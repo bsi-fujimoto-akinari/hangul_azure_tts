@@ -1036,6 +1036,30 @@ function h3ReviewHomeIndexEnvelopes_(
           row,
           indexed.table.map
         );
+      if (
+        entry.review_kind === 'WRITTEN' &&
+        typeof h3WrittenReviewAnsweredAtBackfillRecord_ ===
+          'function'
+      ) {
+        var answeredAtBackfill =
+          h3WrittenReviewAnsweredAtBackfillRecord_(
+            spreadsheet,
+            entry.set_id,
+            entry.answered_at
+          );
+
+        if (answeredAtBackfill) {
+          entry.answered_at =
+            answeredAtBackfill.answeredAt;
+          entry.answered_at_precision =
+            answeredAtBackfill.precision;
+          entry.answered_at_evidence =
+            answeredAtBackfill.evidence;
+          entry.answered_at_note =
+            answeredAtBackfill.note;
+        }
+      }
+
       var key =
         entry.review_kind +
         '|' +

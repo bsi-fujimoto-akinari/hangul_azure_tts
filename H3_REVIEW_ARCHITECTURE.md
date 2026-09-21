@@ -323,3 +323,28 @@ Written 5W body-translation paragraphs and learning blocks preserve stored newli
 boundaries. Listening Review retains its existing disclosure and translation
 behavior.
 
+## 35. Written 5W ANSWERED_AT backfill sidecar
+
+Historical Written Review reconstruction remains immutable. A timestamp-only repair for
+legacy 5W Review uses the optional `written_review_answered_at_backfill_v1` sidecar under
+`H3-WRITTEN-REVIEW-ANSWERED-AT-BACKFILL-20260921-V1`.
+
+Each LOCKED row binds the exact SET_ID, serialized ANSWERED_AT, observation PRECISION,
+EVIDENCE, NOTE, contract ID, LOCKED_AT, and canonical RECORD_SHA256. The only supported
+provenance pairs are `MINUTE + CHAT_HISTORY` and
+`MINUTE_APPROX + USER_ASSIGNED_FALLBACK`; fallback rows require an explanatory note.
+The serialized `:00` second is a storage convention only and must never be interpreted as
+an observed second.
+
+The sidecar may replace only an `UNKNOWN` Written Review answered_at, or validate
+idempotently when the lightweight HOME index already contains the same repaired value. A
+conflicting non-UNKNOWN timestamp fails closed. The sidecar must not change answers,
+marks, score, uncertainty, question surfaces, explanations, source bindings, immutable
+legacy reconstruction hashes, production Review hashes, queue/history, scheduler, retest
+state, counters, pointers, Listening, or active-learning behavior.
+
+HOME applies the same validated sidecar before sorting/rendering Written history. The
+physical `review_home_index_v1.ANSWERED_AT` may be repaired to the same serialized value
+for index consistency, while precision/evidence authority remains exclusively in the
+versioned sidecar.
+

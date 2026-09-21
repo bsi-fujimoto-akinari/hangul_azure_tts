@@ -108,3 +108,8 @@ This phase does not:
 - activate 準2級;
 - modify Review/HOME;
 - copy or mutate learner answer history.
+
+
+## Learner submit interaction
+
+5W uses the shared 5L / 5W / 2R / 2T interaction contract: learner Reset / Grade buttons are absent, and selecting the choice that completes the final unanswered item automatically starts the existing submit transaction. This changes only the client trigger; answer identity, uncertainty state, source locks, and persistence semantics are unchanged.

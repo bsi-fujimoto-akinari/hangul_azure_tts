@@ -455,6 +455,33 @@ var H3_REVIEW_HOME_INDEX_HEADERS_ =
   H3_REVIEW_HOME_INDEX_HEADERS_V2_;
 
 
+function h3ReviewNormalizeLevel_(
+  value
+) {
+  var normalized =
+    String(value || '3級')
+      .trim();
+
+  if (
+    normalized === '3級' ||
+    normalized === '3급'
+  ) {
+    return '3級';
+  }
+
+  if (
+    normalized === '準2級' ||
+    normalized === '준2급'
+  ) {
+    return '準2級';
+  }
+
+  throw new Error(
+    'REVIEW_EVIDENCE_LEVEL_INVALID'
+  );
+}
+
+
 function h3ReviewSkillEvidenceIndex_(
   spreadsheet
 ) {
@@ -486,15 +513,9 @@ function h3ReviewSkillEvidenceIndex_(
     }
 
     var normalizedLevel =
-      String(level || '3級');
-    if (
-      ['3級', '準2級']
-        .indexOf(normalizedLevel) < 0
-    ) {
-      throw new Error(
-        'REVIEW_EVIDENCE_LEVEL_INVALID'
+      h3ReviewNormalizeLevel_(
+        level
       );
-    }
 
     var setKey =
       kind + '|' +
@@ -562,7 +583,7 @@ function h3ReviewSkillEvidenceIndex_(
         'LEVEL'
       )
     ) {
-      return String(
+      return h3ReviewNormalizeLevel_(
         row[table.map.LEVEL] ||
         '3級'
       );
@@ -709,7 +730,9 @@ function h3ReviewBaseLevelForEntry_(
   evidence
 ) {
   var entryLevel =
-    String(entry.level || '3級');
+    h3ReviewNormalizeLevel_(
+      entry.level || '3級'
+    );
   var setKey =
     kind + '|' +
     entryLevel + '|' +

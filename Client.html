@@ -1570,109 +1570,6 @@
     );
   }
 
-  function updateWrittenGradeButton_() {
-    var button =
-      document.querySelector(
-        '.written-grade-button'
-      );
-
-    if (!button) {
-      return;
-    }
-
-    button.disabled =
-      app.locked ||
-      app.submitting ||
-      !allAnswered();
-  }
-
-  function resetWrittenAnswers_() {
-    if (
-      !app.payload ||
-      app.payload.mode !==
-        'WRITTEN' ||
-      app.locked ||
-      app.submitting
-    ) {
-      return;
-    }
-
-    app.answers = {};
-    app.uncertain = {};
-    app.activeIndex = 0;
-
-    Array.prototype.forEach.call(
-      document.querySelectorAll(
-        '.choice'
-      ),
-      function (node) {
-        node.classList.remove(
-          'selected'
-        );
-      }
-    );
-
-    Array.prototype.forEach.call(
-      document.querySelectorAll(
-        '.uncertain'
-      ),
-      function (node) {
-        node.classList.remove(
-          'active'
-        );
-        node.setAttribute(
-          'aria-pressed',
-          'false'
-        );
-      }
-    );
-
-    updateLiveSummary();
-    setActiveIndex(0);
-  }
-
-  function appendWrittenControls_(
-    root
-  ) {
-    var controls =
-      el(
-        'div',
-        'control-row written-controls'
-      );
-
-    var reset =
-      el(
-        'button',
-        'secondary written-reset-button'
-      );
-    reset.type = 'button';
-    reset.textContent =
-      'リセット';
-    reset.addEventListener(
-      'click',
-      resetWrittenAnswers_
-    );
-    controls.appendChild(reset);
-
-    var grade =
-      el(
-        'button',
-        'primary written-grade-button'
-      );
-    grade.type = 'button';
-    grade.textContent = '採点';
-    grade.disabled = true;
-    grade.addEventListener(
-      'click',
-      submitAnswers
-    );
-    controls.appendChild(grade);
-
-    root.appendChild(
-      controls
-    );
-  }
-
   function renderQuestions(questions) {
     var root = document.getElementById('questions');
     root.textContent = '';
@@ -1797,8 +1694,20 @@
 
           if (!app.payload) return;
 
-          if (index < app.payload.questions.length - 1) {
-            var nextIndex = index + 1;
+          if (allAnswered()) {
+            window.setTimeout(function () {
+              submitAnswers();
+            }, 80);
+            return;
+          }
+
+          if (
+            index <
+              app.payload.questions.length -
+                1
+          ) {
+            var nextIndex =
+              index + 1;
             setActiveIndex(nextIndex, true);
             playAudioAssetNow(
               audioKeyForIndex_(
@@ -1809,38 +1718,28 @@
             return;
           }
 
-          if (allAnswered()) {
-            if (
-              !app.payload ||
-              app.payload.mode !==
-                'WRITTEN'
-            ) {
-              window.setTimeout(function () {
-                submitAnswers();
-              }, 80);
-            } else {
-              updateWrittenGradeButton_();
-            }
-          } else {
-            var firstMissing =
-              questionKeys.findIndex(
-                function (questionKey) {
-                  return (
-                    typeof app.answers[
-                      questionKey
-                    ] !== 'number'
-                  );
-                }
-              );
-            if (firstMissing >= 0) {
-              setActiveIndex(firstMissing, true);
-              playAudioAssetNow(
-                audioKeyForIndex_(
-                  firstMissing
-                ),
-                true
-              );
-            }
+          var firstMissing =
+            questionKeys.findIndex(
+              function (key) {
+                return (
+                  typeof app.answers[
+                    key
+                  ] !== 'number'
+                );
+              }
+            );
+
+          if (firstMissing >= 0) {
+            setActiveIndex(
+              firstMissing,
+              true
+            );
+            playAudioAssetNow(
+              audioKeyForIndex_(
+                firstMissing
+              ),
+              true
+            );
           }
         });
 
@@ -1851,22 +1750,6 @@
       root.appendChild(card);
     });
 
-    if (
-      app.payload &&
-      app.payload.mode ===
-        'WRITTEN' &&
-      (
-        app.surfaceFamily === '5W' ||
-        app.surfaceFamily ===
-          'READING' ||
-        app.surfaceFamily ===
-          'TRANSLATION'
-      )
-    ) {
-      appendWrittenControls_(
-        root
-      );
-    }
   }
 
   function buildAudioBlock(assetKey, fallbackUrl, label, compact) {
@@ -2379,7 +2262,6 @@
 
   function updateLiveSummary() {
     updateMobilePager();
-    updateWrittenGradeButton_();
   }
 
   function allAnswered() {
@@ -2509,7 +2391,7 @@
 
   function setInteractiveDisabled(disabled) {
     Array.prototype.forEach.call(
-      document.querySelectorAll('.choice, .uncertain, .written-reset-button, .written-grade-button'),
+      document.querySelectorAll('.choice, .uncertain'),
       function (node) {
         node.disabled = disabled;
       }

@@ -306,12 +306,17 @@ jobs:
                   raise SystemExit(f'Manual grading UI still present: {stale}')
 
           if (
+              "if (allAnswered())" not in client or
               "window.setTimeout(function () {" not in client or
-              "submitAnswers();" not in client or
-              "app.payload.mode !==\n                'WRITTEN'" not in client
+              "submitAnswers();" not in client
           ):
               raise SystemExit(
-                  'Listening/SYSTEM_TEST Q5 auto-submit path regressed or WRITTEN guard is missing.'
+                  'Shared final-answer auto-submit path is missing.'
+              )
+
+          if "app.payload.mode !==\n                'WRITTEN'" in client:
+              raise SystemExit(
+                  'Obsolete WRITTEN manual-grade guard remains in auto-submit path.'
               )
 
           commit_start = web.index('function h3CommitSystemTestTransaction_(')
@@ -4727,6 +4732,7 @@ jobs:
           web = Path('WebApp.js').read_text(encoding='utf-8')
           client = Path('Client.html').read_text(encoding='utf-8')
           css = Path('Stylesheet.html').read_text(encoding='utf-8')
+          review = Path('WebAppReviewCore.js').read_text(encoding='utf-8')
           ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
           chat = Path('H3_WEB_CHAT_CONTRACT.md').read_text(encoding='utf-8')
 
@@ -4775,11 +4781,9 @@ jobs:
               "payload.questions.map(",
               "q.question_text",
               "'question-prompt'",
-              "written-grade-button",
-              "written-reset-button",
-              "resetWrittenAnswers_",
-              "app.payload.mode !==",
-              "'WRITTEN'",
+              "if (allAnswered())",
+              "window.setTimeout(function ()",
+              "submitAnswers();",
               "audioKeyForIndex_(",
           ]:
               if needle not in client:
@@ -4787,14 +4791,43 @@ jobs:
                       f'Written learner client invariant missing: {needle}'
                   )
 
+          for forbidden in [
+              'written-grade-button',
+              'written-reset-button',
+              'resetWrittenAnswers_',
+              'appendWrittenControls_',
+              'updateWrittenGradeButton_',
+          ]:
+              if forbidden in client:
+                  raise SystemExit(
+                      f'Obsolete explicit grading control remains: {forbidden}'
+                  )
+
+          if '.written-controls' in css:
+              raise SystemExit(
+                  'Obsolete Written action-bar CSS remains.'
+              )
+
           for needle in [
               '.written-question .question-head',
               '.question-prompt',
-              '.written-controls',
           ]:
               if needle not in css:
                   raise SystemExit(
                       f'Written learner CSS invariant missing: {needle}'
+                  )
+
+          for needle in [
+              'function h3ReviewNormalizeLevel_(',
+              "normalized === '3급'",
+              "return '3級';",
+              "normalized === '준2급'",
+              "return '準2級';",
+              "h3ReviewNormalizeLevel_(",
+          ]:
+              if needle not in review:
+                  raise SystemExit(
+                      f'Review level normalization invariant missing: {needle}'
                   )
 
           # Pre-answer payload must never serialize protected answer fields.
@@ -6227,8 +6260,9 @@ jobs:
               'function validateReadingPayload_(',
               'function renderReadingSurface_(',
               "family === 'READING'",
-              "app.surfaceFamily === '5W'",
               "app.surfaceFamily ===\n        'READING'",
+              'if (allAnswered())',
+              'submitAnswers();',
           ]:
               if needle not in client:
                   raise SystemExit(f'Reading client boundary missing: {needle}')
@@ -6238,7 +6272,7 @@ jobs:
               "'reading-passage-card reading-passage'",
               "return '2R / Reading';",
               "return '2T / Translation';",
-              "app.surfaceFamily ===\n          'READING' ||",
+              "app.surfaceFamily ===\n        'READING' ||",
           ]:
               if needle not in client:
                   raise SystemExit(f'Reading learner UI invariant missing: {needle}')

@@ -67,7 +67,7 @@ Translation persistent Review LOCKED
 → learner success
 ```
 
-A same-fingerprint retry of an already committed transaction re-runs the idempotent post-commit Review/HOME sequence, allowing post-commit side effects to heal without downgrading the committed transaction. Any partial transaction write before COMMITTED is marked `RECOVERY_REQUIRED` and blocks a new attempt for the same SET_ID.
+A same-fingerprint retry of an already committed transaction re-runs the idempotent post-commit Review/HOME sequence, allowing post-commit side effects to heal without downgrading the committed transaction. The committed submit result carries `status=COMMITTED`; for a pre-fix committed row whose immutable `RESULT_JSON` lacks that field, idempotent readback derives the same status from the authoritative transaction journal in memory only and does not rewrite the stored result. Any partial transaction write before COMMITTED is marked `RECOVERY_REQUIRED` and blocks a new attempt for the same SET_ID.
 
 ## 5. Direction and answer-type invariants
 

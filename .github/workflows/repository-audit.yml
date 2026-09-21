@@ -2201,8 +2201,8 @@ jobs:
               "'WRITTEN'",
               "entry.review_kind ===",
               "'5W'",
-              "'読解'",
-              "'翻訳'",
+              "'2R'",
+              "'2T'",
               'written_set_no',
               'family_set_no',
               'openReviewHistoryEntry_(',
@@ -6943,8 +6943,8 @@ jobs:
               "surface_family:",
               "surfaceFamily === 'READING'",
               "'TRANSLATION'",
-              "'読解'",
-              "'翻訳'",
+              "'2R'",
+              "'2T'",
           ]:
               if needle not in client:
                   raise SystemExit(f'F1 Client Review routing invariant missing: {needle}')

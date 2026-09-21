@@ -494,7 +494,8 @@ function h3ReviewSkillEvidenceIndex_(
     level,
     setId,
     skillId,
-    result
+    result,
+    includeWrittenSet
   ) {
     var normalizedResult =
       String(result || '');
@@ -535,7 +536,8 @@ function h3ReviewSkillEvidenceIndex_(
     });
 
     if (
-      kind === 'WRITTEN'
+      kind === 'WRITTEN' &&
+      includeWrittenSet === true
     ) {
       writtenSetSeen[
         normalizedSetId
@@ -591,6 +593,137 @@ function h3ReviewSkillEvidenceIndex_(
     return '3級';
   }
 
+  function surfaceStageLevels(
+    stageSheetName
+  ) {
+    var stageSheet =
+      spreadsheet.getSheetByName(
+        stageSheetName
+      );
+    var levels = {};
+
+    if (!stageSheet) {
+      return levels;
+    }
+
+    var stage =
+      h3ReviewTable_(
+        stageSheet
+      );
+    h3ProdRequireColumns_(
+      stage,
+      [
+        'SET_ID',
+        'STATUS',
+        'LEVEL'
+      ],
+      stageSheetName
+    );
+
+    stage.rows.forEach(
+      function (row) {
+        var setId =
+          String(
+            row[stage.map.SET_ID] ||
+            ''
+          );
+        if (
+          !setId ||
+          String(
+            row[stage.map.STATUS] ||
+            ''
+          ) !== 'COMMITTED'
+        ) {
+          return;
+        }
+
+        if (
+          Object.prototype
+            .hasOwnProperty.call(
+              levels,
+              setId
+            )
+        ) {
+          throw new Error(
+            'REVIEW_EVIDENCE_STAGE_DUPLICATE:' +
+              stageSheetName +
+              ':' +
+              setId
+          );
+        }
+
+        levels[setId] =
+          h3ReviewNormalizeLevel_(
+            row[stage.map.LEVEL] ||
+            '3級'
+          );
+      }
+    );
+
+    return levels;
+  }
+
+  function addSurfaceEvidence(
+    stageSheetName,
+    logSheetName
+  ) {
+    var levels =
+      surfaceStageLevels(
+        stageSheetName
+      );
+    var logSheet =
+      spreadsheet.getSheetByName(
+        logSheetName
+      );
+
+    if (!logSheet) {
+      return;
+    }
+
+    var log =
+      h3ReviewTable_(
+        logSheet
+      );
+    h3ProdRequireColumns_(
+      log,
+      [
+        'SET_ID',
+        'SKILL_ID',
+        'RESULT'
+      ],
+      logSheetName
+    );
+
+    log.rows.forEach(
+      function (row) {
+        var setId =
+          String(
+            row[log.map.SET_ID] ||
+            ''
+          );
+        if (
+          !setId ||
+          !Object.prototype
+            .hasOwnProperty.call(
+              levels,
+              setId
+            )
+        ) {
+          return;
+        }
+
+        add(
+          'WRITTEN',
+          levels[setId],
+          setId,
+          row[log.map.SKILL_ID],
+          row[log.map.RESULT],
+          false
+        );
+      }
+    );
+  }
+
   var listeningSheet =
     spreadsheet.getSheetByName(
       'listening_log_v1'
@@ -639,7 +772,8 @@ function h3ReviewSkillEvidenceIndex_(
           row[
             listening.map
               .USER_RESULT
-          ]
+          ],
+          false
         );
       }
     );
@@ -707,11 +841,21 @@ function h3ReviewSkillEvidenceIndex_(
           ],
           row[
             written.map.USER_RESULT
-          ]
+          ],
+          true
         );
       }
     );
   }
+
+  addSurfaceEvidence(
+    'reading_stage_v1',
+    'reading_log_v1'
+  );
+  addSurfaceEvidence(
+    'translation_stage_v1',
+    'translation_log_v1'
+  );
 
   return {
     bySet: bySet,

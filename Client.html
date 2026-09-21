@@ -19,7 +19,9 @@
     mediaTrimMs: {},
     mediaLoading: {},
     reviewKindFilter: 'ALL',
-    reviewSort: 'REVIEW_LEVEL'
+    reviewSort: 'REVIEW_LEVEL',
+    reviewVisited: {},
+    reviewCompletionPending: false
   };
 
   document.addEventListener('DOMContentLoaded', function () {
@@ -78,6 +80,8 @@
     app.mediaRetryCount = {};
     app.reviewKindFilter = 'ALL';
     app.reviewSort = 'REVIEW_LEVEL';
+    app.reviewVisited = {};
+    app.reviewCompletionPending = false;
 
     document.body.classList.remove(
       'graded'
@@ -2771,6 +2775,131 @@
   }
 
 
+  function reviewAllViewed_(
+    review
+  ) {
+    return (
+      review &&
+      Array.isArray(
+        review.sections
+      ) &&
+      review.sections.length > 0 &&
+      review.sections.every(
+        function (_part, index) {
+          return !!app.reviewVisited[
+            String(index)
+          ];
+        }
+      )
+    );
+  }
+
+
+  function reviewCompletionRequest_(
+    review
+  ) {
+    var kind =
+      String(
+        review.kind || ''
+      );
+    var sourceId =
+      kind === 'WRITTEN'
+        ? String(
+            review.set_id || ''
+          )
+        : String(
+            review.legacy_review_id ||
+            review.txn_id ||
+            ''
+          );
+
+    return {
+      schema:
+        'H3_REVIEW_COMPLETE_REQUEST_V1',
+      review_kind: kind,
+      surface_family:
+        String(
+          review.surface_family || ''
+        ),
+      set_id:
+        String(
+          review.set_id || ''
+        ),
+      review_source_id:
+        sourceId,
+      viewed_count:
+        review.sections.length
+    };
+  }
+
+
+  function completeReviewAndLoadHome_(
+    review
+  ) {
+    if (
+      !reviewAllViewed_(review)
+    ) {
+      loadHome();
+      return;
+    }
+
+    if (
+      app.reviewCompletionPending
+    ) {
+      return;
+    }
+
+    app.reviewCompletionPending = true;
+    setLoading(true);
+
+    google.script.run
+      .withSuccessHandler(
+        function (result) {
+          if (
+            !result ||
+            result.schema !==
+              'H3_REVIEW_COMPLETE_RESULT_V1' ||
+            result.status !==
+              'RECORDED' ||
+            String(
+              result.set_id || ''
+            ) !==
+              String(
+                review.set_id || ''
+              )
+          ) {
+            app.reviewCompletionPending =
+              false;
+            setLoading(false);
+            showError(
+              '復習完了の記録を確認できません。'
+            );
+            return;
+          }
+
+          app.reviewCompletionPending =
+            false;
+          loadHome();
+        }
+      )
+      .withFailureHandler(
+        function (err) {
+          app.reviewCompletionPending =
+            false;
+          setLoading(false);
+          showError(
+            errorText(err)
+          );
+        }
+      )
+      .completeReviewSession(
+        reviewCompletionRequest_(
+          review
+        )
+      );
+  }
+
+
   function renderPersistentReview(
     review
   ) {
@@ -2968,7 +3097,11 @@
       'ホーム';
     back.addEventListener(
       'click',
-      loadHome
+      function () {
+        completeReviewAndLoadHome_(
+          review
+        );
+      }
     );
     actions.appendChild(back);
 
@@ -2994,6 +3127,10 @@
           Number(index) || 0
         )
       );
+
+    app.reviewVisited[
+      String(app.activeIndex)
+    ] = true;
 
     Array.prototype
       .forEach.call(

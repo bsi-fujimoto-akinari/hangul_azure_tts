@@ -105,7 +105,7 @@ Each history card is the navigation target for its exact persistent Review. Sepa
 
 HOME uses the segmented filter `ALL` / `L` / `W`; `ALL` is the default and shows both providers together. `L` and `W` remain provider filters only and do not change stored Review history. Sorting is a second segmented control, `Newest` / `Priority`, with `Priority` as the default. The control block remains sticky while the history list scrolls.
 
-Review priority is `H3_REVIEW_PRIORITY_V3` and is globally normalized to 0–100. First compute raw item weakness: `×=12 / △=6 / ○=0`, plus same-skill historical weakness `min(8, 2×wrong_count + uncertain_count)`, so one item has a theoretical maximum of 20. Normalize for set length as `N = 100 × raw_sum / (20 × item_count)`. This removes the structural five-question versus two-question advantage. Then apply a 50:50 blend of equal-surface importance and the exam-score shares `5L=40%, 5W=36%, 2R=12%, 2T=12%`: `q = 0.50×0.25 + 0.50×exam_share`. Finally divide by the largest blended share, `0.325` for 5L, so the base priority remains globally 0–100: surface factors are `5L=1.0000`, `5W≈0.9385`, `2R≈0.5692`, `2T≈0.5692`. Same-skill evidence is keyed by `provider_kind + level + skill_id`, so 3級 and 準2級 evidence never cross-contaminates. Evidence includes committed 5L, 5W, Reading, and Translation item logs. Reading/Translation resolve level from their exact COMMITTED stage row before their item log is admitted; their SET_IDs do not enter the 5W ordinal pool. Legacy logs without a LEVEL field keep the frozen legacy 3級 interpretation only where that legacy authority applies. Missing skill identity contributes no skill bonus. After the normalized and exam-weighted base `B`, compute elapsed-day pressure `F = 1 - 2^(-d/14)` and final priority `P = B + (100-B)×0.40×F`, clamped and rounded to 0–100. The 14-day half-life is a simple exponential forgetting approximation, not a personalized memory estimate. Time can fill at most 40% of the remaining headroom.
+Review priority is `H3_REVIEW_PRIORITY_V3` and is globally normalized to 0–100. First compute raw item weakness: `×=12 / △=6 / ○=0`, plus same-skill historical weakness `min(8, 2×wrong_count + uncertain_count)`, so one item has a theoretical maximum of 20. Normalize for set length as `N = 100 × raw_sum / (20 × item_count)`. This removes the structural five-question versus two-question advantage. Then apply a 50:50 blend of equal-surface importance and the exam-score shares `5L=40%, 5W=36%, 2R=12%, 2T=12%`: `q = 0.50×0.25 + 0.50×exam_share`. Finally divide by the largest blended share, `0.325` for 5L, so the base priority remains globally 0–100: surface factors are `5L=1.0000`, `5W≈0.9385`, `2R≈0.5692`, `2T≈0.5692`. Same-skill evidence is keyed by `provider_kind + level + skill_id`, so 3級 and 準2級 evidence never cross-contaminates. Evidence includes committed 5L, 5W, Reading, and Translation item logs. Reading/Translation resolve level from their exact COMMITTED stage row before their item log is admitted; their SET_IDs do not enter the 5W ordinal pool. Legacy logs without a LEVEL field keep the frozen legacy 3級 interpretation only where that legacy authority applies. Missing skill identity contributes no skill bonus. After the normalized and exam-weighted base `B`, compute elapsed-day pressure `F = 1 - 2^(-d/14)` and final priority `P = B + (100-B)×0.40×F`, clamped and rounded to 0–100. The 14-day half-life is a simple exponential forgetting approximation, not a personalized memory estimate. Time can fill at most 40% of the remaining headroom. After that ordinary priority is calculated, a Review-completion cooldown may temporarily lower only the HOME display/order priority: immediately after a completed Review the factor is 45%, then it recovers linearly to 100% over 72 hours. Opening a Review alone does not trigger cooldown.
 
 For `answered_at=UNKNOWN`, HOME uses the oldest valid timestamp among the current history entries as a provisional effective timestamp for sorting and age. The stored/displayed timestamp is not rewritten and remains `UNKNOWN`. If no valid timestamp exists, the current load time is used as the fail-safe fallback. Review priority changes display order only and must not mutate scheduler/retest state.
 
@@ -151,7 +151,7 @@ Current production behavior is audited directly from runtime code. Completed pha
 
 ## 13. Current learner UI contract
 
-HOME shows only the compact Review library; active learning is resolved before HOME. History cards are directly tappable, the sticky controls are segmented `ALL/L/W` (default `ALL`) and `Newest/Priority` (default `Priority`), Written uses stable `5W #N`, and exactly one Review card is visible at a time. History cards show the set label, score, date, and a compact 0–100 priority bar. The textual summary line such as `×3　?2　復習優先度 47` is not rendered. The normalized priority remains available for bar width, accessibility metadata, and `Priority` sorting; it is an ordering heuristic, not a mastery score. The Review footer contains only a full-width `ホーム` action.
+HOME shows only the compact Review library; active learning is resolved before HOME. History cards are directly tappable, the sticky controls are segmented `ALL/L/W` (default `ALL`) and `Newest/Priority` (default `Priority`), Written uses stable `5W #N`, and exactly one Review card is visible at a time. History cards show the set label, score, date, and a compact 0–100 priority bar. The textual summary line such as `×3　?2　復習優先度 47` is not rendered. The bar and `Priority` sorting use the post-cooldown priority when a valid `LAST_REVIEWED_AT` exists; otherwise they use the ordinary normalized priority. `Newest` continues to use the original answer timestamp and is not changed by Review completion. The priority is an ordering heuristic, not a mastery score. The Review footer contains only a full-width `ホーム` action.
 
 ## 26. Legacy pre-Web Review compatibility
 
@@ -400,3 +400,33 @@ are shown in the explanation must come from the verified source-bound capture.
 The current pilot bindings for P11 and P12 are covered. Any later Translation source
 binding must obtain its own verified explanation binding before it can claim the same
 learner explanation coverage.
+
+
+## 38. Review-completion cooldown
+
+Review completion is UI-state metadata, not learner-result evidence. A session is
+eligible only after all Review questions have been displayed at least once in that
+session and the learner then taps `ホーム`. Merely opening a Review, viewing only a
+subset, refreshing, or leaving by another route must not change priority.
+
+A completed session writes only `LAST_REVIEWED_AT` in
+`review_home_index_v1`. The index therefore advances to the V3-compatible layout.
+This write must not alter score, answer/uncertainty marks, immutable Review payload
+or binding hashes, learner history, retest state, scheduler, skill_queue, counters,
+pointers, or source identity.
+
+Let `P` be the ordinary 0–100 Review priority after item-count normalization,
+exam weighting, and the existing forgetting-time pressure. If there is no valid
+`LAST_REVIEWED_AT`, HOME uses `P` unchanged. Otherwise, with `h` equal to
+hours since the latest completed Review:
+
+```text
+C = 0.45 + 0.55 × min(h / 72, 1)
+HOME_PRIORITY = round(P × C)
+```
+
+Thus the ranking/bar drops to 45% immediately after completion and recovers
+linearly to the uncooldowned priority over 72 hours. The underlying
+`BASE_PRIORITY` and ordinary priority remain intact so reviewing content is never
+treated as proof of mastery. A later scored learning event continues to change
+weakness through the normal evidence path rather than through this cooldown.

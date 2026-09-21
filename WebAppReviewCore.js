@@ -425,6 +425,12 @@ var H3_REVIEW_LEVEL_HALF_LIFE_DAYS_ =
 var H3_REVIEW_LEVEL_TIME_HEADROOM_SHARE_ =
   0.40;
 
+var H3_REVIEW_COOLDOWN_INITIAL_FACTOR_ =
+  0.45;
+
+var H3_REVIEW_COOLDOWN_RECOVERY_HOURS_ =
+  72;
+
 var H3_REVIEW_PRIORITY_ITEM_MAX_ =
   20;
 
@@ -482,8 +488,14 @@ var H3_REVIEW_HOME_INDEX_HEADERS_V2_ =
       'LEVEL'
     ]);
 
+var H3_REVIEW_HOME_INDEX_HEADERS_V3_ =
+  H3_REVIEW_HOME_INDEX_HEADERS_V2_
+    .concat([
+      'LAST_REVIEWED_AT'
+    ]);
+
 var H3_REVIEW_HOME_INDEX_HEADERS_ =
-  H3_REVIEW_HOME_INDEX_HEADERS_V2_;
+  H3_REVIEW_HOME_INDEX_HEADERS_V3_;
 
 
 function h3ReviewNormalizeLevel_(
@@ -1111,8 +1123,17 @@ function h3ReviewHomeIndexTable_(
     JSON.stringify(
       H3_REVIEW_HOME_INDEX_HEADERS_V2_
     );
+  var isV3 =
+    JSON.stringify(table.header) ===
+    JSON.stringify(
+      H3_REVIEW_HOME_INDEX_HEADERS_V3_
+    );
 
-  if (!isV1 && !isV2) {
+  if (
+    !isV1 &&
+    !isV2 &&
+    !isV3
+  ) {
     throw new Error(
       'REVIEW_HOME_INDEX_HEADER_MISMATCH'
     );
@@ -1122,9 +1143,13 @@ function h3ReviewHomeIndexTable_(
     sheet: sheet,
     table: table,
     schema_version:
-      isV2
-        ? 'H3_REVIEW_HOME_INDEX_V2'
-        : 'H3_REVIEW_HOME_INDEX_V1'
+      isV3
+        ? 'H3_REVIEW_HOME_INDEX_V3'
+        : (
+            isV2
+              ? 'H3_REVIEW_HOME_INDEX_V2'
+              : 'H3_REVIEW_HOME_INDEX_V1'
+          )
   };
 }
 
@@ -1268,8 +1293,32 @@ function h3ReviewHomeIndexRowEntry_(
     review_base_level:
       Number(
         row[map.BASE_PRIORITY] || 0
-      )
+      ),
+    last_reviewed_at:
+      Object.prototype
+        .hasOwnProperty.call(
+          map,
+          'LAST_REVIEWED_AT'
+        )
+        ? String(
+            row[
+              map.LAST_REVIEWED_AT
+            ] || ''
+          )
+        : ''
   };
+
+  if (
+    entry.last_reviewed_at &&
+    h3ReviewTimestampMs_(
+      entry.last_reviewed_at
+    ) === null
+  ) {
+    throw new Error(
+      'REVIEW_HOME_INDEX_LAST_REVIEWED_AT_INVALID:' +
+        setId
+    );
+  }
 
   var reviewSourceId =
     String(
@@ -1537,6 +1586,88 @@ function h3ReviewLevelFromBase_(
 }
 
 
+function h3ReviewCooldownMeta_(
+  priority,
+  lastReviewedAt,
+  nowMs
+) {
+  var normalizedPriority =
+    Math.max(
+      0,
+      Math.min(
+        100,
+        Number(priority || 0)
+      )
+    );
+  var lastReviewedMs =
+    h3ReviewTimestampMs_(
+      lastReviewedAt
+    );
+
+  if (lastReviewedMs === null) {
+    return {
+      active: false,
+      factor: 1,
+      age_hours: null,
+      level:
+        Math.round(
+          normalizedPriority
+        )
+    };
+  }
+
+  var ageHours =
+    Math.max(
+      0,
+      (
+        Number(nowMs) -
+        Number(lastReviewedMs)
+      ) /
+      3600000
+    );
+  var recoveryProgress =
+    Math.min(
+      1,
+      ageHours /
+      H3_REVIEW_COOLDOWN_RECOVERY_HOURS_
+    );
+  var factor =
+    H3_REVIEW_COOLDOWN_INITIAL_FACTOR_ +
+    (
+      (
+        1 -
+        H3_REVIEW_COOLDOWN_INITIAL_FACTOR_
+      ) *
+      recoveryProgress
+    );
+
+  return {
+    active:
+      ageHours <
+      H3_REVIEW_COOLDOWN_RECOVERY_HOURS_,
+    factor:
+      Math.round(
+        factor * 1000
+      ) / 1000,
+    age_hours:
+      Math.round(
+        ageHours * 10
+      ) / 10,
+    level:
+      Math.max(
+        0,
+        Math.min(
+          100,
+          Math.round(
+            normalizedPriority *
+            factor
+          )
+        )
+      )
+  };
+}
+
+
 function h3ReviewLevelForEntry_(
   kind,
   entry,
@@ -1592,6 +1723,12 @@ function h3ReviewAttachHomeMetadata_(
           effectiveTimestampMs,
           nowMs
         );
+      var cooldownMeta =
+        h3ReviewCooldownMeta_(
+          levelMeta.level,
+          entry.last_reviewed_at,
+          nowMs
+        );
 
       envelope.review_effective_at =
         new Date(
@@ -1610,8 +1747,16 @@ function h3ReviewAttachHomeMetadata_(
         levelMeta.forgetting_pressure;
       entry.review_base_level =
         levelMeta.base;
-      entry.review_level =
+      entry.review_priority_before_cooldown =
         levelMeta.level;
+      entry.review_cooldown_active =
+        cooldownMeta.active;
+      entry.review_cooldown_factor =
+        cooldownMeta.factor;
+      entry.review_cooldown_age_hours =
+        cooldownMeta.age_hours;
+      entry.review_level =
+        cooldownMeta.level;
       entry.review_level_contract =
         H3_REVIEW_LEVEL_CONTRACT_;
     }
@@ -1723,13 +1868,17 @@ function buildReviewHomePayload_() {
     review_level_contract:
       H3_REVIEW_LEVEL_CONTRACT_,
     review_home_index_contract:
-      'H3_REVIEW_HOME_INDEX_V2_COMPAT',
+      'H3_REVIEW_HOME_INDEX_V3_COMPAT',
     learning_surface_schema:
       'H3_LEARNING_SURFACE_V1',
     review_level_half_life_days:
       H3_REVIEW_LEVEL_HALF_LIFE_DAYS_,
     review_level_time_headroom_share:
-      H3_REVIEW_LEVEL_TIME_HEADROOM_SHARE_
+      H3_REVIEW_LEVEL_TIME_HEADROOM_SHARE_,
+    review_cooldown_initial_factor:
+      H3_REVIEW_COOLDOWN_INITIAL_FACTOR_,
+    review_cooldown_recovery_hours:
+      H3_REVIEW_COOLDOWN_RECOVERY_HOURS_
   };
 }
 

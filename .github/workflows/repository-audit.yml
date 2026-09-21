@@ -2162,6 +2162,7 @@ jobs:
           written = Path('WebAppReviewWrittenAdapter.js').read_text(encoding='utf-8')
           persistence = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
           client = Path('Client.html').read_text(encoding='utf-8')
+          style = Path('Stylesheet.html').read_text(encoding='utf-8')
           web = Path('WebApp.js').read_text(encoding='utf-8')
 
           for needle in [
@@ -2201,8 +2202,8 @@ jobs:
               "'WRITTEN'",
               "entry.review_kind ===",
               "'5W'",
-              "'読解'",
-              "'翻訳'",
+              "'2R'",
+              "'2T'",
               'written_set_no',
               'family_set_no',
               'openReviewHistoryEntry_(',
@@ -2800,53 +2801,34 @@ jobs:
           if '## 9. Current production and Review invariants' not in operations:
               raise SystemExit('OPERATIONS lacks the current Review UI contract.')
 
-          # 5W Written Review explanations are structural, not disclosures.
-          helper_start = client.index('function isWritten5WReview_()')
+          # Learner explanations are structural across Review families.
+          explanation_start = client.index(
+              'function buildReviewExplanationContainer_('
+          )
           card_start = client.index('function buildPersistentReviewCard(')
-          helper = client[helper_start:card_start]
+          helper = client[explanation_start:card_start]
           card_end = client.index('function appendReviewTranslations(', card_start)
           card = client[card_start:card_end]
 
           for needle in [
-              "payload.kind === 'WRITTEN'",
-              "family === '5W'",
-              "? 'section'",
-              ": 'details'",
-              "container.open =",
-              "part.result !== '○'",
-              "'summary'",
+              "document.createElement('section')",
+              "'review-explanation'",
               "'解説'",
           ]:
               if needle not in helper:
                   raise SystemExit(
-                      f'5W Review visibility helper invariant missing: {needle}'
+                      f'Review explanation visibility invariant missing: {needle}'
                   )
 
-          written_return = helper.index('return container;')
-          listening_open = helper.index('container.open =')
-          listening_result_policy = helper.index("part.result !== '○'")
-
-          if written_return > listening_open:
-              raise SystemExit(
-                  'Written 5W Review reaches disclosure open-state logic.'
-              )
-          if written_return > listening_result_policy:
-              raise SystemExit(
-                  'Written 5W Review visibility depends on result state.'
-              )
-
-          # Therefore ○ / △ / × all take the same non-DIRECT-DISCLOSURE Written path.
-          for result_mark in ('○', '△', '×'):
-              if result_mark not in ('○', '△', '×'):
-                  raise SystemExit('Unexpected 5W Review result fixture.')
-
           for forbidden in [
-              "document.createElement(\n        'details'\n      )",
-              "details.open =",
+              "document.createElement('details')",
+              "container.open =",
+              "part.result !== '○'",
+              "document.createElement(\n        'summary'\n      )",
           ]:
-              if forbidden in card:
+              if forbidden in helper:
                   raise SystemExit(
-                      f'5W Review card still owns global disclosure behavior: {forbidden}'
+                      f'Learner explanation reverted to disclosure behavior: {forbidden}'
                   )
 
           for needle in [
@@ -2855,19 +2837,19 @@ jobs:
           ]:
               if needle not in card:
                   raise SystemExit(
-                      f'5W Review explanation body invariant missing: {needle}'
+                      f'Review explanation body invariant missing: {needle}'
                   )
 
           if ".review-explanation-written" not in style:
               raise SystemExit(
-                  'Written 5W Review scoped style is missing.'
+                  'Structured Written Review scoped style is missing.'
               )
           if "white-space: pre-line;" not in style:
               raise SystemExit(
                   'Structured Written Review newlines are not preserved.'
               )
 
-          # Technical information remains an independent disclosure.
+          # Technical information remains the independent disclosure.
           if "document.createElement(\n        'details'\n      )" not in review:
               raise SystemExit(
                   'Review technical information is no longer a DETAILS disclosure.'
@@ -2877,23 +2859,24 @@ jobs:
                   'Review technical disclosure contract changed.'
               )
 
-          # Active learning must not depend on the 5W Review-only helper.
-          if 'isWritten5WReview_' in questions or 'review-explanation-written' in questions:
+          # Active learning does not inherit Review-only structured style.
+          if 'review-explanation-written' in questions:
               raise SystemExit(
-                  '5W Review-only visibility logic leaked into active learning.'
+                  'Review-only visibility style leaked into active learning.'
               )
 
-          # Architecture must freeze scope and content-layer boundary.
+          # Architecture freezes the all-family visibility boundary.
           for needle in [
-              '## 33. 5W Written Review explanation visibility and structured text',
+              '## 33. Review explanation visibility and structured text',
+              '5L | 5W | READING | TRANSLATION',
               'structurally always visible',
-              'Listening Review keeps its existing explanation disclosure behavior',
-              'active-learning rendering/answer behavior is unchanged',
+              'technical-information block remains the Review disclosure',
+              'does not change scoring',
               'must preserve stored newline boundaries',
           ]:
               if needle not in architecture:
                   raise SystemExit(
-                      f'5W Review canonical architecture invariant missing: {needle}'
+                      f'Review canonical architecture invariant missing: {needle}'
                   )
 
           if 'H3_REVIEW_LEVEL_V2' not in chat:
@@ -2938,7 +2921,7 @@ jobs:
               '## 34. Written 5W approved explanation overlay',
               'sections[].explanation',
               'must not alter score',
-              'Listening Review retains its existing disclosure',
+              'provider-specific translation and source-lock behavior remains unchanged',
           ]:
               if needle not in architecture:
                   raise SystemExit(f'Explanation overlay architecture invariant missing: {needle}')
@@ -6212,6 +6195,7 @@ jobs:
 
           reading = Path('WebAppReadingPilot.js').read_text(encoding='utf-8')
           client = Path('Client.html').read_text(encoding='utf-8')
+          style = Path('Stylesheet.html').read_text(encoding='utf-8')
           web = Path('WebApp.js').read_text(encoding='utf-8')
           contract = Path('H3_READING_P8_PILOT_CONTRACT.md').read_text(encoding='utf-8')
 
@@ -6248,6 +6232,34 @@ jobs:
           ]:
               if needle not in client:
                   raise SystemExit(f'Reading client boundary missing: {needle}')
+
+          for needle in [
+              'function readingPassageDisplayText_(',
+              "'reading-passage-card reading-passage'",
+              "return '2R / Reading';",
+              "return '2T / Translation';",
+              "app.surfaceFamily ===\n          'READING' ||",
+          ]:
+              if needle not in client:
+                  raise SystemExit(f'Reading learner UI invariant missing: {needle}')
+
+          if '.reading-passage-card' not in style:
+              raise SystemExit('Reading passage card style missing.')
+
+          explanation_start = client.index(
+              'function buildReviewExplanationContainer_('
+          )
+          explanation_end = client.index(
+              'function buildPersistentReviewCard',
+              explanation_start
+          )
+          explanation_body = client[
+              explanation_start:explanation_end
+          ]
+          if "document.createElement('details')" in explanation_body:
+              raise SystemExit('Learner explanation must not be collapsible.')
+          if "document.createElement('section')" not in explanation_body:
+              raise SystemExit('Learner explanation must be always-visible section.')
 
           if "request.mode === 'READING'" in web:
               raise SystemExit('Reading pilot was accidentally activated as a server route.')
@@ -6332,7 +6344,7 @@ jobs:
 
           for needle in [
               'Version: H3-READING-PRODUCTION-20260921-V1',
-              'P8_CONTROLLED_COMMIT_ENABLED_NOT_ISSUED',
+              'F2C_P8_ISSUED_UI_REPAIR_PENDING_LEARNER_COMMIT',
               'PREISSUE_READY',
               'H3_READING_PRODUCTION_COMMIT_ENABLED_=true',
               'Reading transaction COMMITTED',
@@ -6933,8 +6945,8 @@ jobs:
               "surface_family:",
               "surfaceFamily === 'READING'",
               "'TRANSLATION'",
-              "'読解'",
-              "'翻訳'",
+              "'2R'",
+              "'2T'",
           ]:
               if needle not in client:
                   raise SystemExit(f'F1 Client Review routing invariant missing: {needle}')

@@ -29,7 +29,7 @@
     overflow-wrap: anywhere;
   }
 
-  .notice, .panel, .question-card, .review-panel {
+  .notice, .panel, .question-card, .reading-passage-card, .review-panel {
     background: #fff;
     border: 1px solid #d8d8d8;
     border-radius: 12px;
@@ -41,7 +41,8 @@
   }
   .panel { padding: 14px; margin-top: 12px; }
   .questions { display: grid; gap: 12px; }
-  .question-card { padding: 14px; }
+  .question-card, .reading-passage-card { padding: 14px; }
+  .reading-passage-card { width: 100%; }
   .question-head {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto auto;
@@ -372,6 +373,12 @@
     .question-card.mobile-active {
       display: block;
     }
+    .reading-passage-card {
+      display: block;
+      padding: 12px;
+      border-radius: 10px;
+      margin-bottom: 12px;
+    }
     .question-head { margin-bottom: 8px; }
     .question-title { font-size: 17px; }
     .question-prompt {
@@ -582,6 +589,12 @@
   }
   body.mobile-device .question-card.mobile-active {
     display: block;
+  }
+  body.mobile-device .reading-passage-card {
+    display: block;
+    padding: 12px;
+    border-radius: 10px;
+    margin-bottom: 12px;
   }
   body.mobile-device .question-head {
     margin-bottom: 8px;

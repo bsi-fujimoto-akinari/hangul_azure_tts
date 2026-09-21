@@ -495,6 +495,36 @@
     return family;
   }
 
+  function surfaceLearnerLabel_(family) {
+    var normalized =
+      String(family || '');
+
+    if (normalized === 'READING') {
+      return '2R / Reading';
+    }
+    if (normalized === 'TRANSLATION') {
+      return '2T / Translation';
+    }
+    return '';
+  }
+
+
+  function readingPassageDisplayText_(text) {
+    var source =
+      String(text || '');
+    var hasExplicitFootnoteBody =
+      /[＊*]\s*[）)]/.test(source);
+
+    if (hasExplicitFootnoteBody) {
+      return source;
+    }
+
+    return source
+      .replace(/＊/g, '')
+      .replace(/([가-힣])\*/g, '$1');
+  }
+
+
   function renderReadingSurface_(
     payload
   ) {
@@ -511,7 +541,7 @@
     var block =
       el(
         'section',
-        'question-prompt reading-passage'
+        'reading-passage-card reading-passage'
       );
     block.dataset.passageId =
       passage.passage_id;
@@ -528,10 +558,12 @@
     var textBlock =
       el(
         'div',
-        'reading-passage-text'
+        'question-prompt reading-passage-text'
       );
     textBlock.textContent =
-      passage.text_ko;
+      readingPassageDisplayText_(
+        passage.text_ko
+      );
     block.appendChild(textBlock);
 
     root.insertBefore(
@@ -628,7 +660,7 @@
         'question-title'
       );
     title.textContent =
-      '翻訳';
+      'Translation';
     block.appendChild(title);
 
     var direction =
@@ -1321,11 +1353,11 @@
               );
             var writtenLabel =
               surfaceFamily === 'READING'
-                ? '読解'
+                ? '2R'
                 : (
                     surfaceFamily ===
                       'TRANSLATION'
-                      ? '翻訳'
+                      ? '2T'
                       : '5W'
                   );
             var writtenSetNo =
@@ -1647,7 +1679,13 @@
 
       var head = el('div', 'question-head');
       var title = el('h2', 'question-title');
-      title.textContent = 'Q' + qNo + ' ' + q.display;
+      var surfaceLabel =
+        surfaceLearnerLabel_(
+          app.surfaceFamily
+        );
+      title.textContent =
+        'Q' + qNo + ' ' +
+        (surfaceLabel || q.display);
 
       var uncertain = el('button', 'uncertain');
       uncertain.type = 'button';
@@ -1797,6 +1835,8 @@
         'WRITTEN' &&
       (
         app.surfaceFamily === '5W' ||
+        app.surfaceFamily ===
+          'READING' ||
         app.surfaceFamily ===
           'TRANSLATION'
       )
@@ -2663,7 +2703,7 @@
     var block =
       el(
         'section',
-        'question-prompt reading-passage review-reading-passage'
+        'reading-passage-card reading-passage review-reading-passage'
       );
     block.dataset.passageId =
       passage.passage_id;
@@ -2680,10 +2720,12 @@
     var ko =
       el(
         'div',
-        'reading-passage-text'
+        'question-prompt reading-passage-text'
       );
     ko.textContent =
-      passage.text_ko;
+      readingPassageDisplayText_(
+        passage.text_ko
+      );
     block.appendChild(ko);
 
     var ja =
@@ -3130,48 +3172,29 @@
   function buildReviewExplanationContainer_(
     part
   ) {
-    var isWritten5W =
-      isWritten5WReview_();
+    var isWritten =
+      app.payload &&
+      app.payload.kind === 'WRITTEN';
     var container =
-      document.createElement(
-        isWritten5W
-          ? 'section'
-          : 'details'
-      );
+      document.createElement('section');
 
     container.className =
       'review-explanation' +
       (
-        isWritten5W
+        isWritten
           ? ' review-explanation-written'
           : ''
       );
 
-    if (isWritten5W) {
-      var heading =
-        document.createElement('h4');
-      heading.className =
-        'review-block-title ' +
-        'review-explanation-title';
-      heading.textContent =
-        '解説';
-      container.appendChild(
-        heading
-      );
-      return container;
-    }
-
-    container.open =
-      part.result !== '○';
-
-    var summary =
-      document.createElement(
-        'summary'
-      );
-    summary.textContent =
+    var heading =
+      document.createElement('h4');
+    heading.className =
+      'review-block-title ' +
+      'review-explanation-title';
+    heading.textContent =
       '解説';
     container.appendChild(
-      summary
+      heading
     );
 
     return container;
@@ -3196,11 +3219,16 @@
       );
     var title =
       document.createElement('h3');
+    var reviewSurfaceLabel =
+      surfaceLearnerLabel_(
+        app.payload &&
+        app.payload.surface_family
+      );
     title.textContent =
       'Q' +
       (index + 1) +
       ' ' +
-      part.display +
+      (reviewSurfaceLabel || part.display) +
       '　' +
       part.result;
     head.appendChild(title);
@@ -3305,8 +3333,25 @@
       document.createElement('h4');
     scriptTitle.className =
       'review-block-title';
+    var reviewFamily =
+      String(
+        app.payload &&
+        app.payload.surface_family || ''
+      );
     scriptTitle.textContent =
-      '問題・スクリプト';
+      reviewFamily === 'READING'
+        ? '設問'
+        : (
+            reviewFamily === 'TRANSLATION'
+              ? '原文・訳す部分'
+              : (
+                  app.payload &&
+                  app.payload.kind ===
+                    'WRITTEN'
+                    ? '問題'
+                    : '問題・スクリプト'
+                )
+          );
     card.appendChild(
       scriptTitle
     );

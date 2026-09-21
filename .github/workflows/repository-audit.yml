@@ -2871,7 +2871,6 @@ jobs:
               "'Newest'",
               "'Priority'",
               "reviewKindFilter",
-              "reviewKindFilter: 'ALL'",
               "復習優先度",
               'written_set_no',
               'openReviewHistoryEntry_(',

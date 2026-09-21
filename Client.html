@@ -1716,12 +1716,11 @@
       app.payload &&
       app.payload.mode ===
         'WRITTEN' &&
-      [
-        '5W',
-        'TRANSLATION'
-      ].indexOf(
-        app.surfaceFamily
-      ) >= 0
+      (
+        app.surfaceFamily === '5W' ||
+        app.surfaceFamily ===
+          'TRANSLATION'
+      )
     ) {
       appendWrittenControls_(
         root

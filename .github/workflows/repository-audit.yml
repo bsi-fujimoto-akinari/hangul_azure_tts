@@ -8379,8 +8379,6 @@ jobs:
           ];
 
           reviews.forEach(spec => {
-            clientApi.app.reviewCompletionEventKey =
-              null;
             const request =
               clientApi.reviewCompletionRequest_(
                 spec.review
@@ -8401,6 +8399,35 @@ jobs:
               spec.label + ' completion key invalid.'
             );
           });
+
+          const sameSessionReview = {
+            provider_kind: 'LISTENING',
+            surface_family: '5L',
+            set_id: 'H3-L-STABLE',
+            txn_id: 'TX-L-STABLE',
+            sections: [{}, {}, {}, {}, {}]
+          };
+          const sameSessionFirst =
+            clientApi.reviewCompletionRequest_(
+              sameSessionReview
+            );
+          const sameSessionSecond =
+            clientApi.reviewCompletionRequest_(
+              sameSessionReview
+            );
+          assert.strictEqual(
+            sameSessionSecond.completion_event_key,
+            sameSessionFirst.completion_event_key,
+            'Same rendered Review session generated a second completion key.'
+          );
+          assert(
+            !Object.keys(
+              sameSessionReview
+            ).includes(
+              '__h3ReviewCompletionEventKey'
+            ),
+            'Completion key leaked into enumerable Review payload fields.'
+          );
 
           const commonContext = {
             console,

@@ -3903,6 +3903,104 @@
     document.body.removeChild(area);
   }
 
+
+  function reviewSurfaceIcon_(
+    surfaceFamily
+  ) {
+    var ns =
+      'http://www.w3.org/2000/svg';
+    var family =
+      String(surfaceFamily || '');
+    var paths = {
+      '5L': [
+        'M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3'
+      ],
+      '5W': [
+        'M14.364 13.634a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506l4.013-4.009a1 1 0 0 0-3.004-3.004z',
+        'M14.487 7.858A1 1 0 0 1 14 7V2',
+        'M20 19.645V20a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l2.516 2.516',
+        'M8 18h1'
+      ],
+      'READING': [
+        'M12 5v16',
+        'M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z'
+      ],
+      'TRANSLATION': [
+        'm5 8 6 6',
+        'm4 14 6-6 2-3',
+        'M2 5h12',
+        'M7 2h1',
+        'm22 22-5-10-5 10',
+        'M14 18h6'
+      ]
+    };
+
+    if (!paths[family]) {
+      return null;
+    }
+
+    // Lucide icon geometry (ISC):
+    // https://lucide.dev/
+    var svg =
+      document.createElementNS(
+        ns,
+        'svg'
+      );
+    svg.setAttribute(
+      'class',
+      'review-history-icon'
+    );
+    svg.setAttribute(
+      'viewBox',
+      '0 0 24 24'
+    );
+    svg.setAttribute(
+      'fill',
+      'none'
+    );
+    svg.setAttribute(
+      'stroke',
+      'currentColor'
+    );
+    svg.setAttribute(
+      'stroke-width',
+      '2'
+    );
+    svg.setAttribute(
+      'stroke-linecap',
+      'round'
+    );
+    svg.setAttribute(
+      'stroke-linejoin',
+      'round'
+    );
+    svg.setAttribute(
+      'aria-hidden',
+      'true'
+    );
+    svg.setAttribute(
+      'focusable',
+      'false'
+    );
+
+    paths[family].forEach(
+      function (pathData) {
+        var path =
+          document.createElementNS(
+            ns,
+            'path'
+          );
+        path.setAttribute(
+          'd',
+          pathData
+        );
+        svg.appendChild(path);
+      }
+    );
+
+    return svg;
+  }
+
   function el(tag, className) {
     var node = document.createElement(tag);
     node.className = className;

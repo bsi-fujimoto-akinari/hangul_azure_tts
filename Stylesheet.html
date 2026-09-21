@@ -958,19 +958,36 @@
     color: var(--review-primary);
   }
 
+  .review-history-icon {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 22px;
+    color: var(--review-primary);
+  }
+
+  .review-history-item.review-priority-accent
+  .review-history-icon {
+    color: var(--review-accent);
+  }
+
   .review-priority-track {
     height: 5px;
     margin-top: 6px;
     overflow: hidden;
     border-radius: 999px;
-    background: #e5e5e5;
+    background: var(--review-secondary);
   }
 
   .review-priority-fill {
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: #555;
+    background: var(--review-primary);
+  }
+
+  .review-history-item.review-priority-accent
+  .review-priority-fill {
+    background: var(--review-accent);
   }
 
   .review-history-actions {

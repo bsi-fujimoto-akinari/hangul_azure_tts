@@ -2332,6 +2332,16 @@
     );
   }
 
+  function isQuestionKeyWrittenSurface_() {
+    return (
+      app.surfaceFamily ===
+        'READING' ||
+      app.surfaceFamily ===
+        'TRANSLATION'
+    );
+  }
+
+
   function submitAnswers() {
     if (!allAnswered() || app.locked || app.submitting) return;
 
@@ -2355,10 +2365,7 @@
     updateLiveSummary();
 
     var keyedWrittenSurface =
-      app.surfaceFamily ===
-        'READING' ||
-      app.surfaceFamily ===
-        'TRANSLATION';
+      isQuestionKeyWrittenSurface_();
 
     var request = {
       schema: 'H3_WEB_SUBMIT_V1',

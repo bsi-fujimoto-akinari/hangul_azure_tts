@@ -3016,6 +3016,132 @@ jobs:
                   'Review HOME mobile icon sizing invariant missing.'
               )
 
+          # Written/Translation persistent Review presentation.
+          for needle in [
+              'function writtenReviewDisplayLabel_(',
+              "D4: '筆4/置換'",
+              'function reviewCardTitleText_(',
+              'function appendBracketUnderlines_(',
+              'function appendTranslationReviewScript_(',
+              'TRANSLATION_REVIEW_TARGET_SEGMENT_MISMATCH',
+              'function appendWritten5WReviewScript_(',
+              'function appendReviewScript_(',
+          ]:
+              if needle not in client:
+                  raise SystemExit(
+                      f'Written Review compact presentation invariant missing: {needle}'
+                  )
+
+          if 'reviewTwoDigitNo_(' in client:
+              raise SystemExit(
+                  'Written Review heading regressed to two-digit numbering.'
+              )
+
+          title_start = client.index(
+              'function reviewCardTitleText_('
+          )
+          title_end = client.index(
+              'function appendBracketUnderlines_(',
+              title_start
+          )
+          title_helper = client[
+              title_start:title_end
+          ]
+          for needle in [
+              "'Q' +",
+              "(index + 1) +",
+              "' ［' +",
+              "'］ ' +",
+              'writtenReviewDisplayLabel_(',
+          ]:
+              if needle not in title_helper:
+                  raise SystemExit(
+                      f'Written Review heading invariant missing: {needle}'
+                  )
+
+          translation_normalize_start = client.index(
+              'function normalizeTranslationReview_('
+          )
+          translation_normalize_end = client.index(
+              'function reviewAllViewed_(',
+              translation_normalize_start
+          )
+          translation_normalize = client[
+              translation_normalize_start:
+              translation_normalize_end
+          ]
+          for needle in [
+              'question_text:',
+              'target_segment:',
+              'choices:',
+          ]:
+              if needle not in translation_normalize:
+                  raise SystemExit(
+                      f'Translation Review structured field missing: {needle}'
+                  )
+          if '［訳す部分］' in translation_normalize:
+              raise SystemExit(
+                  'Translation Review synthetic target label returned.'
+              )
+          if '原文・訳す部分' in client:
+              raise SystemExit(
+                  'Translation Review target label returned to learner UI.'
+              )
+
+          written_script_start = client.index(
+              'function appendWritten5WReviewScript_('
+          )
+          written_script_end = client.index(
+              'function appendReviewScript_(',
+              written_script_start
+          )
+          written_script = client[
+              written_script_start:
+              written_script_end
+          ]
+          for needle in [
+              "part.section === 'D4'",
+              'appendBracketUnderlines_(',
+              'surface.body',
+              'surface.choices',
+          ]:
+              if needle not in written_script:
+                  raise SystemExit(
+                      f'5W D4 underline invariant missing: {needle}'
+                  )
+
+          translation_script_start = client.index(
+              'function appendTranslationReviewScript_('
+          )
+          translation_script_end = client.index(
+              'function appendWritten5WReviewScript_(',
+              translation_script_start
+          )
+          translation_script = client[
+              translation_script_start:
+              translation_script_end
+          ]
+          for needle in [
+              'part.question_text',
+              'part.target_segment',
+              "document.createElement('u')",
+              'TRANSLATION_REVIEW_TARGET_SEGMENT_MISMATCH',
+          ]:
+              if needle not in translation_script:
+                  raise SystemExit(
+                      f'Translation Review underline invariant missing: {needle}'
+                  )
+
+          for needle in [
+              'Qn ［筆n/種別］ mark',
+              '訳す部分',
+              'target_segment',
+          ]:
+              if needle not in architecture:
+                  raise SystemExit(
+                      f'Written Review UI contract evidence missing: {needle}'
+                  )
+
           if '.review-history-summary' in style:
               raise SystemExit(
                   'Retired HOME summary CSS returned.'

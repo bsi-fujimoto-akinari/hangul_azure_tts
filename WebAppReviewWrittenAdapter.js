@@ -314,6 +314,16 @@ function h3WrittenReviewOpen_(request) {
         'SURFACE_REVIEW_BRIDGE_UNAVAILABLE'
       );
     }
+    if (
+      surfaceFamily === 'TRANSLATION' &&
+      typeof h3SurfaceReviewOpenForLearner_ ===
+        'function'
+    ) {
+      return h3SurfaceReviewOpenForLearner_(
+        request
+      );
+    }
+
     return h3SurfaceReviewOpen_(request);
   }
 

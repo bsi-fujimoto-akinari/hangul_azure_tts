@@ -1,7 +1,7 @@
 # H3 Translation Production Route Contract
 
 Version: H3-TRANSLATION-PRODUCTION-20260921-V1
-Status: F3_RUNTIME_ACTIVE_PILOT_GATED
+Status: F3D_P11_P12_PILOT_PASS_F4_NOT_ACTIVE
 
 ## 1. Scope
 
@@ -78,7 +78,7 @@ Every stage, transaction, result, and log entry preserves:
 
 P11 uses `KR_TO_JP`; P12 uses `JP_TO_KR`.
 
-Learner and persistent Review question titles use the source-bound section display (`筆11/翻訳` or `筆12/翻訳`), matching the 5W `筆2/語彙` style. `2T` remains a HOME family-card label, not a question title. Translation follows the shared 5L / 5W / 2R / 2T interaction: no learner Reset / Grade buttons; selecting the choice that completes the final unanswered item begins submission automatically.
+Learner and persistent Review question titles use the source-bound section display (`筆11/翻訳` or `筆12/翻訳`), matching the 5W `筆2/語彙` style. `2T` remains a HOME family-card label, not a question title. Translation follows the shared 5L / 5W / 2R / 2T interaction: no learner Reset / Grade buttons; selecting the choice that completes the final unanswered item begins submission automatically. The current P11/P12 pilot Review also receives the read-only source-bound `H3-TRANSLATION-EXPLANATION-20260921-V1` overlay after immutable base Review validation; the authored explanation is not publisher commentary and may not change any stored Review hash or learner result.
 
 Direction is never inferred from learner input and cross-section skill reuse is not rewritten.
 
@@ -102,19 +102,20 @@ A PREISSUE_READY P11 remains non-renderable. Only the separately authorized exac
 
 ## 8. Next gate
 
-After merge/audit/sync:
+P11 and P12 learner pilots are COMMITTED and their persistent Review/HOME/open
+validation has passed. F3D may close after the source-bound explanation and Review
+priority integration read back successfully.
 
 ```text
-final P11 exact preissue readback
-→ verify no concurrent current-learning candidate
-→ verify exact source/bundle hashes unchanged
-→ P11 PREISSUE_READY -> ISSUED
-→ one real learner pilot attempt
-→ txn/log/Review/HOME verification
-→ only then P12 materialization/pilot
+F3D final readback / canonical-source refresh
+→ F3D CLOSED
+→ F4 scheduler / skill_queue design and activation gate
 ```
 
-F4, not F3, owns scheduler/skill_queue activation.
+F4, not F3, owns scheduler/skill_queue activation. No P11/P12 reissue is authorized
+for F3D closure. Any future Translation item outside the two verified pilot bindings
+must obtain its own source-bound explanation coverage before claiming parity with the
+current 2T Review.
 
 ## F1 Review bridge status
 

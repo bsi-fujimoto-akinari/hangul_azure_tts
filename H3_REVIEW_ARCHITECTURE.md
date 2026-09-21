@@ -105,7 +105,7 @@ Each history card is the navigation target for its exact persistent Review. Sepa
 
 HOME uses an exclusive provider segment `L` / `W`; exactly one provider is visible at a time, and the initial provider follows the newest history entry. Sorting is a second segmented control, `Newest` / `Priority`. The control block remains sticky while the history list scrolls.
 
-Review priority is `H3_REVIEW_LEVEL_V2` on a 0–100 scale. First compute base weakness `B`: each item contributes `×=12 / △=6 / ○=0`; same-skill historical weakness adds `min(8, 2×wrong_count + uncertain_count)`. Same-skill evidence is keyed by `provider_kind + level + skill_id`, so 3級 and 準2級 evidence never cross-contaminates. Current logs without a LEVEL field are interpreted as the frozen legacy 3級 runtime only. Missing skill identity contributes no skill bonus. Then compute elapsed-day pressure `F = 1 - 2^(-d/14)` and final priority `B + (100-B)×0.40×F`. The 14-day half-life is a simple exponential forgetting approximation, not a personalized memory estimate. Time can fill at most 40% of the remaining headroom, preserving strong recent error signals.
+Review priority is `H3_REVIEW_LEVEL_V2` on a 0–100 scale. First compute base weakness `B`: each item contributes `×=12 / △=6 / ○=0`; same-skill historical weakness adds `min(8, 2×wrong_count + uncertain_count)`. Same-skill evidence is keyed by `provider_kind + level + skill_id`, so 3級 and 準2級 evidence never cross-contaminates. Evidence includes committed 5L, 5W, Reading, and Translation item logs. Reading/Translation resolve level from their exact COMMITTED stage row before their item log is admitted; their SET_IDs do not enter the 5W ordinal pool. Legacy logs without a LEVEL field keep the frozen legacy 3級 interpretation only where that legacy authority applies. Missing skill identity contributes no skill bonus. Then compute elapsed-day pressure `F = 1 - 2^(-d/14)` and final priority `B + (100-B)×0.40×F`. The 14-day half-life is a simple exponential forgetting approximation, not a personalized memory estimate. Time can fill at most 40% of the remaining headroom, preserving strong recent error signals.
 
 For `answered_at=UNKNOWN`, HOME uses the oldest valid timestamp among the current history entries as a provisional effective timestamp for sorting and age. The stored/displayed timestamp is not rewritten and remains `UNKNOWN`. If no valid timestamp exists, the current load time is used as the fail-safe fallback. Review priority changes display order only and must not mutate scheduler/retest state.
 
@@ -151,7 +151,7 @@ Current production behavior is audited directly from runtime code. Completed pha
 
 ## 13. Current learner UI contract
 
-HOME shows only the compact Review library; active learning is resolved before HOME. History cards are directly tappable, the sticky controls are segmented `L/W` and `Newest/Priority`, Written uses stable `5W #N`, and exactly one Review card is visible at a time. The Review footer contains only a full-width `ホーム` action.
+HOME shows only the compact Review library; active learning is resolved before HOME. History cards are directly tappable, the sticky controls are segmented `L/W` and `Newest/Priority`, Written uses stable `5W #N`, and exactly one Review card is visible at a time. Each history card labels the 0–100 metric as `復習優先度` and shows a compact progress indicator; the metric is an ordering heuristic, not a mastery score. The Review footer contains only a full-width `ホーム` action.
 
 ## 26. Legacy pre-Web Review compatibility
 
@@ -279,7 +279,7 @@ Opening a Review performs provider-specific source-lock validation first and onl
 
 The HOME index reader is backward compatible with the current physical V1 header. `migrateReviewHomeIndexV2()` is the explicit idempotent migration that appends `SURFACE_FAMILY` and `LEVEL` and materializes the frozen legacy values for existing rows. The migration is never implicit and does not alter learner history, answers, scores, scheduler state, or Review payload authority.
 
-Reading, Translation, and 準2級 remain inactive until their dedicated family adapters and scheduler contracts are separately enabled.
+Reading and Translation learner pilots are active and source-locked, while their scheduler/skill_queue integration remains inactive until F4. 準2級 remains taxonomy-ready but runtime-inactive until its dedicated activation gate.
 
 ## 33. Review explanation visibility and structured text
 
@@ -376,3 +376,27 @@ Listening plus Written-provider candidates are also an error.
 
 F1 itself keeps P8/P11 PREISSUE_READY, both production commit gates disabled,
 and all learner-facing issue/submit/scheduler paths inactive.
+
+
+## 37. Translation source-bound explanation overlay
+
+The immutable `translation_review_payload_v1` and
+`translation_review_binding_v1` rows remain the base Review authority. The current
+P11/P12 pilot explanations are attached only after that base Review passes its full
+transaction, result, source-binding, payload-hash, and binding-hash validation.
+
+`H3-TRANSLATION-EXPLANATION-20260921-V1` is keyed by the exact Translation
+`SOURCE_BINDING_SHA256` and checks the ordered locked item identity, skill ID, and
+locked item SHA before adding learner-facing `question.explanation`. The overlay is
+in-memory and read-only; it does not rewrite the committed transaction, locked Review
+JSON, Review SHA, binding SHA, score, mark, uncertainty, learner history, scheduler,
+queue, counters, or pointers.
+
+The explanatory reason/learning blocks are authored from the verified official
+question/answer/translation capture plus the canonical skill map. They are not
+represented as official publisher commentary. P11/P12 choices and translations that
+are shown in the explanation must come from the verified source-bound capture.
+
+The current pilot bindings for P11 and P12 are covered. Any later Translation source
+binding must obtain its own verified explanation binding before it can claim the same
+learner explanation coverage.

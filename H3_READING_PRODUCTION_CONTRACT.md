@@ -1,13 +1,13 @@
 # H3 Reading Production Route Contract
 
 Version: H3-READING-PRODUCTION-20260921-V1
-Status: F2C_P8_ISSUED_UI_REPAIR_PENDING_LEARNER_COMMIT
+Status: F2C_P8_PILOT_PASS_P9P10_GATED
 
 ## Scope
 
 This contract wires the Reading activation core to production render, Reading-owned transaction persistence, persistent Reading Review, and HOME.
 
-F2B enabled the controlled Reading submission/commit path. F2C has now passed the final preissue gate and changed only the exact live P8 stage to `ISSUED`. The same P8 pilot remains the sole authorized learner attempt until it reaches COMMITTED; it must not be reissued.
+F2B enabled the controlled Reading submission/commit path. F2C issued exactly one source-locked P8 pilot; that set is now COMMITTED with exactly two Reading log rows, locked persistent Review/binding, HOME index entry, and successful Review reopen validation. It must not be reissued. P9/P10 remain separately gated.
 
 ## Runtime authorities
 
@@ -103,18 +103,15 @@ F2B does not:
 
 ## Next gate
 
-P8 is already `ISSUED` with the exact source/bundle hashes preserved. After this learner-UI repair is audited and synced:
+F2C is PASS. The committed P8 learner result, transaction, source/bundle hashes,
+Reading log, persistent Review/binding, and HOME entry are frozen as the pilot
+evidence.
 
 ```text
-reload the same current P8 learner surface
-→ answer Q1/Q2
-→ explicit Grade
-→ Reading transaction COMMITTED
-→ exactly two reading_log_v1 rows
-→ persistent Reading Review/binding LOCKED
-→ HOME upsert
-→ immediate Review open validation
-→ F2C PASS
+P8 F2C PASS
+→ keep P9/P10 repository-only until their explicit activation gate
+→ no new P8 issue write
 ```
 
-No new P8 issue write is authorized.
+The shared learner interaction is now automatic submit when the choice completing
+all unanswered items is selected; there is no explicit Grade / Reset control.

@@ -662,6 +662,317 @@ function h3SurfaceReviewBuildTranslationPayload_(
 }
 
 
+var H3_TRANSLATION_EXPLANATION_CONTRACT_ID_ =
+  'H3-TRANSLATION-EXPLANATION-20260921-V1';
+
+var H3_TRANSLATION_EXPLANATION_OVERLAY_V1_ = {
+  '4c863cedd0d640949995640f31872cf66bb055cf7bef32e2fd4b0c99779887dd': {
+    section_key: 'H3-P11',
+    items: {
+      'OFF-H3-P11-001': {
+        item_sha256:
+          '0a9e5a3daab41331a5a5ff2afb1df3700a8b4cc1199df1bee74e7d26bef1e170',
+        skill_id: 'H3-P11-SK001',
+        explanation: {
+          body_ja:
+            '若いなんてとんでもないです。もう60ですよ。',
+          reason:
+            'ここで -기는요 は相手の評価を受けて強く打ち消す表現です。後続の 벌써 예순인데요（もう60ですよ）が、その反駁を支えています。したがって①「若いなんてとんでもないです。」が合います。',
+          learning_blocks: [
+            {
+              form: '-기는요',
+              usage:
+                '相手の発言・評価を「～だなんて、とんでもない」のように打ち消します。'
+            },
+            {
+              form: '벌써',
+              usage:
+                '「もう、すでに」。予想より早い・進んでいるという感覚を伴うことがあります。'
+            },
+            {
+              form: '예순',
+              usage:
+                '60を表す固有数詞です。'
+            }
+          ]
+        }
+      },
+      'OFF-H3-P11-002': {
+        item_sha256:
+          'c2a43fa1ce4319a997ca9abcc0c1cefdc8f2272929bc1df59c987ad984d239fc',
+        skill_id: 'H3-P11-SK002',
+        explanation: {
+          body_ja:
+            '私は社長に言われたとおりにしただけです。',
+          reason:
+            '-는 대로 は「～する通りに」、-았/었을 뿐이다 は「～しただけだ」を表します。시키시는 대로 했을 뿐입니다 はこの二つが組み合わさり、「言われたとおりにしただけです。」となるため②が適切です。',
+          learning_blocks: [
+            {
+              form: '-는 대로',
+              usage:
+                '動作・指示の内容にそのまま従う「～する通りに」。시키시는 대로 で「指示なさる通りに」。'
+            },
+            {
+              form: '-았/었을 뿐이다',
+              usage:
+                '「～しただけだ」。行為をそれ以上に広げず限定します。'
+            },
+            {
+              form: '시키다',
+              usage:
+                '「させる、命じる」。文脈では 사장님께서 시키시다 が「社長が指示する」です。'
+            }
+          ]
+        }
+      }
+    }
+  },
+  'cd252fed03e56d00f73ea755a7fd5df729b1709caede38baa113c2f4d60ebfd4': {
+    section_key: 'H3-P12',
+    items: {
+      'OFF-H3-P12-001': {
+        item_sha256:
+          '46156856bdd8d190b161e07c02870d13e81f463203fb592d1e11daa7ba410d14',
+        skill_id: 'H3-P11-SK017',
+        explanation: {
+          choices: [
+            {
+              ko: '얼굴색만 보지 않고',
+              ja: '顔の色だけ見ないで'
+            },
+            {
+              ko: '눈치만 보지 말고',
+              ja: '顔色ばかりうかがわないで'
+            },
+            {
+              ko: '신경만 쓰지 말고',
+              ja: '気ばかり使わないで'
+            },
+            {
+              ko: '정신만 팔지 않고',
+              ja: '気ばかり散らさないで'
+            }
+          ],
+          reason:
+            '「顔色をうかがう」は相手の反応や機嫌を気にする意味なので、慣用表現 눈치 보다 が対応します。さらに後続が「自分の意見を言ってください」なので、禁止から次の行動へつなぐ -지 말고 が自然です。したがって② 눈치만 보지 말고 が適切です。',
+          learning_blocks: [
+            {
+              form: '눈치 보다',
+              usage:
+                '相手の反応・機嫌・周囲の空気を気にする「顔色をうかがう」。'
+            },
+            {
+              form: '-지 말고',
+              usage:
+                '「～しないで、（代わりに）…」。前の行動を止め、後続の行動へつなげます。'
+            }
+          ]
+        }
+      },
+      'OFF-H3-P12-002': {
+        item_sha256:
+          '984a2c8d473d92740e6b291f33fd10a92e9860efa6597fd8673401fb4151d372',
+        skill_id: 'H3-P11-SK011',
+        explanation: {
+          choices: [
+            {
+              ko: '아픔이 더할 겁니다.',
+              ja: '痛みが増すでしょう。'
+            },
+            {
+              ko: '아픈 곳이 나을 겁니다.',
+              ja: '痛いところが治るでしょう。'
+            },
+            {
+              ko: '좀 덜 아플 거예요.',
+              ja: '少し痛みが和らぐでしょう。'
+            },
+            {
+              ko: '조금 심해질 거예요.',
+              ja: '少しひどくなるでしょう。'
+            }
+          ],
+          reason:
+            '덜 は「より少なく」、아프다 は「痛い」なので 덜 아프다 は「痛みがより少ない＝痛みが和らぐ」に対応します。①と④は悪化する意味で反対、②の 낫다 は「治る」で意味が強すぎるため、③が適切です。',
+          learning_blocks: [
+            {
+              form: '덜 + 형용사',
+              usage:
+                '程度が「より少なく～だ」。덜 아프다 で「前より痛くない、痛みが和らぐ」。'
+            },
+            {
+              form: '-(으)ㄹ 거예요',
+              usage:
+                '未来の見込み・予測を表します。ここでは薬を飲んだ後の状態の予測です。'
+            },
+            {
+              form: '낫다 ↔ 덜 아프다',
+              usage:
+                '낫다 は「治る・よくなる」、덜 아프다 は「痛みが軽くなる」。同じではありません。'
+            }
+          ]
+        }
+      }
+    }
+  }
+};
+
+
+function h3TranslationReviewApplyExplanationOverlay_(
+  payload,
+  locked
+) {
+  if (
+    !payload ||
+    payload.surface_family !==
+      'TRANSLATION'
+  ) {
+    return payload;
+  }
+
+  var binding =
+    String(
+      payload.source_binding_sha256 ||
+      ''
+    );
+  var spec =
+    H3_TRANSLATION_EXPLANATION_OVERLAY_V1_[
+      binding
+    ];
+
+  if (!spec) {
+    return payload;
+  }
+
+  if (
+    !locked ||
+    locked.source_binding_sha256 !==
+      binding ||
+    locked.section_key !==
+      spec.section_key ||
+    !Array.isArray(locked.items) ||
+    !Array.isArray(payload.questions) ||
+    locked.items.length !==
+      payload.questions.length
+  ) {
+    throw new Error(
+      'TRANSLATION_EXPLANATION_SOURCE_MISMATCH'
+    );
+  }
+
+  var out =
+    JSON.parse(
+      JSON.stringify(payload)
+    );
+
+  out.questions.forEach(
+    function (question, index) {
+      var lockedItem =
+        locked.items[index];
+      var itemSpec =
+        spec.items[
+          question.item_id
+        ];
+
+      if (
+        !itemSpec ||
+        !lockedItem ||
+        lockedItem.item_id !==
+          question.item_id ||
+        lockedItem.question_key !==
+          question.question_key ||
+        lockedItem.skill_id !==
+          question.skill_id ||
+        lockedItem.item_sha256 !==
+          itemSpec.item_sha256 ||
+        question.skill_id !==
+          itemSpec.skill_id
+      ) {
+        throw new Error(
+          'TRANSLATION_EXPLANATION_ITEM_MISMATCH:' +
+            String(
+              question.item_id || ''
+            )
+        );
+      }
+
+      var explanation =
+        JSON.parse(
+          JSON.stringify(
+            itemSpec.explanation
+          )
+        );
+      explanation.schema =
+        'H3_TRANSLATION_EXPLANATION_V1';
+      explanation.contract_id =
+        H3_TRANSLATION_EXPLANATION_CONTRACT_ID_;
+      explanation.source_binding_sha256 =
+        binding;
+      explanation.item_sha256 =
+        itemSpec.item_sha256;
+      explanation.provenance_mode =
+        'SOURCE_LINKED_AUTHORED';
+
+      question.explanation =
+        explanation;
+    }
+  );
+
+  out.explanation_contract_id =
+    H3_TRANSLATION_EXPLANATION_CONTRACT_ID_;
+
+  return out;
+}
+
+
+function h3SurfaceReviewOpenForLearner_(
+  request
+) {
+  var family =
+    String(
+      request &&
+      request.surface_family ||
+      ''
+    );
+  var setId =
+    String(
+      request &&
+      request.set_id ||
+      ''
+    );
+
+  if (
+    ['READING', 'TRANSLATION']
+      .indexOf(family) < 0 ||
+    !setId
+  ) {
+    throw new Error(
+      'SURFACE_REVIEW_REQUEST_INVALID'
+    );
+  }
+
+  var spreadsheet =
+    SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+  var context =
+    h3SurfaceReviewContextBySet_(
+      spreadsheet,
+      family,
+      setId
+    );
+
+  if (family !== 'TRANSLATION') {
+    return context.payload;
+  }
+
+  return h3TranslationReviewApplyExplanationOverlay_(
+    context.payload,
+    context.txn.locked
+  );
+}
+
+
 function h3SurfaceReviewBuildPayload_(
   txn
 ) {

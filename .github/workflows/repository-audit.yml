@@ -1416,6 +1416,38 @@ jobs:
                   ]
                 };
               }
+              if (name === 'reading_stage_v1') {
+                return {
+                  map:{SET_ID:0,STATUS:1,LEVEL:2},
+                  rows:[
+                    ['R','COMMITTED','3級']
+                  ]
+                };
+              }
+              if (name === 'reading_log_v1') {
+                return {
+                  map:{SET_ID:0,SKILL_ID:1,RESULT:2},
+                  rows:[
+                    ['R','RSK1','×']
+                  ]
+                };
+              }
+              if (name === 'translation_stage_v1') {
+                return {
+                  map:{SET_ID:0,STATUS:1,LEVEL:2},
+                  rows:[
+                    ['T','COMMITTED','3級']
+                  ]
+                };
+              }
+              if (name === 'translation_log_v1') {
+                return {
+                  map:{SET_ID:0,SKILL_ID:1,RESULT:2},
+                  rows:[
+                    ['T','TSK1','△']
+                  ]
+                };
+              }
               return null;
             }
           };
@@ -1429,6 +1461,18 @@ jobs:
           assert.strictEqual(
             evidence.bySkill['WRITTEN|準2級|SK1'].wrong,
             1
+          );
+          assert.strictEqual(
+            evidence.bySkill['WRITTEN|3級|RSK1'].wrong,
+            1
+          );
+          assert.strictEqual(
+            evidence.bySkill['WRITTEN|3級|TSK1'].uncertain,
+            1
+          );
+          assert.deepStrictEqual(
+            evidence.written_set_ids,
+            ['A','B']
           );
           context.__evidence = evidence;
           context.__entry3 = {
@@ -1450,6 +1494,26 @@ jobs:
               context
             ),
             14
+          );
+          context.__entryR = {
+            set_id:'R', level:'3級'
+          };
+          context.__entryT = {
+            set_id:'T', level:'3級'
+          };
+          assert.strictEqual(
+            vm.runInContext(
+              "h3ReviewBaseLevelForEntry_('WRITTEN',__entryR,__evidence)",
+              context
+            ),
+            14
+          );
+          assert.strictEqual(
+            vm.runInContext(
+              "h3ReviewBaseLevelForEntry_('WRITTEN',__entryT,__evidence)",
+              context
+            ),
+            7
           );
 
           const providers = vm.runInContext('h3ReviewProviders_()', context);
@@ -2440,7 +2504,7 @@ jobs:
               "'技術情報'",
               "'ホーム'",
               "'review-controls-sticky'",
-              "復習Lv",
+              "復習優先度",
           ]
           for needle in required_client:
               if needle not in client:
@@ -2453,6 +2517,7 @@ jobs:
               '.persistent-review-card',
               '.review-filter-button',
               '.review-history-item',
+              '.review-priority-track',
               '.review-technical',
           ]:
               if needle not in style:
@@ -2766,7 +2831,7 @@ jobs:
               "'Newest'",
               "'Priority'",
               "reviewKindFilter",
-              "復習Lv",
+              "復習優先度",
               'written_set_no',
               'openReviewHistoryEntry_(',
           ]:
@@ -3425,7 +3490,7 @@ jobs:
               "'Newest'",
               "'Priority'",
               "reviewKindFilter",
-              "復習Lv",
+              "復習優先度",
           ]:
               if needle not in client:
                   raise SystemExit(f'HOME learner-open invariant missing: {needle}')
@@ -6378,7 +6443,7 @@ jobs:
 
           for needle in [
               'Version: H3-READING-PRODUCTION-20260921-V1',
-              'F2C_P8_ISSUED_UI_REPAIR_PENDING_LEARNER_COMMIT',
+              'F2C_P8_PILOT_PASS_P9P10_GATED',
               'PREISSUE_READY',
               'H3_READING_PRODUCTION_COMMIT_ENABLED_=true',
               'Reading transaction COMMITTED',
@@ -6711,7 +6776,7 @@ jobs:
 
           for needle in [
               'Version: H3-TRANSLATION-PRODUCTION-20260921-V1',
-              'Status: F3_RUNTIME_ACTIVE_PILOT_GATED',
+              'Status: F3D_P11_P12_PILOT_PASS_F4_NOT_ACTIVE',
               'PREISSUE_READY',
               'non-renderable',
               'H3_TRANSLATION_PRODUCTION_COMMIT_ENABLED_=true',
@@ -6727,6 +6792,7 @@ jobs:
               'function renderTranslationSurface_(',
               'TRANSLATION_TARGET_SEGMENT_MISMATCH',
               'function normalizeTranslationReview_(',
+              'question.explanation ||',
               "'H3_PERSISTENT_TRANSLATION_REVIEW_PAYLOAD_V1'",
               'function isQuestionKeyWrittenSurface_(',
               "request.surface_family =\n        app.surfaceFamily;",
@@ -7037,7 +7103,7 @@ jobs:
             result.result !== 'PASS' ||
             result.schema !==
               'H3_SURFACE_REVIEW_BRIDGE_AUDIT_V1' ||
-            result.checks !== 6 ||
+            result.checks !== 8 ||
             result.reading_item_count !== 2 ||
             result.translation_item_count !== 2 ||
             result.translation_direction !==

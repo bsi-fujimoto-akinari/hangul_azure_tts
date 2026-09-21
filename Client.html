@@ -2099,8 +2099,6 @@
 
     if (
       app.surfaceFamily ===
-        'READING' ||
-      app.surfaceFamily ===
         'TRANSLATION'
     ) {
       showError(
@@ -2137,7 +2135,28 @@
       legacy_review_id:
         app.payload
           .legacy_review_id || null,
-      answers: sections.map(function (section) {
+      answers: sections.map(function (section, index) {
+        if (
+          app.surfaceFamily ===
+            'READING'
+        ) {
+          var questionKey =
+            questionKeys[index];
+
+          return {
+            question_key:
+              questionKey,
+            answer:
+              app.answers[
+                questionKey
+              ],
+            uncertain:
+              !!app.uncertain[
+                questionKey
+              ]
+          };
+        }
+
         return {
           section: section,
           answer: app.answers[section],
@@ -2145,6 +2164,16 @@
         };
       })
     };
+
+    if (
+      app.surfaceFamily ===
+        'READING'
+    ) {
+      request.provider_kind =
+        'WRITTEN';
+      request.surface_family =
+        'READING';
+    }
 
     google.script.run
       .withSuccessHandler(function (result) {
@@ -2224,8 +2253,12 @@
     if (
       result.mode === 'WRITTEN' &&
       result.after_sync &&
-      result.after_sync.schema ===
-        'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1'
+      [
+        'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1',
+        'H3_PERSISTENT_READING_REVIEW_PAYLOAD_V1'
+      ].indexOf(
+        result.after_sync.schema
+      ) >= 0
     ) {
       renderPersistentReview(
         result.after_sync

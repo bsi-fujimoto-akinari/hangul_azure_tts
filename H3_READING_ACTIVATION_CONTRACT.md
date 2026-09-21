@@ -1,7 +1,7 @@
 # H3 Reading Activation Core Contract
 
 Version: H3-READING-ACTIVATION-CORE-20260921-V3
-Status: SECTION_AWARE_PREISSUE_CAPABLE_ROUTE_INACTIVE
+Status: P8_CONTROLLED_ISSUE_READY_NOT_ISSUED
 
 ## 1. Scope
 
@@ -16,7 +16,7 @@ level = 3級
 
 It defines section-aware runtime identity, stage identity, transaction shape, preissue validation, committed-result projection, and current-learning candidate rules.
 
-This contract permits bounded Reading-only stage materialization through `PREISSUE_READY`. It does not itself issue a learner set, enable Client submission, integrate Review/HOME, or activate scheduler/queue state.
+This contract permits bounded Reading-only stage materialization through `PREISSUE_READY`. F2B now supplies the separate production/Client/Review/HOME wiring required for a controlled P8 issue, but this activation core does not itself issue a learner set or activate scheduler/queue state.
 
 The already materialized P8 stage remains the only live Reading stage:
 
@@ -224,7 +224,7 @@ The shared passage remains provenance/context and is not itself a mastery key.
 
 ## 11. Current-learning boundary
 
-`h3ReadingCurrentLearning_` may resolve exactly one ISSUED, uncommitted, source-valid Reading stage. This contract does not merge Reading into parameterless HOME resolution.
+`h3ReadingCurrentLearning_` may resolve exactly one ISSUED, uncommitted, source-valid Reading stage. The shared current-learning arbiter now includes Reading and remains fail-closed when multiple family candidates exist.
 
 ## 12. Explicit non-goals
 
@@ -232,25 +232,22 @@ This phase does not:
 
 - create P9/P10 live stage rows;
 - allocate live P9/P10 SET_IDs;
-- issue P8, P9, or P10;
-- enable Reading Client submission;
-- enable Reading production commit;
-- integrate Reading Review/HOME;
-- activate P8/P9/P10 skill_queue rows;
+- issue P8, P9, or P10 by itself;
+- activate P8/P9/P10 skill_queue rows or family scheduler state;
 - modify 5W transaction, Answer Sync, source ratio, scheduler, history, pointer, or Review content;
 - modify Translation or 準2級.
 
 ## 13. Next activation boundary
 
-The next learner-facing Reading step remains serialized with Review/HOME work:
+F2B has completed the Review/HOME, current-learning arbitration, Client submit, and production-commit prerequisites. The next learner-facing Reading step is therefore:
 
 ```text
-Reading Review/HOME persistence contract
-→ current-learning arbitration including READING
-→ enable Reading Client submit + production commit
-→ exact issue transition
-→ one P8 pilot issue
-→ committed transaction/log verification
+fresh final preissue readback
+→ verify no concurrent current learning
+→ verify exact P8 source/locked hashes
+→ exact PREISSUE_READY → ISSUED transition
+→ one controlled P8 learner attempt
+→ committed transaction/log/Review/HOME verification
 ```
 
-Until that shared boundary is available, P9/P10 may continue only as source-locked repository pilots and pure section-aware materialization tests.
+P9/P10 remain repository-only until the P8 controlled pilot passes end-to-end.

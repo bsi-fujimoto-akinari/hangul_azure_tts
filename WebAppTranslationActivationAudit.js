@@ -258,6 +258,8 @@ function auditTranslationActivationCoreV1_() {
         'KR_TO_JP' &&
       result.answer_type ===
         'MULTIPLE_CHOICE' &&
+      result.status ===
+        'COMMITTED' &&
       result.total === 2 &&
       result.receipt.indexOf(
         'STATUS=COMMITTED'

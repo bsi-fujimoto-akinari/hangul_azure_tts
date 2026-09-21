@@ -6272,7 +6272,7 @@ jobs:
               "'reading-passage-card reading-passage'",
               "return '2R / Reading';",
               "return '2T / Translation';",
-              "app.surfaceFamily ===\n          'READING' ||",
+              "app.surfaceFamily ===\n        'READING' ||",
           ]:
               if needle not in client:
                   raise SystemExit(f'Reading learner UI invariant missing: {needle}')

@@ -133,11 +133,23 @@ function submitListeningWebAnswers(request) {
           request
         );
 
-      var translationReview =
-        h3SurfaceReviewEnsure_(
-          'TRANSLATION',
-          translationResult.txn_id
-        );
+      var translationReviewLock =
+        LockService.getScriptLock();
+      translationReviewLock.waitLock(
+        30000
+      );
+
+      var translationReview;
+      try {
+        translationReview =
+          h3SurfaceReviewEnsure_(
+            'TRANSLATION',
+            translationResult.txn_id
+          );
+      } finally {
+        translationReviewLock
+          .releaseLock();
+      }
 
       translationResult.home_index_sync =
         h3ReviewHomeIndexUpsertAfterCommit_(

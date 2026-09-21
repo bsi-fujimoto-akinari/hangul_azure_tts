@@ -1146,6 +1146,8 @@ function h3TranslationBuildCommittedResult_(
       stage.answer_type,
     persisted:
       true,
+    status:
+      'COMMITTED',
     set_id:
       stage.set_id,
     stage_id:

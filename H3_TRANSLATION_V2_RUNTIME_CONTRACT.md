@@ -1,7 +1,7 @@
 # H3 Translation V2 Mixed Runtime Contract
 
 Version: 2026-09-22 V1
-Status: RS-06 remediation / server-side core only / live routing disabled
+Status: RS-07 activation candidate / V2 routing integrated / issue remains transaction-gated
 
 ## Purpose
 Preserve immutable Translation V1 history while adding a parallel V2 contract for future 2T sets.
@@ -30,5 +30,12 @@ translation_web_txn_v2
 translation_log_v2
 
 ## Activation boundary
-This contract does not route learner traffic.
-WebApp.js, Client.html, Review persistence, and live issue remain V1 until RS-07 activation.
+RS-07 adds V2-aware WebApp routing, mixed-direction Client validation/rendering,
+V2 Review source-lock handling, and V2 transaction persistence.
+V1 Translation history remains immutable and is selected whenever SET_ID belongs to V1.
+A V2 set becomes learner-visible only after an authoritative translation_stage_v2 row
+is written with STATUS=ISSUED and ISSUED_AT populated.
+LOCKED/PREISSUE/ISSUED alone never advances Translation family clock or consumes the
+5W-derived R/T opportunity. Those scheduler sidecars advance only after COMMITTED.
+RS-07 first activation is limited to one audited MIXED_1_1 set; recurring automatic
+materialization is outside this initial activation transaction.

@@ -1315,7 +1315,7 @@ jobs:
           );
           assert.deepStrictEqual(
             actualHome.review_filters,
-            ['LISTENING','WRITTEN']
+            ['ALL','LISTENING','WRITTEN']
           );
           assert.deepStrictEqual(
             actualHome.review_sorts,
@@ -1323,7 +1323,7 @@ jobs:
           );
           assert.strictEqual(
             actualHome.review_level_contract,
-            'H3_REVIEW_LEVEL_V2'
+            'H3_REVIEW_PRIORITY_V3'
           );
           assert.strictEqual(
             actualHome.review_home_index_contract,
@@ -1476,44 +1476,83 @@ jobs:
           );
           context.__evidence = evidence;
           context.__entry3 = {
-            set_id:'A', level:'3級'
+            set_id:'A', level:'3級',
+            surface_family:'5W'
           };
           context.__entry2 = {
-            set_id:'B', level:'準2級'
+            set_id:'B', level:'準2級',
+            surface_family:'5W'
           };
           assert.strictEqual(
             vm.runInContext(
               "h3ReviewBaseLevelForEntry_('WRITTEN',__entry3,__evidence)",
               context
             ),
-            14
+            66
           );
           assert.strictEqual(
             vm.runInContext(
               "h3ReviewBaseLevelForEntry_('WRITTEN',__entry2,__evidence)",
               context
             ),
-            14
+            66
           );
           context.__entryR = {
-            set_id:'R', level:'3級'
+            set_id:'R', level:'3級',
+            surface_family:'READING'
           };
           context.__entryT = {
-            set_id:'T', level:'3級'
+            set_id:'T', level:'3級',
+            surface_family:'TRANSLATION'
           };
           assert.strictEqual(
             vm.runInContext(
               "h3ReviewBaseLevelForEntry_('WRITTEN',__entryR,__evidence)",
               context
             ),
-            14
+            40
           );
           assert.strictEqual(
             vm.runInContext(
               "h3ReviewBaseLevelForEntry_('WRITTEN',__entryT,__evidence)",
               context
             ),
-            7
+            20
+          );
+
+          context.__factor5L = {
+            surface_family:'5L'
+          };
+          context.__factor5W = {
+            surface_family:'5W'
+          };
+          context.__factor2R = {
+            surface_family:'READING'
+          };
+          assert.strictEqual(
+            vm.runInContext(
+              "h3ReviewPrioritySurfaceFactor_('LISTENING',__factor5L)",
+              context
+            ),
+            1
+          );
+          assert.ok(
+            Math.abs(
+              vm.runInContext(
+                "h3ReviewPrioritySurfaceFactor_('WRITTEN',__factor5W)",
+                context
+              ) -
+              (1.22 / 1.30)
+            ) < 1e-12
+          );
+          assert.ok(
+            Math.abs(
+              vm.runInContext(
+                "h3ReviewPrioritySurfaceFactor_('WRITTEN',__factor2R)",
+                context
+              ) -
+              (0.74 / 1.30)
+            ) < 1e-12
           );
 
           const providers = vm.runInContext('h3ReviewProviders_()', context);
@@ -2826,11 +2865,13 @@ jobs:
               "'review-controls-sticky'",
               "'review-history-heading'",
               "'review-history-score'",
+              "'ALL'",
               "'L'",
               "'W'",
               "'Newest'",
               "'Priority'",
               "reviewKindFilter",
+              "reviewKindFilter: 'ALL'",
               "復習優先度",
               'written_set_no',
               'openReviewHistoryEntry_(',
@@ -2840,12 +2881,22 @@ jobs:
                       f'R3-09E refined HOME invariant missing: {needle}'
                   )
 
+          if "'review-history-summary'" in home:
+              raise SystemExit(
+                  'Retired HOME textual summary line returned.'
+              )
+          if '.review-history-summary' in style:
+              raise SystemExit(
+                  'Retired HOME summary CSS returned.'
+              )
+
           for needle in [
               '.review-controls-sticky',
               'position: sticky',
               '.review-segmented',
               'border-radius: 12px',
               '.review-history-heading',
+              '.review-priority-track',
               '.review-progress',
               '.review-progress-button.current',
               '.persistent-review-card.review-active',
@@ -2949,7 +3000,7 @@ jobs:
                       f'Review canonical architecture invariant missing: {needle}'
                   )
 
-          if 'H3_REVIEW_LEVEL_V2' not in chat:
+          if 'H3_REVIEW_PRIORITY_V3' not in chat:
               raise SystemExit('Web/Chat contract lacks the current HOME priority contract.')
           PY
 
@@ -3485,11 +3536,13 @@ jobs:
           for needle in [
               'function renderHome(payload)',
               "'review-controls-sticky'",
+              "'ALL'",
               "'L'",
               "'W'",
               "'Newest'",
               "'Priority'",
               "reviewKindFilter",
+              "reviewKindFilter: 'ALL'",
               "復習優先度",
           ]:
               if needle not in client:

@@ -1,13 +1,13 @@
 # H3 Reading Production Route Contract
 
 Version: H3-READING-PRODUCTION-20260921-V1
-Status: P8_CONTROLLED_COMMIT_ENABLED_NOT_ISSUED
+Status: F2C_P8_ISSUED_UI_REPAIR_PENDING_LEARNER_COMMIT
 
 ## Scope
 
 This contract wires the Reading activation core to production render, Reading-owned transaction persistence, persistent Reading Review, and HOME.
 
-F2B enables the controlled Reading submission/commit path, but it does not issue a Reading stage. The live P8 pilot must remain `PREISSUE_READY` until the separate F2C final preissue gate changes only that stage to `ISSUED`.
+F2B enabled the controlled Reading submission/commit path. F2C has now passed the final preissue gate and changed only the exact live P8 stage to `ISSUED`. The same P8 pilot remains the sole authorized learner attempt until it reaches COMMITTED; it must not be reissued.
 
 ## Runtime authorities
 
@@ -69,9 +69,20 @@ Post-commit Review/HOME operations are idempotent and source-validated. A Review
 
 Client submission is enabled only for `surface_family=READING` among the newly staged written families.
 
-Reading browser answer identity is `question_key`, never the repeated section name. Translation submission remains disabled.
+Reading browser answer identity is `question_key`, never the repeated section name. Translation is governed separately by the F3 production contract and is not modified by this Reading repair.
 
 A successful Reading result opens `H3_PERSISTENT_READING_REVIEW_PAYLOAD_V1` only after the server post-commit chain has completed.
+
+### Learner UI invariants
+
+For the live 2-question Reading surface:
+
+- learner-facing family labels use `2R / Reading`; Translation uses `2T / Translation`, not the Japanese family labels;
+- Reading receives the same explicit Reset / Grade controls as other Written learner surfaces;
+- the shared Reading passage is rendered in a bordered card with the same outer width as the question card;
+- raw source passage text and all source/locked hashes remain immutable;
+- if the captured source contains orphan footnote markers but no captured footnote body, the learner display may suppress only those orphan markers at render time; an explicit captured footnote body is preserved;
+- learner-facing explanation content is visible by default; collapsible `<details>` is reserved in principle for technical information.
 
 ## Current learning
 
@@ -91,10 +102,18 @@ F2B does not:
 
 ## Next gate
 
-F2C must perform a fresh final preissue readback immediately before learner issue, verify no concurrent current learning, verify the exact P8 source/locked hashes, and then make the sole intended live activation:
+P8 is already `ISSUED` with the exact source/bundle hashes preserved. After this learner-UI repair is audited and synced:
 
 ```text
-PREISSUE_READY → ISSUED
+reload the same current P8 learner surface
+→ answer Q1/Q2
+→ explicit Grade
+→ Reading transaction COMMITTED
+→ exactly two reading_log_v1 rows
+→ persistent Reading Review/binding LOCKED
+→ HOME upsert
+→ immediate Review open validation
+→ F2C PASS
 ```
 
-Only one controlled P8 learner attempt is authorized after that transition.
+No new P8 issue write is authorized.

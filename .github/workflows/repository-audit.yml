@@ -6498,7 +6498,7 @@ jobs:
             vm.runInContext(
               'H3_READING_PRODUCTION_COMMIT_ENABLED_',
               context
-            ) !== true
+            ) !== false
           ) {
             throw new Error(
               'Reading production commit gate must remain disabled.'
@@ -6511,7 +6511,7 @@ jobs:
               pilot: result,
               family: family,
               activation: activation,
-              production_commit_enabled: true
+              production_commit_enabled: false
             })
           );
           NODE
@@ -6818,7 +6818,7 @@ jobs:
             vm.runInContext(
               'H3_TRANSLATION_PRODUCTION_COMMIT_ENABLED_',
               context
-            ) !== false
+            ) !== true
           ) {
             throw new Error(
               'Translation production commit gate must be enabled for F3.'
@@ -6830,7 +6830,7 @@ jobs:
             JSON.stringify({
               pilot: result,
               activation: activation,
-              production_commit_enabled: false
+              production_commit_enabled: true
             })
           );
           NODE

@@ -993,6 +993,22 @@ function h3ReviewHomeIndexRowEntry_(
   } else {
     entry.written_set_no =
       setNo;
+    entry.family_set_no =
+      setNo;
+
+    if (
+      entry.surface_family ===
+        'READING'
+    ) {
+      entry.reading_set_no =
+        setNo;
+    } else if (
+      entry.surface_family ===
+        'TRANSLATION'
+    ) {
+      entry.translation_set_no =
+        setNo;
+    }
   }
 
   return entry;
@@ -1367,9 +1383,11 @@ function h3ReviewCurrentLearning_(
     return null;
   }
 
-  candidates.sort(function (a, b) {
-    return a.order - b.order;
-  });
+  if (candidates.length > 1) {
+    throw new Error(
+      'REVIEW_CURRENT_LEARNING_AMBIGUOUS'
+    );
+  }
 
   return candidates[0].current;
 }

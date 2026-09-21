@@ -270,13 +270,62 @@ function h3WrittenReviewProjectHistorical_(
 function h3WrittenReviewPersistentHistory_(
   spreadsheet
 ) {
-  return h3WrittenReviewAllHistoryEntries_(
-    spreadsheet
-  );
+  var entries =
+    h3WrittenReviewAllHistoryEntries_(
+      spreadsheet
+    ).slice();
+
+  if (
+    typeof h3SurfaceReviewHistoryEntries_ ===
+      'function'
+  ) {
+    entries = entries.concat(
+      h3SurfaceReviewHistoryEntries_(
+        spreadsheet,
+        'READING'
+      ),
+      h3SurfaceReviewHistoryEntries_(
+        spreadsheet,
+        'TRANSLATION'
+      )
+    );
+  }
+
+  return entries;
 }
 
 
 function h3WrittenReviewOpen_(request) {
+  var surfaceFamily = String(
+    request &&
+    request.surface_family ||
+    ''
+  );
+
+  if (
+    surfaceFamily === 'READING' ||
+    surfaceFamily === 'TRANSLATION'
+  ) {
+    if (
+      typeof h3SurfaceReviewOpen_ !==
+        'function'
+    ) {
+      throw new Error(
+        'SURFACE_REVIEW_BRIDGE_UNAVAILABLE'
+      );
+    }
+    return h3SurfaceReviewOpen_(request);
+  }
+
+  if (
+    surfaceFamily &&
+    surfaceFamily !== '5W'
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_SURFACE_FAMILY_INVALID'
+    );
+  }
+
   if (
     request &&
     request.materialized_record
@@ -302,16 +351,56 @@ function h3WrittenReviewUnavailable_() {
 function h3WrittenReviewCurrentLearning_(
   spreadsheet
 ) {
+  var candidates = [];
+
   if (
-    typeof h3WrittenCurrentLearning_ !==
+    typeof h3WrittenCurrentLearning_ ===
       'function'
   ) {
-    return null;
+    var written =
+      h3WrittenCurrentLearning_(
+        spreadsheet
+      );
+    if (written) {
+      candidates.push(written);
+    }
   }
 
-  return h3WrittenCurrentLearning_(
-    spreadsheet
-  );
+  if (
+    typeof h3ReadingCurrentLearning_ ===
+      'function'
+  ) {
+    var reading =
+      h3ReadingCurrentLearning_(
+        spreadsheet
+      );
+    if (reading) {
+      candidates.push(reading);
+    }
+  }
+
+  if (
+    typeof h3TranslationCurrentLearning_ ===
+      'function'
+  ) {
+    var translation =
+      h3TranslationCurrentLearning_(
+        spreadsheet
+      );
+    if (translation) {
+      candidates.push(translation);
+    }
+  }
+
+  if (candidates.length > 1) {
+    throw new Error(
+      'WRITTEN_SURFACE_CURRENT_AMBIGUOUS'
+    );
+  }
+
+  return candidates.length
+    ? candidates[0]
+    : null;
 }
 
 

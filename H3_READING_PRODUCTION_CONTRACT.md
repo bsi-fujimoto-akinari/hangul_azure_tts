@@ -57,3 +57,14 @@ This phase does not:
 - touch historical 5W Review payload/binding content.
 
 The explicit Web render route may be staged in server dispatch, but remains unusable for the PREISSUE_READY pilot until a later issue transition.
+
+## F1 Review bridge status
+
+The shared F1 Review bridge contract
+`H3-SURFACE-REVIEW-BRIDGE-20260921-V1` is staged. Reading now has a dedicated
+persistent Review authority and HOME/open-routing contract, but this production
+route still keeps `H3_READING_PRODUCTION_COMMIT_ENABLED_=false`.
+
+Activation remains serialized: finalize Reading explanation content, wire the
+post-commit Review/HOME sequence, enable Client submit and the commit gate, then
+perform the final P8 preissue readback before issue.

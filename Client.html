@@ -571,7 +571,8 @@
   }
 
   function loadWrittenReview(
-    setId
+    setId,
+    surfaceFamily
   ) {
     loadSet({
       schema:
@@ -579,6 +580,10 @@
       mode: 'REVIEW',
       review_kind:
         'WRITTEN',
+      surface_family:
+        String(
+          surfaceFamily || '5W'
+        ),
       set_id:
         String(setId),
       txn_id: null,
@@ -654,7 +659,8 @@
         'WRITTEN'
     ) {
       loadWrittenReview(
-        entry.set_id
+        entry.set_id,
+        entry.surface_family
       );
       return;
     }
@@ -1075,15 +1081,43 @@
 
             var heading =
               document.createElement('h4');
+            var surfaceFamily =
+              String(
+                entry.surface_family || ''
+              );
+            var writtenLabel =
+              surfaceFamily === 'READING'
+                ? '読解'
+                : (
+                    surfaceFamily ===
+                      'TRANSLATION'
+                      ? '翻訳'
+                      : '5W'
+                  );
+            var writtenSetNo =
+              entry.family_set_no ||
+              entry.reading_set_no ||
+              entry.translation_set_no ||
+              entry.written_set_no ||
+              '—';
+
             heading.textContent =
               kind === 'WRITTEN'
                 ? (
-                    '5W #' +
-                    String(
-                      entry
-                        .written_set_no ||
-                      '—'
-                    )
+                    writtenLabel === '5W'
+                      ? (
+                          '5W #' +
+                          String(
+                            writtenSetNo
+                          )
+                        )
+                      : (
+                          writtenLabel +
+                          ' #' +
+                          String(
+                            writtenSetNo
+                          )
+                        )
                   )
                 : (
                     '5L #' +

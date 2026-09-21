@@ -67,6 +67,8 @@ jobs:
               'WebAppReviewListeningAdapter.js',
               'WebAppReviewPersistence.js',
               'WebAppReviewWrittenAdapter.js',
+              'WebAppSurfaceReviewBridge.js',
+              'WebAppSurfaceReviewBridgeAudit.js',
               'ListeningBackendOrchestrator.js',
               'H3_WEB_CHAT_CONTRACT.md',
               'H3_REVIEW_ARCHITECTURE.md',
@@ -83,6 +85,7 @@ jobs:
               'H3_TRANSLATION_P11_P12_PILOT_CONTRACT.md',
               'H3_TRANSLATION_ACTIVATION_CONTRACT.md',
               'H3_TRANSLATION_PRODUCTION_CONTRACT.md',
+              'H3_SURFACE_REVIEW_BRIDGE_CONTRACT.md',
               'Index.html',
               'Stylesheet.html',
               'Client.html',
@@ -2197,8 +2200,11 @@ jobs:
               "review_kind:",
               "'WRITTEN'",
               "entry.review_kind ===",
-              "'5W #'",
+              "'5W'",
+              "'読解'",
+              "'翻訳'",
               'written_set_no',
+              'family_set_no',
               'openReviewHistoryEntry_(',
               'part.audio_asset_key',
               'part.user_answer_position',
@@ -6812,6 +6818,148 @@ jobs:
           );
           NODE
 
+      - name: Check F1 Reading Translation Review bridge
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          bridge = Path('WebAppSurfaceReviewBridge.js').read_text(encoding='utf-8')
+          audit = Path('WebAppSurfaceReviewBridgeAudit.js').read_text(encoding='utf-8')
+          contract = Path('H3_SURFACE_REVIEW_BRIDGE_CONTRACT.md').read_text(encoding='utf-8')
+          core = Path('WebAppReviewCore.js').read_text(encoding='utf-8')
+          adapter = Path('WebAppReviewWrittenAdapter.js').read_text(encoding='utf-8')
+          persistence = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          client = Path('Client.html').read_text(encoding='utf-8')
+
+          for needle in [
+              "H3-SURFACE-REVIEW-BRIDGE-20260921-V1",
+              "'reading_review_payload_v1'",
+              "'reading_review_binding_v1'",
+              "'translation_review_payload_v1'",
+              "'translation_review_binding_v1'",
+              "function h3SurfaceReviewEnsure_(",
+              "function h3SurfaceReviewContextBySet_(",
+              "function h3SurfaceReviewHistoryEntries_(",
+              "function h3SurfaceReviewOpen_(",
+              "H3_PERSISTENT_READING_REVIEW_PAYLOAD_V1",
+              "H3_PERSISTENT_TRANSLATION_REVIEW_PAYLOAD_V1",
+          ]:
+              if needle not in bridge:
+                  raise SystemExit(f'F1 bridge invariant missing: {needle}')
+
+          for needle in [
+              'Version: H3-SURFACE-REVIEW-BRIDGE-20260921-V1',
+              'Status: F1_COMPLETE_LEARNER_INACTIVE',
+              'Reading shared passage',
+              'Translation invariants',
+              'current-learning',
+          ]:
+              if needle not in contract:
+                  raise SystemExit(f'F1 bridge contract missing: {needle}')
+
+          for needle in [
+              "h3SurfaceReviewHistoryEntries_(",
+              "h3SurfaceReviewOpen_(request)",
+              "h3ReadingCurrentLearning_(",
+              "h3TranslationCurrentLearning_(",
+              "'WRITTEN_SURFACE_CURRENT_AMBIGUOUS'",
+          ]:
+              if needle not in adapter:
+                  raise SystemExit(f'F1 Written adapter invariant missing: {needle}')
+
+          if "'REVIEW_CURRENT_LEARNING_AMBIGUOUS'" not in core:
+              raise SystemExit('Common current-learning arbiter is not fail-closed.')
+
+          for needle in [
+              "H3_READING_PERSISTENT_REVIEW_SCHEMA_",
+              "H3_TRANSLATION_PERSISTENT_REVIEW_SCHEMA_",
+              "'READING_PRODUCTION_WEB'",
+              "'TRANSLATION_PRODUCTION_WEB'",
+          ]:
+              if needle not in persistence:
+                  raise SystemExit(f'F1 HOME upsert invariant missing: {needle}')
+
+          for needle in [
+              "surface_family:",
+              "surfaceFamily === 'READING'",
+              "'TRANSLATION'",
+              "'読解'",
+              "'翻訳'",
+          ]:
+              if needle not in client:
+                  raise SystemExit(f'F1 Client Review routing invariant missing: {needle}')
+
+          for forbidden in [
+              "H3_READING_PRODUCTION_COMMIT_ENABLED_ =\n  true",
+              "H3_TRANSLATION_PRODUCTION_COMMIT_ENABLED_ =\n  true",
+          ]:
+              if forbidden in bridge:
+                  raise SystemExit(f'F1 unexpectedly enabled production commit: {forbidden}')
+
+          if 'function auditSurfaceReviewBridgeV1_(' not in audit:
+              raise SystemExit('F1 pure audit entrypoint missing.')
+
+          print('F1 Review bridge static boundary: PASS')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+
+          const context = vm.createContext({
+            console,
+            hash_: value =>
+              crypto.createHash('sha256')
+                .update(String(value), 'utf8')
+                .digest('hex')
+          });
+
+          [
+            'WebAppSurfaceCommon.js',
+            'WebAppReviewCore.js',
+            'WebAppReadingPilot.js',
+            'WebAppReadingPilotAudit.js',
+            'WebAppTranslationPilot.js',
+            'WebAppTranslationPilotAudit.js',
+            'WebAppSurfaceReviewBridge.js',
+            'WebAppSurfaceReviewBridgeAudit.js'
+          ].forEach(name => {
+            vm.runInContext(
+              fs.readFileSync(name, 'utf8'),
+              context,
+              {filename:name}
+            );
+          });
+
+          const result = vm.runInContext(
+            'auditSurfaceReviewBridgeV1_()',
+            context
+          );
+
+          if (
+            result.result !== 'PASS' ||
+            result.schema !==
+              'H3_SURFACE_REVIEW_BRIDGE_AUDIT_V1' ||
+            result.checks !== 6 ||
+            result.reading_item_count !== 2 ||
+            result.translation_item_count !== 2 ||
+            result.translation_direction !==
+              'KR_TO_JP'
+          ) {
+            throw new Error(
+              'F1 Review bridge pure audit mismatch: ' +
+              JSON.stringify(result)
+            );
+          }
+
+          console.log(
+            'F1 Review bridge pure audit: PASS',
+            JSON.stringify(result)
+          );
+          NODE
+
       - name: Check independent level runtime boundary
         shell: bash
         run: |
@@ -7271,6 +7419,8 @@ jobs:
           node --check WebAppReviewListeningAdapter.js
           node --check WebAppReviewPersistence.js
           node --check WebAppReviewWrittenAdapter.js
+          node --check WebAppSurfaceReviewBridge.js
+          node --check WebAppSurfaceReviewBridgeAudit.js
           python3 - <<'PY'
           from pathlib import Path
           text = Path('Client.html').read_text(encoding='utf-8').strip()

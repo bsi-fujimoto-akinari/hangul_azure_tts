@@ -106,3 +106,15 @@ common Review/HOME integration
 ```
 
 Review/HOME integration must not race concurrent historical 5W Review writes.
+
+## F1 Review bridge status
+
+The shared F1 Review bridge contract
+`H3-SURFACE-REVIEW-BRIDGE-20260921-V1` is staged. Translation now has a
+dedicated persistent Review authority and HOME/open-routing contract that
+preserves exact `translation_direction` and `answer_type`, but this
+production route still keeps `H3_TRANSLATION_PRODUCTION_COMMIT_ENABLED_=false`.
+
+Activation remains serialized: implement the Translation learner renderer,
+wire the post-commit Review/HOME sequence, enable Client submit and the commit
+gate, then perform the final P11 preissue readback before issue.

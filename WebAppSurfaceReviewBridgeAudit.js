@@ -192,53 +192,21 @@ function auditSurfaceReviewBridgeV1_() {
     'TRANSLATION_DIRECTION_TYPE'
   );
 
-  var currentTranslationResult =
-    h3TranslationBuildCommittedResult_(
-      {
-        schema:
-          H3_TRANSLATION_STAGE_SCHEMA_,
-        activation_contract_id:
-          H3_TRANSLATION_ACTIVATION_CONTRACT_ID_,
-        provider_kind: 'WRITTEN',
-        surface_family:
-          'TRANSLATION',
-        issue_no: 1,
-        stage_id:
-          'TRANS-P11-20260921-001',
-        set_id:
-          'H3-20260921-T001',
-        status: 'COMMITTED',
-        level: '3級',
-        section_key: 'H3-P11',
-        translation_direction:
-          'KR_TO_JP',
-        answer_type:
-          'MULTIPLE_CHOICE',
-        item_count: 2,
-        source_binding_sha256:
-          translationLocked
-            .source_binding_sha256,
-        locked_bundle_sha256:
-          h3TranslationLockedBundleHash_(
-            translationLocked
-          ),
-        locked_bundle_json:
-          h3TranslationLockedBundleJson_(
-            translationLocked
-          ),
-        created_at:
-          '2026-09-21T10:00:00+09:00',
-        locked_at:
-          '2026-09-21T10:00:00+09:00',
-        issued_at:
-          '2026-09-21T10:05:00+09:00',
-        committed_at:
-          '2026-09-21T12:05:00+09:00'
-      },
-      translationLocked,
-      translationGrade,
-      'H3TX-20260921-900002'
-    );
+  var currentTranslationResult = {
+    schema:
+      'H3_WEB_SUBMIT_RESULT_V1',
+    status:
+      'COMMITTED',
+    surface_family:
+      'TRANSLATION',
+    receipt:
+      [
+        '[H3_WEB_SYNC]',
+        'SET_ID=H3-20260921-T001',
+        'TXN_ID=H3TX-20260921-900002',
+        'STATUS=COMMITTED'
+      ].join('\n')
+  };
   var legacyTranslationResult =
     JSON.parse(
       JSON.stringify(

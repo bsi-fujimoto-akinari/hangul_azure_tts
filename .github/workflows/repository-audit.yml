@@ -61,6 +61,8 @@ jobs:
               'WebAppTranslationActivation.js',
               'WebAppTranslationActivationAudit.js',
               'WebAppTranslationProduction.js',
+              'WebAppTranslationV2.js',
+              'WebAppTranslationV2Audit.js',
               'WebAppPreissue.js',
               'WebAppReceipt.js',
               'WebAppReviewCore.js',
@@ -85,6 +87,7 @@ jobs:
               'H3_TRANSLATION_P11_P12_PILOT_CONTRACT.md',
               'H3_TRANSLATION_ACTIVATION_CONTRACT.md',
               'H3_TRANSLATION_PRODUCTION_CONTRACT.md',
+              'H3_TRANSLATION_V2_RUNTIME_CONTRACT.md',
               'H3_SURFACE_REVIEW_BRIDGE_CONTRACT.md',
               'Index.html',
               'Stylesheet.html',
@@ -7918,6 +7921,8 @@ jobs:
           node --check WebAppTranslationActivation.js
           node --check WebAppTranslationActivationAudit.js
           node --check WebAppTranslationProduction.js
+          node --check WebAppTranslationV2.js
+          node --check WebAppTranslationV2Audit.js
           node --check WebAppPreissue.js
           node --check WebAppReceipt.js
           node --check WebAppReviewCore.js

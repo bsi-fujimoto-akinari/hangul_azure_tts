@@ -6776,7 +6776,7 @@ jobs:
 
           for needle in [
               'Version: H3-TRANSLATION-PRODUCTION-20260921-V1',
-              'Status: F3_RUNTIME_ACTIVE_PILOT_GATED',
+              'Status: F3D_P11_P12_PILOT_PASS_F4_NOT_ACTIVE',
               'PREISSUE_READY',
               'non-renderable',
               'H3_TRANSLATION_PRODUCTION_COMMIT_ENABLED_=true',

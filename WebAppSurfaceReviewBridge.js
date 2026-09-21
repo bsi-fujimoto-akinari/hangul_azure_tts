@@ -994,6 +994,53 @@ function h3SurfaceReviewBuildPayload_(
 }
 
 
+
+function h3SurfaceReviewExpectedReadingExplanationContract_(
+  payload
+) {
+  var sectionKey =
+    String(
+      payload &&
+      payload.section_key ||
+      ''
+    );
+  var binding =
+    String(
+      payload &&
+      payload.source_binding_sha256 ||
+      ''
+    );
+
+  if (
+    sectionKey === 'H3-P8' &&
+    binding ===
+      'a8c3a7c038fa251e195463a13157fb3683882ddef30d677d9962c58ff120761e'
+  ) {
+    return H3_READING_P8_EXPLANATION_CONTRACT_ID_;
+  }
+
+  if (
+    sectionKey === 'H3-P9' &&
+    binding ===
+      H3_READING_P9_SOURCE_BINDING_SHA256_
+  ) {
+    return H3_READING_P9_P10_EXPLANATION_CONTRACT_ID_;
+  }
+
+  if (
+    sectionKey === 'H3-P10' &&
+    binding ===
+      H3_READING_P10_SOURCE_BINDING_SHA256_
+  ) {
+    return H3_READING_P9_P10_EXPLANATION_CONTRACT_ID_;
+  }
+
+  throw new Error(
+    'READING_REVIEW_EXPLANATION_SCOPE_INVALID'
+  );
+}
+
+
 function h3SurfaceReviewValidatePayload_(
   payload,
   config
@@ -1064,20 +1111,50 @@ function h3SurfaceReviewValidatePayload_(
       }
     );
 
+    var expectedExplanationContract =
+      h3SurfaceReviewExpectedReadingExplanationContract_(
+        payload
+      );
+    var expectedSection =
+      String(payload.section_key || '')
+        .replace('H3-', '');
+
     payload.sections.forEach(
-      function (section) {
+      function (section, index) {
+        var question =
+          payload.questions[index];
+        var isP9P10 =
+          expectedExplanationContract ===
+            H3_READING_P9_P10_EXPLANATION_CONTRACT_ID_;
+
         if (
           !section.explanation ||
           section.explanation.contract_id !==
-            H3_READING_P8_EXPLANATION_CONTRACT_ID_ ||
+            expectedExplanationContract ||
           section.explanation.source_binding_sha256 !==
             payload.source_binding_sha256 ||
           section.explanation.passage_sha256 !==
             payload.passage.passage_sha256 ||
+          section.explanation.item_sha256 !==
+            section.item_sha256 ||
+          (
+            isP9P10 &&
+            section.explanation.provenance_mode !==
+              'SOURCE_LINKED_AUTHORED'
+          ) ||
+          section.section !==
+            expectedSection ||
           section.passage_id !==
             payload.passage.passage_id ||
           section.passage_sha256 !==
-            payload.passage.passage_sha256
+            payload.passage.passage_sha256 ||
+          !question ||
+          section.item_id !==
+            question.item_id ||
+          section.question_key !==
+            question.question_key ||
+          section.skill_id !==
+            question.skill_id
         ) {
           throw new Error(
             'READING_REVIEW_EXPLANATION_BINDING_MISMATCH'

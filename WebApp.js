@@ -167,9 +167,57 @@ function submitListeningWebAnswers(request) {
       request.surface_family ===
         'TRANSLATION'
     ) {
-      return h3TranslationSubmit_(
-        request
+      var translationResult =
+        h3TranslationSubmit_(
+          request
+        );
+
+      var translationReviewLock =
+        LockService.getScriptLock();
+      translationReviewLock.waitLock(
+        30000
       );
+
+      var translationReview;
+      try {
+        translationReview =
+          h3SurfaceReviewEnsure_(
+            'TRANSLATION',
+            translationResult.txn_id
+          );
+      } finally {
+        translationReviewLock
+          .releaseLock();
+      }
+
+      translationResult.home_index_sync =
+        h3ReviewHomeIndexUpsertAfterCommit_(
+          translationResult,
+          translationReview
+        );
+
+      translationResult.after_sync =
+        h3SurfaceReviewOpen_({
+          surface_family:
+            'TRANSLATION',
+          set_id:
+            translationResult.set_id
+        });
+
+      if (
+        h3ReviewHash_(
+          translationResult.after_sync
+        ) !==
+        h3ReviewHash_(
+          translationReview
+        )
+      ) {
+        throw new Error(
+          'TRANSLATION_REVIEW_OPEN_VALIDATION_MISMATCH'
+        );
+      }
+
+      return translationResult;
     }
 
     var writtenResult =

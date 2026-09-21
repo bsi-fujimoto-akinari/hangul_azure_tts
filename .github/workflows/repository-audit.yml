@@ -6304,15 +6304,16 @@ jobs:
               if needle not in production:
                   raise SystemExit(f'Reading production invariant missing: {needle}')
 
-          old_combined_submit_block = """app.surfaceFamily ===
-        'READING' ||
-      app.surfaceFamily ===
-        'TRANSLATION'"""
-          if old_combined_submit_block in client:
+          submit_start = client.index('function submitAnswers()')
+          submit_request = client.index('var request =', submit_start)
+          submit_gate = client[submit_start:submit_request]
+          if "'READING'" in submit_gate:
               raise SystemExit('Reading remains blocked by the pre-F2B Client gate.')
+          if "'TRANSLATION'" not in submit_gate:
+              raise SystemExit('Translation submit gate was accidentally removed.')
 
           for needle in [
-              "request.surface_family =\n        'READING';",
+              'request.surface_family =',
               "'H3_PERSISTENT_READING_REVIEW_PAYLOAD_V1'",
           ]:
               if needle not in client:

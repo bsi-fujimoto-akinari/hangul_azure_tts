@@ -1464,10 +1464,57 @@
                         .uncertain_count
                     )
               ) +
-              '　復習Lv ' +
+              '　復習優先度 ' +
               reviewLevel;
             meta.appendChild(
               summary
+            );
+
+            var priorityTrack =
+              el(
+                'div',
+                'review-priority-track'
+              );
+            priorityTrack.setAttribute(
+              'role',
+              'progressbar'
+            );
+            priorityTrack.setAttribute(
+              'aria-label',
+              '復習優先度'
+            );
+            priorityTrack.setAttribute(
+              'aria-valuemin',
+              '0'
+            );
+            priorityTrack.setAttribute(
+              'aria-valuemax',
+              '100'
+            );
+            priorityTrack.setAttribute(
+              'aria-valuenow',
+              String(reviewLevel)
+            );
+
+            var priorityFill =
+              el(
+                'span',
+                'review-priority-fill'
+              );
+            priorityFill.style.width =
+              Math.max(
+                0,
+                Math.min(
+                  100,
+                  reviewLevel
+                )
+              ) +
+              '%';
+            priorityTrack.appendChild(
+              priorityFill
+            );
+            meta.appendChild(
+              priorityTrack
             );
 
             item.appendChild(meta);
@@ -1503,7 +1550,7 @@
               heading.textContent +
               ' ' +
               score.textContent +
-              ' 復習レベル ' +
+              ' 復習優先度 ' +
               reviewLevel
             );
 
@@ -2749,7 +2796,9 @@
                   }
                 )
               ).join('\n'),
-            explanation: null,
+            explanation:
+              question.explanation ||
+              null,
             audio_asset_key: null,
             audio_fallback_url: null
           };

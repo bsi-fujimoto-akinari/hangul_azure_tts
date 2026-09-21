@@ -78,7 +78,7 @@ Every stage, transaction, result, and log entry preserves:
 
 P11 uses `KR_TO_JP`; P12 uses `JP_TO_KR`.
 
-Learner and persistent Review question titles use the source-bound section display (`筆11/翻訳` or `筆12/翻訳`), matching the 5W `筆2/語彙` style. `2T` remains a HOME family-card label, not a question title.
+Learner and persistent Review question titles use the source-bound section display (`筆11/翻訳` or `筆12/翻訳`), matching the 5W `筆2/語彙` style. `2T` remains a HOME family-card label, not a question title. Translation follows the shared 5L / 5W / 2R / 2T interaction: no learner Reset / Grade buttons; selecting the choice that completes the final unanswered item begins submission automatically.
 
 Direction is never inferred from learner input and cross-section skill reuse is not rewritten.
 

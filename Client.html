@@ -21,7 +21,9 @@
     reviewKindFilter: 'ALL',
     reviewSort: 'REVIEW_LEVEL',
     reviewVisited: {},
-    reviewCompletionPending: false
+    reviewCompletionPending: false,
+    reviewCompletionEventKey: null,
+    reviewCompletionRefreshPending: false
   };
 
   document.addEventListener('DOMContentLoaded', function () {
@@ -82,6 +84,7 @@
     app.reviewSort = 'REVIEW_LEVEL';
     app.reviewVisited = {};
     app.reviewCompletionPending = false;
+    app.reviewCompletionEventKey = null;
 
     document.body.classList.remove(
       'graded'
@@ -1054,6 +1057,24 @@
 
 
   function renderHome(payload) {
+    if (
+      app.reviewCompletionRefreshPending
+    ) {
+      app.reviewCompletionRefreshPending =
+        false;
+      window.setTimeout(
+        function () {
+          if (
+            app.payload &&
+            app.payload.mode === 'HOME'
+          ) {
+            loadHome();
+          }
+        },
+        0
+      );
+    }
+
     var root =
       document.getElementById(
         'home'
@@ -2795,12 +2816,73 @@
   }
 
 
+  function reviewCompletionProviderKind_(
+    review
+  ) {
+    return String(
+      review &&
+      (
+        review.provider_kind ||
+        review.kind
+      ) ||
+      ''
+    );
+  }
+
+
+  function newReviewCompletionEventKey_() {
+    if (
+      !window.crypto ||
+      !window.crypto.getRandomValues
+    ) {
+      return '';
+    }
+
+    var bytes =
+      new Uint8Array(16);
+    window.crypto.getRandomValues(
+      bytes
+    );
+
+    return (
+      'H3RC-' +
+      Array.prototype.map
+        .call(
+          bytes,
+          function (value) {
+            return (
+              '0' +
+              Number(value)
+                .toString(16)
+            ).slice(-2);
+          }
+        )
+        .join('')
+    );
+  }
+
+
+  function reviewCompletionEventKey_() {
+    if (
+      !app.reviewCompletionEventKey
+    ) {
+      app.reviewCompletionEventKey =
+        newReviewCompletionEventKey_();
+    }
+
+    return String(
+      app.reviewCompletionEventKey ||
+      ''
+    );
+  }
+
+
   function reviewCompletionRequest_(
     review
   ) {
     var kind =
-      String(
-        review.kind || ''
+      reviewCompletionProviderKind_(
+        review
       );
     var sourceId =
       kind === 'WRITTEN'
@@ -2815,7 +2897,7 @@
 
     return {
       schema:
-        'H3_REVIEW_COMPLETE_REQUEST_V1',
+        'H3_REVIEW_COMPLETE_REQUEST_V2',
       review_kind: kind,
       surface_family:
         String(
@@ -2828,8 +2910,128 @@
       review_source_id:
         sourceId,
       viewed_count:
-        review.sections.length
+        review.sections.length,
+      completion_event_key:
+        reviewCompletionEventKey_()
     };
+  }
+
+
+  function reviewCompletionRecorded_(
+    request
+  ) {
+    app.reviewCompletionRefreshPending =
+      true;
+
+    if (
+      app.payload &&
+      app.payload.mode === 'HOME'
+    ) {
+      app.reviewCompletionRefreshPending =
+        false;
+      loadHome();
+    }
+  }
+
+
+  function attemptReviewCompletion_(
+    request,
+    attempt
+  ) {
+    app.reviewCompletionPending = true;
+
+    google.script.run
+      .withSuccessHandler(
+        function (result) {
+          var recorded =
+            result &&
+            result.schema ===
+              'H3_REVIEW_COMPLETE_RESULT_V2' &&
+            (
+              result.status ===
+                'RECORDED' ||
+              result.status ===
+                'ALREADY_RECORDED'
+            ) &&
+            String(
+              result.set_id || ''
+            ) ===
+              String(
+                request.set_id || ''
+              ) &&
+            String(
+              result.completion_event_key ||
+              ''
+            ) ===
+              String(
+                request.completion_event_key ||
+                ''
+              );
+
+          if (recorded) {
+            app.reviewCompletionPending =
+              false;
+            reviewCompletionRecorded_(
+              request
+            );
+            return;
+          }
+
+          var retryable =
+            result &&
+            result.schema ===
+              'H3_REVIEW_COMPLETE_RESULT_V2' &&
+            result.status === 'ERROR' &&
+            result.error_class ===
+              'TRANSIENT' &&
+            result.retryable === true;
+
+          if (
+            retryable &&
+            Number(attempt || 0) < 1
+          ) {
+            attemptReviewCompletion_(
+              request,
+              Number(attempt || 0) + 1
+            );
+            return;
+          }
+
+          app.reviewCompletionPending =
+            false;
+          if (window.console) {
+            console.warn(
+              'Review completion metadata was not recorded.',
+              result
+            );
+          }
+        }
+      )
+      .withFailureHandler(
+        function (err) {
+          if (
+            Number(attempt || 0) < 1
+          ) {
+            attemptReviewCompletion_(
+              request,
+              Number(attempt || 0) + 1
+            );
+            return;
+          }
+
+          app.reviewCompletionPending =
+            false;
+          if (window.console) {
+            console.warn(
+              'Review completion transport failed.',
+              err
+            );
+          }
+        }
+      )
+      .completeReviewSession(
+        request
+      );
   }
 
 
@@ -2843,60 +3045,21 @@
       return;
     }
 
+    var request =
+      reviewCompletionRequest_(
+        review
+      );
+
     if (
-      app.reviewCompletionPending
+      request.completion_event_key
     ) {
-      return;
+      attemptReviewCompletion_(
+        request,
+        0
+      );
     }
 
-    app.reviewCompletionPending = true;
-    setLoading(true);
-
-    google.script.run
-      .withSuccessHandler(
-        function (result) {
-          if (
-            !result ||
-            result.schema !==
-              'H3_REVIEW_COMPLETE_RESULT_V1' ||
-            result.status !==
-              'RECORDED' ||
-            String(
-              result.set_id || ''
-            ) !==
-              String(
-                review.set_id || ''
-              )
-          ) {
-            app.reviewCompletionPending =
-              false;
-            setLoading(false);
-            showError(
-              '復習完了の記録を確認できません。'
-            );
-            return;
-          }
-
-          app.reviewCompletionPending =
-            false;
-          loadHome();
-        }
-      )
-      .withFailureHandler(
-        function (err) {
-          app.reviewCompletionPending =
-            false;
-          setLoading(false);
-          showError(
-            errorText(err)
-          );
-        }
-      )
-      .completeReviewSession(
-        reviewCompletionRequest_(
-          review
-        )
-      );
+    loadHome();
   }
 
 

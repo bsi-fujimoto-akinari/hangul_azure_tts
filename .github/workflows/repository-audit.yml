@@ -6195,6 +6195,7 @@ jobs:
 
           reading = Path('WebAppReadingPilot.js').read_text(encoding='utf-8')
           client = Path('Client.html').read_text(encoding='utf-8')
+          style = Path('Stylesheet.html').read_text(encoding='utf-8')
           web = Path('WebApp.js').read_text(encoding='utf-8')
           contract = Path('H3_READING_P8_PILOT_CONTRACT.md').read_text(encoding='utf-8')
 

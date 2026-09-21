@@ -409,8 +409,12 @@ eligible only after all Review questions have been displayed at least once in th
 session and the learner then taps `ホーム`. Merely opening a Review, viewing only a
 subset, refreshing, or leaving by another route must not change priority.
 
-A completed session writes only `LAST_REVIEWED_AT` in
-`review_home_index_v1`. The index therefore advances to the V3-compatible layout.
+A completed session writes only derived UI metadata in `review_home_index_v1`:
+`LAST_REVIEWED_AT` plus `LAST_REVIEW_COMPLETION_KEY`. The index therefore
+advances to the V4-compatible layout. The completion key is generated once per
+rendered Review session and is stable across the one permitted retry. Replaying the
+same key returns `ALREADY_RECORDED` and must not advance `LAST_REVIEWED_AT`;
+a later reopened Review receives a new key and may record a new completion event.
 This write must not alter score, answer/uncertainty marks, immutable Review payload
 or binding hashes, learner history, retest state, scheduler, skill_queue, counters,
 pointers, or source identity.
@@ -430,3 +434,21 @@ linearly to the uncooldowned priority over 72 hours. The underlying
 `BASE_PRIORITY` and ordinary priority remain intact so reviewing content is never
 treated as proof of mastery. A later scored learning event continues to change
 weakness through the normal evidence path rather than through this cooldown.
+
+
+### Completion failure isolation and retry
+
+The `ホーム` transition is mandatory and is not conditional on cooldown persistence.
+After all questions have been viewed, the client starts the completion metadata RPC
+and immediately loads HOME. A persistence failure leaves the set at ordinary,
+uncooldowned priority and must not strand the learner on Review or require a second
+HOME tap.
+
+Completion identity uses canonical provider metadata (`provider_kind`, with
+`kind` accepted only as compatibility fallback) and remains fail-closed on
+identity, schema, source, surface, row, or integrity mismatch. Such failures are not
+retried. Only an explicitly typed transient server result, or a transport-level RPC
+failure, may be retried automatically, and at most once. The retry reuses the exact
+same completion-event key, so an accepted first request followed by a lost response
+cannot refresh the cooldown timestamp twice. Unknown runtime errors are not guessed
+to be transient.

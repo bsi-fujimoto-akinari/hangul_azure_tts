@@ -306,12 +306,17 @@ jobs:
                   raise SystemExit(f'Manual grading UI still present: {stale}')
 
           if (
+              "if (allAnswered())" not in client or
               "window.setTimeout(function () {" not in client or
-              "submitAnswers();" not in client or
-              "app.payload.mode !==\n                'WRITTEN'" not in client
+              "submitAnswers();" not in client
           ):
               raise SystemExit(
-                  'Listening/SYSTEM_TEST Q5 auto-submit path regressed or WRITTEN guard is missing.'
+                  'Shared final-answer auto-submit path is missing.'
+              )
+
+          if "app.payload.mode !==\n                'WRITTEN'" in client:
+              raise SystemExit(
+                  'Obsolete WRITTEN manual-grade guard remains in auto-submit path.'
               )
 
           commit_start = web.index('function h3CommitSystemTestTransaction_(')

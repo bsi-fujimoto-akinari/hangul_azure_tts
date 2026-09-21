@@ -417,13 +417,44 @@ function h3ReviewHistoryEnvelope_(
 
 
 var H3_REVIEW_LEVEL_CONTRACT_ =
-  'H3_REVIEW_LEVEL_V2';
+  'H3_REVIEW_PRIORITY_V3';
 
 var H3_REVIEW_LEVEL_HALF_LIFE_DAYS_ =
   14;
 
 var H3_REVIEW_LEVEL_TIME_HEADROOM_SHARE_ =
   0.40;
+
+var H3_REVIEW_PRIORITY_ITEM_MAX_ =
+  20;
+
+var H3_REVIEW_PRIORITY_EXAM_BLEND_ =
+  0.50;
+
+var H3_REVIEW_PRIORITY_UNIFORM_SHARE_ =
+  0.25;
+
+var H3_REVIEW_PRIORITY_EXAM_SHARE_ = {
+  '5L': 0.40,
+  '5W': 0.36,
+  'READING': 0.12,
+  'TRANSLATION': 0.12
+};
+
+var H3_REVIEW_PRIORITY_MAX_BLEND_SHARE_ =
+  (
+    (
+      1 -
+      H3_REVIEW_PRIORITY_EXAM_BLEND_
+    ) *
+    H3_REVIEW_PRIORITY_UNIFORM_SHARE_
+  ) +
+  (
+    H3_REVIEW_PRIORITY_EXAM_BLEND_ *
+    H3_REVIEW_PRIORITY_EXAM_SHARE_[
+      '5L'
+    ]
+  );
 
 var H3_REVIEW_HOME_INDEX_SHEET_ =
   'review_home_index_v1';
@@ -868,6 +899,72 @@ function h3ReviewSkillEvidenceIndex_(
 }
 
 
+function h3ReviewPrioritySurfaceFamily_(
+  kind,
+  entry
+) {
+  var family =
+    String(
+      entry &&
+      entry.surface_family ||
+      ''
+    );
+
+  if (!family) {
+    family =
+      kind === 'LISTENING'
+        ? '5L'
+        : '5W';
+  }
+
+  if (
+    !Object.prototype
+      .hasOwnProperty.call(
+        H3_REVIEW_PRIORITY_EXAM_SHARE_,
+        family
+      )
+  ) {
+    throw new Error(
+      'REVIEW_PRIORITY_SURFACE_INVALID:' +
+        family
+    );
+  }
+
+  return family;
+}
+
+
+function h3ReviewPrioritySurfaceFactor_(
+  kind,
+  entry
+) {
+  var family =
+    h3ReviewPrioritySurfaceFamily_(
+      kind,
+      entry
+    );
+  var blendedShare =
+    (
+      (
+        1 -
+        H3_REVIEW_PRIORITY_EXAM_BLEND_
+      ) *
+      H3_REVIEW_PRIORITY_UNIFORM_SHARE_
+    ) +
+    (
+      H3_REVIEW_PRIORITY_EXAM_BLEND_ *
+      H3_REVIEW_PRIORITY_EXAM_SHARE_[
+        family
+      ]
+    );
+
+  return (
+    blendedShare /
+    H3_REVIEW_PRIORITY_MAX_BLEND_SHARE_
+  );
+}
+
+
 function h3ReviewBaseLevelForEntry_(
   kind,
   entry,
@@ -884,17 +981,20 @@ function h3ReviewBaseLevelForEntry_(
   var items =
     evidence.bySet[setKey] ||
     [];
-  var level = 0;
+  var raw = 0;
+  var itemCount = 0;
 
   if (items.length) {
+    itemCount = items.length;
+
     items.forEach(
       function (item) {
         if (item.result === '×') {
-          level += 12;
+          raw += 12;
         } else if (
           item.result === '△'
         ) {
-          level += 6;
+          raw += 6;
         }
 
         if (item.skill_id) {
@@ -906,7 +1006,7 @@ function h3ReviewBaseLevelForEntry_(
             ];
 
           if (stats) {
-            level += Math.min(
+            raw += Math.min(
               8,
               (
                 Number(
@@ -922,7 +1022,13 @@ function h3ReviewBaseLevelForEntry_(
       }
     );
   } else {
-    level +=
+    itemCount =
+      Math.max(
+        0,
+        Number(entry.total || 0)
+      );
+
+    raw +=
       Number(
         entry.wrong_count || 0
       ) * 12;
@@ -931,22 +1037,51 @@ function h3ReviewBaseLevelForEntry_(
       entry.uncertainty_known !==
         false
     ) {
-      level +=
+      raw +=
         Number(
           entry.uncertain_count || 0
         ) * 6;
     }
   }
 
+  if (
+    !Number.isFinite(itemCount) ||
+    itemCount <= 0
+  ) {
+    return 0;
+  }
+
+  var normalizedWeakness =
+    Math.max(
+      0,
+      Math.min(
+        100,
+        (
+          raw /
+          (
+            H3_REVIEW_PRIORITY_ITEM_MAX_ *
+            itemCount
+          )
+        ) *
+        100
+      )
+    );
+
+  var weighted =
+    normalizedWeakness *
+    h3ReviewPrioritySurfaceFactor_(
+      kind,
+      entry
+    );
+
   return Math.max(
     0,
     Math.min(
       100,
-      level
+      Math.round(weighted)
     )
   );
 }
-
 
 
 function h3ReviewHomeIndexTable_(
@@ -1577,6 +1712,7 @@ function buildReviewHomePayload_() {
         spreadsheet
       ),
     review_filters: [
+      'ALL',
       'LISTENING',
       'WRITTEN'
     ],

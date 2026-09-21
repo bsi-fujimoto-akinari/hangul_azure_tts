@@ -1627,6 +1627,7 @@ jobs:
               learning_surface_schema:
                 'H3_LEARNING_SURFACE_V1',
               provider_kind:'LISTENING',
+              kind:'LISTENING',
               surface_family:'5L',
               level:'3級'
             }
@@ -1638,6 +1639,7 @@ jobs:
               learning_surface_schema:
                 'H3_LEARNING_SURFACE_V1',
               provider_kind:'LISTENING',
+              kind:'LISTENING',
               surface_family:'5L',
               level:'3級'
             }
@@ -1807,6 +1809,7 @@ jobs:
               route:'txn-review',
               learning_surface_schema:'H3_LEARNING_SURFACE_V1',
               provider_kind:'LISTENING',
+              kind:'LISTENING',
               surface_family:'5L',
               level:'3級'
             }
@@ -1818,6 +1821,7 @@ jobs:
               route:'legacy-review',
               learning_surface_schema:'H3_LEARNING_SURFACE_V1',
               provider_kind:'LISTENING',
+              kind:'LISTENING',
               surface_family:'5L',
               level:'3級'
             }

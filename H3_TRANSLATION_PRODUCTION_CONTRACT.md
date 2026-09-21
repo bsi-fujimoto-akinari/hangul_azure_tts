@@ -1,13 +1,13 @@
 # H3 Translation Production Route Contract
 
 Version: H3-TRANSLATION-PRODUCTION-20260921-V1
-Status: F3_RUNTIME_ACTIVE_PILOT_GATED
+Status: F3C_P11_PILOT_PASS_P12_GATED
 
 ## 1. Scope
 
 This contract completes the F3 runtime activation boundary for source-locked P11/P12 Translation: learner rendering, exact question-key submission, Translation-owned transaction persistence, persistent Review, HOME integration, and immediate Review-open validation.
 
-Repository activation does not itself issue a learner set. The live P11 stage remains gated by a fresh exact preissue readback; P12 remains gated on P11 pilot PASS.
+Repository activation does not itself issue a learner set. P11 has completed one controlled real learner pilot and is now closed as PASS. P12 remains the next gated Translation learner pilot.
 
 ## 2. Runtime authorities
 
@@ -98,21 +98,41 @@ The F3 repository activation does not:
 
 A PREISSUE_READY P11 remains non-renderable. Only the separately authorized exact live issue write makes the source-locked set renderable.
 
-## 8. Next gate
+## 8. P11 pilot close and next gate
 
-After merge/audit/sync:
+P11 controlled learner pilot is closed as PASS with:
+
+- SET_ID `H3-20260921-T001`
+- stage status `COMMITTED`
+- exactly two Translation log rows
+- both learner results recorded as explicit-uncertainty correct (`△`)
+- persistent Translation Review and binding `LOCKED`
+- HOME history entry present
+- learner Review open validated from HOME
+- source-binding SHA-256 unchanged
+- Reading P8 left `PREISSUE_READY`
+
+P11 must not be reissued or replayed as another pilot.
+
+The next Translation gate is:
 
 ```text
-final P11 exact preissue readback
-→ verify no concurrent current-learning candidate
-→ verify exact source/bundle hashes unchanged
-→ P11 PREISSUE_READY -> ISSUED
-→ one real learner pilot attempt
-→ txn/log/Review/HOME verification
-→ only then P12 materialization/pilot
+fresh current/main and live authority readback
+→ materialize exact source-bound P12 live stage
+→ final P12 preissue gate
+→ verify no current-learning conflict
+→ P12 PREISSUE_READY -> ISSUED
+→ one controlled learner P12 pilot
+→ txn/log/Review/HOME/open verification
 ```
 
 F4, not F3, owns scheduler/skill_queue activation.
+
+## 9. Learner-facing UI handoff
+
+Translation remains the internal `surface_family=TRANSLATION`, but learner-facing Web App labels must use English-family notation such as `Translation` and/or `2T`, not the Japanese label `翻訳`.
+
+For Review presentation, explanatory learning content is visible by default. Collapsible `<details>` treatment is reserved in principle for technical information; the learner-facing explanation block must not be collapsed by default.
 
 ## F1 Review bridge status
 

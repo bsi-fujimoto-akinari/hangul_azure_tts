@@ -402,6 +402,19 @@ function h3WrittenReviewCurrentLearning_(
     }
   }
 
+  if (
+    typeof h3TranslationV2CurrentLearning_ ===
+      'function'
+  ) {
+    var translationV2 =
+      h3TranslationV2CurrentLearning_(
+        spreadsheet
+      );
+    if (translationV2) {
+      candidates.push(translationV2);
+    }
+  }
+
   if (candidates.length > 1) {
     throw new Error(
       'WRITTEN_SURFACE_CURRENT_AMBIGUOUS'

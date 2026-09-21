@@ -81,6 +81,10 @@ function h3TranslationV2ValidateItem_(item, index) {
   if (!Number.isInteger(correct) || correct < 1 || correct > 4) {
     throw new Error('TRANSLATION_V2_CORRECT_CHOICE_INVALID:' + index);
   }
+  var sourceItemSha256 = String(item.source_item_sha256 || '').trim();
+  if (!/^[0-9a-f]{64}$/.test(sourceItemSha256)) {
+    throw new Error('TRANSLATION_V2_SOURCE_ITEM_SHA256_INVALID:' + index);
+  }
   var lang = h3TranslationLanguageContract_(direction);
   return {
     item_id:h3TranslationActivationRequireId_(item.item_id,'TRANSLATION_V2_ITEM_ID_INVALID:' + index),
@@ -93,6 +97,7 @@ function h3TranslationV2ValidateItem_(item, index) {
     skill_id:h3TranslationActivationRequireId_(item.skill_id,'TRANSLATION_V2_SKILL_ID_INVALID:' + index),
     source_kind:String(item.source_kind),
     source_reference:String(item.source_reference || ''),
+    source_item_sha256:sourceItemSha256,
     surface_key:h3TranslationActivationRequireId_(item.surface_key,'TRANSLATION_V2_SURFACE_KEY_INVALID:' + index),
     target_segment:target,
     question_text:question,
@@ -278,7 +283,8 @@ function h3TranslationV2Grade_(locked, answers) {
     var mark = correct ? (answer.uncertain ? '△' : '○') : '×';
     return {
       q_no:index+1,item_id:item.item_id,question_key:item.question_key,skill_id:item.skill_id,
-      section_key:item.section_key,mark:mark,uncertain:!!answer.uncertain,
+      section_key:item.section_key,answer:Number(answer.answer),
+      correct_answer:Number(item.correct_choice),mark:mark,uncertain:!!answer.uncertain,
       translation_direction:item.translation_direction,answer_type:item.answer_type,
       surface_key:item.surface_key
     };

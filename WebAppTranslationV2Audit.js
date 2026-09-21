@@ -7,10 +7,11 @@ function auditTranslationV2MixedCoreV1_() {
     section_key:'H3-P11',translation_direction:'KR_TO_JP',
     answer_type:'MULTIPLE_CHOICE',skill_id:'H3-P11-SK003',
     source_kind:'OFFICIAL',source_reference:'official_items:OFF-H3-P11-003',
-    surface_key:'OFFICIAL:OFF-H3-P11-003',target_segment:'보기 드물다',
-    question_text:'요즘 보기 드문 장면입니다.',
-    choices:['最近では珍しい場面です。','最近よく見る場面です。','最近見たくない場面です。','最近見逃した場面です。'],
-    correct_choice:1
+    source_item_sha256:'0f05dc338afa019ccba9389e3cf949093b3450ffdd0ea8d7400f8f25f3e59abf',
+    surface_key:'OFFICIAL:OFF-H3-P11-003',target_segment:'보기 드물다.',
+    question_text:'이런 물건은 요즘 보기 드물다.',
+    choices:['偽物が多い。','見かけるようになった。','手に入らない。','めったにない。'],
+    correct_choice:4
   };
   var p12 = {
     item_id:'AUTH-H3-P12-RT-SK017-001',question_key:'AUTH-H3-P12-RT-SK017-001',
@@ -18,6 +19,7 @@ function auditTranslationV2MixedCoreV1_() {
     answer_type:'MULTIPLE_CHOICE',skill_id:'H3-P11-SK017',
     source_kind:'AUTHORED_RETEST',
     source_reference:'translation_authored_surface_v1:AUTH-H3-P12-RT-SK017-001',
+    source_item_sha256:'36052f02dbc145ddd880529d268fad9d143fc4b194facf94896dfebf4deaa2cb',
     surface_key:'AUTHORED:36052f02dbc145ddd880529d268fad9d143fc4b194facf94896dfebf4deaa2cb',
     target_segment:'周囲の顔色を気にしすぎて',
     question_text:'彼は周囲の顔色を気にしすぎて、会議で自分の考えを言えなかった。',
@@ -62,14 +64,19 @@ function auditTranslationV2MixedCoreV1_() {
     schema:'H3_WEB_SUBMIT_V1',mode:'WRITTEN',provider_kind:'WRITTEN',
     surface_family:'TRANSLATION',set_id:stage.set_id,
     answers:[
-      {question_key:p11.question_key,answer:1,uncertain:false},
+      {question_key:p11.question_key,answer:4,uncertain:false},
       {question_key:p12.question_key,answer:1,uncertain:false}
     ]
   },locked);
   var grade = h3TranslationV2Grade_(locked,normalized.answers);
   var result = h3TranslationV2BuildCommittedResult_(
     stage,locked,grade,'H3TX-20260922-000001');
-  if (result.score !== 2 || result.summary[1].surface_key !== p12.surface_key) {
+  if (result.score !== 2 ||
+      grade.graded[0].answer !== 4 ||
+      grade.graded[0].correct_answer !== 4 ||
+      grade.graded[1].answer !== 1 ||
+      grade.graded[1].correct_answer !== 1 ||
+      result.summary[1].surface_key !== p12.surface_key) {
     throw new Error('TRANSLATION_V2_AUDIT_RESULT_INVALID');
   }
   return {

@@ -6293,7 +6293,7 @@ jobs:
                   raise SystemExit(f'Reading production route missing: {needle}')
 
           for needle in [
-              "var H3_READING_PRODUCTION_COMMIT_ENABLED_ =\n  false;",
+              "var H3_READING_PRODUCTION_COMMIT_ENABLED_ =\n  true;",
               "function buildReadingProductionRenderPayload_(",
               "function h3ReadingSubmit_(",
               "function h3ReadingCurrentLearning_(",
@@ -6304,14 +6304,42 @@ jobs:
               if needle not in production:
                   raise SystemExit(f'Reading production invariant missing: {needle}')
 
-          if "app.surfaceFamily ===\n        'READING'" not in client:
-              raise SystemExit('Reading client submit gate is missing.')
+          old_combined_submit_block = """app.surfaceFamily ===
+        'READING' ||
+      app.surfaceFamily ===
+        'TRANSLATION'"""
+          if old_combined_submit_block in client:
+              raise SystemExit('Reading remains blocked by the pre-F2B Client gate.')
+
+          for needle in [
+              "request.surface_family =\n        'READING';",
+              "'H3_PERSISTENT_READING_REVIEW_PAYLOAD_V1'",
+          ]:
+              if needle not in client:
+                  raise SystemExit(f'Reading F2B Client invariant missing: {needle}')
+
+          reading_submit = web.index('var readingResult =')
+          review_lock = web.index('h3SurfaceReviewEnsure_(', reading_submit)
+          home_upsert = web.index('h3ReviewHomeIndexUpsertAfterCommit_(', reading_submit)
+          review_reopen = web.index('h3SurfaceReviewOpen_({', reading_submit)
+          learner_return = web.index('return readingResult;', reading_submit)
+          if not (
+              reading_submit < review_lock < home_upsert <
+              review_reopen < learner_return
+          ):
+              raise SystemExit('Reading post-commit Review/HOME order mismatch.')
+          if 'READING_REVIEW_POSTCOMMIT_OPEN_MISMATCH' not in web:
+              raise SystemExit('Reading post-commit Review reopen gate missing.')
 
           for needle in [
               'Version: H3-READING-PRODUCTION-20260921-V1',
-              'ROUTE_STAGED_COMMIT_DISABLED',
-              'PREISSUE_READY stage is intentionally not renderable',
-              'H3_READING_PRODUCTION_COMMIT_ENABLED_=false',
+              'P8_CONTROLLED_COMMIT_ENABLED_NOT_ISSUED',
+              'PREISSUE_READY',
+              'H3_READING_PRODUCTION_COMMIT_ENABLED_=true',
+              'Reading transaction COMMITTED',
+              'persistent Reading Review LOCKED',
+              'review_home_index_v1 upsert',
+              'immediate persistent Review open/readback validation',
           ]:
               if needle not in production_contract:
                   raise SystemExit(f'Reading production contract missing: {needle}')
@@ -6498,10 +6526,10 @@ jobs:
             vm.runInContext(
               'H3_READING_PRODUCTION_COMMIT_ENABLED_',
               context
-            ) !== false
+            ) !== true
           ) {
             throw new Error(
-              'Reading production commit gate must remain disabled.'
+              'Reading F2B production commit gate is not enabled.'
             );
           }
 
@@ -6511,7 +6539,7 @@ jobs:
               pilot: result,
               family: family,
               activation: activation,
-              production_commit_enabled: false
+              production_commit_enabled: true
             })
           );
           NODE

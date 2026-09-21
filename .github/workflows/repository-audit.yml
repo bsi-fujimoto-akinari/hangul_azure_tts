@@ -6652,6 +6652,8 @@ jobs:
           for needle in [
               'function validateTranslationPayload_(',
               'function renderTranslationSurface_(',
+              'TRANSLATION_TARGET_SEGMENT_MISMATCH',
+              'function normalizeTranslationReview_(',
               "'H3_PERSISTENT_TRANSLATION_REVIEW_PAYLOAD_V1'",
               "request.provider_kind =\n        'WRITTEN';",
               "request.surface_family =\n        'TRANSLATION';",

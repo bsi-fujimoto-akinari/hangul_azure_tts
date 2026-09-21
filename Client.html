@@ -19,7 +19,7 @@
     mediaTrimMs: {},
     mediaLoading: {},
     reviewKindFilter: 'ALL',
-    reviewSort: 'RECENT'
+    reviewSort: 'REVIEW_LEVEL'
   };
 
   document.addEventListener('DOMContentLoaded', function () {
@@ -77,7 +77,7 @@
     app.mediaLoading = {};
     app.mediaRetryCount = {};
     app.reviewKindFilter = 'ALL';
-    app.reviewSort = 'RECENT';
+    app.reviewSort = 'REVIEW_LEVEL';
 
     document.body.classList.remove(
       'graded'

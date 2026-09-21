@@ -1104,11 +1104,20 @@
             heading.textContent =
               kind === 'WRITTEN'
                 ? (
-                    writtenLabel +
-                    ' #' +
-                    String(
-                      writtenSetNo
-                    )
+                    writtenLabel === '5W'
+                      ? (
+                          '5W #' +
+                          String(
+                            writtenSetNo
+                          )
+                        )
+                      : (
+                          writtenLabel +
+                          ' #' +
+                          String(
+                            writtenSetNo
+                          )
+                        )
                   )
                 : (
                     '5L #' +

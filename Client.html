@@ -1341,6 +1341,14 @@
               Number(
                 entry.review_level || 0
               );
+            var accentPriority =
+              reviewLevel >= 50;
+
+            if (accentPriority) {
+              item.classList.add(
+                'review-priority-accent'
+              );
+            }
 
             item.dataset.reviewKind =
               kind;

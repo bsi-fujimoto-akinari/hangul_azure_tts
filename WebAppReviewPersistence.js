@@ -6663,17 +6663,66 @@ function h3ReviewHomeIndexUpsertAfterCommit_(
         base_priority: 0
       };
     } else {
+      var writtenFamily =
+        surface.surface_family;
+      var expectedReviewSchema =
+        writtenFamily === '5W'
+          ? 'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1'
+          : (
+              writtenFamily === 'READING'
+                ? H3_READING_PERSISTENT_REVIEW_SCHEMA_
+                : (
+                    writtenFamily === 'TRANSLATION'
+                      ? H3_TRANSLATION_PERSISTENT_REVIEW_SCHEMA_
+                      : ''
+                  )
+            );
+
       if (
+        !expectedReviewSchema ||
         !reviewPayload ||
         reviewPayload.schema !==
-          'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1' ||
+          expectedReviewSchema ||
         reviewPayload.kind !==
           'WRITTEN' ||
+        reviewPayload.provider_kind &&
+          reviewPayload.provider_kind !==
+            'WRITTEN' ||
         reviewPayload.set_id !==
-          setId
+          setId ||
+        writtenFamily !== '5W' &&
+          reviewPayload.surface_family !==
+            writtenFamily
       ) {
         throw new Error(
           'REVIEW_HOME_INDEX_WRITTEN_REVIEW_INVALID'
+        );
+      }
+
+      var familySetNo =
+        writtenFamily === '5W'
+          ? (
+              existing
+                ? Number(
+                    existing.row[
+                      indexed.table.map.SET_NO
+                    ]
+                  )
+                : h3ReviewHomeIndexNextSetNo_(
+                    indexed.table,
+                    'WRITTEN'
+                  )
+            )
+          : Number(
+              reviewPayload.issue_no || 0
+            );
+
+      if (
+        !Number.isInteger(familySetNo) ||
+        familySetNo < 1
+      ) {
+        throw new Error(
+          'REVIEW_HOME_INDEX_FAMILY_SET_NO_INVALID'
         );
       }
 
@@ -6685,16 +6734,7 @@ function h3ReviewHomeIndexUpsertAfterCommit_(
           surface.level,
         set_id: setId,
         set_no:
-          existing
-            ? Number(
-                existing.row[
-                  indexed.table.map.SET_NO
-                ]
-              )
-            : h3ReviewHomeIndexNextSetNo_(
-                indexed.table,
-                'WRITTEN'
-              ),
+          familySetNo,
         answered_at:
           String(
             reviewPayload
@@ -6729,7 +6769,13 @@ function h3ReviewHomeIndexUpsertAfterCommit_(
         review_source_id:
           setId,
         source_mode:
-          'WRITTEN_PRODUCTION_WEB',
+          writtenFamily === '5W'
+            ? 'WRITTEN_PRODUCTION_WEB'
+            : (
+                writtenFamily === 'READING'
+                  ? 'READING_PRODUCTION_WEB'
+                  : 'TRANSLATION_PRODUCTION_WEB'
+              ),
         base_priority: 0
       };
     }

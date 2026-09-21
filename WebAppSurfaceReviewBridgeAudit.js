@@ -192,6 +192,49 @@ function auditSurfaceReviewBridgeV1_() {
     'TRANSLATION_DIRECTION_TYPE'
   );
 
+  var currentReadingResult = {
+    schema:
+      'H3_WEB_SUBMIT_RESULT_V1',
+    status:
+      'COMMITTED',
+    surface_family:
+      'READING',
+    receipt:
+      [
+        '[H3_WEB_SYNC]',
+        'SET_ID=H3-20260921-R001',
+        'TXN_ID=H3TX-20260921-900001',
+        'STATUS=COMMITTED'
+      ].join('\n')
+  };
+  var legacyReadingResult =
+    JSON.parse(
+      JSON.stringify(
+        currentReadingResult
+      )
+    );
+  delete legacyReadingResult.status;
+  var compatibleLegacyReadingResult =
+    h3SurfaceReviewComparableResult_(
+      'READING',
+      legacyReadingResult,
+      currentReadingResult
+    );
+
+  h3SurfaceReviewBridgeAssert_(
+    !Object.prototype.hasOwnProperty.call(
+      compatibleLegacyReadingResult,
+      'status'
+    ) &&
+      h3ReviewHash_(
+        compatibleLegacyReadingResult
+      ) ===
+        h3ReviewHash_(
+          legacyReadingResult
+        ),
+    'READING_LEGACY_RESULT_COMPATIBILITY'
+  );
+
   var currentTranslationResult = {
     schema:
       'H3_WEB_SUBMIT_RESULT_V1',

@@ -193,7 +193,10 @@ function h3SurfaceReviewComparableResult_(
   var family =
     String(surfaceFamily || '');
 
-  if (family !== 'TRANSLATION') {
+  if (
+    ['READING', 'TRANSLATION']
+      .indexOf(family) < 0
+  ) {
     return expectedResult;
   }
 
@@ -218,7 +221,9 @@ function h3SurfaceReviewComparableResult_(
     ) < 0
   ) {
     throw new Error(
-      'SURFACE_REVIEW_TRANSLATION_LEGACY_RESULT_INVALID'
+      'SURFACE_REVIEW_' +
+        family +
+        '_LEGACY_RESULT_INVALID'
     );
   }
 

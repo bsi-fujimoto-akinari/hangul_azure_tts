@@ -63,7 +63,7 @@ The Review payload remains bound to the exact committed transaction result, sour
 
 Reading transaction persistence remains PREPARED → exact answer-log rows → stage COMMITTED → transaction COMMITTED. A partial transaction write after PREPARED is marked `RECOVERY_REQUIRED` and fails closed.
 
-Post-commit Review/HOME operations are idempotent and source-validated. A Review reopen mismatch raises `READING_REVIEW_POSTCOMMIT_OPEN_MISMATCH` and no learner success response is returned.
+Post-commit Review/HOME operations are idempotent and source-validated. The committed submit result carries `status=COMMITTED`; for a pre-fix committed row whose immutable `RESULT_JSON` lacks that field, idempotent readback derives the status from the authoritative transaction journal in memory only and does not rewrite the stored result. A Review reopen mismatch raises `READING_REVIEW_POSTCOMMIT_OPEN_MISMATCH` and no learner success response is returned.
 
 ## Client boundary
 

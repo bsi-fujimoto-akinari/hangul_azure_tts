@@ -86,11 +86,12 @@ Translation persistent Review preserves the exact source-locked:
 Current answer_type remains `MULTIPLE_CHOICE`. Every Review question must
 match the top-level direction/type. Free-text/LLM grading remains out of scope.
 
-For Translation transactions committed before the F3 submit-result contract added
-`status=COMMITTED`, Review open may compare against the exact legacy result shape
-only when the authoritative transaction row is COMMITTED and the immutable stored
-receipt itself contains `STATUS=COMMITTED`. This compatibility is read-only: the
-stored transaction result, Review payload, and binding hashes are never rewritten.
+For Reading or Translation transactions committed before the family submit-result
+contract added `status=COMMITTED`, Review open may compare against the exact legacy
+result shape only when the authoritative transaction row is COMMITTED and the
+immutable stored receipt itself contains `STATUS=COMMITTED`. This compatibility is
+read-only: the stored transaction result, Review payload, and binding hashes are
+never rewritten.
 
 ## 7. HOME integration
 

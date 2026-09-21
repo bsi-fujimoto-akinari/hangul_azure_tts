@@ -439,6 +439,8 @@ function auditReadingActivationCoreV1_() {
     result.mode === 'WRITTEN' &&
       result.surface_family ===
         'READING' &&
+      result.status ===
+        'COMMITTED' &&
       result.score === 1 &&
       result.total === 2 &&
       result.receipt.indexOf(

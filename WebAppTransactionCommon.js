@@ -10,7 +10,8 @@ var H3_WEB_TXN_JOURNAL_SHEETS = [
   'listening_web_txn_v1',
   'written_web_txn_v1',
   'reading_web_txn_v1',
-  'translation_web_txn_v1'
+  'translation_web_txn_v1',
+  'translation_web_txn_v2'
 ];
 
 function h3NextWebTxnIdFromRows_(datePart, journalRows) {

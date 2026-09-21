@@ -6185,9 +6185,27 @@ function getWrittenProductionPersistentReviewPayload_(
 
 function h3ReviewHomeIndexNextSetNo_(
   table,
-  kind
+  kind,
+  surfaceFamily
 ) {
   var maxSetNo = 0;
+  var normalizedFamily =
+    String(surfaceFamily || '');
+  var hasFamilyColumn =
+    Object.prototype
+      .hasOwnProperty.call(
+        table.map,
+        'SURFACE_FAMILY'
+      );
+
+  if (
+    normalizedFamily &&
+    !hasFamilyColumn
+  ) {
+    throw new Error(
+      'REVIEW_HOME_INDEX_SURFACE_FAMILY_COLUMN_MISSING'
+    );
+  }
 
   table.rows.forEach(
     function (row) {
@@ -6198,6 +6216,17 @@ function h3ReviewHomeIndexNextSetNo_(
         String(
           row[table.map.STATUS] || ''
         ) !== 'ACTIVE'
+      ) {
+        return;
+      }
+
+      if (
+        normalizedFamily &&
+        String(
+          row[
+            table.map.SURFACE_FAMILY
+          ] || ''
+        ) !== normalizedFamily
       ) {
         return;
       }
@@ -6710,7 +6739,8 @@ function h3ReviewHomeIndexUpsertAfterCommit_(
                   )
                 : h3ReviewHomeIndexNextSetNo_(
                     indexed.table,
-                    'WRITTEN'
+                    'WRITTEN',
+                    '5W'
                   )
             )
           : Number(

@@ -1,12 +1,12 @@
 /**
  * H3 Reading production route / transaction persistence.
  *
- * Reading-only runtime. Review/HOME integration and learner issue remain
- * separately gated.
+ * Reading-only runtime. F2B wires post-commit Review/HOME and enables the
+ * controlled Reading commit gate; learner issue remains a separate F2C gate.
  */
 
 var H3_READING_PRODUCTION_COMMIT_ENABLED_ =
-  false;
+  true;
 
 var H3_READING_PRODUCTION_CONTRACT_ID_ =
   'H3-READING-PRODUCTION-20260921-V1';

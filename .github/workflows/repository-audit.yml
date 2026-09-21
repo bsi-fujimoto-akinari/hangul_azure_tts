@@ -6443,7 +6443,7 @@ jobs:
 
           for needle in [
               'Version: H3-READING-PRODUCTION-20260921-V1',
-              'F2C_P8_ISSUED_UI_REPAIR_PENDING_LEARNER_COMMIT',
+              'F2C_P8_PILOT_PASS_P9P10_GATED',
               'PREISSUE_READY',
               'H3_READING_PRODUCTION_COMMIT_ENABLED_=true',
               'Reading transaction COMMITTED',

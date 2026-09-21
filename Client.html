@@ -323,6 +323,19 @@
           String(
             question.answer_type || ''
           ) !== answerType ||
+          !String(
+            question.target_segment ||
+            ''
+          ).trim() ||
+          String(
+            question.question_text ||
+            ''
+          ).indexOf(
+            String(
+              question.target_segment ||
+              ''
+            )
+          ) < 0 ||
           !Array.isArray(choiceIds) ||
           choiceIds.length !== 4 ||
           choiceIds.some(
@@ -538,6 +551,72 @@
       document.getElementById(
         'questions'
       );
+
+    payload.questions.forEach(
+      function (question, index) {
+        var card =
+          root.querySelector(
+            '.question-card[data-index="' +
+            String(index) +
+            '"]'
+          );
+        var prompt =
+          card &&
+          card.querySelector(
+            '.question-prompt'
+          );
+        var fullText =
+          String(
+            question.question_text ||
+            ''
+          );
+        var target =
+          String(
+            question.target_segment ||
+            ''
+          );
+        var targetIndex =
+          fullText.indexOf(target);
+
+        if (
+          !prompt ||
+          !target ||
+          targetIndex < 0
+        ) {
+          throw new Error(
+            'TRANSLATION_TARGET_SEGMENT_MISMATCH'
+          );
+        }
+
+        prompt.textContent = '';
+        prompt.appendChild(
+          document.createTextNode(
+            fullText.slice(
+              0,
+              targetIndex
+            )
+          )
+        );
+
+        var underline =
+          document.createElement('u');
+        underline.textContent =
+          target;
+        prompt.appendChild(
+          underline
+        );
+
+        prompt.appendChild(
+          document.createTextNode(
+            fullText.slice(
+              targetIndex +
+              target.length
+            )
+          )
+        );
+      }
+    );
+
     var block =
       el(
         'section',
@@ -2642,7 +2721,12 @@
                 String(
                   question.question_text ||
                   ''
-                )
+                ),
+                '［訳す部分］' +
+                  String(
+                    question.target_segment ||
+                    ''
+                  )
               ].concat(
                 choices.map(
                   function (

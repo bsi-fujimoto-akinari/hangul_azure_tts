@@ -1398,6 +1398,21 @@
               entry.written_set_no ||
               '—';
 
+            var surfaceIcon =
+              reviewSurfaceIcon_(
+                surfaceFamily ||
+                (
+                  kind === 'LISTENING'
+                    ? '5L'
+                    : '5W'
+                )
+              );
+            if (surfaceIcon) {
+              headingRow.appendChild(
+                surfaceIcon
+              );
+            }
+
             heading.textContent =
               kind === 'WRITTEN'
                 ? (
@@ -1438,13 +1453,9 @@
               score
             );
 
-            meta.appendChild(
-              headingRow
-            );
-
             var date =
               document.createElement(
-                'p'
+                'span'
               );
             date.className =
               'review-history-date';
@@ -1453,7 +1464,13 @@
                 entry.committed_at ||
                 entry.answered_at
               );
-            meta.appendChild(date);
+            headingRow.appendChild(
+              date
+            );
+
+            meta.appendChild(
+              headingRow
+            );
 
             var priorityTrack =
               el(

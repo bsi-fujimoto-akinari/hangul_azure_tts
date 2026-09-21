@@ -91,6 +91,13 @@ function getListeningWebMedia(request) {
   return getSystemTestMediaPayload_(request);
 }
 
+function completeReviewSession(request) {
+  return h3ReviewCompleteSession_(
+    request
+  );
+}
+
+
 function submitListeningWebAnswers(request) {
   if (request && request.mode === 'LISTENING') {
     var result =

@@ -6627,7 +6627,7 @@ jobs:
 
           for needle in [
               'Version: H3-TRANSLATION-ACTIVATION-CORE-20260921-V1',
-              'Status: PREISSUE_CAPABLE_ROUTE_INACTIVE',
+              'Status: F3_ACTIVATION_CORE_ACTIVE_PILOT_GATED',
               'SET_ID   = H3-YYYYMMDD-TNNN',
               'STAGE_ID = TRANS-P11-YYYYMMDD-NNN',
               'translation_web_txn_v1',
@@ -6643,12 +6643,17 @@ jobs:
               "request.surface_family ===\n        'TRANSLATION'",
               'buildTranslationProductionRenderPayload_(',
               'h3TranslationSubmit_(',
+              'h3SurfaceReviewEnsure_(',
+              'translationReviewLock.waitLock(',
+              'h3ReviewHomeIndexUpsertAfterCommit_(',
+              'h3SurfaceReviewOpen_({',
+              'TRANSLATION_REVIEW_OPEN_VALIDATION_MISMATCH',
           ]:
               if needle not in web:
                   raise SystemExit(f'Translation production route missing: {needle}')
 
           for needle in [
-              "var H3_TRANSLATION_PRODUCTION_COMMIT_ENABLED_ =\n  false;",
+              "var H3_TRANSLATION_PRODUCTION_COMMIT_ENABLED_ =\n  true;",
               "function buildTranslationProductionRenderPayload_(",
               "function h3TranslationSubmit_(",
               "function h3TranslationCurrentLearning_(",
@@ -6662,22 +6667,36 @@ jobs:
 
           for needle in [
               'Version: H3-TRANSLATION-PRODUCTION-20260921-V1',
-              'Status: ROUTE_STAGED_COMMIT_DISABLED',
+              'Status: F3_RUNTIME_ACTIVE_PILOT_GATED',
               'PREISSUE_READY',
-              'intentionally not renderable',
-              'H3_TRANSLATION_PRODUCTION_COMMIT_ENABLED_=false',
-              'Review/HOME integration',
+              'non-renderable',
+              'H3_TRANSLATION_PRODUCTION_COMMIT_ENABLED_=true',
+              'Review LOCKED',
+              'review_home_index_v1 upsert',
+              'Review open validation',
           ]:
               if needle not in production_contract:
                   raise SystemExit(f'Translation production contract missing: {needle}')
 
-          if "renderTranslationSurface_" in client:
-              raise SystemExit('Translation learner renderer must remain inactive in this pilot.')
+          for needle in [
+              'function validateTranslationPayload_(',
+              'function renderTranslationSurface_(',
+              'TRANSLATION_TARGET_SEGMENT_MISMATCH',
+              'function normalizeTranslationReview_(',
+              "'H3_PERSISTENT_TRANSLATION_REVIEW_PAYLOAD_V1'",
+              "'READING' ||\n      app.surfaceFamily ===\n        'TRANSLATION'",
+              "request.surface_family =\n        app.surfaceFamily;",
+          ]:
+              if needle not in client:
+                  raise SystemExit(f'F3 Translation Client invariant missing: {needle}')
 
-          if "app.surfaceFamily ===\n        'TRANSLATION'" not in client:
-              raise SystemExit('Translation client submit gate is missing.')
+          if (
+              "app.surfaceFamily ===\n        'TRANSLATION'\n    ) {\n      showError("
+              in client
+          ):
+              raise SystemExit('Translation remains blocked by the Client submit gate.')
 
-          print('P11/P12 Translation staged static boundary: PASS')
+          print('P11/P12 Translation F3 activation static boundary: PASS')
           PY
 
           node <<'NODE'
@@ -6830,10 +6849,10 @@ jobs:
             vm.runInContext(
               'H3_TRANSLATION_PRODUCTION_COMMIT_ENABLED_',
               context
-            ) !== false
+            ) !== true
           ) {
             throw new Error(
-              'Translation production commit gate must remain disabled.'
+              'Translation production commit gate must be enabled for F3.'
             );
           }
 
@@ -6842,7 +6861,7 @@ jobs:
             JSON.stringify({
               pilot: result,
               activation: activation,
-              production_commit_enabled: false
+              production_commit_enabled: true
             })
           );
           NODE

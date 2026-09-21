@@ -18,7 +18,7 @@
     mediaCache: {},
     mediaTrimMs: {},
     mediaLoading: {},
-    reviewKindFilter: null,
+    reviewKindFilter: 'ALL',
     reviewSort: 'RECENT'
   };
 
@@ -76,7 +76,7 @@
     app.mediaTrimMs = {};
     app.mediaLoading = {};
     app.mediaRetryCount = {};
-    app.reviewKindFilter = null;
+    app.reviewKindFilter = 'ALL';
     app.reviewSort = 'RECENT';
 
     document.body.classList.remove(
@@ -1021,8 +1021,10 @@
           'LISTENING'
         );
       var visible =
+        app.reviewKindFilter ===
+          'ALL' ||
         kind ===
-        app.reviewKindFilter;
+          app.reviewKindFilter;
 
       node.classList.toggle(
         'hidden',
@@ -1114,23 +1116,6 @@
         'review-controls-sticky'
       );
 
-    if (!app.reviewKindFilter) {
-      var latestKind =
-        payload.review_history &&
-        payload.review_history.length
-          ? String(
-              payload.review_history[0]
-                .review_kind || ''
-            )
-          : '';
-
-      app.reviewKindFilter =
-        ['LISTENING', 'WRITTEN']
-          .indexOf(latestKind) >= 0
-          ? latestKind
-          : 'WRITTEN';
-    }
-
     var filters =
       el(
         'div',
@@ -1142,6 +1127,10 @@
     );
 
     [
+      {
+        key: 'ALL',
+        label: 'ALL'
+      },
       {
         key: 'LISTENING',
         label: 'L'
@@ -1442,33 +1431,6 @@
                 entry.answered_at
               );
             meta.appendChild(date);
-
-            var summary =
-              document.createElement(
-                'p'
-              );
-            summary.className =
-              'review-history-summary';
-            summary.textContent =
-              '×' +
-              entry.wrong_count +
-              '　' +
-              (
-                entry
-                  .uncertainty_known ===
-                  false
-                  ? '?—'
-                  : (
-                      '?' +
-                      entry
-                        .uncertain_count
-                    )
-              ) +
-              '　復習優先度 ' +
-              reviewLevel;
-            meta.appendChild(
-              summary
-            );
 
             var priorityTrack =
               el(

@@ -192,6 +192,103 @@ function auditSurfaceReviewBridgeV1_() {
     'TRANSLATION_DIRECTION_TYPE'
   );
 
+  var translationExplained =
+    h3TranslationReviewApplyExplanationOverlay_(
+      translation,
+      translationLocked
+    );
+
+  h3SurfaceReviewBridgeAssert_(
+    translationExplained.questions
+      .every(function (question) {
+        return (
+          question.explanation &&
+          question.explanation
+            .contract_id ===
+            H3_TRANSLATION_EXPLANATION_CONTRACT_ID_ &&
+          question.explanation
+            .source_binding_sha256 ===
+            translationLocked
+              .source_binding_sha256
+        );
+      }) &&
+      translationExplained.questions[0]
+        .explanation.body_ja ===
+        '若いなんてとんでもないです。もう60ですよ。',
+    'TRANSLATION_P11_EXPLANATION_OVERLAY'
+  );
+
+  var translationP12Locked =
+    h3TranslationLockBundle_(
+      h3TranslationP12Fixture_()
+    );
+  var translationP12Grade =
+    h3TranslationGrade_(
+      translationP12Locked,
+      [
+        {
+          question_key:
+            'OFF-H3-P12-001',
+          answer: 2,
+          uncertain: false
+        },
+        {
+          question_key:
+            'OFF-H3-P12-002',
+          answer: 3,
+          uncertain: true
+        }
+      ]
+    );
+  var translationP12 =
+    h3SurfaceReviewBuildTranslationPayload_({
+      family: 'TRANSLATION',
+      txn_id:
+        'H3TX-20260921-900003',
+      set_id:
+        'H3-20260921-T002',
+      stage_id:
+        'TRANS-P12-20260921-002',
+      committed_at:
+        '2026-09-21T12:10:00+09:00',
+      source_binding_sha256:
+        translationP12Locked
+          .source_binding_sha256,
+      result_sha256:
+        'c'.repeat(64),
+      grade:
+        translationP12Grade,
+      stage: {
+        issue_no: 2,
+        section_key:
+          'H3-P12',
+        translation_direction:
+          'JP_TO_KR',
+        answer_type:
+          'MULTIPLE_CHOICE'
+      },
+      locked:
+        translationP12Locked
+    });
+  var translationP12Explained =
+    h3TranslationReviewApplyExplanationOverlay_(
+      translationP12,
+      translationP12Locked
+    );
+
+  h3SurfaceReviewBridgeAssert_(
+    translationP12Explained.questions[0]
+      .explanation.choices[1].ko ===
+        '눈치만 보지 말고' &&
+      translationP12Explained.questions[0]
+        .explanation.choices[1].ja ===
+        '顔色ばかりうかがわないで' &&
+      translationP12Explained.questions[1]
+        .explanation.learning_blocks
+        .length >= 2,
+    'TRANSLATION_P12_EXPLANATION_OVERLAY'
+  );
+
   var currentReadingResult = {
     schema:
       'H3_WEB_SUBMIT_RESULT_V1',
@@ -315,7 +412,7 @@ function auditSurfaceReviewBridgeV1_() {
     schema:
       'H3_SURFACE_REVIEW_BRIDGE_AUDIT_V1',
     result: 'PASS',
-    checks: 6,
+    checks: 8,
     reading_item_count:
       reading.item_count,
     translation_item_count:

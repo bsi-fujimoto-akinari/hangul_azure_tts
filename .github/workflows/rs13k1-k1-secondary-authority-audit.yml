@@ -1,0 +1,204 @@
+name: RS13K1 K1 Secondary Authority Audit
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify RS-13K1 item-level authority
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const vm=require('vm');
+          const assert=require('assert');
+
+          const capture=fs.readFileSync('WebAppMultiSkillEvidence.js','utf8');
+          const k1=fs.readFileSync('WebAppK1SecondaryAuthority.js','utf8');
+          const backend=fs.readFileSync('ListeningBackendOrchestrator.js','utf8');
+
+          const context={console,JSON,Number,String,Object,Array,Math,Date};
+          context.globalThis=context;
+          vm.createContext(context);
+          vm.runInContext(capture,context);
+          vm.runInContext(k1,context);
+
+          assert.strictEqual(
+            context.H3_RS13K1_CONTRACT_ID_,
+            'H3-RS13K1-K1-SECONDARY-AUTHORITY-20260922-V1'
+          );
+          assert.strictEqual(
+            context.H3_RS13K1_ANNOTATION_CONTRACT_ID_,
+            'H3-RS13K1-ITEM-AUTHORITY-20260922-V1'
+          );
+
+          const rh=context.H3_RS13K1_READY_HEADERS_;
+          const ah=context.H3_RS13K1_AUTHORITY_HEADERS_;
+          const ch=context.H3_MULTI_SKILL_CONCEPT_HEADERS_;
+
+          function row(headers,obj){
+            return headers.map(k =>
+              Object.prototype.hasOwnProperty.call(obj,k) ? obj[k] : ''
+            );
+          }
+
+          const ready=[
+            rh,
+            row(rh,{
+              K1_READY_ID:'H3-K1R-20260922-999',
+              CREATED_AT:'2026-09-22T12:00:00+09:00',
+              STATUS:'READY',
+              IMAGE_FILE_ID:'IMG',
+              IMAGE_URL:'https://example.invalid/IMG',
+              IMAGE_SHA256:'abc123',
+              FINAL_CHOICES_JSON:'["a","b","c","d"]',
+              ANSWER_KEY:'2',
+              TTS_SCRIPT_JSON:'{}',
+              QA_PROFILE:JSON.stringify({
+                group:'G',
+                mode:'NEW_AUTHORING',
+                item_id:'NEW-H3-K1-20260922-999',
+                profile:'fixture',
+                image_source:'generated'
+              }),
+              AUDIT_RESULT:JSON.stringify({
+                result:'PASS',
+                visual_qa:'PASS',
+                blind_audit:'PASS',
+                exactly_one_choice:2
+              })
+            })
+          ];
+
+          const concepts=[
+            ch,
+            row(ch,{
+              CONCEPT_ID:'VOCAB:열쇠',
+              LEVEL:'3級',
+              CONCEPT_DOMAIN:'VOCABULARY',
+              CONCEPT_LABEL:'열쇠',
+              SKILL_ID:'H3-P2-SK031',
+              FAMILY:'WRITTEN',
+              SECTION_KEY:'H3-P2',
+              APPLICATION_LABEL:'열쇠',
+              MAPPING_ROLE:'APPLICATION_SKILL',
+              MATCH_TYPE:'EXACT_LEXEME_MATCH',
+              CONFIDENCE:'HIGH',
+              DIRECT_REUSE:'NO',
+              STATE_TRANSFER:'NO',
+              RETEST_CLOSURE:'NO',
+              STABILITY_TRANSFER:'NO',
+              SCHEDULER_USE:'DIAGNOSTIC_SELECTION_ONLY',
+              STATUS:'ACTIVE_PILOT'
+            })
+          ];
+
+          const authority=[
+            ah,
+            row(ah,{
+              AUTHORITY_ID:'K1A|H3-K1R-20260922-999|H3-P2-SK031|VOCAB:열쇠',
+              K1_READY_ID:'H3-K1R-20260922-999',
+              K1_SKILL_ID:'H3-K1-SK001',
+              IMAGE_SHA256:'abc123',
+              SOURCE_ITEM_ID:'NEW-H3-K1-20260922-999',
+              TARGET_SKILL_ID:'H3-P2-SK031',
+              CONCEPT_ID:'VOCAB:열쇠',
+              LINK_ROLE:'CONTRIBUTORY',
+              CONFIDENCE:'HIGH',
+              ANNOTATION_CONTRACT_ID:
+                'H3-RS13K1-ITEM-AUTHORITY-20260922-V1',
+              STATUS:'ACTIVE_PROSPECTIVE',
+              CREATED_AT:'2026-09-22T12:01:00+09:00',
+              SOURCE_REF:'fixture'
+            })
+          ];
+
+          const rr=context.h3Rs13k1ReadyRecordFromValues_(
+            ready,'H3-K1R-20260922-999'
+          );
+          const resolved=context.h3Rs13k1AuthorityFromValues_(
+            authority,rr,concepts,4
+          );
+          assert(resolved);
+          assert.strictEqual(resolved.link.link_role,'CONTRIBUTORY');
+          assert.strictEqual(
+            resolved.link.annotation_contract_id,
+            'H3-RS13K1-ITEM-AUTHORITY-20260922-V1'
+          );
+
+          assert.strictEqual(
+            context.h3Rs13k1AuthorityFromValues_(authority,rr,concepts,3),
+            null
+          );
+
+          const oldReady=JSON.parse(JSON.stringify(ready));
+          oldReady[1][rh.indexOf('CREATED_AT')]='2026-09-20T08:00:00+09:00';
+          const oldRr=context.h3Rs13k1ReadyRecordFromValues_(
+            oldReady,'H3-K1R-20260922-999'
+          );
+          assert.strictEqual(
+            context.h3Rs13k1AuthorityFromValues_(authority,oldRr,concepts,4),
+            null
+          );
+
+          assert.strictEqual(
+            context.h3Rs13k1AuthorityFromValues_([ah],rr,concepts,4),
+            null
+          );
+
+          const badImage=JSON.parse(JSON.stringify(authority));
+          badImage[1][ah.indexOf('IMAGE_SHA256')]='wrong';
+          assert.throws(
+            ()=>context.h3Rs13k1AuthorityFromValues_(
+              badImage,rr,concepts,4
+            ),
+            /AUTHORITY_IDENTITY_INVALID/
+          );
+
+          const dup=authority.concat([authority[1].slice()]);
+          assert.throws(
+            ()=>context.h3Rs13k1AuthorityFromValues_(dup,rr,concepts,4),
+            /ACTIVE_AUTHORITY_COUNT:2/
+          );
+
+          const badRole=JSON.parse(JSON.stringify(authority));
+          badRole[1][ah.indexOf('LINK_ROLE')]='INCIDENTAL';
+          assert.throws(
+            ()=>context.h3Rs13k1AuthorityFromValues_(
+              badRole,rr,concepts,4
+            ),
+            /AUTHORITY_IDENTITY_INVALID/
+          );
+
+          const listeningTarget=JSON.parse(JSON.stringify(concepts));
+          listeningTarget[1][ch.indexOf('FAMILY')]='LISTENING';
+          assert.throws(
+            ()=>context.h3Rs13k1AuthorityFromValues_(
+              authority,rr,listeningTarget,4
+            ),
+            /TARGET_FAMILY_INVALID/
+          );
+
+          const normalized=context.h3MultiSkillNormalizeAuthoredLinks_(
+            [resolved.link]
+          );
+          assert.strictEqual(normalized.length,1);
+
+          const contract=context.h3Rs13k1DescribeContract_();
+          assert.strictEqual(contract.skill_level_concept_inference,false);
+          assert.strictEqual(contract.historical_backfill,false);
+          assert.strictEqual(contract.payload_hash_mutation,false);
+          assert.strictEqual(contract.state_transfer,false);
+
+          assert(capture.includes("'K1_READY_ID'"));
+          assert(capture.includes("['K1','K2','K3','K4','K5']"));
+          assert(capture.includes('h3Rs13k1ListeningLinks_'));
+          assert(backend.includes('h3Rs13k1PreissueValidate_'));
+
+          console.log('RS-13K1 item-level authority audit passed.');
+          NODE

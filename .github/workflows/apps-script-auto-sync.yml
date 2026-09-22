@@ -147,57 +147,6 @@ jobs:
             exit 1
           fi
 
-      - name: Run nondev direct execution probe
-        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
-        shell: bash
-        run: |
-          if ! git log -1 --pretty=%B | grep -Fq '[clasp-nondev-probe]'; then
-            echo 'Nondev probe marker absent; skipped.'
-            exit 0
-          fi
-
-          npx -y @google/clasp@3.4.0 update-deployment \
-            AKfycbxmJnIPTKJY5beUVAU5d0RyKb0Nj-YarY8EkdyczgXHpJKVw4-0kdjv6cYEUXEDtw5D \
-            --description "Review audio API executable 2026-09-22 D probe" \
-            --json > /tmp/nondev-deploy.json
-
-          npx -y @google/clasp@3.4.0 run-function \
-            h3ClaspDirectExecutionProbe \
-            --nondev \
-            --user default \
-            --json > /tmp/nondev-probe.json
-
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          dep = json.loads(Path('/tmp/nondev-deploy.json').read_text(encoding='utf-8'))
-          probe = json.loads(Path('/tmp/nondev-probe.json').read_text(encoding='utf-8'))
-
-          deployment_id = dep.get('deploymentId')
-          version_number = dep.get('versionNumber')
-          response = probe.get('response')
-          error = probe.get('error')
-
-          expected_deployment = 'AKfycbxmJnIPTKJY5beUVAU5d0RyKb0Nj-YarY8EkdyczgXHpJKVw4-0kdjv6cYEUXEDtw5D'
-          expected_response = 'H3_CLASP_DIRECT_EXEC_OK_V1'
-
-          if deployment_id != expected_deployment:
-              raise SystemExit(f'Unexpected deployment ID: {deployment_id!r}')
-          if not version_number:
-              raise SystemExit('Updated deployment did not return a version number')
-          if error:
-              raise SystemExit(f'Nondev probe returned error: {error!r}')
-          if response != expected_response:
-              raise SystemExit(f'Unexpected nondev probe response: {response!r}')
-
-          print(f'deployment_id={deployment_id}')
-          print(f'version_number={version_number}')
-          print('nondev_probe_response=H3_CLASP_DIRECT_EXEC_OK_V1')
-          print('direct_execution_nondev=PASS')
-          print('secret_values_printed=false')
-          PY
-
       - name: Read deployment inventory
         if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
         shell: bash

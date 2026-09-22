@@ -1,7 +1,3 @@
-function h3ClaspDirectExecutionProbe() {
-  return 'H3_CLASP_DIRECT_EXEC_OK_V1';
-}
-
 var H3_REVIEW_AUDIO_ASSET_SHEET_='review_audio_asset_v1';
 var H3_REVIEW_AUDIO_SCHEMA_='H3_REVIEW_AUDIO_ASSET_V1';
 var H3_REVIEW_AUDIO_GENERATOR_VERSION_='review-audio-v1';

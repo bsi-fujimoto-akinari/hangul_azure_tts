@@ -8,6 +8,6 @@
     "access": "MYSELF"
   },
   "executionApi": {
-    "access": "ANYONE"
+    "access": "MYSELF"
   }
 }

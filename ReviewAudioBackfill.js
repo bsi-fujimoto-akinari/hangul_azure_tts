@@ -618,6 +618,11 @@ function h3ReviewAudioValidateStaleCanonical_(row,plan){
   if(f.isTrashed()||f.getMimeType()!=='audio/mpeg'||f.getSize()<128){
     throw new Error('REVIEW_AUDIO_STALE_FILE_INVALID:'+plan.set_id+':'+plan.slot_key);
   }
+  var parentIds=[],parents=f.getParents();
+  while(parents.hasNext())parentIds.push(parents.next().getId());
+  if(parentIds.indexOf(plan.drive_folder_id)<0){
+    throw new Error('REVIEW_AUDIO_STALE_FILE_PARENT_MISMATCH:'+plan.set_id+':'+plan.slot_key);
+  }
 
   if(oldGen==='review-audio-v1'){
     var expectedName=plan.set_id+'__'+plan.slot_key+'__'+oldHash.slice(0,12)+'.mp3';

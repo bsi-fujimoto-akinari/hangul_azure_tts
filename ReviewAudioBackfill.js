@@ -206,18 +206,17 @@ function h3ReviewAudioFallback5WAssignment_(setId){
   return{Q1:r[0],Q2:r[1],Q3:r[2],Q4:r[3],Q5A:q5a,Q5B:q5b};
 }
 
-function h3ReviewAudio5WVoiceAssignment_(a,sec){
+function h3ReviewAudio5WVoiceAssignment_(a,sec,script){
   var key={D2:'Q1',D3:'Q2',D4:'Q3',D5:'Q4'}[sec];
   if(key)return{primary:h3ReviewAudioVoiceByLabel_(a[key])};
   if(sec==='D6'){
-    return{
-      primary:h3ReviewAudioVoiceByLabel_(a.Q5A),
-      sequence:[
-        h3ReviewAudioVoiceByLabel_(a.Q5A),
-        h3ReviewAudioVoiceByLabel_(a.Q5B),
-        h3ReviewAudioVoiceByLabel_(a.Q5A)
-      ]
-    };
+    var count=h3ReviewAudioNormalizeText_(script).split('\n').filter(Boolean).length;
+    if(count<2)throw new Error('REVIEW_AUDIO_5W_D6_VOICE_COUNT:'+count);
+    var q5a=h3ReviewAudioVoiceByLabel_(a.Q5A);
+    var q5b=h3ReviewAudioVoiceByLabel_(a.Q5B);
+    var sequence=[];
+    for(var i=0;i<count;i++)sequence.push(i%2===0?q5a:q5b);
+    return{primary:q5a,sequence:sequence};
   }
   throw new Error('REVIEW_AUDIO_5W_SECTION_VOICE_INVALID:'+sec);
 }
@@ -268,7 +267,7 @@ function h3ReviewAudioPlan5W_(ss,setId){
       '5W',setId,sec,script,
       {sheet:source,source_schema:payload.schema||payload.reconstruction_schema||'',section:sec,q_no:i+1},
       {mode:'5W_CANONICAL_SCRIPT'},
-      h3ReviewAudio5WVoiceAssignment_(assignment,sec)
+      h3ReviewAudio5WVoiceAssignment_(assignment,sec,script)
     );
   });
 }
@@ -1063,5 +1062,48 @@ function runReviewAudioE4NextBatch(){
     family:family,sets:batch.map(function(s){return s.set_id;}),
     asset_count:results.length,duration_ms:new Date().getTime()-started,
     post_total_assets:after.total_assets,remaining_sets:remaining,counts:after.counts
+  };
+}
+
+function runReviewAudioE4RepairKnownD6(){
+  var ss=h3ReviewAudioRuntimeSpreadsheet_();
+  h3ReviewAudioE4AssertRuntime_(ss);
+  var protectedBefore=h3ReviewAudioE4ProtectedSnapshot_(ss);
+  var plan=h3ReviewAudioBuildHistoricalPlan_();
+  var setId='H3-20260914-04';
+  var assets=h3ReviewAudioPlanForSet_(ss,'5W',setId);
+  var target=assets.filter(function(a){return a.slot_key==='D6';});
+  if(target.length!==1)throw new Error('REVIEW_AUDIO_E4_REPAIR_TARGET_COUNT:'+target.length);
+  var sheet=h3ReviewAudioAssetSheet_(ss);
+  var row=h3ReviewAudioFindAssetRow_(sheet,target[0]);
+  if(!row)throw new Error('REVIEW_AUDIO_E4_REPAIR_ROW_MISSING');
+  var status=String(row.row[row.map.STATUS]||'');
+  var errorText=String(row.row[row.map.ERROR]||'');
+  if(status!=='ERROR'||errorText!=='REVIEW_AUDIO_VOICE_SEQUENCE_INVALID:'+setId+':D6'){
+    throw new Error('REVIEW_AUDIO_E4_REPAIR_STATE_MISMATCH:'+status+':'+errorText);
+  }
+  if(String(row.row[row.map.AUDIO_FILE_ID]||'')!==''){
+    throw new Error('REVIEW_AUDIO_E4_REPAIR_UNEXPECTED_FILE');
+  }
+  var result=h3ReviewAudioGeneratePlannedAsset_(ss,target[0]);
+  if(result.status!=='DONE'||result.set_id!==setId||result.slot_key!=='D6'){
+    throw new Error('REVIEW_AUDIO_E4_REPAIR_RESULT_INVALID');
+  }
+  h3ReviewAudioE4VerifyBatchFiles_([
+    {family:'5W',set_id:setId,assets:target}
+  ],[result],h3ReviewAudioE4PlanMaps_(plan).asset_by_key);
+  h3ReviewAudioE4AssertRuntime_(ss);
+  var protectedAfter=h3ReviewAudioE4ProtectedSnapshot_(ss);
+  if(JSON.stringify(protectedAfter)!==JSON.stringify(protectedBefore)){
+    throw new Error('REVIEW_AUDIO_E4_REPAIR_PROTECTED_STATE_DRIFT');
+  }
+  var summary=h3ReviewAudioE4SidecarSummary_(ss,plan);
+  if(summary.total_assets!==40||summary.complete_set_count!==9){
+    throw new Error('REVIEW_AUDIO_E4_REPAIR_POST_COUNT:'+summary.total_assets+':'+summary.complete_set_count);
+  }
+  return{
+    schema:'H3_REVIEW_AUDIO_E4_REPAIR_V1',status:'DONE',set_id:setId,slot_key:'D6',
+    post_total_assets:summary.total_assets,remaining_sets:24-summary.complete_set_count,
+    file_id:result.file_id,generator_version:result.generator_version
   };
 }

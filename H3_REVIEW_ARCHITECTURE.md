@@ -522,3 +522,28 @@ Historical Listening display correction:
   mixed Japanese explanatory sentence. The locked historical explanation row remains
   the validated authority; this is a source-identity-gated display correction.
 
+
+
+## 40. Review explanation style contract
+
+Shared learner-facing explanation style is governed by
+`H3_REVIEW_EXPLANATION_STYLE_CONTRACT.md`
+(`H3-REVIEW-EXPLANATION-STYLE-20260922-V1`).
+
+The contract defines Japanese Review explanation meta-text as the explanatory semantic
+roles corresponding to `reason`, `learning_blocks[].usage`, and
+`learning_blocks[].note`. Across `5L | 5W | READING | TRANSLATION`, that meta-text
+uses Japanese plain explanatory style (常体). Source/body translations, choice
+translations, example translations, quoted source/answer text, Korean examples, and
+source utterance honorific/register are excluded and retain their semantic form.
+
+Representative examples must not duplicate the exact correct choice or completed
+correct-answer surface after the contract's normalization. Exact answer wording may
+still be cited in rationale/choice explanation; the separate representative example
+uses a different short, natural surface demonstrating the same learning point.
+
+This is an explanation/presentation contract only. Historical locked/committed Review
+authorities remain immutable and any historical correction must use a validated,
+source-bound overlay/display layer. No learner result, Review identity, source binding,
+scheduler, skill_queue, retest state, counter, or pointer may be changed merely to
+satisfy explanation style.

@@ -700,6 +700,11 @@ function h3ReadingSubmit_(
       );
     }
 
+    h3MultiSkillReadingPreflight_(
+      spreadsheet,
+      context
+    );
+
     var normalized =
       h3ReadingNormalizeSubmission_(
         request,
@@ -905,7 +910,18 @@ function h3ReadingSubmit_(
       );
     }
 
-    return result;
+    return h3MultiSkillAttachCapture_(
+      result,
+      function () {
+        return h3MultiSkillReadingCapture_(
+          spreadsheet,
+          context,
+          grade,
+          txnId,
+          now
+        );
+      }
+    );
   } catch (err) {
     if (
       journal &&

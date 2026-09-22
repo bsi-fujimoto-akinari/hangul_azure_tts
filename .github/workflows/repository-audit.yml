@@ -9298,3 +9298,308 @@ jobs:
             'Review completion remediation contract checks passed.'
           );
           NODE
+
+
+      - name: Verify Review explanation style contract
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const assert = require('assert');
+
+          const surfaceCommonText =
+            fs.readFileSync(
+              'WebAppSurfaceCommon.js',
+              'utf8'
+            );
+          const coreText =
+            fs.readFileSync(
+              'WebAppReviewCore.js',
+              'utf8'
+            );
+          const writtenText =
+            fs.readFileSync(
+              'WebAppWrittenProduction.js',
+              'utf8'
+            );
+          const readingText =
+            fs.readFileSync(
+              'WebAppReadingPilot.js',
+              'utf8'
+            );
+          const translationText =
+            fs.readFileSync(
+              'WebAppSurfaceReviewBridge.js',
+              'utf8'
+            );
+          const contractText =
+            fs.readFileSync(
+              'H3_REVIEW_EXPLANATION_STYLE_CONTRACT.md',
+              'utf8'
+            );
+          const architectureText =
+            fs.readFileSync(
+              'H3_REVIEW_ARCHITECTURE.md',
+              'utf8'
+            );
+
+          assert(
+            contractText.includes(
+              'H3-REVIEW-EXPLANATION-STYLE-20260922-V1'
+            )
+          );
+          assert(
+            architectureText.includes(
+              'H3_REVIEW_EXPLANATION_STYLE_CONTRACT.md'
+            )
+          );
+          assert(
+            writtenText.includes(
+              'h3ReviewExplanationStyleValidateAuthoring_'
+            ),
+            '5W future authoring style gate missing.'
+          );
+          assert(
+            readingText.includes(
+              "'READING_FUTURE:'"
+            ),
+            'Reading future authoring style gate missing.'
+          );
+          assert(
+            translationText.includes(
+              "'TRANSLATION_FUTURE:'"
+            ),
+            'Translation future authoring style gate missing.'
+          );
+
+          const context = {
+            console,
+            JSON,
+            Object,
+            Array,
+            String,
+            Number,
+            Math,
+            RegExp,
+            Error
+          };
+          vm.createContext(context);
+          vm.runInContext(
+            surfaceCommonText,
+            context,
+            {
+              filename: 'WebAppSurfaceCommon.js'
+            }
+          );
+          vm.runInContext(
+            coreText,
+            context,
+            {
+              filename: 'WebAppReviewCore.js'
+            }
+          );
+
+          const selfCheck =
+            context
+              .h3ReviewExplanationStyleSelfCheck_();
+          assert.strictEqual(
+            selfCheck.ok,
+            true
+          );
+          assert.strictEqual(
+            selfCheck.contract_id,
+            'H3-REVIEW-EXPLANATION-STYLE-20260922-V1'
+          );
+          assert.strictEqual(
+            selfCheck.known_example_fix_count,
+            6
+          );
+
+          const protectedText =
+            context
+              .h3ReviewExplanationStyleNormalizeMetaText_(
+                '「この形です。」と説明します。\n→ これは例文訳です。'
+              );
+          assert.strictEqual(
+            protectedText,
+            '「この形です。」と説明する。\n→ これは例文訳です。'
+          );
+
+          function stripJapaneseQuotes(value) {
+            let out = '';
+            let depth = 0;
+            for (const ch of String(value || '')) {
+              if (ch === '「' || ch === '『') {
+                depth++;
+                continue;
+              }
+              if (ch === '」' || ch === '』') {
+                depth = Math.max(
+                  0,
+                  depth - 1
+                );
+                continue;
+              }
+              if (depth === 0) {
+                out += ch;
+              }
+            }
+            return out;
+          }
+
+          const polite =
+            /(?:です|ます|でした|ません|でしょう|ましょう|ください|ございます)(?=[。！？!?]|$|が[、,]|ので|から|ため|けれど|けれども|一方)/;
+
+          function auditHardcodedMeta(
+            source,
+            label
+          ) {
+            const re =
+              /(reason|usage|note)\s*:\s*'((?:\\'|[^'])*)'/g;
+            let match;
+            while (
+              (match = re.exec(source)) !==
+              null
+            ) {
+              const value =
+                match[2]
+                  .replace(/\\'/g, "'");
+              const outside =
+                stripJapaneseQuotes(
+                  value
+                )
+                  .split(/\r?\n/)
+                  .filter(
+                    line =>
+                      !/^\s*→/.test(line)
+                  )
+                  .join('\n');
+              assert(
+                !polite.test(outside),
+                label +
+                  ' contains polite meta-text: ' +
+                  outside
+              );
+              polite.lastIndex = 0;
+            }
+          }
+
+          auditHardcodedMeta(
+            readingText,
+            'Reading'
+          );
+          auditHardcodedMeta(
+            translationText,
+            'Translation'
+          );
+
+          const fiveL = {
+            surface_family: '5L',
+            set_id:
+              'H3-20260919-L02',
+            sections: [
+              {
+                section: 'K3',
+                correct_answer: 2,
+                question_surface: {
+                  choices: [
+                    '그래도 일을 그만두면 안 돼요.',
+                    '주말에는 푹 쉬는 게 어때요?',
+                    '몇 시에 출근했어요?',
+                    '회사 근처에 살고 있어요.'
+                  ]
+                },
+                explanation: {
+                  reason:
+                    '相手に休むことを提案する。',
+                  learning_blocks: [
+                    {
+                      example_ko:
+                        '주말에는 푹 쉬는 게 어때요?',
+                      example_ja:
+                        '週末はゆっくり休むのはどうですか。'
+                    }
+                  ]
+                }
+              }
+            ]
+          };
+
+          context
+            .h3ReviewExplanationStyleApplyPayload_(
+              fiveL
+            );
+          assert.strictEqual(
+            fiveL.sections[0]
+              .explanation
+              .learning_blocks[0]
+              .example_ko,
+            '오늘은 일찍 자는 게 어때요?'
+          );
+
+          const fiveW = {
+            surface_family: '5W',
+            set_id:
+              'H3-20260914-03',
+            sections: [
+              {
+                section: 'D6',
+                correct_answer_position: 1,
+                question_surface: {
+                  choices: [
+                    {
+                      text:
+                        '같이 전시회 보러 갈래요?'
+                    }
+                  ]
+                },
+                script_text:
+                  '같이 전시회 보러 갈래요?',
+                explanation: {
+                  reason:
+                    '親しい相手への誘いとして自然です。',
+                  learning_blocks: [
+                    {
+                      usage:
+                        '-(으)ㄹ래요?\n같이 전시회 보러 갈래요?\n→ 一緒に展示会を見に行きませんか？\n親しい相手への誘いとして自然です。'
+                    }
+                  ]
+                }
+              }
+            ]
+          };
+
+          context
+            .h3ReviewExplanationStyleApplyPayload_(
+              fiveW
+            );
+          assert.strictEqual(
+            fiveW.sections[0]
+              .explanation
+              .reason,
+            '親しい相手への誘いとして自然だ。'
+          );
+          assert(
+            fiveW.sections[0]
+              .explanation
+              .learning_blocks[0]
+              .usage
+              .includes(
+                '주말에 같이 산책할래요?'
+              )
+          );
+          assert(
+            fiveW.sections[0]
+              .explanation
+              .learning_blocks[0]
+              .usage
+              .includes(
+                '→ 週末に一緒に散歩しませんか？'
+              )
+          );
+
+          console.log(
+            'Review explanation style contract checks passed.'
+          );
+          NODE

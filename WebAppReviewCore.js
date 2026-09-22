@@ -298,6 +298,7 @@ function h3ReviewSurfaceMetadata_(
 }
 
 
+
 function h3ReviewAttachSurfaceMetadata_(
   provider,
   payload
@@ -351,6 +352,15 @@ function h3ReviewAttachSurfaceMetadata_(
   ) {
     payload.item_count =
       payload.questions.length;
+  }
+
+  if (
+    typeof h3ReviewExplanationStyleApplyPayload_ ===
+      'function'
+  ) {
+    return h3ReviewExplanationStyleApplyPayload_(
+      payload
+    );
   }
 
   return payload;

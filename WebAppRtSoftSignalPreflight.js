@@ -19,15 +19,21 @@ var H3_RS14P_MIN_CONCEPTS_ = 2;
 var H3_RS14P_MIN_SOURCE_FAMILIES_ = 2;
 
 function h3Rs14pRequireRs10_() {
-  [
-    'h3Rs10NormalizeCandidate_',
-    'h3Rs10DirectionForSection_',
-    'h3Rs10CompareNumberAsc_'
-  ].forEach(function (name) {
-    if (typeof this[name] !== 'function') {
-      throw new Error('RS14P_RS10_DEPENDENCY_MISSING:' + name);
-    }
-  }, this);
+  if (typeof h3Rs10NormalizeCandidate_ !== 'function') {
+    throw new Error(
+      'RS14P_RS10_DEPENDENCY_MISSING:h3Rs10NormalizeCandidate_'
+    );
+  }
+  if (typeof h3Rs10DirectionForSection_ !== 'function') {
+    throw new Error(
+      'RS14P_RS10_DEPENDENCY_MISSING:h3Rs10DirectionForSection_'
+    );
+  }
+  if (typeof h3Rs10CompareNumberAsc_ !== 'function') {
+    throw new Error(
+      'RS14P_RS10_DEPENDENCY_MISSING:h3Rs10CompareNumberAsc_'
+    );
+  }
 }
 
 function h3Rs14pPrimaryTuple_(candidate) {

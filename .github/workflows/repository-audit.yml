@@ -3037,6 +3037,41 @@ jobs:
           if 'replay-notice' in questions:
               raise SystemExit('R3-09E Replay intro block was not removed.')
 
+          for needle in [
+              "'audio-wrap inline-seek-audio-wrap'",
+              "'custom-audio-controls audio-seek-controls'",
+              "'audio-seek'",
+              'function setAudioSeekFill_(',
+              "'--seek-fill'",
+          ]:
+              if needle not in client:
+                  raise SystemExit(
+                      f'Integrated audio seekbar invariant missing: {needle}'
+                  )
+
+          for needle in [
+              '.audio-seek-controls {',
+              'min-height: 48px;',
+              'border-radius: 14px;',
+              'flex: 0 0 56px;',
+              '--seek-fill: 0%;',
+              '.audio-seek::-webkit-slider-runnable-track',
+              '.audio-seek::-moz-range-progress',
+          ]:
+              if needle not in style:
+                  raise SystemExit(
+                      f'Integrated audio seekbar visual invariant missing: {needle}'
+                  )
+
+          for forbidden in [
+              'audio-time',
+              '0:00 / --:--',
+          ]:
+              if forbidden in questions:
+                  raise SystemExit(
+                      f'Retired audio time display returned: {forbidden}'
+                  )
+
           home_start = client.index('function renderHome(payload)')
           home_end = client.index('function formatHistoryDate(value)', home_start)
           home = client[home_start:home_end]

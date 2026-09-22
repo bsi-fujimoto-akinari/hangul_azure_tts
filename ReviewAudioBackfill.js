@@ -848,4 +848,220 @@ function h3ReviewAudioSelfCheck_(){
   };
 }
 
+// Temporary E4 bounded backfill runner. Remove after E4.
+function h3ReviewAudioE4DataDigest_(sheet){
+  if(!sheet)throw new Error('REVIEW_AUDIO_E4_SHEET_MISSING');
+  return h3ReviewAudioSha256_(JSON.stringify(sheet.getDataRange().getDisplayValues()));
+}
 
+function h3ReviewAudioE4ProtectedSnapshot_(ss){
+  var names=[
+    'generation_state_v1','listening_state_v1','rt_lane_state_v1',
+    'written_legacy_review_payload_v1','written_review_payload_v1',
+    'reading_review_payload_v1','translation_review_payload_v1',
+    'review_home_index_v1'
+  ];
+  var out={};
+  names.forEach(function(name){
+    out[name]=h3ReviewAudioE4DataDigest_(ss.getSheetByName(name));
+  });
+  return out;
+}
+
+function h3ReviewAudioE4AssertRuntime_(ss){
+  function keyValue(sheetName){
+    var t=h3ReviewAudioTable_(ss.getSheetByName(sheetName)),out={};
+    t.rows.forEach(function(row){out[String(row[0]||'')]=String(row[1]||'');});
+    return out;
+  }
+  var g=keyValue('generation_state_v1');
+  var l=keyValue('listening_state_v1');
+  if(g.NEXT_BLOCK_NO!=='2'||g.NEXT_SET_OFFSET!=='1'||
+     g.WRITTEN_NEXT_STAGE_ID!=='STD-B002-S1'||
+     g.WRITTEN_NEXT_STAGE_STATUS!=='READY_TO_PATCH'){
+    throw new Error('REVIEW_AUDIO_E4_GENERATION_RUNTIME_DRIFT');
+  }
+  if(l.STATUS!=='N5_AUDIO_TIMING_STAGED'||l.LISTENING_ISSUE_NO!=='3'||
+     l.NEXT_LISTENING_SET_NO!=='4'){
+    throw new Error('REVIEW_AUDIO_E4_LISTENING_RUNTIME_DRIFT');
+  }
+  var rt=h3ReviewAudioTable_(ss.getSheetByName('rt_lane_state_v1'));
+  if(rt.rows.length!==1)throw new Error('REVIEW_AUDIO_E4_RT_ROW_COUNT:'+rt.rows.length);
+  var row=rt.rows[0],m=rt.map;
+  var expected={
+    LEVEL:'3級',READING_CLOCK:'3',TRANSLATION_CLOCK:'3',
+    LAST_RT_FAMILY:'TRANSLATION',LAST_TRANSLATION_ACTION:'CORE:H3-20260922-T003',
+    LAST_CONSUMED_5W_CORE_SET_ID:'H3-20260920-01'
+  };
+  Object.keys(expected).forEach(function(k){
+    if(String(row[m[k]]||'')!==expected[k])throw new Error('REVIEW_AUDIO_E4_RT_RUNTIME_DRIFT:'+k);
+  });
+}
+
+function h3ReviewAudioE4PlanMaps_(plan){
+  var assetByKey={},sets=[],setByKey={};
+  plan.assets.forEach(function(a){
+    var key=[a.surface_family,a.set_id,a.slot_key].join('|');
+    if(assetByKey[key])throw new Error('REVIEW_AUDIO_E4_PLAN_DUPLICATE:'+key);
+    assetByKey[key]=a;
+    var sk=[a.surface_family,a.set_id].join('|');
+    if(!setByKey[sk]){
+      setByKey[sk]={family:a.surface_family,set_id:a.set_id,assets:[]};
+      sets.push(setByKey[sk]);
+    }
+    setByKey[sk].assets.push(a);
+  });
+  return{asset_by_key:assetByKey,sets:sets,set_by_key:setByKey};
+}
+
+function h3ReviewAudioE4SidecarSummary_(ss,plan){
+  var maps=h3ReviewAudioE4PlanMaps_(plan);
+  var sheet=h3ReviewAudioAssetSheet_(ss),t=h3ReviewAudioTable_(sheet);
+  var seen={},fileIds={},setCounts={},counts={'5W':0,'2R':0,'2T':0};
+  t.rows.forEach(function(row){
+    if(!row.some(function(v){return String(v||'')!=='';}))return;
+    var family=String(row[t.map.SURFACE_FAMILY]||'');
+    var setId=String(row[t.map.SET_ID]||'');
+    var slot=String(row[t.map.SLOT_KEY]||'');
+    var key=[family,setId,slot].join('|');
+    var p=maps.asset_by_key[key];
+    if(!p)throw new Error('REVIEW_AUDIO_E4_FOREIGN_LOGICAL_KEY:'+key);
+    if(seen[key])throw new Error('REVIEW_AUDIO_E4_DUPLICATE_LOGICAL_KEY:'+key);
+    seen[key]=true;
+    if(String(row[t.map.STATUS]||'')!=='DONE')throw new Error('REVIEW_AUDIO_E4_NON_DONE:'+key);
+    if(String(row[t.map.ERROR]||'')!=='')throw new Error('REVIEW_AUDIO_E4_ERROR_PRESENT:'+key);
+    if(String(row[t.map.GENERATOR_VERSION]||'')!==H3_REVIEW_AUDIO_GENERATOR_VERSION_){
+      throw new Error('REVIEW_AUDIO_E4_GENERATOR_MISMATCH:'+key);
+    }
+    if(String(row[t.map.DRIVE_FOLDER_ID]||'')!==p.drive_folder_id){
+      throw new Error('REVIEW_AUDIO_E4_FOLDER_MISMATCH:'+key);
+    }
+    var text=String(row[t.map.AUDIO_TEXT]||'');
+    var hash=String(row[t.map.AUDIO_TEXT_SHA256]||'');
+    if(text!==p.audio_text||hash!==p.audio_text_sha256||h3ReviewAudioSha256_(text)!==hash){
+      throw new Error('REVIEW_AUDIO_E4_TEXT_HASH_MISMATCH:'+key);
+    }
+    if(family==='5W'&&slot==='D5'&&text.indexOf('\n')<0){
+      throw new Error('REVIEW_AUDIO_E4_D5_NEWLINE_MISSING:'+setId);
+    }
+    var fileId=String(row[t.map.AUDIO_FILE_ID]||'');
+    if(!fileId)throw new Error('REVIEW_AUDIO_E4_FILE_ID_MISSING:'+key);
+    if(fileIds[fileId])throw new Error('REVIEW_AUDIO_E4_DUPLICATE_FILE_ID:'+fileId);
+    fileIds[fileId]=true;
+    var sk=[family,setId].join('|');
+    setCounts[sk]=(setCounts[sk]||0)+1;
+    counts[family]=(counts[family]||0)+1;
+  });
+
+  var completeSets={};
+  maps.sets.forEach(function(s){
+    var sk=[s.family,s.set_id].join('|');
+    var n=setCounts[sk]||0;
+    if(n!==0&&n!==s.assets.length)throw new Error('REVIEW_AUDIO_E4_PARTIAL_SET:'+sk+':'+n);
+    if(n===s.assets.length)completeSets[sk]=true;
+  });
+  return{
+    total_assets:Object.keys(seen).length,
+    counts:counts,
+    complete_sets:completeSets,
+    complete_set_count:Object.keys(completeSets).length,
+    asset_by_key:maps.asset_by_key,
+    sets:maps.sets
+  };
+}
+
+function h3ReviewAudioE4PickBatch_(summary){
+  var pilots={
+    '5W|H3-20260913-01':true,
+    '2R|H3-20260921-R001':true,
+    '2T|H3-20260921-T001':true
+  };
+  Object.keys(pilots).forEach(function(k){
+    if(!summary.complete_sets[k])throw new Error('REVIEW_AUDIO_E4_PILOT_NOT_COMPLETE:'+k);
+  });
+  var priorities=['5W','2R','2T'];
+  for(var i=0;i<priorities.length;i++){
+    var family=priorities[i];
+    var candidates=summary.sets.filter(function(s){
+      var sk=[s.family,s.set_id].join('|');
+      return s.family===family&&!summary.complete_sets[sk]&&!pilots[sk];
+    });
+    if(candidates.length)return candidates.slice(0,2);
+  }
+  return[];
+}
+
+function h3ReviewAudioE4VerifyBatchFiles_(batch,results,assetByKey){
+  var expected=0,seen={};
+  batch.forEach(function(s){expected+=s.assets.length;});
+  if(results.length!==expected)throw new Error('REVIEW_AUDIO_E4_BATCH_RESULT_COUNT:'+results.length+':'+expected);
+  results.forEach(function(r){
+    var key=[r.family,r.set_id,r.slot_key].join('|');
+    var p=assetByKey[key];
+    if(!p||seen[key])throw new Error('REVIEW_AUDIO_E4_BATCH_RESULT_KEY:'+key);
+    seen[key]=true;
+    if(r.status!=='DONE'||r.generator_version!==H3_REVIEW_AUDIO_GENERATOR_VERSION_||
+       !r.file_id||!r.audio_url||r.audio_text_sha256!==p.audio_text_sha256){
+      throw new Error('REVIEW_AUDIO_E4_BATCH_RESULT_INVALID:'+key);
+    }
+    if(r.replaced_file_id)throw new Error('REVIEW_AUDIO_E4_UNEXPECTED_REPLACEMENT:'+key);
+    var f=DriveApp.getFileById(r.file_id);
+    if(f.isTrashed()||f.getMimeType()!=='audio/mpeg'||f.getSize()<128||
+       f.getName()!==h3ReviewAudioFilename_(p)||
+       String(f.getDescription()||'')!==h3ReviewAudioFileDescription_(p)){
+      throw new Error('REVIEW_AUDIO_E4_FILE_INVALID:'+key);
+    }
+    var ok=false,parents=f.getParents();
+    while(parents.hasNext())if(parents.next().getId()===p.drive_folder_id)ok=true;
+    if(!ok)throw new Error('REVIEW_AUDIO_E4_FILE_PARENT_INVALID:'+key);
+  });
+}
+
+function runReviewAudioE4NextBatch(){
+  var started=new Date().getTime();
+  var selfCheck=h3ReviewAudioSelfCheck_();
+  if(!selfCheck.ok||selfCheck.set_count!==24||selfCheck.asset_count!==105||
+     selfCheck.break_ms!==1200||
+     selfCheck.generator_version!=='review-audio-v2-1200ms'){
+    throw new Error('REVIEW_AUDIO_E4_SELF_CHECK_FAILED');
+  }
+  var ss=h3ReviewAudioRuntimeSpreadsheet_();
+  h3ReviewAudioE4AssertRuntime_(ss);
+  var protectedBefore=h3ReviewAudioE4ProtectedSnapshot_(ss);
+  var plan=h3ReviewAudioBuildHistoricalPlan_();
+  var before=h3ReviewAudioE4SidecarSummary_(ss,plan);
+  var batch=h3ReviewAudioE4PickBatch_(before);
+  if(!batch.length){
+    if(before.total_assets!==105||before.complete_set_count!==24){
+      throw new Error('REVIEW_AUDIO_E4_EMPTY_BATCH_BEFORE_COMPLETE');
+    }
+    return{
+      schema:'H3_REVIEW_AUDIO_E4_BATCH_V1',complete:true,family:'',sets:[],
+      asset_count:0,duration_ms:new Date().getTime()-started,
+      post_total_assets:before.total_assets,remaining_sets:0,counts:before.counts
+    };
+  }
+  var family=batch[0].family;
+  if(batch.some(function(s){return s.family!==family;}))throw new Error('REVIEW_AUDIO_E4_MIXED_FAMILY_BATCH');
+  var results=[];
+  batch.forEach(function(s){
+    results=results.concat(h3ReviewAudioGenerateSet_(s.family,s.set_id));
+  });
+  h3ReviewAudioE4VerifyBatchFiles_(batch,results,before.asset_by_key);
+  h3ReviewAudioE4AssertRuntime_(ss);
+  var protectedAfter=h3ReviewAudioE4ProtectedSnapshot_(ss);
+  if(JSON.stringify(protectedAfter)!==JSON.stringify(protectedBefore)){
+    throw new Error('REVIEW_AUDIO_E4_PROTECTED_STATE_DRIFT');
+  }
+  var after=h3ReviewAudioE4SidecarSummary_(ss,plan);
+  if(after.total_assets!==before.total_assets+results.length){
+    throw new Error('REVIEW_AUDIO_E4_POST_COUNT_MISMATCH');
+  }
+  var remaining=24-after.complete_set_count;
+  return{
+    schema:'H3_REVIEW_AUDIO_E4_BATCH_V1',complete:remaining===0,
+    family:family,sets:batch.map(function(s){return s.set_id;}),
+    asset_count:results.length,duration_ms:new Date().getTime()-started,
+    post_total_assets:after.total_assets,remaining_sets:remaining,counts:after.counts
+  };
+}

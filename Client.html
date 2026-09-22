@@ -632,12 +632,29 @@
 
   function questionDisplayLabel_(
     display,
-    family
+    family,
+    section
   ) {
     var normalized =
       String(display || '')
         .trim()
         .replace(/／/g, '/');
+
+    if (
+      String(family || '') ===
+        'TRANSLATION'
+    ) {
+      var sectionKey =
+        String(section || '')
+          .replace(/^H3-/, '');
+
+      if (sectionKey === 'P11') {
+        return '筆11/翻訳';
+      }
+      if (sectionKey === 'P12') {
+        return '筆12/翻訳';
+      }
+    }
 
     if (normalized) {
       return normalized;
@@ -649,6 +666,50 @@
   }
 
 
+  function appendSafeUnderlineMarkup_(
+    node,
+    text
+  ) {
+    var source =
+      String(text || '');
+    var pattern =
+      /<u>([\s\S]*?)<\/u>/gi;
+    var cursor = 0;
+    var match;
+
+    while (
+      (match = pattern.exec(source))
+    ) {
+      node.appendChild(
+        document.createTextNode(
+          source.slice(
+            cursor,
+            match.index
+          )
+        )
+      );
+
+      var underline =
+        document.createElement('u');
+      underline.textContent =
+        match[1] || '';
+      node.appendChild(
+        underline
+      );
+
+      cursor =
+        match.index +
+        match[0].length;
+    }
+
+    node.appendChild(
+      document.createTextNode(
+        source.slice(cursor)
+      )
+    );
+  }
+
+
   function readingPassageDisplayText_(text) {
     var source =
       String(text || '');
@@ -656,12 +717,29 @@
       /[＊*]\s*[）)]/.test(source);
 
     if (hasExplicitFootnoteBody) {
-      return source;
+      return source
+        .replace(/＊\s*[）)]\s*/g, '* ')
+        .replace(/\*\s*[）)]\s*/g, '* ')
+        .replace(
+          '* 매장：売り',
+          '* 매장：売場'
+        );
     }
 
     return source
       .replace(/＊/g, '')
       .replace(/([가-힣])\*/g, '$1');
+  }
+
+
+  function readingPassageTranslationDisplayText_(
+    text
+  ) {
+    return String(text || '')
+      .replace(
+        /\(×[^)\n]*\)/g,
+        '(　　　　　　　　　　)'
+      );
   }
 
 
@@ -723,12 +801,6 @@
       document.getElementById(
         'questions'
       );
-    var isV2 =
-      !!String(
-        payload.translation_profile ||
-        ''
-      );
-
     payload.questions.forEach(
       function (question, index) {
         var card =
@@ -765,20 +837,6 @@
           );
         }
 
-        if (isV2) {
-          var itemDirection =
-            document.createElement('p');
-          itemDirection.textContent =
-            question.translation_direction ===
-              'KR_TO_JP'
-              ? '韓国語 → 日本語'
-              : '日本語 → 韓国語';
-          card.insertBefore(
-            itemDirection,
-            prompt
-          );
-        }
-
         prompt.textContent = '';
         prompt.appendChild(
           document.createTextNode(
@@ -808,46 +866,6 @@
       }
     );
 
-    var block =
-      el(
-        'section',
-        'question-prompt translation-context'
-      );
-    var title =
-      el(
-        'h2',
-        'question-title'
-      );
-    title.textContent =
-      'Translation';
-    block.appendChild(title);
-
-    var direction =
-      document.createElement('p');
-    if (isV2) {
-      direction.textContent =
-        payload.translation_profile ===
-          'MIXED_1_1'
-          ? '韓国語 → 日本語 / 日本語 → 韓国語'
-          : (
-              payload.translation_profile ===
-                'EDF_KR_TO_JP_2'
-                ? '韓国語 → 日本語'
-                : '日本語 → 韓国語'
-            );
-    } else {
-      direction.textContent =
-        payload.translation_direction ===
-          'KR_TO_JP'
-          ? '韓国語 → 日本語'
-          : '日本語 → 韓国語';
-    }
-    block.appendChild(direction);
-
-    root.insertBefore(
-      block,
-      root.firstChild
-    );
   }
 
   function renderLearningSurface_(
@@ -1807,7 +1825,8 @@
         'Q' + qNo + ' ' +
         questionDisplayLabel_(
           q.display,
-          app.surfaceFamily
+          app.surfaceFamily,
+          q.section
         );
 
       var uncertain = el('button', 'uncertain');
@@ -1857,8 +1876,10 @@
             'div',
             'question-prompt'
           );
-        prompt.textContent =
-          q.question_text;
+        appendSafeUnderlineMarkup_(
+          prompt,
+          q.question_text
+        );
         card.appendChild(prompt);
       }
 
@@ -2839,12 +2860,14 @@
     var ja =
       el(
         'div',
-        'review-translation'
+        'review-translation review-translation-reading'
       );
     var jaText =
       document.createElement('p');
     jaText.textContent =
-      '→ ' + passage.text_ja;
+      readingPassageTranslationDisplayText_(
+        passage.text_ja
+      );
     ja.appendChild(jaText);
     block.appendChild(ja);
 
@@ -3397,6 +3420,27 @@
       'review-technical-ids';
     technical.appendChild(ids);
 
+    var copyIds =
+      el(
+        'button',
+        'copy-button'
+      );
+    copyIds.type = 'button';
+    copyIds.textContent =
+      '技術情報をコピー';
+    copyIds.addEventListener(
+      'click',
+      function () {
+        copyReceipt(
+          ids.textContent,
+          copyIds
+        );
+      }
+    );
+    technical.appendChild(
+      copyIds
+    );
+
     if (
       review.technical &&
       review.technical.receipt
@@ -3618,7 +3662,8 @@
       ' ' +
       questionDisplayLabel_(
         part.display,
-        family
+        family,
+        part.section
       ) +
       '　' +
       part.result
@@ -3863,8 +3908,10 @@
       return;
     }
 
-    node.textContent =
-      part.script_text;
+    appendSafeUnderlineMarkup_(
+      node,
+      part.script_text
+    );
   }
 
 
@@ -3915,6 +3962,33 @@
 
     return container;
   }
+
+  function reviewReasonDisplayText_(
+    part,
+    text
+  ) {
+    var value =
+      String(text || '');
+    var payload =
+      app.payload || {};
+
+    if (
+      payload.set_id ===
+        'H3-20260919-L02' &&
+      part &&
+      part.section === 'K5' &&
+      part.explanation_sha256 ===
+        'd5fbcf3e695219d43ec0068d504067f00a0b1ca4c767cac3b54ace4230f52fc5'
+    ) {
+      return value.replace(
+        '어린이를 위한 책 읽기 행사라고明示されている',
+        '어린이를 위한 책 읽기 행사と明示されている'
+      );
+    }
+
+    return value;
+  }
+
 
   function buildPersistentReviewCard(
     part,
@@ -4103,7 +4177,10 @@
       reason.className =
         'review-reason';
       reason.textContent =
-        part.explanation.reason;
+        reviewReasonDisplayText_(
+          part,
+          part.explanation.reason
+        );
       body.appendChild(reason);
     } else if (
       part.explanation &&

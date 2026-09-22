@@ -1532,9 +1532,20 @@ function h3ProdSubmit_(request) {
         status === 'COMMITTED' &&
         String(row[5] || '') === fingerprint
       ) {
-        return h3ProdParseJson_(
+        var committedResult = h3ProdParseJson_(
           row[8],
           'PRODUCTION_COMMITTED_RESULT_INVALID'
+        );
+        return h3MultiSkillAttachCapture_(
+          committedResult,
+          function () {
+            return h3MultiSkillListeningStoredCapture_(
+              spreadsheet,
+              String(row[1] || ''),
+              String(row[0] || ''),
+              String(row[6] || '')
+            );
+          }
         );
       }
 
@@ -1596,7 +1607,17 @@ function h3ProdSubmit_(request) {
             );
           }
 
-          return storedResult;
+          return h3MultiSkillAttachCapture_(
+            storedResult,
+            function () {
+              return h3MultiSkillListeningStoredCapture_(
+                spreadsheet,
+                String(row[1] || ''),
+                String(row[0] || ''),
+                String(row[6] || '')
+              );
+            }
+          );
         }
 
         if (current.sha256 === preHash) {
@@ -1635,6 +1656,10 @@ function h3ProdSubmit_(request) {
     }
 
     var context = h3ProdReadContext_(
+      spreadsheet,
+      request.set_id
+    );
+    h3MultiSkillListeningStoredPreflight_(
       spreadsheet,
       request.set_id
     );
@@ -1745,7 +1770,17 @@ function h3ProdSubmit_(request) {
       );
     }
 
-    return result;
+    return h3MultiSkillAttachCapture_(
+      result,
+      function () {
+        return h3MultiSkillListeningStoredCapture_(
+          spreadsheet,
+          context.setId,
+          txnId,
+          nowText
+        );
+      }
+    );
   } catch (err) {
     if (
       spreadsheet &&

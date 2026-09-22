@@ -135,17 +135,49 @@ jobs:
         if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
         shell: bash
         run: |
-          if ! git log -1 --pretty=%B | grep -Fq '[gcp-project-readonly-diagnostic]'; then
+          if ! git log -1 --pretty=%B | grep -Fq '[gcp-project-readonly-diagnostic-v2]'; then
             echo 'Diagnostic marker absent; skipped.'
             exit 0
           fi
           python3 - <<'PY'
-          import json, urllib.request, urllib.error, datetime
+          import json, urllib.request, urllib.error, urllib.parse, datetime
           from pathlib import Path
 
           rc = json.loads((Path.home()/'.clasprc.json').read_text(encoding='utf-8'))
           cred = (rc.get('tokens') or {}).get('default') or rc.get('token') or {}
-          token = cred.get('access_token')
+
+          def refresh_access_token():
+              cid = cred.get('client_id')
+              csec = cred.get('client_secret')
+              rt = cred.get('refresh_token')
+              if not (cid and csec and rt):
+                  print('GCP_DIAG refresh_material=missing')
+                  return None
+              body = urllib.parse.urlencode({
+                  'client_id': cid,
+                  'client_secret': csec,
+                  'refresh_token': rt,
+                  'grant_type': 'refresh_token'
+              }).encode('utf-8')
+              req = urllib.request.Request(
+                  'https://oauth2.googleapis.com/token',
+                  data=body,
+                  headers={'Content-Type':'application/x-www-form-urlencoded'},
+                  method='POST'
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as resp:
+                      data = json.loads(resp.read().decode('utf-8'))
+                      print('GCP_DIAG refresh_status=' + str(resp.status))
+                      return data.get('access_token')
+              except urllib.error.HTTPError as e:
+                  print('GCP_DIAG refresh_status=' + str(e.code))
+                  return None
+              except Exception:
+                  print('GCP_DIAG refresh_status=0')
+                  return None
+
+          token = refresh_access_token() or cred.get('access_token')
           if not token:
               print('GCP_DIAG access_token=missing')
               raise SystemExit(0)

@@ -151,6 +151,30 @@ function h3ReviewAudioLegacy5WScript_(q){
   throw new Error('REVIEW_AUDIO_5W_SECTION_UNSUPPORTED:'+sec);
 }
 
+function h3ReviewAudioCanonicalize5WScript_(q,sec,script){
+  var s=h3ReviewAudioNormalizeText_(script);
+  if(sec!=='D5')return s;
+
+  var surface=q.question_surface||q.question_body||'';
+  var body=typeof surface==='string'?
+    surface:
+    String((surface&&surface.body)||(surface&&surface.rendered)||q.question_body||'');
+  var correct=String(q.correct_answer_text||'').trim();
+  var lines=h3ReviewAudioExtractHangulLines_(body);
+
+  if(lines.length>=2&&correct){
+    return h3ReviewAudioNormalizeText_(lines.slice(0,2).map(function(x){
+      return h3ReviewAudioFillBlank_(x.replace(/^[・•]\s*/,''),correct);
+    }).join('\n'));
+  }
+
+  var split=s.replace(/([.!?。？！])\s+(?=[가-힣])/g,'$1\n');
+  if(split.indexOf('\n')<0){
+    throw new Error('REVIEW_AUDIO_5W_D5_CANONICAL_NEWLINE_UNRESOLVED');
+  }
+  return h3ReviewAudioNormalizeText_(split);
+}
+
 function h3ReviewAudioVoiceByLabel_(label){
   var v=H3_REVIEW_AUDIO_VOICES_.filter(function(x){return x.label===String(label||'');})[0];
   if(!v)throw new Error('REVIEW_AUDIO_VOICE_LABEL_INVALID:'+label);
@@ -239,6 +263,7 @@ function h3ReviewAudioPlan5W_(ss,setId){
   return qs.map(function(q,i){
     var sec=String(q.section||('D'+(i+2)));
     var script=String(q.script_text||'').trim()||h3ReviewAudioLegacy5WScript_(q);
+    script=h3ReviewAudioCanonicalize5WScript_(q,sec,script);
     return h3ReviewAudioPlanEntry_(
       '5W',setId,sec,script,
       {sheet:source,source_schema:payload.schema||payload.reconstruction_schema||'',section:sec,q_no:i+1},

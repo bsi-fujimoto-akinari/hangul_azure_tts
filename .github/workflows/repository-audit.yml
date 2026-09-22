@@ -3051,12 +3051,14 @@ jobs:
 
           for needle in [
               '.audio-seek-controls {',
-              'min-height: 48px;',
-              'border-radius: 14px;',
-              'flex: 0 0 56px;',
+              'min-height: 34px;',
+              'border-radius: 9px;',
+              'flex: 0 0 40px;',
               '--seek-fill: 0%;',
               '.audio-seek::-webkit-slider-runnable-track',
+              '.audio-seek::-webkit-slider-thumb',
               '.audio-seek::-moz-range-progress',
+              '.audio-seek::-moz-range-thumb',
           ]:
               if needle not in style:
                   raise SystemExit(

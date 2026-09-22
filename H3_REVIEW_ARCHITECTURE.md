@@ -528,7 +528,7 @@ Historical Listening display correction:
 
 Shared learner-facing explanation style is governed by
 `H3_REVIEW_EXPLANATION_STYLE_CONTRACT.md`
-(`H3-REVIEW-EXPLANATION-STYLE-20260922-V1`).
+(`H3-REVIEW-EXPLANATION-STYLE-20260923-V3`).
 
 The contract defines Japanese Review explanation meta-text as the explanatory semantic
 roles corresponding to `reason`, `learning_blocks[].usage`, and

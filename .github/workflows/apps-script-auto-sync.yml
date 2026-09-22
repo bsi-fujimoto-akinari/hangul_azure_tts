@@ -110,6 +110,52 @@ jobs:
           path.chmod(0o600)
           PY
 
+      - name: Diagnose clasp auth safely
+        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
+        shell: bash
+        run: |
+          if ! git log -1 --pretty=%B | grep -Fq '[clasp-auth-diagnostic]'; then
+            echo 'Diagnostic marker absent; skipped.'
+            exit 0
+          fi
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          DEFAULT_CLIENT_ID = '1072944905499-vm2v2i5dvn0a0d2o4ca36i1vge8cvbn0.apps.googleusercontent.com'
+          data = json.loads((Path.home()/'.clasprc.json').read_text(encoding='utf-8'))
+
+          fmt = 'unknown'
+          cred = None
+          if isinstance(data.get('tokens'), dict):
+              fmt = 'v3'
+              cred = data['tokens'].get('default')
+          elif isinstance(data.get('token'), dict):
+              fmt = 'legacy_v1_local'
+              cred = dict(data['token'])
+              settings = data.get('oauth2ClientSettings') or {}
+              if not cred.get('client_id'):
+                  cred['client_id'] = settings.get('clientId')
+          elif isinstance(data, dict) and data.get('client_id'):
+              fmt = 'authorized_user'
+              cred = data
+
+          cred = cred or {}
+          cid = str(cred.get('client_id') or '')
+          if not cid:
+              kind = 'missing'
+          elif cid == DEFAULT_CLIENT_ID:
+              kind = 'google_default'
+          else:
+              kind = 'custom'
+
+          print(f'credential_format={fmt}')
+          print(f'client_kind={kind}')
+          print(f'has_refresh_token={bool(cred.get("refresh_token"))}')
+          print(f'has_access_token={bool(cred.get("access_token"))}')
+          print('secret_values_printed=false')
+          PY
+
       - name: Verify exact Apps Script target
         if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
         shell: bash

@@ -9308,6 +9308,11 @@ jobs:
           const vm = require('vm');
           const assert = require('assert');
 
+          const surfaceCommonText =
+            fs.readFileSync(
+              'WebAppSurfaceCommon.js',
+              'utf8'
+            );
           const coreText =
             fs.readFileSync(
               'WebAppReviewCore.js',
@@ -9380,6 +9385,13 @@ jobs:
             Error
           };
           vm.createContext(context);
+          vm.runInContext(
+            surfaceCommonText,
+            context,
+            {
+              filename: 'WebAppSurfaceCommon.js'
+            }
+          );
           vm.runInContext(
             coreText,
             context,

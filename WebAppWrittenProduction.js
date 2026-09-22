@@ -389,10 +389,40 @@ function h3WrittenReviewAuthoring_(context) {
         }
       );
 
-      return h3WrittenParseJson_(
-        JSON.stringify(review),
-        'WRITTEN_REVIEW_AUTHORING_CLONE_FAILED'
+      var authored =
+        h3WrittenParseJson_(
+          JSON.stringify(review),
+          'WRITTEN_REVIEW_AUTHORING_CLONE_FAILED'
+        );
+      var correctSurfaces = [
+        String(
+          question.choices[
+            Number(question.answer_pos) - 1
+          ] || ''
+        )
+      ];
+
+      String(
+        h3WrittenReviewScriptForQuestion_(
+          context,
+          index
+        ) || ''
+      )
+        .split(/\r?\n/)
+        .forEach(function (line) {
+          if (String(line || '').trim()) {
+            correctSurfaces.push(line);
+          }
+        });
+
+      h3ReviewExplanationStyleValidateAuthoring_(
+        authored,
+        correctSurfaces,
+        '5W_FUTURE_Q' +
+          String(index + 1)
       );
+
+      return authored;
     }
   );
 }

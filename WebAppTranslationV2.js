@@ -94,7 +94,7 @@ function h3TranslationV2ValidateItem_(item, index) {
     throw new Error('TRANSLATION_V2_SOURCE_ITEM_SHA256_INVALID:' + index);
   }
   var lang = h3TranslationLanguageContract_(direction);
-  return {
+  var out = {
     item_id:h3TranslationActivationRequireId_(item.item_id,'TRANSLATION_V2_ITEM_ID_INVALID:' + index),
     question_key:h3TranslationActivationRequireId_(item.question_key,'TRANSLATION_V2_QUESTION_KEY_INVALID:' + index),
     section_key:section,
@@ -107,12 +107,17 @@ function h3TranslationV2ValidateItem_(item, index) {
     source_reference:String(item.source_reference || ''),
     source_item_sha256:sourceItemSha256,
     surface_key:h3TranslationActivationRequireId_(item.surface_key,'TRANSLATION_V2_SURFACE_KEY_INVALID:' + index),
-    secondary_evidence_links:h3TranslationV2SecondaryLinks_(item.secondary_evidence_links),
     target_segment:target,
     question_text:question,
     choices:choices,
     correct_choice:correct
   };
+  var secondaryLinks =
+    h3TranslationV2SecondaryLinks_(item.secondary_evidence_links);
+  if (secondaryLinks.length) {
+    out.secondary_evidence_links = secondaryLinks;
+  }
+  return out;
 }
 
 function h3TranslationV2LockBundle_(source) {

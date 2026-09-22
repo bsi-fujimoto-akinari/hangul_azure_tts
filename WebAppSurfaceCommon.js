@@ -247,7 +247,7 @@ function h3LearningSurfaceLegacyReviewMetadata_(
 
 
 var H3_REVIEW_EXPLANATION_STYLE_CONTRACT_ID_ =
-  'H3-REVIEW-EXPLANATION-STYLE-20260922-V2';
+  'H3-REVIEW-EXPLANATION-STYLE-20260923-V3';
 
 
 function h3ReviewExplanationStyleComparable_(value) {

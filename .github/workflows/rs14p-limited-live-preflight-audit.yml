@@ -1,0 +1,363 @@
+name: RS14P Limited Live Preflight Audit
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify RS-14P prelive contract and fixtures
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const assert = require('assert');
+
+          const soft = fs.readFileSync('WebAppRtSoftSignal.js','utf8');
+          const shadow = fs.readFileSync('WebAppMultiSkillShadow.js','utf8');
+          const preflight = fs.readFileSync('WebAppRtSoftSignalPreflight.js','utf8');
+
+          const context = {console,JSON,Number,String,Object,Array,Math,Date};
+          context.globalThis = context;
+          vm.createContext(context);
+          vm.runInContext(soft, context);
+          vm.runInContext(shadow, context);
+          vm.runInContext(preflight, context);
+
+          const contract = context.h3Rs14pDescribeContract_();
+          assert.strictEqual(
+            contract.contract_id,
+            'H3-RS14P-LIMITED-LIVE-PREFLIGHT-20260922-V1'
+          );
+          assert.strictEqual(contract.production_wired,false);
+          assert.strictEqual(contract.rs14_active,false);
+          assert.strictEqual(contract.soft_signal.incidental_live_use,false);
+          assert.strictEqual(contract.soft_signal.cap_per_component,1);
+          assert.deepStrictEqual(
+            Array.from(contract.soft_signal.components),
+            ['X_PRESENT','TRIANGLE_PRESENT']
+          );
+
+          function candidate(o) {
+            return Object.assign({
+              level:'3級',
+              family:'WRITTEN',
+              skill_id:'H3-P2-SK001',
+              translation_direction:'',
+              edf_rank:1,
+              balance_rank:1,
+              coverage_rank:1,
+              skill_priority_rank:1,
+              deterministic_key:'A'
+            },o||{});
+          }
+
+          const target = candidate({
+            skill_id:'H3-P4-SK011',
+            deterministic_key:'B'
+          });
+
+          const snapshot = {
+            schema:'H3_RS10_SOFT_SIGNAL_SNAPSHOT_V1',
+            observations:[
+              {
+                level:'3級',
+                source_family:'LISTENING',
+                target_skill_id:'H3-P4-SK011',
+                target_family:'WRITTEN',
+                target_section_key:'H3-P4',
+                concept_id:'EXPR:대책이_안_서다',
+                role:'CONTRIBUTORY',
+                result:'×'
+              },
+              {
+                level:'3級',
+                source_family:'LISTENING',
+                target_skill_id:'H3-P4-SK011',
+                target_family:'WRITTEN',
+                target_section_key:'H3-P4',
+                concept_id:'EXPR:마음을_놓다',
+                role:'CONTRIBUTORY',
+                result:'×'
+              },
+              {
+                level:'3級',
+                source_family:'LISTENING',
+                target_skill_id:'H3-P4-SK011',
+                target_family:'WRITTEN',
+                target_section_key:'H3-P4',
+                concept_id:'VOCAB:답답하다',
+                role:'CONTRIBUTORY',
+                result:'△'
+              },
+              {
+                level:'3級',
+                source_family:'READING',
+                target_skill_id:'H3-P4-SK011',
+                target_family:'WRITTEN',
+                target_section_key:'H3-P4',
+                concept_id:'IGNORED:INCIDENTAL',
+                role:'INCIDENTAL',
+                result:'×'
+              }
+            ]
+          };
+
+          assert.deepStrictEqual(
+            Array.from(
+              context.h3Rs14pContributoryBinaryVectorForCandidate_(
+                target,
+                snapshot
+              )
+            ),
+            [1,1]
+          );
+
+          const incidentalOnly = {
+            observations:[{
+              level:'3級',
+              source_family:'LISTENING',
+              target_skill_id:'H3-P4-SK011',
+              target_family:'WRITTEN',
+              target_section_key:'H3-P4',
+              concept_id:'X',
+              role:'INCIDENTAL',
+              result:'×'
+            }]
+          };
+          assert.deepStrictEqual(
+            Array.from(
+              context.h3Rs14pContributoryBinaryVectorForCandidate_(
+                target,
+                incidentalOnly
+              )
+            ),
+            [0,0]
+          );
+
+          const translationCandidate = candidate({
+            family:'TRANSLATION',
+            skill_id:'H3-P11-SK013',
+            translation_direction:'KR_TO_JP',
+            deterministic_key:'T'
+          });
+          const translationSnapshot = {
+            observations:[
+              {
+                level:'3級',
+                source_family:'WRITTEN',
+                target_skill_id:'H3-P11-SK013',
+                target_family:'TRANSLATION',
+                target_section_key:'H3-P11',
+                concept_id:'GRAM:-ㄹ_틈이_없다',
+                role:'CONTRIBUTORY',
+                result:'×'
+              }
+            ]
+          };
+          assert.deepStrictEqual(
+            Array.from(
+              context.h3Rs14pContributoryBinaryVectorForCandidate_(
+                translationCandidate,
+                translationSnapshot
+              )
+            ),
+            [1,0]
+          );
+          assert.deepStrictEqual(
+            Array.from(
+              context.h3Rs14pContributoryBinaryVectorForCandidate_(
+                {...translationCandidate,translation_direction:'JP_TO_KR'},
+                translationSnapshot
+              )
+            ),
+            [0,0]
+          );
+
+          function assertPrimaryDominates(field) {
+            const a=candidate({
+              deterministic_key:'A',
+              skill_id:'H3-P2-SK001'
+            });
+            const b=candidate({
+              deterministic_key:'B',
+              skill_id:'H3-P4-SK011'
+            });
+            a[field]=1;
+            b[field]=2;
+            const higherFields=[
+              'edf_rank','balance_rank','coverage_rank','skill_priority_rank'
+            ];
+            const idx=higherFields.indexOf(field);
+            for(let i=0;i<idx;i++) {
+              a[higherFields[i]]=1;
+              b[higherFields[i]]=1;
+            }
+            const ranked=context.h3Rs14pRankPilot_([b,a],snapshot);
+            assert.strictEqual(ranked[0].deterministic_key,'A');
+          }
+          assertPrimaryDominates('edf_rank');
+          assertPrimaryDominates('balance_rank');
+          assertPrimaryDominates('coverage_rank');
+          assertPrimaryDominates('skill_priority_rank');
+
+          const tiedA=candidate({
+            skill_id:'H3-P2-SK001',
+            deterministic_key:'A'
+          });
+          const tiedB=candidate({
+            skill_id:'H3-P4-SK011',
+            deterministic_key:'B'
+          });
+          const dual=context.h3Rs14pDualRun_(
+            [tiedB,tiedA],
+            snapshot
+          );
+          assert.strictEqual(dual.scheduler_applied,false);
+          assert.strictEqual(dual.baseline[0].deterministic_key,'A');
+          assert.strictEqual(dual.pilot[0].deterministic_key,'B');
+          assert.strictEqual(dual.differences.length,2);
+          assert.strictEqual(
+            dual.differences[0].primary_key,
+            dual.differences[1].primary_key
+          );
+
+          const sh=context.H3_MULTI_SKILL_SHADOW_HEADERS_;
+          function srow(o) {
+            const base={
+              OBSERVATION_ID:'MSO|1',
+              LINK_ID:'L1',
+              EVIDENCE_EVENT_ID:'E1',
+              LEVEL:'3級',
+              SOURCE_FAMILY:'LISTENING',
+              TARGET_FAMILY:'WRITTEN',
+              TARGET_SKILL_ID:'H3-P4-SK011',
+              CONCEPT_ID:'C1',
+              LINK_ROLE:'CONTRIBUTORY',
+              SOURCE_RESULT:'×',
+              PROVENANCE_KIND:'AUTHOR_VERIFIED_EXACT',
+              MAPPING_STATUS:'ACTIVE_PILOT',
+              CROSS_FAMILY:'TRUE',
+              TRANSFER_SAFE:'TRUE',
+              SOFT_SIGNAL_CLASS:'CONTRIBUTORY_X',
+              SCHEDULER_APPLIED:'FALSE',
+              SHADOW_ONLY:'TRUE',
+              OBSERVED_AT:'2026-09-22T12:00:00+09:00',
+              STATUS:'PASS_SHADOW_OBSERVED',
+              NOTES:''
+            };
+            const obj=Object.assign(base,o||{});
+            return sh.map(k=>obj[k] ?? '');
+          }
+
+          const notReady=context.h3Rs14pEvaluateActivationGateFromShadowValues_([
+            sh,
+            srow({EVIDENCE_EVENT_ID:'E1'})
+          ]);
+          assert.strictEqual(notReady.gate_pass,false);
+          assert(notReady.reasons.includes('INSUFFICIENT_DISTINCT_EVENTS'));
+          assert(notReady.reasons.includes('INSUFFICIENT_CONCEPTS'));
+          assert(notReady.reasons.includes('INSUFFICIENT_SOURCE_FAMILIES'));
+
+          const passRows=[sh];
+          for(let i=1;i<=6;i++) {
+            passRows.push(srow({
+              OBSERVATION_ID:'MSO|'+i,
+              LINK_ID:'L'+i,
+              EVIDENCE_EVENT_ID:'E'+i,
+              CONCEPT_ID:i<=3 ? 'C1' : 'C2',
+              SOURCE_FAMILY:i%2 ? 'LISTENING' : 'WRITTEN',
+              TARGET_FAMILY:i%2 ? 'WRITTEN' : 'TRANSLATION',
+              TARGET_SKILL_ID:i%2 ? 'H3-P4-SK011' : 'H3-P11-SK013',
+              SOURCE_RESULT:i===1 ? '×' : '○',
+              SOFT_SIGNAL_CLASS:i===1
+                ? 'CONTRIBUTORY_X'
+                : 'NO_BOOST_CORRECT'
+            }));
+          }
+          const ready=context.h3Rs14pEvaluateActivationGateFromShadowValues_(
+            passRows
+          );
+          assert.strictEqual(ready.gate_pass,true);
+          assert.strictEqual(ready.metrics.distinct_event_count,6);
+          assert.strictEqual(ready.metrics.concept_count,2);
+          assert.strictEqual(ready.metrics.source_family_count,2);
+          assert.strictEqual(ready.metrics.unsafe_rows,0);
+          assert.strictEqual(ready.metrics.scheduler_applied_true,0);
+
+          const unsafeRows=passRows.map(r=>r.slice());
+          unsafeRows[1][sh.indexOf('TRANSFER_SAFE')]='FALSE';
+          const unsafe=context.h3Rs14pEvaluateActivationGateFromShadowValues_(
+            unsafeRows
+          );
+          assert.strictEqual(unsafe.gate_pass,false);
+          assert(unsafe.reasons.includes('UNSAFE_SHADOW_ROWS'));
+
+          const rollback=context.h3Rs14pControlDecision_(dual,{
+            schema:'H3_RS14P_CONTROL_V1',
+            soft_signal_enabled:false,
+            activation_gate_pass:false,
+            simulation_only:false
+          });
+          assert.strictEqual(rollback.mode,'BASELINE_ROLLBACK');
+          assert.deepStrictEqual(
+            JSON.parse(JSON.stringify(rollback.selected)),
+            JSON.parse(JSON.stringify(dual.baseline))
+          );
+          assert.strictEqual(rollback.scheduler_applied,false);
+
+          assert.throws(
+            () => context.h3Rs14pControlDecision_(dual,{
+              schema:'H3_RS14P_CONTROL_V1',
+              soft_signal_enabled:true,
+              activation_gate_pass:false,
+              simulation_only:true
+            }),
+            /LIVE_ENABLE_WITHOUT_ACTIVATION_GATE/
+          );
+
+          const simulated=context.h3Rs14pControlDecision_(dual,{
+            schema:'H3_RS14P_CONTROL_V1',
+            soft_signal_enabled:true,
+            activation_gate_pass:true,
+            simulation_only:true
+          });
+          assert.strictEqual(simulated.mode,'SIMULATED_LIMITED_LIVE');
+          assert.strictEqual(simulated.scheduler_applied,false);
+          assert.deepStrictEqual(
+            JSON.parse(JSON.stringify(simulated.selected)),
+            JSON.parse(JSON.stringify(dual.pilot))
+          );
+
+          assert.throws(
+            () => context.h3Rs14pControlDecision_(dual,{
+              schema:'H3_RS14P_CONTROL_V1',
+              soft_signal_enabled:true,
+              activation_gate_pass:true,
+              simulation_only:false
+            }),
+            /PRODUCTION_WIRING_FORBIDDEN_IN_PREFLIGHT/
+          );
+
+          // Preflight module must not be called from production scheduler code.
+          const treeFiles=[
+            'WebAppProduction.js',
+            'WebAppWrittenProduction.js',
+            'WebAppReadingProduction.js',
+            'WebAppTranslationV2Production.js',
+            'WebAppRtScheduler.js'
+          ];
+          treeFiles.forEach(file=>{
+            if(!fs.existsSync(file)) return;
+            const source=fs.readFileSync(file,'utf8');
+            assert(!source.includes('h3Rs14p'));
+            assert(!source.includes('H3_RS14P'));
+          });
+
+          console.log('RS-14P limited-live preflight audit passed.');
+          NODE

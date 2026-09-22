@@ -705,5 +705,3 @@ function h3ReviewAudioSelfCheck_(){
   });
   return{ok:true,set_count:p.set_count,asset_count:p.asset_count,counts:p.counts};
 }
-
-// CLASP_AUTH_DIAGNOSTIC_NOOP_20260922

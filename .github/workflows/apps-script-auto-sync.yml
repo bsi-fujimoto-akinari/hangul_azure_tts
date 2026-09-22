@@ -147,6 +147,76 @@ jobs:
             exit 1
           fi
 
+      - name: Create and verify API executable deployment
+        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
+        shell: bash
+        run: |
+          if ! git log -1 --pretty=%B | grep -Fq '[api-exec-deploy]'; then
+            echo 'API executable deployment marker absent; skipped.'
+            exit 0
+          fi
+
+          npx -y @google/clasp@3.4.0 create-deployment \
+            --description "Review audio API executable 2026-09-22" \
+            --json > /tmp/api-exec-deployment.json
+
+          python3 - <<'PY'
+          import json, urllib.parse, urllib.request
+          from pathlib import Path
+
+          script_id = '1p_e1jKICTZXHpCrQ7rwU9HilloZdkFBpHry_lCq5YgXpaiU4FNEQlDa-'
+          dep = json.loads(Path('/tmp/api-exec-deployment.json').read_text(encoding='utf-8'))
+          deployment_id = dep.get('deploymentId')
+          version_number = dep.get('versionNumber')
+          if not deployment_id or not version_number:
+              raise SystemExit('Deployment creation did not return deploymentId/versionNumber')
+
+          rc = json.loads((Path.home()/'.clasprc.json').read_text(encoding='utf-8'))
+          cred = (rc.get('tokens') or {}).get('default') or {}
+          required = ['client_id','client_secret','refresh_token']
+          missing = [k for k in required if not cred.get(k)]
+          if missing:
+              raise SystemExit('Missing clasp credential fields: ' + ','.join(missing))
+
+          body = urllib.parse.urlencode({
+              'client_id': cred['client_id'],
+              'client_secret': cred['client_secret'],
+              'refresh_token': cred['refresh_token'],
+              'grant_type': 'refresh_token',
+          }).encode('utf-8')
+          req = urllib.request.Request(
+              'https://oauth2.googleapis.com/token',
+              data=body,
+              headers={'Content-Type':'application/x-www-form-urlencoded'},
+              method='POST',
+          )
+          with urllib.request.urlopen(req) as resp:
+              token = json.loads(resp.read().decode('utf-8')).get('access_token')
+          if not token:
+              raise SystemExit('OAuth refresh did not return access_token')
+
+          url = f'https://script.googleapis.com/v1/projects/{script_id}/deployments/{deployment_id}'
+          req = urllib.request.Request(url, headers={'Authorization': f'Bearer {token}'})
+          with urllib.request.urlopen(req) as resp:
+              data = json.loads(resp.read().decode('utf-8'))
+
+          entry_points = data.get('entryPoints') or []
+          entry_types = [ep.get('entryPointType') for ep in entry_points]
+          exec_eps = [ep for ep in entry_points if ep.get('entryPointType') == 'EXECUTION_API']
+          if not exec_eps:
+              raise SystemExit('Created deployment has no EXECUTION_API entry point')
+
+          access = ((exec_eps[0].get('executionApi') or {}).get('entryPointConfig') or {}).get('access')
+          if access != 'MYSELF':
+              raise SystemExit(f'Unexpected execution API access: {access!r}')
+
+          print(f'deployment_id={deployment_id}')
+          print(f'version_number={version_number}')
+          print('entry_types=' + ','.join(x for x in entry_types if x))
+          print(f'execution_api_access={access}')
+          print('secret_values_printed=false')
+          PY
+
       - name: Read deployment inventory
         if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
         shell: bash

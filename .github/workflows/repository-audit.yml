@@ -9346,7 +9346,7 @@ jobs:
 
           assert(
             contractText.includes(
-              'H3-REVIEW-EXPLANATION-STYLE-20260922-V2'
+              'H3-REVIEW-EXPLANATION-STYLE-20260923-V3'
             )
           );
           assert(
@@ -9409,7 +9409,7 @@ jobs:
           );
           assert.strictEqual(
             selfCheck.contract_id,
-            'H3-REVIEW-EXPLANATION-STYLE-20260922-V2'
+            'H3-REVIEW-EXPLANATION-STYLE-20260923-V3'
           );
           assert.strictEqual(
             selfCheck.known_example_fix_count,

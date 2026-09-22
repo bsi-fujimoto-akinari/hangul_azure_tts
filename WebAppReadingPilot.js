@@ -306,6 +306,11 @@ function h3ReadingLockBundle_(
   var items =
     source.items.map(
       function (item) {
+        var secondaryLinks =
+          h3ReadingSecondaryLinks_(
+            item.secondary_evidence_links
+          );
+
         var hashObject = {
           item_id:
             item.item_id,
@@ -332,14 +337,15 @@ function h3ReadingLockBundle_(
           passage_id:
             source.passage.passage_id,
           passage_sha256:
-            passageSha,
-          secondary_evidence_links:
-            h3ReadingSecondaryLinks_(
-              item.secondary_evidence_links
-            )
+            passageSha
         };
 
-        return {
+        if (secondaryLinks.length) {
+          hashObject.secondary_evidence_links =
+            secondaryLinks;
+        }
+
+        var lockedItem = {
           item_id:
             item.item_id,
           question_key:
@@ -376,11 +382,16 @@ function h3ReadingLockBundle_(
             source.passage.passage_id,
           passage_sha256:
             passageSha,
-          secondary_evidence_links:
-            hashObject.secondary_evidence_links,
           item_sha256:
             h3ReadingHash_(hashObject)
         };
+
+        if (secondaryLinks.length) {
+          lockedItem.secondary_evidence_links =
+            secondaryLinks;
+        }
+
+        return lockedItem;
       }
     );
 

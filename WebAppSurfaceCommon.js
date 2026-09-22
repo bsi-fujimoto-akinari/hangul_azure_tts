@@ -596,15 +596,30 @@ function h3ReviewExplanationStyleMapUnquotedLine_(
 function h3ReviewExplanationStyleNormalizeMetaText_(
   value
 ) {
-  return String(value || '')
-    .split('\n')
-    .map(function (line) {
-      return h3ReviewExplanationStyleMapUnquotedLine_(
-        line,
-        h3ReviewExplanationStylePlainSegment_
-      );
-    })
-    .join('\n');
+  var normalized =
+    String(value || '')
+      .split('\n')
+      .map(function (line) {
+        return h3ReviewExplanationStyleMapUnquotedLine_(
+          line,
+          h3ReviewExplanationStylePlainSegment_
+        );
+      })
+      .join('\n');
+
+  // Two historical constructions cross a quoted gloss boundary, so the
+  // segment-wise normalizer cannot see the predicate as a whole.
+  normalized = normalized
+    .replace(
+      '時間だけでなく、気持ち・経済面などにも使える「余裕がない」だ。',
+      '時間だけでなく、気持ち・経済面などにも使える「余裕がない」という表現。'
+    )
+    .replace(
+      /사흘 は固有語で「([^」]+)」だ。/g,
+      '사흘 は「$1」を表す固有語。'
+    );
+
+  return normalized;
 }
 
 
@@ -1203,6 +1218,10 @@ function h3ReviewExplanationStyleSelfCheck_() {
       '共通して入るのは 세우다 だ。'
     ) !==
       '共通して入るのは 세우다。' ||
+    h3ReviewExplanationStyleNormalizeMetaText_(
+      '사흘 は固有語で「3日」だ。'
+    ) !==
+      '사흘 は「3日」を表す固有語。' ||
     h3ReviewExplanationStyleHasPoliteMeta_(
       probe.reason
     ) ||

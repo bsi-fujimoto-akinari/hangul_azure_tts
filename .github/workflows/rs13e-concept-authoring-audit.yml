@@ -1,0 +1,263 @@
+name: RS13E Concept Authoring Audit
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify RS-13E Concept authoring gate
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const assert = require('assert');
+
+          const capture = fs.readFileSync('WebAppMultiSkillEvidence.js','utf8');
+          const authoring = fs.readFileSync('WebAppConceptAuthoring.js','utf8');
+
+          const context = {console,JSON,Number,String,Object,Array,Math,Date};
+          context.SpreadsheetApp = {flush() {}};
+          context.globalThis = context;
+          vm.createContext(context);
+          vm.runInContext(capture, context);
+          vm.runInContext(authoring, context);
+
+          assert.strictEqual(
+            context.H3_RS13E_CONTRACT_ID_,
+            'H3-RS13E-CONCEPT-AUTHORING-20260922-V1'
+          );
+          assert.strictEqual(
+            context.H3_RS13E_AUTO_ANNOTATION_CONTRACT_ID_,
+            'H3-RS13E-AUTO-ANNOTATION-20260922-V1'
+          );
+
+          assert.strictEqual(
+            context.h3Rs13eWrittenEligible_({blockNo:2,setOffset:1}),
+            false
+          );
+          assert.strictEqual(
+            context.h3Rs13eWrittenEligible_({blockNo:2,setOffset:2}),
+            true
+          );
+          assert.strictEqual(context.h3Rs13eListeningEligible_(4),false);
+          assert.strictEqual(context.h3Rs13eListeningEligible_(5),true);
+          assert.strictEqual(context.h3Rs13eReadingEligible_(3),false);
+          assert.strictEqual(context.h3Rs13eReadingEligible_(4),true);
+          assert.strictEqual(context.h3Rs13eTranslationEligible_(3),false);
+          assert.strictEqual(context.h3Rs13eTranslationEligible_(4),true);
+
+          const ch = context.H3_MULTI_SKILL_CONCEPT_HEADERS_;
+          const eh = context.H3_MULTI_SKILL_HEADERS_;
+          function row(headers,obj) {
+            return headers.map(k =>
+              Object.prototype.hasOwnProperty.call(obj,k) ? obj[k] : ''
+            );
+          }
+          function concept(o) {
+            return row(ch,Object.assign({
+              LEVEL:'3級',
+              CONCEPT_DOMAIN:'EXPRESSION',
+              CONCEPT_LABEL:'x',
+              APPLICATION_LABEL:'x',
+              MAPPING_ROLE:'APPLICATION_SKILL',
+              MATCH_TYPE:'EXACT_EXPRESSION_SEMANTICS',
+              CONFIDENCE:'HIGH',
+              DIRECT_REUSE:'NO',
+              STATE_TRANSFER:'NO',
+              RETEST_CLOSURE:'NO',
+              STABILITY_TRANSFER:'NO',
+              SCHEDULER_USE:'DIAGNOSTIC_SELECTION_ONLY',
+              STATUS:'ACTIVE_PILOT'
+            },o));
+          }
+
+          const concepts = [
+            ch,
+            concept({
+              CONCEPT_ID:'EXPR:대책이_안_서다',
+              SKILL_ID:'H3-K2-SK006',
+              FAMILY:'LISTENING',
+              SECTION_KEY:'H3-K2'
+            }),
+            concept({
+              CONCEPT_ID:'EXPR:대책이_안_서다',
+              SKILL_ID:'H3-P4-SK011',
+              FAMILY:'WRITTEN',
+              SECTION_KEY:'H3-P4'
+            }),
+            concept({
+              CONCEPT_ID:'VOCAB:답답하다',
+              CONCEPT_DOMAIN:'VOCABULARY',
+              CONCEPT_LABEL:'답답하다',
+              SKILL_ID:'H3-K2-SK063',
+              FAMILY:'LISTENING',
+              SECTION_KEY:'H3-K2',
+              MATCH_TYPE:'EXACT_LEXEME_MATCH'
+            }),
+            concept({
+              CONCEPT_ID:'VOCAB:답답하다',
+              CONCEPT_DOMAIN:'VOCABULARY',
+              CONCEPT_LABEL:'답답하다',
+              SKILL_ID:'H3-P2-SK012',
+              FAMILY:'WRITTEN',
+              SECTION_KEY:'H3-P2',
+              MATCH_TYPE:'EXACT_LEXEME_MATCH'
+            }),
+            concept({
+              CONCEPT_ID:'DROP:ANALOGUE',
+              SKILL_ID:'H3-K3-SK001',
+              FAMILY:'LISTENING',
+              SECTION_KEY:'H3-K3',
+              MATCH_TYPE:'FUNCTIONAL_ANALOGUE'
+            })
+          ];
+
+          const listen = context.h3Rs13eAutoLinksFromValues_(
+            '3級','LISTENING','H3-K2-SK006',concepts
+          );
+          assert.strictEqual(listen.length,1);
+          assert.strictEqual(listen[0].target_skill_id,'H3-P4-SK011');
+          assert.strictEqual(listen[0].concept_id,'EXPR:대책이_안_서다');
+          assert.strictEqual(listen[0].link_role,'CONTRIBUTORY');
+          assert.strictEqual(
+            listen[0].annotation_contract_id,
+            'H3-RS13E-AUTO-ANNOTATION-20260922-V1'
+          );
+
+          const written = context.h3Rs13eAutoLinksFromValues_(
+            '3級','WRITTEN','H3-P4-SK011',concepts
+          );
+          assert.strictEqual(written.length,1);
+          assert.strictEqual(written[0].target_skill_id,'H3-K2-SK006');
+
+          const analogue = context.h3Rs13eAutoLinksFromValues_(
+            '3級','LISTENING','H3-K3-SK001',concepts
+          );
+          assert.deepStrictEqual(Array.from(analogue),[]);
+
+          const normalized = context.h3MultiSkillNormalizeAuthoredLinks_(listen);
+          assert.strictEqual(normalized.length,1);
+          assert.strictEqual(
+            normalized[0].annotation_contract_id,
+            'H3-RS13E-AUTO-ANNOTATION-20260922-V1'
+          );
+
+          const explicit = [{
+            link_role:'INCIDENTAL',
+            target_skill_id:'H3-P2-SK012',
+            concept_id:'VOCAB:답답하다',
+            confidence:'HIGH',
+            annotation_contract_id:'H3-RS12-AUTHOR-VERIFIED-EXACT-V1'
+          }];
+          const resolvedExplicit = context.h3MultiSkillResolvedLinks_(
+            {},
+            explicit,
+            true,
+            '3級',
+            'LISTENING',
+            'H3-K2-SK006'
+          );
+          assert.strictEqual(resolvedExplicit.length,1);
+          assert.strictEqual(resolvedExplicit[0].link_role,'INCIDENTAL');
+          assert.strictEqual(
+            resolvedExplicit[0].annotation_contract_id,
+            'H3-RS12-AUTHOR-VERIFIED-EXACT-V1'
+          );
+
+          const event = {
+            level:'3級',
+            source_family:'LISTENING',
+            source_event_ref:'LISTENING|TX|K2',
+            source_set_id:'H3-L-TEST',
+            source_txn_id:'TX',
+            source_q_no:2,
+            source_surface_key:'SURFACE',
+            source_result:'×',
+            direct_skill_id:'H3-K2-SK006'
+          };
+          const built = context.h3MultiSkillBuildRowsFromValues_(
+            event,
+            listen,
+            concepts,
+            '2026-09-22T11:30:00+09:00'
+          );
+          assert.strictEqual(built.length,1);
+          assert(
+            String(built[0][17]).includes(
+              'H3-RS13E-AUTO-ANNOTATION-20260922-V1'
+            )
+          );
+          assert.strictEqual(built[0][18],'NO');
+          assert.strictEqual(built[0][19],'NO');
+          assert.strictEqual(built[0][20],'NO');
+          assert.strictEqual(built[0][21],'NO');
+
+          const ambiguous = concepts.concat([
+            concept({
+              CONCEPT_ID:'EXPR:OTHER_EXACT',
+              SKILL_ID:'H3-K2-SK006',
+              FAMILY:'LISTENING',
+              SECTION_KEY:'H3-K2'
+            }),
+            concept({
+              CONCEPT_ID:'EXPR:OTHER_EXACT',
+              SKILL_ID:'H3-P4-SK099',
+              FAMILY:'WRITTEN',
+              SECTION_KEY:'H3-P4'
+            })
+          ]);
+          assert.throws(
+            () => context.h3Rs13eAutoLinksFromValues_(
+              '3級','LISTENING','H3-K2-SK006',ambiguous
+            ),
+            /AUTO_CONCEPT_AMBIGUOUS/
+          );
+
+          const unsafe = [
+            ch,
+            concept({
+              CONCEPT_ID:'EXPR:UNSAFE',
+              SKILL_ID:'H3-K2-SK099',
+              FAMILY:'LISTENING',
+              SECTION_KEY:'H3-K2',
+              STATE_TRANSFER:'YES'
+            })
+          ];
+          assert.throws(
+            () => context.h3Rs13eAutoLinksFromValues_(
+              '3級','LISTENING','H3-K2-SK099',unsafe
+            ),
+            /CONCEPT_MAP_UNSAFE/
+          );
+
+          const gate = context.h3Rs13eDescribeGate_();
+          assert.strictEqual(gate.hash_bearing_surface_mutation,false);
+          assert.strictEqual(gate.scheduler_selection_mutation,false);
+          assert.strictEqual(gate.historical_backfill,false);
+
+          // Hash-bearing authoring/lock files must remain free of RS-13E logic.
+          [
+            'WebAppReadingPilot.js',
+            'WebAppTranslationV2.js',
+            'ListeningBackendOrchestrator.js'
+          ].forEach(file => {
+            const source=fs.readFileSync(file,'utf8');
+            assert(!source.includes('h3Rs13e'));
+            assert(!source.includes('H3_RS13E'));
+          });
+
+          const writtenProd=fs.readFileSync('WebAppWrittenProduction.js','utf8');
+          const start=writtenProd.indexOf('function h3WrittenSourceBinding_');
+          const end=writtenProd.indexOf('function h3WrittenGrade_',start);
+          const binding=writtenProd.slice(start,end);
+          assert(!binding.includes('blockNo'));
+          assert(!binding.includes('setOffset'));
+
+          console.log('RS-13E Concept authoring audit passed.');
+          NODE

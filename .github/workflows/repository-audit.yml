@@ -9346,7 +9346,7 @@ jobs:
 
           assert(
             contractText.includes(
-              'H3-REVIEW-EXPLANATION-STYLE-20260922-V1'
+              'H3-REVIEW-EXPLANATION-STYLE-20260922-V2'
             )
           );
           assert(
@@ -9409,11 +9409,47 @@ jobs:
           );
           assert.strictEqual(
             selfCheck.contract_id,
-            'H3-REVIEW-EXPLANATION-STYLE-20260922-V1'
+            'H3-REVIEW-EXPLANATION-STYLE-20260922-V2'
           );
           assert.strictEqual(
             selfCheck.known_example_fix_count,
             6
+          );
+
+          assert.strictEqual(
+            context
+              .h3ReviewExplanationStyleNormalizeMetaText_(
+                'この表現が合う。'
+              ),
+            'この表現が適切。'
+          );
+          assert.strictEqual(
+            context
+              .h3ReviewExplanationStyleNormalizeMetaText_(
+                'この形が自然だ。'
+              ),
+            'この形が自然。'
+          );
+          assert.strictEqual(
+            context
+              .h3ReviewExplanationStyleNormalizeMetaText_(
+                'これは自動詞だ。'
+              ),
+            'これは自動詞。'
+          );
+          assert.strictEqual(
+            context
+              .h3ReviewExplanationStyleHasAwkwardMeta_(
+                'この形が自然だ。'
+              ),
+            true
+          );
+          assert.strictEqual(
+            context
+              .h3ReviewExplanationStyleHasAwkwardMeta_(
+                'この形が自然。'
+              ),
+            false
           );
 
           const protectedText =
@@ -9482,6 +9518,15 @@ jobs:
                   outside
               );
               polite.lastIndex = 0;
+
+              const awkward =
+                /(?:が合う|(自然|適切|重要|同じ|自動詞|他動詞|表現|意味|予測|段階|語|数詞|固有数詞|手掛かり|対比|ニュアンス|状態|理由|形|焦点|必要|義務|許可)だ)(?=[。！？!?]|$)/;
+              assert(
+                !awkward.test(outside),
+                label +
+                  ' contains awkward meta-text: ' +
+                  outside
+              );
             }
           }
 

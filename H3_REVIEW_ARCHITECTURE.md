@@ -452,3 +452,40 @@ failure, may be retried automatically, and at most once. The retry reuses the ex
 same completion-event key, so an accepted first request followed by a lost response
 cannot refresh the cooldown timestamp twice. Unknown runtime errors are not guessed
 to be transient.
+
+## 39. Review display normalization and Translation UI cleanup
+
+Learner-facing Review presentation may apply deterministic display-only normalization
+after the exact stored Review/source authority has passed its existing validation.
+These normalizations do not rewrite committed learner history, score, answer/uncertainty
+state, scheduler state, counters, pointers, or source-binding hashes.
+
+Reading presentation rules:
+- Japanese passage translation is shown without a leading arrow.
+- Stored newline boundaries in Japanese passage translations remain visible.
+- A parenthesized source marker of the form `(×...)` is rendered as an unfilled blank
+  so a Review translation does not disclose an intentionally inappropriate choice in
+  the passage blank.
+- Reading footnotes normalize full-width asterisk/parenthesis notation to a half-width
+  `* ` marker. The verified historical `매장：売り` truncation is displayed as
+  `매장：売場`.
+- Literal `<u>...</u>` source markup is not interpreted as arbitrary HTML. The client
+  parses only the explicit underline marker and creates a DOM `u` element; all other
+  text remains text content.
+
+Translation presentation rules:
+- The redundant family header `Translation`, the aggregate direction line, and
+  per-question direction lines are not rendered.
+- Question headings derive from the locked section identity:
+  `H3-P11 -> 筆11/翻訳`, `H3-P12 -> 筆12/翻訳`.
+
+Technical Review information always exposes a copy action for the displayed canonical
+identifiers. Existing receipt-copy behavior remains separate.
+
+Historical Listening display correction:
+- For `H3-20260919-L02` K5 only, and only when the original locked explanation SHA is
+  `d5fbcf3e695219d43ec0068d504067f00a0b1ca4c767cac3b54ace4230f52fc5`,
+  the learner-facing reason removes the erroneous Korean quotation particle from the
+  mixed Japanese explanatory sentence. The locked historical explanation row remains
+  the validated authority; this is a source-identity-gated display correction.
+

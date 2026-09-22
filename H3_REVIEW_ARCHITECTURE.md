@@ -402,39 +402,69 @@ binding must obtain its own verified explanation binding before it can claim the
 learner explanation coverage.
 
 
-## 38. Review-completion cooldown
+## 38. Dynamic Review priority and completion cooldown
 
-Review completion is UI-state metadata, not learner-result evidence. A session is
+Review priority uses `H3_REVIEW_PRIORITY_V4`. The originating Review result is evidence,
+not a permanent sentence on that set's rank. Each item starts from residual weakness
+`×=1.00`, `△=0.65`, `○=0.00`. Later authoritative learner evidence with the same
+`skill_id` may update that item only when it comes from a different set and a different
+surface. A later `×` resets weakness to `1.00`; a later `△` resets it to `0.65`;
+the first independent `○` after non-correct evidence lowers it to `0.35`; the second
+lowers it to `0.10`. Further independent `○` evidence keeps the residual floor at
+`0.10` while refreshing the evidence clock. A later `×` or `△` resets the recovery.
+This mirrors the learner-state rule that two spaced corrects deprioritize/stabilize but
+do not prove mastery.
+
+The derived V5 HOME index adds `PRIORITY_STATE_JSON`. It records only the computed
+per-item Review-priority state (skill identity, source/latest result, residual weakness,
+spaced-correct count, source surface identity, and latest evidence timestamp). It is not
+learner history and never replaces the committed logs that produced it. `BASE_PRIORITY`
+is the mean residual weakness after the existing family weighting. Both fields are
+refreshed after committed answer/Answer Sync; HOME remains a lightweight read of
+`review_home_index_v1`.
+
+For each item's latest evidence age `d_i` in days:
+
+```text
+F_i = 1 - 2^(-d_i / 14)
+F = mean(F_i)
+P = B + (100 - B) × 0.40 × F
+```
+
+Thus a later independent correct answer can reduce an old Review set and restart the
+forgetting clock for the affected skill without rewriting that historical set. Missing
+or invalid `ANSWERED_AT` is fail-closed. The former oldest-known timestamp substitution
+is removed because historical ACTIVE Review timestamps have been backfilled.
+
+Review completion remains UI-state metadata, not learner-result evidence. A session is
 eligible only after all Review questions have been displayed at least once in that
 session and the learner then taps `ホーム`. Merely opening a Review, viewing only a
 subset, refreshing, or leaving by another route must not change priority.
 
-A completed session writes only derived UI metadata in `review_home_index_v1`:
-`LAST_REVIEWED_AT` plus `LAST_REVIEW_COMPLETION_KEY`. The index therefore
-advances to the V4-compatible layout. The completion key is generated once per
-rendered Review session and is stable across the one permitted retry. Replaying the
-same key returns `ALREADY_RECORDED` and must not advance `LAST_REVIEWED_AT`;
-a later reopened Review receives a new key and may record a new completion event.
-This write must not alter score, answer/uncertainty marks, immutable Review payload
-or binding hashes, learner history, retest state, scheduler, skill_queue, counters,
-pointers, or source identity.
+A completed session writes only `LAST_REVIEWED_AT` plus
+`LAST_REVIEW_COMPLETION_KEY`. It must not alter score, answer/uncertainty marks,
+immutable Review payload or binding hashes, learner history, retest state, scheduler,
+skill_queue, counters, pointers, or source identity.
 
-Let `P` be the ordinary 0–100 Review priority after item-count normalization,
-exam weighting, and the existing forgetting-time pressure. If there is no valid
-`LAST_REVIEWED_AT`, HOME uses `P` unchanged. Otherwise, with `h` equal to
-hours since the latest completed Review:
+Let `P` be the ordinary 0–100 dynamic Review priority before cooldown and `h` hours
+since the latest completed Review:
 
 ```text
-C = 0.45 + 0.55 × min(h / 72, 1)
-HOME_PRIORITY = round(P × C)
+0 <= h < 24:
+  CAP = 10 + 15 × (h / 24)
+  HOME_PRIORITY = min(P, CAP)
+
+24 <= h < 96:
+  START = min(P, 25)
+  HOME_PRIORITY = START + (P - START) × ((h - 24) / 72)
+
+h >= 96:
+  HOME_PRIORITY = P
 ```
 
-Thus the ranking/bar drops to 45% immediately after completion and recovers
-linearly to the uncooldowned priority over 72 hours. The underlying
-`BASE_PRIORITY` and ordinary priority remain intact so reviewing content is never
-treated as proof of mastery. A later scored learning event continues to change
-weakness through the normal evidence path rather than through this cooldown.
-
+The 0–24h cap strongly suppresses an immediately reviewed set; 24–96h restores its
+ordinary priority continuously. Cooldown never counts as mastery and never changes
+`BASE_PRIORITY` or `PRIORITY_STATE_JSON`.
 
 ### Completion failure isolation and retry
 

@@ -460,8 +460,11 @@ after the exact stored Review/source authority has passed its existing validatio
 These normalizations do not rewrite committed learner history, score, answer/uncertainty
 state, scheduler state, counters, pointers, or source-binding hashes.
 
+Common Review translation presentation:
+- Learner-facing Japanese translation bodies are shown without a leading arrow across all Review families (5L / 5W / READING / TRANSLATION).
+- Reading shared-passage Japanese translation follows the same no-leading-arrow rule.
+
 Reading presentation rules:
-- Japanese passage translation is shown without a leading arrow.
 - Stored newline boundaries in Japanese passage translations remain visible.
 - A parenthesized source marker of the form `(×...)` is rendered as an unfilled blank
   so a Review translation does not disclose an intentionally inappropriate choice in

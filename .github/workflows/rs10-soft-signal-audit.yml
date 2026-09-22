@@ -1,0 +1,236 @@
+name: RS10 Soft Signal Audit
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify RS-10 soft-signal contract
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const assert = require('assert');
+
+          const source = fs.readFileSync('WebAppRtSoftSignal.js', 'utf8');
+          const context = {
+            console, JSON, Number, String, Object, Array, Math, Date
+          };
+          context.globalThis = context;
+          vm.createContext(context);
+          vm.runInContext(source, context);
+
+          assert.strictEqual(
+            context.H3_RS10_SOFT_SIGNAL_CONTRACT_ID_,
+            'H3-RS10-SOFT-SIGNAL-20260922-V1'
+          );
+
+          const ch = context.H3_RS10_CONCEPT_HEADERS_;
+          const eh = context.H3_RS10_MULTI_SKILL_HEADERS_;
+
+          function row(headers, obj) {
+            return headers.map(name =>
+              Object.prototype.hasOwnProperty.call(obj, name)
+                ? obj[name]
+                : ''
+            );
+          }
+
+          const concepts = [
+            ch,
+            row(ch, {
+              CONCEPT_ID: 'GRAM:-ㄹ_틈이_없다',
+              LEVEL: '3級',
+              CONCEPT_DOMAIN: 'GRAMMAR',
+              CONCEPT_LABEL: '-ㄹ 틈이 없다',
+              SKILL_ID: 'H3-P11-SK013',
+              FAMILY: 'TRANSLATION',
+              SECTION_KEY: 'H3-P11',
+              APPLICATION_LABEL: '-ㄹ 틈이 없다',
+              MAPPING_ROLE: 'APPLICATION_SKILL',
+              MATCH_TYPE: 'EXACT_GRAMMAR_CONCEPT',
+              CONFIDENCE: 'HIGH',
+              DIRECT_REUSE: 'NO',
+              STATE_TRANSFER: 'NO',
+              RETEST_CLOSURE: 'NO',
+              STABILITY_TRANSFER: 'NO',
+              SCHEDULER_USE: 'DIAGNOSTIC_SELECTION_ONLY',
+              STATUS: 'ACTIVE_PILOT'
+            }),
+            row(ch, {
+              CONCEPT_ID: 'VOCAB:열쇠',
+              LEVEL: '3級',
+              CONCEPT_DOMAIN: 'VOCABULARY',
+              CONCEPT_LABEL: '열쇠',
+              SKILL_ID: 'H3-P2-SK031',
+              FAMILY: 'WRITTEN',
+              SECTION_KEY: 'H3-P2',
+              APPLICATION_LABEL: '열쇠',
+              MAPPING_ROLE: 'APPLICATION_SKILL',
+              MATCH_TYPE: 'EXACT_LEXEME_MATCH',
+              CONFIDENCE: 'HIGH',
+              DIRECT_REUSE: 'NO',
+              STATE_TRANSFER: 'NO',
+              RETEST_CLOSURE: 'NO',
+              STABILITY_TRANSFER: 'NO',
+              SCHEDULER_USE: 'DIAGNOSTIC_SELECTION_ONLY',
+              STATUS: 'ACTIVE_PILOT'
+            })
+          ];
+
+          function evidence(overrides) {
+            return row(eh, Object.assign({
+              LINK_ID: 'L',
+              EVIDENCE_EVENT_ID: 'E',
+              LEVEL: '3級',
+              EVENT_SCOPE: 'COMMITTED_LEARNING',
+              SOURCE_EVENT_REF: 'SRC',
+              SOURCE_SET_ID: 'SET',
+              SOURCE_Q_NO: '1',
+              SOURCE_SURFACE_KEY: 'SURFACE',
+              SOURCE_RESULT: '×',
+              SOURCE_FAMILY: 'WRITTEN',
+              DIRECT_SKILL_ID: 'H3-P3-SK035',
+              LINK_ROLE: 'CONTRIBUTORY',
+              TARGET_SKILL_ID: 'H3-P11-SK013',
+              CONCEPT_ID: 'GRAM:-ㄹ_틈이_없다',
+              CONFIDENCE: 'HIGH',
+              PROVENANCE_KIND: 'TEST',
+              PROVENANCE_REF: 'TEST',
+              DIRECT_STATE_AUTHORITY: 'NO',
+              STATE_TRANSFER: 'NO',
+              RETEST_CLOSURE_TRANSFER: 'NO',
+              STABILITY_TRANSFER: 'NO',
+              SCHEDULER_USE: 'DIAGNOSTIC_ONLY',
+              STATUS: 'ACTIVE_COMMITTED',
+              CREATED_AT: '2026-09-22T10:00:00+09:00'
+            }, overrides || {}));
+          }
+
+          const krCandidate = {
+            level: '3級',
+            family: 'TRANSLATION',
+            skill_id: 'H3-P11-SK013',
+            translation_direction: 'KR_TO_JP',
+            edf_rank: 1,
+            balance_rank: 1,
+            coverage_rank: 1,
+            skill_priority_rank: 1,
+            deterministic_key: 'A'
+          };
+          const jpCandidate = Object.assign({}, krCandidate, {
+            translation_direction: 'JP_TO_KR',
+            deterministic_key: 'B'
+          });
+
+          let snapshot = context.h3Rs10BuildSoftSignalSnapshotFromRows_(
+            [eh, evidence()],
+            concepts
+          );
+          assert.deepStrictEqual(
+            Array.from(context.h3Rs10SoftVectorForCandidate_(krCandidate, snapshot)),
+            [1, 0, 0, 0]
+          );
+          assert.deepStrictEqual(
+            Array.from(context.h3Rs10SoftVectorForCandidate_(jpCandidate, snapshot)),
+            [0, 0, 0, 0]
+          );
+
+          snapshot = context.h3Rs10BuildSoftSignalSnapshotFromRows_(
+            [eh, evidence({
+              EVENT_SCOPE: 'SYSTEM_TEST_SHADOW',
+              STATUS: 'PASS_SHADOW'
+            })],
+            concepts
+          );
+          assert.strictEqual(snapshot.observations.length, 0);
+
+          snapshot = context.h3Rs10BuildSoftSignalSnapshotFromRows_(
+            [eh, evidence({ LINK_ROLE: 'DIRECT' })],
+            concepts
+          );
+          assert.strictEqual(snapshot.observations.length, 0);
+
+          snapshot = context.h3Rs10BuildSoftSignalSnapshotFromRows_(
+            [eh, evidence({ SOURCE_FAMILY: 'TRANSLATION' })],
+            concepts
+          );
+          assert.strictEqual(snapshot.observations.length, 0);
+
+          snapshot = context.h3Rs10BuildSoftSignalSnapshotFromRows_(
+            [
+              eh,
+              evidence({
+                EVIDENCE_EVENT_ID: 'E1',
+                CREATED_AT: '2026-09-22T10:00:00+09:00',
+                SOURCE_RESULT: '×'
+              }),
+              evidence({
+                EVIDENCE_EVENT_ID: 'E2',
+                CREATED_AT: '2026-09-22T11:00:00+09:00',
+                SOURCE_RESULT: '○'
+              })
+            ],
+            concepts
+          );
+          assert.deepStrictEqual(
+            Array.from(context.h3Rs10SoftVectorForCandidate_(krCandidate, snapshot)),
+            [0, 0, 0, 0]
+          );
+
+          const strongSoft = Object.assign({}, krCandidate, {
+            edf_rank: 2,
+            deterministic_key: 'A'
+          });
+          const betterEdf = Object.assign({}, jpCandidate, {
+            edf_rank: 1,
+            deterministic_key: 'B'
+          });
+          snapshot = context.h3Rs10BuildSoftSignalSnapshotFromRows_(
+            [eh, evidence()],
+            concepts
+          );
+          assert(
+            context.h3Rs10CompareCandidates_(strongSoft, betterEdf, snapshot) > 0,
+            'Soft signal overrode EDF.'
+          );
+
+          const noSoft = Object.assign({}, jpCandidate, {
+            translation_direction: 'KR_TO_JP',
+            skill_id: 'H3-P11-SK999',
+            deterministic_key: 'Z'
+          });
+          const tiedStrong = Object.assign({}, krCandidate, {
+            deterministic_key: 'Y'
+          });
+          assert(
+            context.h3Rs10CompareCandidates_(tiedStrong, noSoft, snapshot) < 0,
+            'Soft signal did not break an exact primary tie.'
+          );
+
+          const tieA = Object.assign({}, noSoft, { deterministic_key: 'A' });
+          const tieB = Object.assign({}, noSoft, { deterministic_key: 'B' });
+          assert(
+            context.h3Rs10CompareCandidates_(tieA, tieB, snapshot) < 0,
+            'Deterministic key was not the final tie-break.'
+          );
+
+          let threw = false;
+          try {
+            context.h3Rs10BuildSoftSignalSnapshotFromRows_(
+              [eh, evidence({ STATE_TRANSFER: 'YES' })],
+              concepts
+            );
+          } catch (err) {
+            threw = /TRANSFER_VIOLATION/.test(String(err && err.message || err));
+          }
+          assert(threw, 'Unsafe state-transfer evidence did not fail closed.');
+
+          console.log('RS-10 soft-signal audit passed.');
+          NODE

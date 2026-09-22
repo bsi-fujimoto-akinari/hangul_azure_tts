@@ -201,6 +201,8 @@ function h3WrittenReadContext_(runtimeSpreadsheet, setId) {
     stage.map,
     [
       'STAGE_ID',
+      'BLOCK_NO',
+      'SET_OFFSET',
       'STATUS',
       'QUESTIONS_LOG_TEMPLATE',
       'ANSWER_KEY_JSON',
@@ -252,6 +254,8 @@ function h3WrittenReadContext_(runtimeSpreadsheet, setId) {
     ].map(function (value) { return String(value || ''); }),
     storageMode: String(qr[qm.STORAGE_MODE] || ''),
     stageId: String(sr[sm.STAGE_ID] || ''),
+    blockNo: Number(sr[sm.BLOCK_NO]),
+    setOffset: Number(sr[sm.SET_OFFSET]),
     stageStatus: String(sr[sm.STATUS] || ''),
     questionsTemplate: String(sr[sm.QUESTIONS_LOG_TEMPLATE] || ''),
     answerKeyJson: String(sr[sm.ANSWER_KEY_JSON] || ''),

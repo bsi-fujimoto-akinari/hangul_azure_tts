@@ -67,6 +67,7 @@ jobs:
               'WebAppRtSoftSignal.js',
               'WebAppMultiSkillEvidence.js',
               'WebAppMultiSkillShadow.js',
+              'WebAppConceptAuthoring.js',
               'WebAppPreissue.js',
               'WebAppReceipt.js',
               'WebAppReviewCore.js',
@@ -95,6 +96,7 @@ jobs:
               'H3_RS10_SOFT_SIGNAL_CONTRACT.md',
               'H3_RS12_PROSPECTIVE_EVIDENCE_CONTRACT.md',
               'H3_RS13_REAL_DATA_SHADOW_CONTRACT.md',
+              'H3_RS13E_CONCEPT_AUTHORING_CONTRACT.md',
               'H3_SURFACE_REVIEW_BRIDGE_CONTRACT.md',
               'Index.html',
               'Stylesheet.html',
@@ -107,6 +109,7 @@ jobs:
               '.github/workflows/rs10-soft-signal-audit.yml',
               '.github/workflows/rs12-prospective-evidence-audit.yml',
               '.github/workflows/rs13-real-data-shadow-audit.yml',
+              '.github/workflows/rs13e-concept-authoring-audit.yml',
           }
           tracked = set(
               subprocess.check_output(

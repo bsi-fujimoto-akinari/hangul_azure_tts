@@ -9446,6 +9446,13 @@ jobs:
           );
           assert.strictEqual(
             context
+              .h3ReviewExplanationStyleNormalizeMetaText_(
+                '사흘 は固有語で「3日」だ。'
+              ),
+            '사흘 は「3日」を表す固有語。'
+          );
+          assert.strictEqual(
+            context
               .h3ReviewExplanationStyleHasAwkwardMeta_(
                 'この形が自然だ。'
               ),

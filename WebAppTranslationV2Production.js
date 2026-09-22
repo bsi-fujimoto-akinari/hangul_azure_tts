@@ -535,6 +535,7 @@ function h3TranslationV2Submit_(request) {
     if (context.stage.status !== 'ISSUED' || !context.stage.issued_at || context.stage.committed_at) {
       throw new Error('TRANSLATION_V2_SUBMIT_STAGE_NOT_ISSUED');
     }
+    h3MultiSkillTranslationV2Preflight_(spreadsheet,context);
     var normalized=h3TranslationV2NormalizeSubmission_(request,context.locked);
     if (normalized.set_id !== context.stage.set_id) {
       throw new Error('TRANSLATION_V2_SUBMIT_SET_ID_MISMATCH');
@@ -610,7 +611,7 @@ function h3TranslationV2Submit_(request) {
       throw new Error('TRANSLATION_V2_COMMIT_READBACK_FAILED');
     }
 
-    return h3TranslationV2AttachSchedulerSync_(
+    var syncedResult=h3TranslationV2AttachSchedulerSync_(
       result,
       spreadsheet,
       context,
@@ -619,6 +620,14 @@ function h3TranslationV2Submit_(request) {
       now,
       journal,
       txnRow
+    );
+    return h3MultiSkillAttachCapture_(
+      syncedResult,
+      function () {
+        return h3MultiSkillTranslationV2Capture_(
+          spreadsheet,context,grade,txnId,now
+        );
+      }
     );
   } catch (err) {
     if (journal && txnRow) {

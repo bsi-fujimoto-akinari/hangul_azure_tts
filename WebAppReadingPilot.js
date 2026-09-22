@@ -95,6 +95,15 @@ function h3ReadingRequireString_(
 }
 
 
+function h3ReadingSecondaryLinks_(links) {
+  if (links === undefined || links === null) return [];
+  if (typeof h3MultiSkillNormalizeAuthoredLinks_ !== 'function') {
+    throw new Error('READING_MULTI_SKILL_HELPER_MISSING');
+  }
+  return h3MultiSkillNormalizeAuthoredLinks_(links);
+}
+
+
 function h3ReadingValidateSourceBundle_(
   source
 ) {
@@ -249,6 +258,10 @@ function h3ReadingValidateSourceBundle_(
           'READING_ITEM_SKILL_SCOPE_INVALID'
         );
       }
+
+      h3ReadingSecondaryLinks_(
+        item.secondary_evidence_links
+      );
     }
   );
 
@@ -293,6 +306,11 @@ function h3ReadingLockBundle_(
   var items =
     source.items.map(
       function (item) {
+        var secondaryLinks =
+          h3ReadingSecondaryLinks_(
+            item.secondary_evidence_links
+          );
+
         var hashObject = {
           item_id:
             item.item_id,
@@ -322,7 +340,12 @@ function h3ReadingLockBundle_(
             passageSha
         };
 
-        return {
+        if (secondaryLinks.length) {
+          hashObject.secondary_evidence_links =
+            secondaryLinks;
+        }
+
+        var lockedItem = {
           item_id:
             item.item_id,
           question_key:
@@ -362,6 +385,13 @@ function h3ReadingLockBundle_(
           item_sha256:
             h3ReadingHash_(hashObject)
         };
+
+        if (secondaryLinks.length) {
+          lockedItem.secondary_evidence_links =
+            secondaryLinks;
+        }
+
+        return lockedItem;
       }
     );
 

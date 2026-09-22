@@ -940,7 +940,32 @@ function h3WrittenSubmit_(request) {
         ) {
           throw new Error('WRITTEN_COMMITTED_RESULT_MISMATCH');
         }
-        return stored;
+        var committedContext = h3WrittenReadContext_(
+          runtimeSpreadsheet,
+          request.set_id
+        );
+        h3WrittenValidateSourceIdentity_(committedContext);
+        h3WrittenReviewAuthoring_(committedContext);
+        h3MultiSkillWrittenPreflight_(
+          runtimeSpreadsheet,
+          committedContext
+        );
+        var committedGrade = h3WrittenGrade_(
+          committedContext,
+          answers
+        );
+        return h3MultiSkillAttachCapture_(
+          stored,
+          function () {
+            return h3MultiSkillWrittenCapture_(
+              runtimeSpreadsheet,
+              committedContext,
+              committedGrade,
+              String(row[0] || ''),
+              String(row[7] || '')
+            );
+          }
+        );
       }
       if (action === 'CONFLICT_COMMITTED') {
         throw new Error('CONFLICT_ALREADY_COMMITTED');
@@ -963,11 +988,37 @@ function h3WrittenSubmit_(request) {
     }
 
     if (prepared) {
-      return h3WrittenRecoverPrepared_(
+      var recovered = h3WrittenRecoverPrepared_(
         runtimeSpreadsheet,
         journal,
         prepared,
         fingerprint
+      );
+      var recoveredContext = h3WrittenReadContext_(
+        runtimeSpreadsheet,
+        request.set_id
+      );
+      h3WrittenValidateSourceIdentity_(recoveredContext);
+      h3WrittenReviewAuthoring_(recoveredContext);
+      h3MultiSkillWrittenPreflight_(
+        runtimeSpreadsheet,
+        recoveredContext
+      );
+      var recoveredGrade = h3WrittenGrade_(
+        recoveredContext,
+        answers
+      );
+      return h3MultiSkillAttachCapture_(
+        recovered,
+        function () {
+          return h3MultiSkillWrittenCapture_(
+            runtimeSpreadsheet,
+            recoveredContext,
+            recoveredGrade,
+            String(prepared.values[0] || ''),
+            String(prepared.values[7] || '')
+          );
+        }
       );
     }
     if (unresolvedRecovery) {
@@ -981,6 +1032,10 @@ function h3WrittenSubmit_(request) {
     h3WrittenValidateSourceIdentity_(context);
     h3WrittenRequireNewSubmitPrecondition_(context);
     h3WrittenReviewAuthoring_(context);
+    h3MultiSkillWrittenPreflight_(
+      runtimeSpreadsheet,
+      context
+    );
 
     var sourceBinding = h3WrittenSourceBinding_(context);
     var txnId = h3NextWebTxnId_(runtimeSpreadsheet);
@@ -1074,7 +1129,18 @@ function h3WrittenSubmit_(request) {
       sourceBinding.sha256,
       poststate.sha256
     );
-    return result;
+    return h3MultiSkillAttachCapture_(
+      result,
+      function () {
+        return h3MultiSkillWrittenCapture_(
+          runtimeSpreadsheet,
+          context,
+          grade,
+          txnId,
+          createdAt
+        );
+      }
+    );
   } finally {
     lock.releaseLock();
   }

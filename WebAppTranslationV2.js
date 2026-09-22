@@ -46,6 +46,14 @@ function h3TranslationV2Profile_(value) {
   return profile;
 }
 
+function h3TranslationV2SecondaryLinks_(links) {
+  if (links === undefined || links === null) return [];
+  if (typeof h3MultiSkillNormalizeAuthoredLinks_ !== 'function') {
+    throw new Error('TRANSLATION_V2_MULTI_SKILL_HELPER_MISSING');
+  }
+  return h3MultiSkillNormalizeAuthoredLinks_(links);
+}
+
 function h3TranslationV2ValidateItem_(item, index) {
   if (!item || typeof item !== 'object') {
     throw new Error('TRANSLATION_V2_ITEM_INVALID:' + index);
@@ -86,7 +94,7 @@ function h3TranslationV2ValidateItem_(item, index) {
     throw new Error('TRANSLATION_V2_SOURCE_ITEM_SHA256_INVALID:' + index);
   }
   var lang = h3TranslationLanguageContract_(direction);
-  return {
+  var out = {
     item_id:h3TranslationActivationRequireId_(item.item_id,'TRANSLATION_V2_ITEM_ID_INVALID:' + index),
     question_key:h3TranslationActivationRequireId_(item.question_key,'TRANSLATION_V2_QUESTION_KEY_INVALID:' + index),
     section_key:section,
@@ -104,6 +112,12 @@ function h3TranslationV2ValidateItem_(item, index) {
     choices:choices,
     correct_choice:correct
   };
+  var secondaryLinks =
+    h3TranslationV2SecondaryLinks_(item.secondary_evidence_links);
+  if (secondaryLinks.length) {
+    out.secondary_evidence_links = secondaryLinks;
+  }
+  return out;
 }
 
 function h3TranslationV2LockBundle_(source) {

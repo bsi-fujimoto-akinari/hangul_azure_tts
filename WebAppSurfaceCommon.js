@@ -247,7 +247,7 @@ function h3LearningSurfaceLegacyReviewMetadata_(
 
 
 var H3_REVIEW_EXPLANATION_STYLE_CONTRACT_ID_ =
-  'H3-REVIEW-EXPLANATION-STYLE-20260922-V1';
+  'H3-REVIEW-EXPLANATION-STYLE-20260922-V2';
 
 
 function h3ReviewExplanationStyleComparable_(value) {
@@ -518,6 +518,19 @@ function h3ReviewExplanationStylePlainSegment_(value) {
       'よう'
     );
 
+  // Match the compact, natural learner-facing rhythm already used by 5L.
+  // This is intentionally narrow: it only adjusts answer-evaluation wording
+  // and sentence-final nominal/na-adjectival predicates.
+  out = out
+    .replace(
+      /が合う(?=[。！？!?]|$)/g,
+      'が適切'
+    )
+    .replace(
+      /(自然|適切|重要|同じ|自動詞|他動詞|表現|意味|予測|段階|語|数詞|固有数詞|手掛かり|対比|ニュアンス|状態|理由|形|焦点|必要|義務|許可)だ(?=[。！？!?]|$)/g,
+      '$1'
+    );
+
   return out;
 }
 
@@ -605,6 +618,33 @@ function h3ReviewExplanationStyleHasPoliteMeta_(
             found = true;
           }
           polite.lastIndex = 0;
+          return segment;
+        }
+      );
+
+      return found;
+    });
+}
+
+
+function h3ReviewExplanationStyleHasAwkwardMeta_(
+  value
+) {
+  var awkward =
+    /(?:が合う|(自然|適切|重要|同じ|自動詞|他動詞|表現|意味|予測|段階|語|数詞|固有数詞|手掛かり|対比|ニュアンス|状態|理由|形|焦点|必要|義務|許可)だ)(?=[。！？!?]|$)/;
+
+  return String(value || '')
+    .split('\n')
+    .some(function (line) {
+      var found = false;
+
+      h3ReviewExplanationStyleMapUnquotedLine_(
+        line,
+        function (segment) {
+          if (awkward.test(segment)) {
+            found = true;
+          }
+          awkward.lastIndex = 0;
           return segment;
         }
       );
@@ -713,6 +753,20 @@ function h3ReviewExplanationStyleValidateAuthoring_(
     ) {
       throw new Error(
         'REVIEW_EXPLANATION_STYLE_POLITE_META:' +
+          String(label || '') +
+          ':' +
+          entry.field
+      );
+    }
+
+    if (
+      entry.value &&
+      h3ReviewExplanationStyleHasAwkwardMeta_(
+        entry.value
+      )
+    ) {
+      throw new Error(
+        'REVIEW_EXPLANATION_STYLE_AWKWARD_META:' +
           String(label || '') +
           ':' +
           entry.field
@@ -1125,11 +1179,28 @@ function h3ReviewExplanationStyleSelfCheck_() {
       'この形は原因を表す。' ||
     probe.learning_blocks[0].usage !==
       '例文では自然に使えるが、別の場面では意味が異なる。' ||
+    h3ReviewExplanationStyleNormalizeMetaText_(
+      'この表現が合う。'
+    ) !==
+      'この表現が適切。' ||
+    h3ReviewExplanationStyleNormalizeMetaText_(
+      'この形が自然だ。'
+    ) !==
+      'この形が自然。' ||
+    h3ReviewExplanationStyleNormalizeMetaText_(
+      '60を表す固有数詞だ。'
+    ) !==
+      '60を表す固有数詞。' ||
     h3ReviewExplanationStyleHasPoliteMeta_(
       probe.reason
     ) ||
     h3ReviewExplanationStyleHasPoliteMeta_(
       probe.learning_blocks[0].usage
+    ) ||
+    h3ReviewExplanationStyleHasAwkwardMeta_(
+      h3ReviewExplanationStyleNormalizeMetaText_(
+        'この表現が合う。'
+      )
     )
   ) {
     throw new Error(

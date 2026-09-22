@@ -65,7 +65,17 @@ function h3MultiSkillNormalizeAuthoredLinks_(links) {
     if (confidence !== 'HIGH') {
       throw new Error('MULTI_SKILL_CONFIDENCE_NOT_HIGH:' + index);
     }
-    if (contract !== H3_MULTI_SKILL_AUTHORING_CONTRACT_ID_) {
+    var allowedContracts = [
+      H3_MULTI_SKILL_AUTHORING_CONTRACT_ID_
+    ];
+    if (
+      typeof H3_RS13E_AUTO_ANNOTATION_CONTRACT_ID_ !== 'undefined'
+    ) {
+      allowedContracts.push(
+        H3_RS13E_AUTO_ANNOTATION_CONTRACT_ID_
+      );
+    }
+    if (allowedContracts.indexOf(contract) < 0) {
       throw new Error('MULTI_SKILL_AUTHORING_CONTRACT_INVALID:' + index);
     }
     var key = [role,target,concept].join('|');
@@ -76,7 +86,7 @@ function h3MultiSkillNormalizeAuthoredLinks_(links) {
       target_skill_id: target,
       concept_id: concept,
       confidence: 'HIGH',
-      annotation_contract_id: H3_MULTI_SKILL_AUTHORING_CONTRACT_ID_
+      annotation_contract_id: contract
     };
   });
 }
@@ -215,7 +225,7 @@ function h3MultiSkillBuildRowsFromValues_(event, authoredLinks, conceptValues, c
       'HIGH',
       'AUTHOR_VERIFIED_EXACT',
       H3_MULTI_SKILL_CAPTURE_CONTRACT_ID_ + ':' +
-        H3_MULTI_SKILL_AUTHORING_CONTRACT_ID_,
+        link.annotation_contract_id,
       'NO','NO','NO','NO',
       'DIAGNOSTIC_ONLY',
       'ACTIVE_COMMITTED',
@@ -347,19 +357,50 @@ function h3MultiSkillAttachCapture_(result, fn) {
   return result;
 }
 
-function h3MultiSkillWrittenLinks_(context) {
+function h3MultiSkillResolvedLinks_(
+  spreadsheet,
+  explicitLinks,
+  autoEligible,
+  level,
+  sourceFamily,
+  directSkillId
+) {
+  var explicit =
+    h3MultiSkillNormalizeAuthoredLinks_(explicitLinks);
+  if (explicit.length || !autoEligible) return explicit;
+  if (typeof h3Rs13eAutoLinks_ !== 'function') return [];
+  return h3MultiSkillNormalizeAuthoredLinks_(
+    h3Rs13eAutoLinks_(
+      spreadsheet,
+      level,
+      sourceFamily,
+      directSkillId
+    )
+  );
+}
+
+function h3MultiSkillWrittenLinks_(spreadsheet, context) {
   var meta = JSON.parse(String(context.questionMetaJson || '{}'));
   if (!meta || !Array.isArray(meta.questions) || meta.questions.length !== 5) {
     throw new Error('MULTI_SKILL_WRITTEN_META_INVALID');
   }
+  var eligible =
+    typeof h3Rs13eWrittenEligible_ === 'function' &&
+    h3Rs13eWrittenEligible_(context);
   return meta.questions.map(function (q) {
-    return h3MultiSkillNormalizeAuthoredLinks_(
-      q && q.secondary_evidence_links);
+    return h3MultiSkillResolvedLinks_(
+      spreadsheet,
+      q && q.secondary_evidence_links,
+      eligible,
+      '3級',
+      'WRITTEN',
+      String(q && q.skill_id || '')
+    );
   });
 }
 
 function h3MultiSkillWrittenPreflight_(spreadsheet,context) {
-  var linksByQ=h3MultiSkillWrittenLinks_(context);
+  var linksByQ=h3MultiSkillWrittenLinks_(spreadsheet,context);
   var meta=JSON.parse(context.questionMetaJson);
   var total=0;
   linksByQ.forEach(function (links,index) {
@@ -397,7 +438,7 @@ function h3MultiSkillListeningStored_(spreadsheet,setId) {
   var lv=logSheet.getDataRange().getDisplayValues();
   var pm=h3MultiSkillHeaderMap_(pv[0] || []);
   var lm=h3MultiSkillHeaderMap_(lv[0] || []);
-  ['LISTENING_SET_ID','K2_ITEM_JSON','K3_ITEM_JSON','K4_ITEM_JSON','K5_ITEM_JSON']
+  ['LISTENING_SET_ID','LISTENING_SET_NO','K2_ITEM_JSON','K3_ITEM_JSON','K4_ITEM_JSON','K5_ITEM_JSON']
     .forEach(function (name) {
       if (typeof pm[name] !== 'number') {
         throw new Error('MULTI_SKILL_LISTENING_PAYLOAD_COLUMN_MISSING:' + name);
@@ -434,7 +475,13 @@ function h3MultiSkillListeningStored_(spreadsheet,setId) {
     return order.indexOf(String(a[lm.SECTION_KEY] || '')) -
       order.indexOf(String(b[lm.SECTION_KEY] || ''));
   });
-  return {items:items,logs:logs,logMap:lm,order:order};
+  return {
+    items:items,
+    logs:logs,
+    logMap:lm,
+    order:order,
+    setNo:Number(payload[pm.LISTENING_SET_NO])
+  };
 }
 
 function h3MultiSkillListeningStoredPreflight_(spreadsheet,setId) {
@@ -443,10 +490,20 @@ function h3MultiSkillListeningStoredPreflight_(spreadsheet,setId) {
   ['K2','K3','K4','K5'].forEach(function (section) {
     var index=ctx.order.indexOf(section);
     var item=ctx.items[section];
-    var links=h3MultiSkillNormalizeAuthoredLinks_(
-      item && item.secondary_evidence_links);
-    if (!links.length) return;
     var log=ctx.logs[index];
+    var skillId=String(log[ctx.logMap.SKILL_ID] || '');
+    var eligible=
+      typeof h3Rs13eListeningEligible_ === 'function' &&
+      h3Rs13eListeningEligible_(ctx.setNo);
+    var links=h3MultiSkillResolvedLinks_(
+      spreadsheet,
+      item && item.secondary_evidence_links,
+      eligible,
+      '3級',
+      'LISTENING',
+      skillId
+    );
+    if (!links.length) return;
     total += h3MultiSkillPreflight_(
       spreadsheet,
       {
@@ -472,10 +529,20 @@ function h3MultiSkillListeningStoredCapture_(
   ['K2','K3','K4','K5'].forEach(function (section) {
     var index=ctx.order.indexOf(section);
     var item=ctx.items[section];
-    var links=h3MultiSkillNormalizeAuthoredLinks_(
-      item && item.secondary_evidence_links);
-    if (!links.length) return;
     var log=ctx.logs[index];
+    var skillId=String(log[ctx.logMap.SKILL_ID] || '');
+    var eligible=
+      typeof h3Rs13eListeningEligible_ === 'function' &&
+      h3Rs13eListeningEligible_(ctx.setNo);
+    var links=h3MultiSkillResolvedLinks_(
+      spreadsheet,
+      item && item.secondary_evidence_links,
+      eligible,
+      '3級',
+      'LISTENING',
+      skillId
+    );
+    if (!links.length) return;
     var result=String(log[ctx.logMap.USER_RESULT] || '');
     if (['○','△','×'].indexOf(result) < 0) {
       throw new Error('MULTI_SKILL_LISTENING_RESULT_NOT_COMMITTED:' + section);
@@ -528,8 +595,18 @@ function h3MultiSkillListeningPreflight_(spreadsheet,context) {
 function h3MultiSkillReadingPreflight_(spreadsheet,context) {
   var total=0;
   context.locked.items.forEach(function (item,index) {
-    var links=h3MultiSkillNormalizeAuthoredLinks_(
-      item && item.secondary_evidence_links);
+    var skillId=String(item && item.skill_id || '');
+    var eligible=
+      typeof h3Rs13eReadingEligible_ === 'function' &&
+      h3Rs13eReadingEligible_(context.stage.issue_no);
+    var links=h3MultiSkillResolvedLinks_(
+      spreadsheet,
+      item && item.secondary_evidence_links,
+      eligible,
+      context.stage.level,
+      'READING',
+      skillId
+    );
     if (!links.length) return;
     total += h3MultiSkillPreflight_(
       spreadsheet,
@@ -550,8 +627,18 @@ function h3MultiSkillReadingPreflight_(spreadsheet,context) {
 function h3MultiSkillTranslationV2Preflight_(spreadsheet,context) {
   var total=0;
   context.locked.items.forEach(function (item,index) {
-    var links=h3MultiSkillNormalizeAuthoredLinks_(
-      item && item.secondary_evidence_links);
+    var skillId=String(item && item.skill_id || '');
+    var eligible=
+      typeof h3Rs13eTranslationEligible_ === 'function' &&
+      h3Rs13eTranslationEligible_(context.stage.issue_no);
+    var links=h3MultiSkillResolvedLinks_(
+      spreadsheet,
+      item && item.secondary_evidence_links,
+      eligible,
+      context.stage.level,
+      'TRANSLATION',
+      skillId
+    );
     if (!links.length) return;
     total += h3MultiSkillPreflight_(
       spreadsheet,
@@ -571,7 +658,7 @@ function h3MultiSkillTranslationV2Preflight_(spreadsheet,context) {
 function h3MultiSkillWrittenCapture_(
   spreadsheet,context,grade,txnId,createdAt
 ) {
-  var linksByQ = h3MultiSkillWrittenLinks_(context);
+  var linksByQ = h3MultiSkillWrittenLinks_(spreadsheet,context);
   var total={written:0,no_op:0,status:'NO_LINKS'};
   grade.graded.forEach(function (g,index) {
     var links=linksByQ[index];
@@ -641,8 +728,18 @@ function h3MultiSkillReadingCapture_(
   var total={written:0,no_op:0,status:'NO_LINKS'};
   grade.graded.forEach(function (g,index) {
     var item=context.locked.items[index];
-    var links=h3MultiSkillNormalizeAuthoredLinks_(
-      item && item.secondary_evidence_links);
+    var skillId=String(item && item.skill_id || '');
+    var eligible=
+      typeof h3Rs13eReadingEligible_ === 'function' &&
+      h3Rs13eReadingEligible_(context.stage.issue_no);
+    var links=h3MultiSkillResolvedLinks_(
+      spreadsheet,
+      item && item.secondary_evidence_links,
+      eligible,
+      context.stage.level,
+      'READING',
+      skillId
+    );
     if (!links.length) return;
     var r=h3MultiSkillPersistCommitted_(
       spreadsheet,
@@ -670,8 +767,18 @@ function h3MultiSkillTranslationV2Capture_(
   var total={written:0,no_op:0,status:'NO_LINKS'};
   grade.graded.forEach(function (g,index) {
     var item=context.locked.items[index];
-    var links=h3MultiSkillNormalizeAuthoredLinks_(
-      item && item.secondary_evidence_links);
+    var skillId=String(item && item.skill_id || '');
+    var eligible=
+      typeof h3Rs13eTranslationEligible_ === 'function' &&
+      h3Rs13eTranslationEligible_(context.stage.issue_no);
+    var links=h3MultiSkillResolvedLinks_(
+      spreadsheet,
+      item && item.secondary_evidence_links,
+      eligible,
+      context.stage.level,
+      'TRANSLATION',
+      skillId
+    );
     if (!links.length) return;
     var r=h3MultiSkillPersistCommitted_(
       spreadsheet,

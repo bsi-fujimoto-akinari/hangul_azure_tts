@@ -313,13 +313,8 @@ function h3ReviewExplanationStyleComparable_(value) {
 
 function h3ReviewExplanationStyleRegexEscape_(value) {
   return String(value || '')
-    .replace(/[.*+?^$()|[\]\\{}]/g, '\\function h3ReviewExplanationStyleRegexEscape_(value) {
-  return String(value || '')
-    .replace(/[.*+?^$()|[\]\\{}]/g, '\\function h3ReviewAttachSurfaceMetadata_(
-');
-}');
+    .replace(/[.*+?^$()|[\]\\{}]/g, '\\$&');
 }
-
 
 function h3ReviewExplanationStylePlainSegment_(value) {
   var out = String(value || '');

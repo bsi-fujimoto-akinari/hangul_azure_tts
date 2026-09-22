@@ -1,0 +1,231 @@
+name: Review Audio E4 bounded backfill
+
+on:
+  workflow_run:
+    workflows: ["Repository audit"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apps-script-auto-sync-main
+  cancel-in-progress: false
+
+jobs:
+  e4:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout audited main source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
+
+      - name: Resolve E4 mode
+        id: mode
+        shell: bash
+        run: |
+          message="$(git log -1 --pretty=%B)"
+          if printf '%s\n' "$message" | grep -Fq '[review-audio-e4-run]'; then
+            echo 'active=true' >> "$GITHUB_OUTPUT"
+            echo 'mode=run' >> "$GITHUB_OUTPUT"
+          elif printf '%s\n' "$message" | grep -Fq '[review-audio-e4-clean-deploy]'; then
+            echo 'active=true' >> "$GITHUB_OUTPUT"
+            echo 'mode=clean' >> "$GITHUB_OUTPUT"
+          else
+            echo 'active=false' >> "$GITHUB_OUTPUT"
+            echo 'mode=skip' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Node
+        if: steps.mode.outputs.active == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Materialize clasp credentials
+        if: steps.mode.outputs.active == 'true'
+        shell: bash
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          value=os.environ.get('CLASPRC_JSON','')
+          if not value.strip():
+              raise SystemExit('CLASPRC_JSON is empty')
+          path=Path.home()/'.clasprc.json'
+          path.write_text(value,encoding='utf-8')
+          path.chmod(0o600)
+          PY
+
+      - name: Verify exact Apps Script target
+        if: steps.mode.outputs.active == 'true'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          expected='1p_e1jKICTZXHpCrQ7rwU9HilloZdkFBpHry_lCq5YgXpaiU4FNEQlDa-'
+          actual=json.loads(Path('.clasp.json').read_text(encoding='utf-8')).get('scriptId')
+          if actual!=expected:
+              raise SystemExit(f'Apps Script target mismatch: {actual!r}')
+          PY
+
+      - name: Push audited source to Apps Script HEAD
+        if: steps.mode.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -o pipefail
+          output="$(npx -y @google/clasp@3.4.0 push --force 2>&1)"
+          printf '%s\n' "$output"
+          if printf '%s\n' "$output" | grep -q 'Skipping push'; then
+            echo '::error::clasp skipped the push.'
+            exit 1
+          fi
+          if ! printf '%s\n' "$output" | grep -Eq '^Pushed (one|[0-9]+) file|^Pushed no files|^Script is already up to date[.]$'; then
+            echo '::error::clasp did not report a completed push.'
+            exit 1
+          fi
+
+      - name: Refresh same API executable deployment
+        if: steps.mode.outputs.active == 'true'
+        shell: bash
+        run: |
+          description='Review audio E4 bounded batch 2026-09-22'
+          if [ '${{ steps.mode.outputs.mode }}' = 'clean' ]; then
+            description='Review audio E4 clean close 2026-09-22'
+          fi
+          npx -y @google/clasp@3.4.0 update-deployment \
+            AKfycbxmJnIPTKJY5beUVAU5d0RyKb0Nj-YarY8EkdyczgXHpJKVw4-0kdjv6cYEUXEDtw5D \
+            --description "$description" \
+            --json > /tmp/e4-deployment.json
+
+      - name: Verify deployment inventory and access
+        if: steps.mode.outputs.active == 'true'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,time,urllib.parse,urllib.request
+          from pathlib import Path
+          script_id='1p_e1jKICTZXHpCrQ7rwU9HilloZdkFBpHry_lCq5YgXpaiU4FNEQlDa-'
+          api_dep='AKfycbxmJnIPTKJY5beUVAU5d0RyKb0Nj-YarY8EkdyczgXHpJKVw4-0kdjv6cYEUXEDtw5D'
+          web_dep='AKfycby8I309RUkfVIsnJks808KA713QLppfrGiAFUTV2tA'
+          dep=json.loads(Path('/tmp/e4-deployment.json').read_text(encoding='utf-8'))
+          if dep.get('deploymentId')!=api_dep or not dep.get('versionNumber'):
+              raise SystemExit('Existing API deployment ID/version not preserved')
+          version=int(dep['versionNumber'])
+          rc=json.loads((Path.home()/'.clasprc.json').read_text(encoding='utf-8'))
+          cred=(rc.get('tokens') or {}).get('default') or {}
+          body=urllib.parse.urlencode({
+            'client_id':cred.get('client_id',''),'client_secret':cred.get('client_secret',''),
+            'refresh_token':cred.get('refresh_token',''),'grant_type':'refresh_token'
+          }).encode('utf-8')
+          req=urllib.request.Request('https://oauth2.googleapis.com/token',data=body,
+            headers={'Content-Type':'application/x-www-form-urlencoded'},method='POST')
+          with urllib.request.urlopen(req) as resp:
+              token=json.loads(resp.read().decode('utf-8')).get('access_token')
+          if not token: raise SystemExit('OAuth refresh did not return access_token')
+          def get_json(url):
+              req=urllib.request.Request(url,headers={'Authorization':f'Bearer {token}'})
+              with urllib.request.urlopen(req) as resp:
+                  return json.loads(resp.read().decode('utf-8'))
+          base=f'https://script.googleapis.com/v1/projects/{script_id}/deployments'
+          target=None; actual=None
+          for _ in range(12):
+              target=get_json(f'{base}/{api_dep}')
+              actual=(target.get('deploymentConfig') or {}).get('versionNumber')
+              if actual is not None and int(actual)==version: break
+              time.sleep(5)
+          if actual is None or int(actual)!=version:
+              raise SystemExit(f'API deployment propagation mismatch: {version!r}/{actual!r}')
+          listing=get_json(base)
+          ids={d.get('deploymentId') for d in (listing.get('deployments') or [])}
+          if ids!={api_dep,web_dep}:
+              raise SystemExit(f'Unexpected deployment inventory: {sorted(ids)}')
+          eps=target.get('entryPoints') or []
+          exec_eps=[ep for ep in eps if ep.get('entryPointType')=='EXECUTION_API']
+          if not exec_eps: raise SystemExit('EXECUTION_API entry point missing')
+          access=((exec_eps[0].get('executionApi') or {}).get('entryPointConfig') or {}).get('access')
+          if access!='MYSELF': raise SystemExit(f'Unexpected execution API access: {access!r}')
+          web=get_json(f'{base}/{web_dep}')
+          if 'WEB_APP' not in [ep.get('entryPointType') for ep in (web.get('entryPoints') or [])]:
+              raise SystemExit('Web deployment changed unexpectedly')
+          Path('/tmp/e4-version.txt').write_text(str(version),encoding='utf-8')
+          print(f'api_version_ready={version}')
+          print('deployment_inventory=2')
+          print('execution_api_access=MYSELF')
+          print('web_deployment_unchanged=true')
+          print('secret_values_printed=false')
+          PY
+
+      - name: Run 11 bounded E4 batches
+        if: steps.mode.outputs.mode == 'run'
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          expected=[
+            ('5W',2,10,20),('5W',2,10,30),('5W',2,10,40),
+            ('5W',2,10,50),('5W',2,10,60),('5W',2,10,70),
+            ('5W',2,10,80),('5W',2,10,90),('5W',1,5,95),
+            ('2R',2,6,101),('2T',2,4,105)
+          ]
+          Path('/tmp/e4-expected.json').write_text(json.dumps(expected),encoding='utf-8')
+          PY
+          for i in $(seq 1 11); do
+            start_ms="$(date +%s%3N)"
+            npx -y @google/clasp@3.4.0 run-function \
+              runReviewAudioE4NextBatch \
+              --nondev --user default --json > "/tmp/e4-batch-${i}.json"
+            end_ms="$(date +%s%3N)"
+            python3 - "$i" "$((end_ms-start_ms))" <<'PY'
+          import json,sys
+          from pathlib import Path
+          i=int(sys.argv[1]); wall=int(sys.argv[2])
+          expected=json.loads(Path('/tmp/e4-expected.json').read_text(encoding='utf-8'))[i-1]
+          data=json.loads(Path(f'/tmp/e4-batch-{i}.json').read_text(encoding='utf-8'))
+          if data.get('error'): raise SystemExit(f'batch {i} API error: {data["error"]!r}')
+          r=data.get('response')
+          if not isinstance(r,dict) or r.get('schema')!='H3_REVIEW_AUDIO_E4_BATCH_V1':
+              raise SystemExit(f'batch {i} response invalid: {r!r}')
+          family,set_count,asset_count,post_total=expected
+          checks=[
+            (r.get('family')==family,'family'),(len(r.get('sets') or [])==set_count,'set_count'),
+            (r.get('asset_count')==asset_count,'asset_count'),
+            (r.get('post_total_assets')==post_total,'post_total_assets'),
+            (r.get('complete')==(i==11),'complete')
+          ]
+          bad=[name for ok,name in checks if not ok]
+          if bad: raise SystemExit(f'batch {i} failed checks {bad}: {r!r}')
+          print('E4_BATCH='+json.dumps({
+            'batch':i,'family':r['family'],'sets':r['sets'],'assets':r['asset_count'],
+            'gas_ms':r['duration_ms'],'wall_ms':wall,'post_total':r['post_total_assets'],
+            'remaining_sets':r['remaining_sets'],'complete':r['complete']
+          },ensure_ascii=False,separators=(',',':')))
+          PY
+          done
+
+      - name: Write E4 summary
+        if: always() && steps.mode.outputs.active == 'true'
+        shell: bash
+        run: |
+          {
+            echo '## Review Audio E4 bounded backfill'
+            echo ''
+            echo '- source: ${{ github.event.workflow_run.head_sha }}'
+            echo '- mode: ${{ steps.mode.outputs.mode }}'
+            echo "- API executable version: $(cat /tmp/e4-version.txt 2>/dev/null || echo unavailable)"
+            echo '- same deployment ID preserved: AKfycbxmJnIPTKJY5beUVAU5d0RyKb0Nj-YarY8EkdyczgXHpJKVw4-0kdjv6cYEUXEDtw5D'
+            echo '- web deployment changed: no'
+            echo '- secret values printed: no'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -6345,6 +6345,10 @@ function h3ReviewHomeIndexRawRow_(
       String(
         entry.last_review_completion_key ||
         ''
+      ),
+    PRIORITY_STATE_JSON:
+      String(
+        entry.priority_state_json || ''
       )
   };
 
@@ -6374,11 +6378,45 @@ function h3ReviewHomeIndexRefreshBasePriorities_(
     h3ReviewHomeIndexTable_(
       spreadsheet
     );
+  var answeredAtBySet = {};
+
+  indexed.table.rows.forEach(
+    function (row) {
+      var setId =
+        String(
+          row[
+            indexed.table.map.SET_ID
+          ] || ''
+        );
+      var answeredAt =
+        String(
+          row[
+            indexed.table.map
+              .ANSWERED_AT
+          ] || ''
+        );
+
+      if (setId && answeredAt) {
+        answeredAtBySet[
+          setId
+        ] = answeredAt;
+      }
+    }
+  );
+
   var evidence =
     h3ReviewSkillEvidenceIndex_(
-      spreadsheet
+      spreadsheet,
+      answeredAtBySet
     );
-  var values = [];
+  var baseValues = [];
+  var stateValues = [];
+  var hasPriorityState =
+    Object.prototype
+      .hasOwnProperty.call(
+        indexed.table.map,
+        'PRIORITY_STATE_JSON'
+      );
 
   indexed.table.rows.forEach(
     function (row) {
@@ -6399,12 +6437,20 @@ function h3ReviewHomeIndexRefreshBasePriorities_(
           ] || ''
         ) !== 'ACTIVE'
       ) {
-        values.push([
+        baseValues.push([
           row[
             indexed.table.map
               .BASE_PRIORITY
           ] || ''
         ]);
+        if (hasPriorityState) {
+          stateValues.push([
+            row[
+              indexed.table.map
+                .PRIORITY_STATE_JSON
+            ] || ''
+          ]);
+        }
         return;
       }
 
@@ -6414,29 +6460,61 @@ function h3ReviewHomeIndexRefreshBasePriorities_(
           indexed.table.map
         );
 
-      values.push([
-        h3ReviewBaseLevelForEntry_(
-          entry.review_kind,
-          entry,
-          evidence
-        )
-      ]);
+      if (hasPriorityState) {
+        var state =
+          h3ReviewPriorityStateForEntry_(
+            entry.review_kind,
+            entry,
+            evidence
+          );
+
+        baseValues.push([
+          Number(
+            state.base_level || 0
+          )
+        ]);
+        stateValues.push([
+          JSON.stringify(state)
+        ]);
+      } else {
+        baseValues.push([
+          h3ReviewBaseLevelForEntry_(
+            entry.review_kind,
+            entry,
+            evidence
+          )
+        ]);
+      }
     }
   );
 
-  if (values.length) {
+  if (baseValues.length) {
     indexed.sheet
       .getRange(
         2,
         indexed.table.map
           .BASE_PRIORITY + 1,
-        values.length,
+        baseValues.length,
         1
       )
-      .setValues(values);
+      .setValues(baseValues);
+  }
+
+  if (
+    hasPriorityState &&
+    stateValues.length
+  ) {
+    indexed.sheet
+      .getRange(
+        2,
+        indexed.table.map
+          .PRIORITY_STATE_JSON + 1,
+        stateValues.length,
+        1
+      )
+      .setValues(stateValues);
   }
 }
-
 
 function migrateReviewHomeIndexV2() {
   var lock =
@@ -6707,6 +6785,88 @@ function migrateReviewHomeIndexV4() {
 }
 
 
+
+function migrateReviewHomeIndexV5() {
+  var lock =
+    LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    var spreadsheet =
+      SpreadsheetApp.openById(
+        H3_WEB_RUNTIME_SPREADSHEET_ID
+      );
+    var indexed =
+      h3ReviewHomeIndexTable_(
+        spreadsheet
+      );
+
+    if (
+      indexed.schema_version ===
+        'H3_REVIEW_HOME_INDEX_V5'
+    ) {
+      return {
+        schema:
+          'H3_REVIEW_HOME_INDEX_MIGRATION_V5',
+        status: 'ALREADY_V5',
+        rows:
+          indexed.table.rows.length
+      };
+    }
+
+    if (
+      indexed.schema_version !==
+        'H3_REVIEW_HOME_INDEX_V4'
+    ) {
+      throw new Error(
+        'REVIEW_HOME_INDEX_V5_MIGRATION_SOURCE_INVALID'
+      );
+    }
+
+    indexed.sheet
+      .getRange(
+        1,
+        H3_REVIEW_HOME_INDEX_HEADERS_V4_
+          .length + 1
+      )
+      .setValue(
+        'PRIORITY_STATE_JSON'
+      );
+
+    SpreadsheetApp.flush();
+
+    var readback =
+      h3ReviewHomeIndexTable_(
+        spreadsheet
+      );
+
+    if (
+      readback.schema_version !==
+        'H3_REVIEW_HOME_INDEX_V5'
+    ) {
+      throw new Error(
+        'REVIEW_HOME_INDEX_V5_MIGRATION_READBACK_INVALID'
+      );
+    }
+
+    h3ReviewHomeIndexRefreshBasePriorities_(
+      spreadsheet
+    );
+    SpreadsheetApp.flush();
+
+    return {
+      schema:
+        'H3_REVIEW_HOME_INDEX_MIGRATION_V5',
+      status: 'PASS',
+      rows:
+        readback.table.rows.length
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
 function h3ReviewCompletionError_(
   code,
   errorClass,
@@ -6843,11 +7003,15 @@ function h3ReviewCompleteSession_(
       );
 
     if (
-      indexed.schema_version !==
-        'H3_REVIEW_HOME_INDEX_V4'
+      [
+        'H3_REVIEW_HOME_INDEX_V4',
+        'H3_REVIEW_HOME_INDEX_V5'
+      ].indexOf(
+        indexed.schema_version
+      ) < 0
     ) {
       throw h3ReviewCompletionError_(
-        'REVIEW_COMPLETE_HOME_INDEX_V4_REQUIRED',
+        'REVIEW_COMPLETE_HOME_INDEX_V4_OR_V5_REQUIRED',
         'INTEGRITY',
         false
       );

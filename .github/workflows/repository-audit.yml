@@ -1269,7 +1269,7 @@ jobs:
           const indexRows = [
             ['LISTENING','S3',3,'2026-09-20T09:00:00Z',4,5,1,'TRUE',0,12,'T3','LISTENING_PRODUCTION_WEB','ACTIVE'],
             ['LISTENING','S2',2,'2026-09-20T08:00:00Z',5,5,0,'TRUE',1,6,'T2','LISTENING_PRODUCTION_WEB','ACTIVE'],
-            ['LISTENING','S1',1,'UNKNOWN',3,5,2,'FALSE','',24,'L1','LEGACY_PRE_WEB','ACTIVE']
+            ['LISTENING','S1',1,'2026-09-19T08:00:00Z',3,5,2,'FALSE','',24,'L1','LEGACY_PRE_WEB','ACTIVE']
           ];
           const touchedSheets = [];
           const indexSheet = {
@@ -1350,23 +1350,31 @@ jobs:
           );
           assert.strictEqual(
             actualHome.review_level_contract,
-            'H3_REVIEW_PRIORITY_V3'
+            'H3_REVIEW_PRIORITY_V4'
           );
           assert.strictEqual(
             actualHome.review_home_index_contract,
-            'H3_REVIEW_HOME_INDEX_V4_COMPAT'
+            'H3_REVIEW_HOME_INDEX_V5_COMPAT'
           );
           assert.strictEqual(
             actualHome.learning_surface_schema,
             'H3_LEARNING_SURFACE_V1'
           );
           assert.strictEqual(
-            actualHome.review_cooldown_initial_factor,
-            0.45
+            actualHome.review_cooldown_cap_start,
+            10
+          );
+          assert.strictEqual(
+            actualHome.review_cooldown_cap_24h,
+            25
+          );
+          assert.strictEqual(
+            actualHome.review_cooldown_cap_hours,
+            24
           );
           assert.strictEqual(
             actualHome.review_cooldown_recovery_hours,
-            72
+            96
           );
           actualHome.review_history.forEach(entry => {
             assert.strictEqual(
@@ -1383,30 +1391,56 @@ jobs:
             );
           });
 
-          const unknownEntry = actualHome.review_history.find(
+          const legacyEntry = actualHome.review_history.find(
             entry => entry.set_id === 'S1'
           );
-          assert.ok(unknownEntry);
-          assert.strictEqual(unknownEntry.answered_at, 'UNKNOWN');
+          assert.ok(legacyEntry);
           assert.strictEqual(
-            unknownEntry.review_time_source,
-            'UNKNOWN_FALLBACK_OLDEST'
+            legacyEntry.review_time_source,
+            'ANSWERED_AT_LEGACY'
           );
           assert.strictEqual(
-            unknownEntry.review_effective_at,
-            '2026-09-20T08:00:00.000Z'
+            legacyEntry.review_effective_at,
+            '2026-09-19T08:00:00.000Z'
           );
-          assert.strictEqual(unknownEntry.review_base_level, 24);
-          assert.strictEqual(unknownEntry.review_level, 39);
+          assert.strictEqual(legacyEntry.review_base_level, 24);
+          assert.ok(
+            legacyEntry.review_level >
+            legacyEntry.review_base_level
+          );
 
           const knownEntry = actualHome.review_history.find(
             entry => entry.set_id === 'S3'
           );
-          assert.strictEqual(knownEntry.review_time_source, 'ACTUAL');
+          assert.strictEqual(
+            knownEntry.review_time_source,
+            'ANSWERED_AT_LEGACY'
+          );
           assert.ok(
             knownEntry.review_level >
             knownEntry.review_base_level
           );
+
+          context.__missingAnswered = indexRows[0].slice();
+          context.__missingAnswered[3] = 'UNKNOWN';
+          const missingSheet = {
+            getDataRange: () => ({
+              getDisplayValues: () =>
+                [indexHeader, context.__missingAnswered]
+            })
+          };
+          const originalSheet = spreadsheet.getSheetByName;
+          spreadsheet.getSheetByName = name => {
+            if (name === 'review_home_index_v1') {
+              return missingSheet;
+            }
+            throw new Error('HOME_UNEXPECTED_SHEET_READ:' + name);
+          };
+          assert.throws(
+            () => vm.runInContext('buildReviewHomePayload_()', context),
+            /REVIEW_ANSWERED_AT_REQUIRED/
+          );
+          spreadsheet.getSheetByName = originalSheet;
 
           const call = expression => JSON.parse(JSON.stringify(
             vm.runInContext(expression, context)
@@ -1437,8 +1471,8 @@ jobs:
             "h3ReviewCooldownMeta_(80,'2026-10-04T10:00:00Z',__cooldownNow)"
           );
           assert.strictEqual(cooldown.active, true);
-          assert.strictEqual(cooldown.factor, 0.45);
-          assert.strictEqual(cooldown.level, 36);
+          assert.strictEqual(cooldown.cap, 10);
+          assert.strictEqual(cooldown.level, 10);
 
           context.__cooldown24 =
             Date.parse('2026-10-05T10:00:00Z');
@@ -1446,12 +1480,21 @@ jobs:
             "h3ReviewCooldownMeta_(80,'2026-10-04T10:00:00Z',__cooldown24)"
           );
           assert.strictEqual(cooldown.active, true);
-          assert.strictEqual(cooldown.level, 51);
+          assert.strictEqual(cooldown.cap, null);
+          assert.strictEqual(cooldown.level, 25);
 
           context.__cooldown72 =
             Date.parse('2026-10-07T10:00:00Z');
           cooldown = call(
             "h3ReviewCooldownMeta_(80,'2026-10-04T10:00:00Z',__cooldown72)"
+          );
+          assert.strictEqual(cooldown.active, true);
+          assert.strictEqual(cooldown.level, 62);
+
+          context.__cooldown96 =
+            Date.parse('2026-10-08T10:00:00Z');
+          cooldown = call(
+            "h3ReviewCooldownMeta_(80,'2026-10-04T10:00:00Z',__cooldown96)"
           );
           assert.strictEqual(cooldown.active, false);
           assert.strictEqual(cooldown.factor, 1);
@@ -1488,11 +1531,14 @@ jobs:
                 return {
                   map:{
                     SET_ID:0,SKILL_ID:1,STATUS:2,
-                    USER_RESULT:3,LEVEL:4
+                    USER_RESULT:3,LEVEL:4,
+                    ANSWERED_AT:5,SURFACE_HASH:6
                   },
                   rows:[
-                    ['A','SK1','ANSWERED','×','3級'],
-                    ['B','SK1','ANSWERED','×','準2級']
+                    ['A','SK1','ANSWERED','×','3級','2026-09-20T09:00:00Z','A1'],
+                    ['B','SK1','ANSWERED','×','準2級','2026-09-20T09:30:00Z','B1'],
+                    ['C','SK1','ANSWERED','○','3級','2026-09-21T09:00:00Z','C1'],
+                    ['D','SK1','ANSWERED','○','3級','2026-09-22T09:00:00Z','D1']
                   ]
                 };
               }
@@ -1506,9 +1552,9 @@ jobs:
               }
               if (name === 'reading_log_v1') {
                 return {
-                  map:{SET_ID:0,SKILL_ID:1,RESULT:2},
+                  map:{SET_ID:0,SKILL_ID:1,RESULT:2,ANSWERED_AT:3,QUESTION_KEY:4},
                   rows:[
-                    ['R','RSK1','×']
+                    ['R','RSK1','×','2026-09-20T10:00:00Z','RQ1']
                   ]
                 };
               }
@@ -1522,9 +1568,9 @@ jobs:
               }
               if (name === 'translation_log_v1') {
                 return {
-                  map:{SET_ID:0,SKILL_ID:1,RESULT:2},
+                  map:{SET_ID:0,SKILL_ID:1,RESULT:2,ANSWERED_AT:3,QUESTION_KEY:4},
                   rows:[
-                    ['T','TSK1','△']
+                    ['T','TSK1','△','2026-09-20T11:00:00Z','TQ1']
                   ]
                 };
               }
@@ -1552,16 +1598,24 @@ jobs:
           );
           assert.deepStrictEqual(
             evidence.written_set_ids,
-            ['A','B']
+            ['A','B','C','D']
           );
           context.__evidence = evidence;
           context.__entry3 = {
             set_id:'A', level:'3級',
-            surface_family:'5W'
+            surface_family:'5W',
+            answered_at:'2026-09-20T09:00:00Z',
+            total:1,wrong_count:1,
+            uncertainty_known:true,
+            uncertain_count:0
           };
           context.__entry2 = {
             set_id:'B', level:'準2級',
-            surface_family:'5W'
+            surface_family:'5W',
+            answered_at:'2026-09-20T09:30:00Z',
+            total:1,wrong_count:1,
+            uncertainty_known:true,
+            uncertain_count:0
           };
           assert.strictEqual(
             vm.runInContext(
@@ -1576,6 +1630,42 @@ jobs:
               context
             ),
             66
+          );
+
+          const dynamicState = call(
+            "h3ReviewPriorityStateForEntry_('WRITTEN',__entry3,__evidence)"
+          );
+          assert.strictEqual(
+            dynamicState.schema,
+            'H3_REVIEW_PRIORITY_STATE_V1'
+          );
+          assert.strictEqual(
+            dynamicState.items[0].weakness,
+            0.1
+          );
+          assert.strictEqual(
+            dynamicState.items[0].correct_spaced_count,
+            2
+          );
+          assert.strictEqual(
+            dynamicState.items[0].evidence_at,
+            '2026-09-22T09:00:00.000Z'
+          );
+          assert.strictEqual(
+            dynamicState.base_level,
+            9
+          );
+
+          context.__dynamicState =
+            dynamicState;
+          context.__dynamicNow =
+            Date.parse('2026-09-22T09:00:00Z');
+          const dynamicNow = call(
+            "h3ReviewDynamicLevelFromState_(9,__dynamicState,__dynamicNow)"
+          );
+          assert.strictEqual(
+            dynamicNow.level,
+            9
           );
           context.__entryR = {
             set_id:'R', level:'3級',
@@ -3284,12 +3374,13 @@ jobs:
                       f'Review canonical architecture invariant missing: {needle}'
                   )
 
-          if 'H3_REVIEW_PRIORITY_V3' not in chat:
+          if 'H3_REVIEW_PRIORITY_V4' not in chat:
               raise SystemExit('Web/Chat contract lacks the current HOME priority contract.')
           for needle in [
+              'PRIORITY_STATE_JSON',
               'LAST_REVIEWED_AT',
-              '45%',
-              '72 hours',
+              '0–24h',
+              '24–96h',
               'all Review questions',
           ]:
               if needle not in architecture:
@@ -8471,12 +8562,12 @@ jobs:
           );
           assert(
             core.includes("'LAST_REVIEW_COMPLETION_KEY'") &&
-            core.includes("'H3_REVIEW_HOME_INDEX_V4_COMPAT'"),
-            'Review HOME index V4 contract is missing.'
+            core.includes("'H3_REVIEW_HOME_INDEX_V5_COMPAT'"),
+            'Review HOME index V5 contract is missing.'
           );
           assert(
-            persistence.includes('function migrateReviewHomeIndexV4()'),
-            'Review HOME index V4 migration is missing.'
+            persistence.includes('function migrateReviewHomeIndexV5()'),
+            'Review HOME index V5 migration is missing.'
           );
           assert(
             webapp.includes(
@@ -8940,7 +9031,8 @@ jobs:
             'SURFACE_FAMILY',
             'LEVEL',
             'LAST_REVIEWED_AT',
-            'LAST_REVIEW_COMPLETION_KEY'
+            'LAST_REVIEW_COMPLETION_KEY',
+            'PRIORITY_STATE_JSON'
           ];
           const map =
             Object.fromEntries(
@@ -8968,7 +9060,8 @@ jobs:
             '5L',
             '3級',
             '',
-            ''
+            '',
+            '{"schema":"H3_REVIEW_PRIORITY_STATE_V1","item_count":0,"base_level":60,"items":[]}'
           ];
           const sheet = {
             getRange(
@@ -9014,7 +9107,7 @@ jobs:
             .h3ReviewHomeIndexTable_ =
             () => ({
               schema_version:
-                'H3_REVIEW_HOME_INDEX_V4',
+                'H3_REVIEW_HOME_INDEX_V5',
               sheet,
               table
             });

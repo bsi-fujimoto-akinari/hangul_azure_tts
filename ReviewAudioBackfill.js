@@ -661,6 +661,31 @@ function h3ReviewAudioGenerateSet_(family,setId){
   });
 }
 
+
+function runReviewAudioPilotFamily1(){
+  var targets=[
+    {family:'5W',set_id:'H3-20260913-01'},
+    {family:'2R',set_id:'H3-20260921-R001'},
+    {family:'2T',set_id:'H3-20260921-T001'}
+  ];
+  var results=[];
+  targets.forEach(function(target){
+    var generated=h3ReviewAudioGenerateSet_(target.family,target.set_id);
+    results.push({
+      family:target.family,
+      set_id:target.set_id,
+      asset_count:generated.length,
+      results:generated
+    });
+  });
+  return{
+    schema:'H3_REVIEW_AUDIO_PILOT_FAMILY1_V1',
+    generated_at:new Date().toISOString(),
+    target_count:targets.length,
+    results:results
+  };
+}
+
 function h3ReviewAudioSelfCheck_(){
   var p=h3ReviewAudioBuildHistoricalPlan_();
   if(p.set_count!==24||p.asset_count!==105){

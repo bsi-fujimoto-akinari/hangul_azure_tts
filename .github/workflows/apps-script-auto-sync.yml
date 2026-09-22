@@ -155,11 +155,21 @@ jobs:
         if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
         shell: bash
         run: |
+          set -o pipefail
           if ! git log -1 --pretty=%B | grep -Fq '[review-audio-pilot-family1]'; then
             echo 'Pilot marker absent; direct run skipped.'
             exit 0
           fi
-          npx -y @google/clasp@3.4.0 run-function runReviewAudioPilotFamily1
+          output="$(npx -y @google/clasp@3.4.0 run-function runReviewAudioPilotFamily1 2>&1)"
+          printf '%s\n' "$output"
+          if printf '%s\n' "$output" | grep -Eq 'Unable to run script function|Script function not found|Exception:|No response[.]'; then
+            echo "::error::Direct Apps Script pilot execution failed."
+            exit 1
+          fi
+          if ! printf '%s\n' "$output" | grep -q 'H3_REVIEW_AUDIO_PILOT_FAMILY1_V1'; then
+            echo "::error::Direct Apps Script pilot did not return the expected pilot schema."
+            exit 1
+          fi
 
       - name: Write run summary
         if: always()

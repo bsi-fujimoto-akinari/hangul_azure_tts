@@ -746,6 +746,7 @@ function h3ReviewAudioGenerateSet_(family,setId){
 
 
 function runReviewAudioPilotFamily1(){
+  var selfCheck=h3ReviewAudioSelfCheck_();
   var targets=[
     {family:'5W',set_id:'H3-20260913-01'},
     {family:'2R',set_id:'H3-20260921-R001'},
@@ -765,6 +766,7 @@ function runReviewAudioPilotFamily1(){
     schema:'H3_REVIEW_AUDIO_PILOT_FAMILY1_V1',
     generated_at:new Date().toISOString(),
     target_count:targets.length,
+    self_check:selfCheck,
     results:results
   };
 }

@@ -696,7 +696,13 @@ function h3ReviewExplanationStyleRepresentativeLines_(
           .forEach(function (line) {
             if (
               /[가-힣]/.test(line) &&
-              !/^\s*→/.test(line)
+              !/^\s*→/.test(line) &&
+              (
+                /\s/.test(line) ||
+                /[.!?。！？]$/.test(
+                  String(line || '').trim()
+                )
+              )
             ) {
               lines.push(line);
             }

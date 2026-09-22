@@ -69,6 +69,10 @@ jobs:
             esac
           done < <(git diff-tree --no-commit-id --name-only -r HEAD)
 
+          if git log -1 --pretty=%B | grep -Fq '[e1-refresh-api-exec]'; then
+            changed=true
+          fi
+
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
       - name: Check clasp credential availability
@@ -146,6 +150,174 @@ jobs:
             echo "::error::clasp did not report a completed push."
             exit 1
           fi
+
+      - name: Refresh and verify existing Review audio API executable
+        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
+        shell: bash
+        run: |
+          if ! git log -1 --pretty=%B | grep -Fq '[e1-refresh-api-exec]'; then
+            echo 'E1 deployment refresh marker absent; skipped.'
+            exit 0
+          fi
+
+          python3 - <<'PY'
+          import json, urllib.parse, urllib.request
+          from pathlib import Path
+
+          script_id = '1p_e1jKICTZXHpCrQ7rwU9HilloZdkFBpHry_lCq5YgXpaiU4FNEQlDa-'
+          api_dep = 'AKfycbxmJnIPTKJY5beUVAU5d0RyKb0Nj-YarY8EkdyczgXHpJKVw4-0kdjv6cYEUXEDtw5D'
+          web_dep = 'AKfycby8I309RUkfVIsnJks808KA713QLppfrGiAFUTV2tA'
+
+          rc = json.loads((Path.home()/'.clasprc.json').read_text(encoding='utf-8'))
+          cred = (rc.get('tokens') or {}).get('default') or {}
+          required = ['client_id','client_secret','refresh_token']
+          missing = [k for k in required if not cred.get(k)]
+          if missing:
+              raise SystemExit('Missing clasp credential fields: ' + ','.join(missing))
+
+          body = urllib.parse.urlencode({
+              'client_id': cred['client_id'],
+              'client_secret': cred['client_secret'],
+              'refresh_token': cred['refresh_token'],
+              'grant_type': 'refresh_token',
+          }).encode('utf-8')
+          req = urllib.request.Request(
+              'https://oauth2.googleapis.com/token',
+              data=body,
+              headers={'Content-Type':'application/x-www-form-urlencoded'},
+              method='POST',
+          )
+          with urllib.request.urlopen(req) as resp:
+              token = json.loads(resp.read().decode('utf-8')).get('access_token')
+          if not token:
+              raise SystemExit('OAuth refresh did not return access_token')
+
+          def get_json(url):
+              req = urllib.request.Request(url, headers={'Authorization': f'Bearer {token}'})
+              with urllib.request.urlopen(req) as resp:
+                  return json.loads(resp.read().decode('utf-8'))
+
+          base = f'https://script.googleapis.com/v1/projects/{script_id}/deployments'
+          listing = get_json(base)
+          deps = listing.get('deployments') or []
+          ids = {d.get('deploymentId') for d in deps}
+          expected = {api_dep, web_dep}
+          if ids != expected:
+              raise SystemExit(f'Unexpected deployment inventory before update: {sorted(ids)}')
+
+          target = get_json(f'{base}/{api_dep}')
+          cfg = target.get('deploymentConfig') or {}
+          version = cfg.get('versionNumber')
+          eps = target.get('entryPoints') or []
+          exec_eps = [ep for ep in eps if ep.get('entryPointType') == 'EXECUTION_API']
+          if not exec_eps:
+              raise SystemExit('Existing API deployment has no EXECUTION_API entry point')
+          access = ((exec_eps[0].get('executionApi') or {}).get('entryPointConfig') or {}).get('access')
+          if access != 'MYSELF':
+              raise SystemExit(f'Unexpected execution API access before update: {access!r}')
+
+          web = get_json(f'{base}/{web_dep}')
+          web_types = [ep.get('entryPointType') for ep in (web.get('entryPoints') or [])]
+          if 'WEB_APP' not in web_types:
+              raise SystemExit(f'Expected web deployment entry point missing: {web_types!r}')
+
+          Path('/tmp/e1-before.json').write_text(json.dumps({
+              'api_version': version,
+              'deployment_ids': sorted(ids),
+              'execution_api_access': access,
+              'web_entry_types': web_types,
+          }), encoding='utf-8')
+
+          print(f'api_version_before={version}')
+          print('deployment_inventory_before=PASS')
+          print('execution_api_access_before=MYSELF')
+          print('web_deployment_before=PASS')
+          print('secret_values_printed=false')
+          PY
+
+          npx -y @google/clasp@3.4.0 update-deployment \
+            AKfycbxmJnIPTKJY5beUVAU5d0RyKb0Nj-YarY8EkdyczgXHpJKVw4-0kdjv6cYEUXEDtw5D \
+            --description "Review audio API executable E1 refreshed 2026-09-22" \
+            --json > /tmp/e1-update.json
+
+          python3 - <<'PY'
+          import json, urllib.parse, urllib.request
+          from pathlib import Path
+
+          script_id = '1p_e1jKICTZXHpCrQ7rwU9HilloZdkFBpHry_lCq5YgXpaiU4FNEQlDa-'
+          api_dep = 'AKfycbxmJnIPTKJY5beUVAU5d0RyKb0Nj-YarY8EkdyczgXHpJKVw4-0kdjv6cYEUXEDtw5D'
+          web_dep = 'AKfycby8I309RUkfVIsnJks808KA713QLppfrGiAFUTV2tA'
+
+          before = json.loads(Path('/tmp/e1-before.json').read_text(encoding='utf-8'))
+          update = json.loads(Path('/tmp/e1-update.json').read_text(encoding='utf-8'))
+
+          if update.get('deploymentId') != api_dep:
+              raise SystemExit(f'Existing deployment ID was not preserved: {update.get("deploymentId")!r}')
+          new_version = update.get('versionNumber')
+          if not new_version:
+              raise SystemExit('Deployment update did not return a version number')
+          old_version = before.get('api_version')
+          if old_version is not None and int(new_version) <= int(old_version):
+              raise SystemExit(f'API deployment version did not advance: {old_version!r} -> {new_version!r}')
+
+          rc = json.loads((Path.home()/'.clasprc.json').read_text(encoding='utf-8'))
+          cred = (rc.get('tokens') or {}).get('default') or {}
+          body = urllib.parse.urlencode({
+              'client_id': cred['client_id'],
+              'client_secret': cred['client_secret'],
+              'refresh_token': cred['refresh_token'],
+              'grant_type': 'refresh_token',
+          }).encode('utf-8')
+          req = urllib.request.Request(
+              'https://oauth2.googleapis.com/token',
+              data=body,
+              headers={'Content-Type':'application/x-www-form-urlencoded'},
+              method='POST',
+          )
+          with urllib.request.urlopen(req) as resp:
+              token = json.loads(resp.read().decode('utf-8')).get('access_token')
+
+          def get_json(url):
+              req = urllib.request.Request(url, headers={'Authorization': f'Bearer {token}'})
+              with urllib.request.urlopen(req) as resp:
+                  return json.loads(resp.read().decode('utf-8'))
+
+          base = f'https://script.googleapis.com/v1/projects/{script_id}/deployments'
+          listing = get_json(base)
+          deps = listing.get('deployments') or []
+          ids = {d.get('deploymentId') for d in deps}
+          expected = {api_dep, web_dep}
+          if ids != expected:
+              raise SystemExit(f'Unexpected deployment inventory after update: {sorted(ids)}')
+
+          target = get_json(f'{base}/{api_dep}')
+          cfg = target.get('deploymentConfig') or {}
+          actual_version = cfg.get('versionNumber')
+          if int(actual_version) != int(new_version):
+              raise SystemExit(f'API deployment version mismatch: update={new_version!r}, readback={actual_version!r}')
+
+          eps = target.get('entryPoints') or []
+          exec_eps = [ep for ep in eps if ep.get('entryPointType') == 'EXECUTION_API']
+          if not exec_eps:
+              raise SystemExit('Updated deployment has no EXECUTION_API entry point')
+          access = ((exec_eps[0].get('executionApi') or {}).get('entryPointConfig') or {}).get('access')
+          if access != 'MYSELF':
+              raise SystemExit(f'Unexpected execution API access after update: {access!r}')
+
+          web = get_json(f'{base}/{web_dep}')
+          web_types = [ep.get('entryPointType') for ep in (web.get('entryPoints') or [])]
+          if 'WEB_APP' not in web_types:
+              raise SystemExit(f'Web deployment entry point changed unexpectedly: {web_types!r}')
+
+          print('e1_api_deployment_refresh=PASS')
+          print(f'api_version_after={actual_version}')
+          print('deployment_id_preserved=true')
+          print('deployment_inventory_after=PASS')
+          print('execution_api_access_after=MYSELF')
+          print('web_deployment_unchanged=true')
+          print('duplicate_deployment_created=false')
+          print('secret_values_printed=false')
+          PY
 
       - name: Read deployment inventory
         if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'

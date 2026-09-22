@@ -2237,6 +2237,32 @@
   }
 
 
+  function setAudioSeekFill_(
+    seek,
+    ratio
+  ) {
+    if (!seek) return;
+
+    var normalized =
+      Math.max(
+        0,
+        Math.min(
+          1,
+          Number(ratio || 0)
+        )
+      );
+
+    seek.style.setProperty(
+      '--seek-fill',
+      String(
+        Math.round(
+          normalized * 1000
+        ) / 10
+      ) + '%'
+    );
+  }
+
+
   function updateAudioSeek_(
     audio,
     seek
@@ -2264,25 +2290,32 @@
 
     if (duration <= 0) {
       seek.value = '0';
+      setAudioSeekFill_(
+        seek,
+        0
+      );
       return;
     }
 
-    seek.value =
-      String(
-        Math.max(
-          0,
-          Math.min(
-            1000,
-            Math.round(
-              (
-                current /
-                duration
-              ) *
-              1000
-            )
-          )
+    var ratio =
+      Math.max(
+        0,
+        Math.min(
+          1,
+          current / duration
         )
       );
+
+    seek.value =
+      String(
+        Math.round(
+          ratio * 1000
+        )
+      );
+    setAudioSeekFill_(
+      seek,
+      ratio
+    );
   }
 
 
@@ -2324,6 +2357,11 @@
           ) / 1000
         )
       );
+
+    setAudioSeekFill_(
+      seek,
+      ratio
+    );
 
     try {
       audio.currentTime =

@@ -3039,7 +3039,7 @@ jobs:
 
           for needle in [
               "'audio-wrap inline-seek-audio-wrap'",
-              "'audio-seek-controls'",
+              "'custom-audio-controls audio-seek-controls'",
               "'audio-seek'",
               'function setAudioSeekFill_(',
               "'--seek-fill'",

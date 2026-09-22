@@ -75,6 +75,13 @@ function h3MultiSkillNormalizeAuthoredLinks_(links) {
         H3_RS13E_AUTO_ANNOTATION_CONTRACT_ID_
       );
     }
+    if (
+      typeof H3_RS13K1_ANNOTATION_CONTRACT_ID_ !== 'undefined'
+    ) {
+      allowedContracts.push(
+        H3_RS13K1_ANNOTATION_CONTRACT_ID_
+      );
+    }
     if (allowedContracts.indexOf(contract) < 0) {
       throw new Error('MULTI_SKILL_AUTHORING_CONTRACT_INVALID:' + index);
     }
@@ -438,7 +445,7 @@ function h3MultiSkillListeningStored_(spreadsheet,setId) {
   var lv=logSheet.getDataRange().getDisplayValues();
   var pm=h3MultiSkillHeaderMap_(pv[0] || []);
   var lm=h3MultiSkillHeaderMap_(lv[0] || []);
-  ['LISTENING_SET_ID','LISTENING_SET_NO','K2_ITEM_JSON','K3_ITEM_JSON','K4_ITEM_JSON','K5_ITEM_JSON']
+  ['LISTENING_SET_ID','LISTENING_SET_NO','K1_READY_ID','K2_ITEM_JSON','K3_ITEM_JSON','K4_ITEM_JSON','K5_ITEM_JSON']
     .forEach(function (name) {
       if (typeof pm[name] !== 'number') {
         throw new Error('MULTI_SKILL_LISTENING_PAYLOAD_COLUMN_MISSING:' + name);
@@ -480,27 +487,57 @@ function h3MultiSkillListeningStored_(spreadsheet,setId) {
     logs:logs,
     logMap:lm,
     order:order,
-    setNo:Number(payload[pm.LISTENING_SET_NO])
+    setNo:Number(payload[pm.LISTENING_SET_NO]),
+    k1ReadyId:String(payload[pm.K1_READY_ID] || '')
   };
+}
+
+function h3MultiSkillListeningResolvedLinks_(
+  spreadsheet,
+  ctx,
+  section,
+  item,
+  skillId
+) {
+  if (section === 'K1') {
+    if (typeof h3Rs13k1ListeningLinks_ !== 'function') {
+      throw new Error('MULTI_SKILL_K1_AUTHORITY_MODULE_MISSING');
+    }
+    return h3MultiSkillNormalizeAuthoredLinks_(
+      h3Rs13k1ListeningLinks_(
+        spreadsheet,
+        ctx.k1ReadyId,
+        ctx.setNo
+      )
+    );
+  }
+
+  var eligible =
+    typeof h3Rs13eListeningEligible_ === 'function' &&
+    h3Rs13eListeningEligible_(ctx.setNo);
+  return h3MultiSkillResolvedLinks_(
+    spreadsheet,
+    item && item.secondary_evidence_links,
+    eligible,
+    '3級',
+    'LISTENING',
+    skillId
+  );
 }
 
 function h3MultiSkillListeningStoredPreflight_(spreadsheet,setId) {
   var ctx=h3MultiSkillListeningStored_(spreadsheet,setId);
   var total=0;
-  ['K2','K3','K4','K5'].forEach(function (section) {
+  ['K1','K2','K3','K4','K5'].forEach(function (section) {
     var index=ctx.order.indexOf(section);
     var item=ctx.items[section];
     var log=ctx.logs[index];
     var skillId=String(log[ctx.logMap.SKILL_ID] || '');
-    var eligible=
-      typeof h3Rs13eListeningEligible_ === 'function' &&
-      h3Rs13eListeningEligible_(ctx.setNo);
-    var links=h3MultiSkillResolvedLinks_(
+    var links=h3MultiSkillListeningResolvedLinks_(
       spreadsheet,
-      item && item.secondary_evidence_links,
-      eligible,
-      '3級',
-      'LISTENING',
+      ctx,
+      section,
+      item,
       skillId
     );
     if (!links.length) return;
@@ -513,7 +550,7 @@ function h3MultiSkillListeningStoredPreflight_(spreadsheet,setId) {
         source_q_no:index+1,
         source_surface_key:String(log[ctx.logMap.SURFACE_HASH] || ''),
         source_result:'○',
-        direct_skill_id:String(log[ctx.logMap.SKILL_ID] || '')
+        direct_skill_id:skillId
       },
       links
     ).rows;
@@ -526,20 +563,16 @@ function h3MultiSkillListeningStoredCapture_(
 ) {
   var ctx=h3MultiSkillListeningStored_(spreadsheet,setId);
   var total={written:0,no_op:0,status:'NO_LINKS'};
-  ['K2','K3','K4','K5'].forEach(function (section) {
+  ['K1','K2','K3','K4','K5'].forEach(function (section) {
     var index=ctx.order.indexOf(section);
     var item=ctx.items[section];
     var log=ctx.logs[index];
     var skillId=String(log[ctx.logMap.SKILL_ID] || '');
-    var eligible=
-      typeof h3Rs13eListeningEligible_ === 'function' &&
-      h3Rs13eListeningEligible_(ctx.setNo);
-    var links=h3MultiSkillResolvedLinks_(
+    var links=h3MultiSkillListeningResolvedLinks_(
       spreadsheet,
-      item && item.secondary_evidence_links,
-      eligible,
-      '3級',
-      'LISTENING',
+      ctx,
+      section,
+      item,
       skillId
     );
     if (!links.length) return;
@@ -556,7 +589,7 @@ function h3MultiSkillListeningStoredCapture_(
         source_q_no:index+1,
         source_surface_key:String(log[ctx.logMap.SURFACE_HASH] || ''),
         source_result:result,
-        direct_skill_id:String(log[ctx.logMap.SKILL_ID] || '')
+        direct_skill_id:skillId
       },
       links,createdAt
     );

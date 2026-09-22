@@ -46,6 +46,14 @@ function h3TranslationV2Profile_(value) {
   return profile;
 }
 
+function h3TranslationV2SecondaryLinks_(links) {
+  if (links === undefined || links === null) return [];
+  if (typeof h3MultiSkillNormalizeAuthoredLinks_ !== 'function') {
+    throw new Error('TRANSLATION_V2_MULTI_SKILL_HELPER_MISSING');
+  }
+  return h3MultiSkillNormalizeAuthoredLinks_(links);
+}
+
 function h3TranslationV2ValidateItem_(item, index) {
   if (!item || typeof item !== 'object') {
     throw new Error('TRANSLATION_V2_ITEM_INVALID:' + index);
@@ -99,6 +107,7 @@ function h3TranslationV2ValidateItem_(item, index) {
     source_reference:String(item.source_reference || ''),
     source_item_sha256:sourceItemSha256,
     surface_key:h3TranslationActivationRequireId_(item.surface_key,'TRANSLATION_V2_SURFACE_KEY_INVALID:' + index),
+    secondary_evidence_links:h3TranslationV2SecondaryLinks_(item.secondary_evidence_links),
     target_segment:target,
     question_text:question,
     choices:choices,

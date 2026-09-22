@@ -70,6 +70,7 @@ jobs:
               'WebAppConceptAuthoring.js',
               'WebAppRtSoftSignalPreflight.js',
               'WebAppK1SecondaryAuthority.js',
+              'WebAppRs13GateReporter.js',
               'WebAppPreissue.js',
               'WebAppReceipt.js',
               'WebAppReviewCore.js',
@@ -101,6 +102,7 @@ jobs:
               'H3_RS13E_CONCEPT_AUTHORING_CONTRACT.md',
               'H3_RS14P_LIMITED_LIVE_PREFLIGHT_CONTRACT.md',
               'H3_RS13K1_K1_SECONDARY_AUTHORITY_CONTRACT.md',
+              'H3_RS13G_GATE_REPORTER_CONTRACT.md',
               'H3_SURFACE_REVIEW_BRIDGE_CONTRACT.md',
               'Index.html',
               'Stylesheet.html',
@@ -116,6 +118,7 @@ jobs:
               '.github/workflows/rs13e-concept-authoring-audit.yml',
               '.github/workflows/rs14p-limited-live-preflight-audit.yml',
               '.github/workflows/rs13k1-k1-secondary-authority-audit.yml',
+              '.github/workflows/rs13g-gate-reporter-audit.yml',
           }
           tracked = set(
               subprocess.check_output(

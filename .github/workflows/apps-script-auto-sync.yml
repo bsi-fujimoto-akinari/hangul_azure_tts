@@ -69,10 +69,6 @@ jobs:
             esac
           done < <(git diff-tree --no-commit-id --name-only -r HEAD)
 
-          if git log -1 --pretty=%B | grep -Fq '[e2-review-audio-pilot]'; then
-            changed=true
-          fi
-
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
       - name: Check clasp credential availability
@@ -150,71 +146,6 @@ jobs:
             echo "::error::clasp did not report a completed push."
             exit 1
           fi
-
-      - name: Run Review audio family1 pilot
-        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
-        shell: bash
-        run: |
-          if ! git log -1 --pretty=%B | grep -Fq '[e2-review-audio-pilot]'; then
-            echo 'E2 pilot marker absent; skipped.'
-            exit 0
-          fi
-
-          start_ts="$(date +%s)"
-          npx -y @google/clasp@3.4.0 run-function \
-            runReviewAudioPilotFamily1 \
-            --nondev \
-            --user default \
-            --json > /tmp/e2-review-audio-pilot.json
-          end_ts="$(date +%s)"
-
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          data=json.loads(Path('/tmp/e2-review-audio-pilot.json').read_text(encoding='utf-8'))
-          response=data.get('response')
-          error=data.get('error')
-          if error:
-              raise SystemExit(f'E2 pilot returned error: {error!r}')
-          if not isinstance(response, dict):
-              raise SystemExit(f'Unexpected E2 pilot response type: {type(response).__name__}')
-          if response.get('schema') != 'H3_REVIEW_AUDIO_PILOT_FAMILY1_V1':
-              raise SystemExit(f'Unexpected E2 pilot schema: {response.get("schema")!r}')
-          if response.get('target_count') != 3:
-              raise SystemExit(f'Unexpected E2 pilot target_count: {response.get("target_count")!r}')
-
-          expected={'5W':5,'2R':3,'2T':2}
-          seen={}
-          for item in response.get('results') or []:
-              fam=item.get('family')
-              count=item.get('asset_count')
-              seen[fam]=count
-              if fam not in expected or count != expected[fam]:
-                  raise SystemExit(f'Unexpected E2 family count: {fam!r}={count!r}')
-              rows=item.get('results') or []
-              if len(rows) != count:
-                  raise SystemExit(f'Unexpected E2 result length for {fam}: {len(rows)} != {count}')
-              for row in rows:
-                  if row.get('status') != 'DONE':
-                      raise SystemExit(f'Non-DONE E2 result: {row!r}')
-                  if not row.get('file_id') or not row.get('audio_url') or not row.get('audio_text_sha256'):
-                      raise SystemExit(f'Incomplete E2 result: {row!r}')
-
-          if seen != expected:
-              raise SystemExit(f'E2 family counts mismatch: {seen!r}')
-
-          print('e2_review_audio_pilot=PASS')
-          print('pilot_target_count=3')
-          print('pilot_asset_count=10')
-          print('family_5w_count=5')
-          print('family_2r_count=3')
-          print('family_2t_count=2')
-          print('all_status_done=true')
-          print('secret_values_printed=false')
-          PY
-
-          echo "pilot_wall_seconds=$((end_ts-start_ts))"
 
       - name: Read deployment inventory
         if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'

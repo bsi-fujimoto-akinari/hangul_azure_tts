@@ -354,9 +354,16 @@ function h3ReviewAttachSurfaceMetadata_(
       payload.questions.length;
   }
 
-  return h3ReviewExplanationStyleApplyPayload_(
-    payload
-  );
+  if (
+    typeof h3ReviewExplanationStyleApplyPayload_ ===
+      'function'
+  ) {
+    return h3ReviewExplanationStyleApplyPayload_(
+      payload
+    );
+  }
+
+  return payload;
 }
 
 

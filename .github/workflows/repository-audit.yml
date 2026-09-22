@@ -80,6 +80,7 @@ jobs:
               'WebAppSurfaceReviewBridge.js',
               'WebAppSurfaceReviewBridgeAudit.js',
               'ListeningBackendOrchestrator.js',
+              'ReviewAudioBackfill.js',
               'H3_WEB_CHAT_CONTRACT.md',
               'H3_REVIEW_ARCHITECTURE.md',
               'H3_LEARNING_SURFACE_CONTRACT.md',

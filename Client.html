@@ -640,10 +640,6 @@
         .trim()
         .replace(/／/g, '/');
 
-    if (normalized) {
-      return normalized;
-    }
-
     if (
       String(family || '') ===
         'TRANSLATION'
@@ -658,6 +654,10 @@
       if (sectionKey === 'P12') {
         return '筆12/翻訳';
       }
+    }
+
+    if (normalized) {
+      return normalized;
     }
 
     return surfaceLearnerLabel_(
@@ -711,13 +711,24 @@
 
 
   function readingPassageDisplayText_(text) {
-    return String(text || '')
-      .replace(/＊\s*[）)]\s*/g, '* ')
-      .replace(/\*\s*[）)]\s*/g, '* ')
-      .replace(
-        '* 매장：売り',
-        '* 매장：売場'
-      );
+    var source =
+      String(text || '');
+    var hasExplicitFootnoteBody =
+      /[＊*]\s*[）)]/.test(source);
+
+    if (hasExplicitFootnoteBody) {
+      return source
+        .replace(/＊\s*[）)]\s*/g, '* ')
+        .replace(/\*\s*[）)]\s*/g, '* ')
+        .replace(
+          '* 매장：売り',
+          '* 매장：売場'
+        );
+    }
+
+    return source
+      .replace(/＊/g, '')
+      .replace(/([가-힣])\*/g, '$1');
   }
 
 
@@ -790,12 +801,6 @@
       document.getElementById(
         'questions'
       );
-    var isV2 =
-      !!String(
-        payload.translation_profile ||
-        ''
-      );
-
     payload.questions.forEach(
       function (question, index) {
         var card =

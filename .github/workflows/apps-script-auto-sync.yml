@@ -69,6 +69,10 @@ jobs:
             esac
           done < <(git diff-tree --no-commit-id --name-only -r HEAD)
 
+          if git log -1 --pretty=%B | grep -Fq '[e0-validate-queue-setup]'; then
+            changed=true
+          fi
+
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
       - name: Check clasp credential availability
@@ -146,6 +150,49 @@ jobs:
             echo "::error::clasp did not report a completed push."
             exit 1
           fi
+
+      - name: Run E0 validateQueueSetup probe
+        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
+        shell: bash
+        run: |
+          if ! git log -1 --pretty=%B | grep -Fq '[e0-validate-queue-setup]'; then
+            echo 'E0 validation marker absent; skipped.'
+            exit 0
+          fi
+
+          npx -y @google/clasp@3.4.0 run-function \
+            validateQueueSetup \
+            --user default \
+            --json > /tmp/e0-validate-queue-setup.json
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          result = json.loads(
+              Path('/tmp/e0-validate-queue-setup.json').read_text(encoding='utf-8')
+          )
+
+          response = result.get('response')
+          error = result.get('error')
+
+          if error:
+              raise SystemExit(f'validateQueueSetup returned error: {error!r}')
+          if not isinstance(response, dict):
+              raise SystemExit(f'Unexpected validateQueueSetup response type: {type(response).__name__}')
+          if response.get('ok') is not True:
+              raise SystemExit(f'validateQueueSetup ok != true: {response!r}')
+          if response.get('azureTested') is not False:
+              raise SystemExit(f'validateQueueSetup azureTested unexpected: {response!r}')
+
+          print('validate_queue_setup=PASS')
+          print(f"sheet={response.get('sheet')}")
+          print(f"columns={response.get('columns')}")
+          print(f"storage_mode={response.get('storageMode')}")
+          print(f"audio_version={response.get('audioVersion')}")
+          print('azure_tested=false')
+          print('secret_values_printed=false')
+          PY
 
       - name: Read deployment inventory
         if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'

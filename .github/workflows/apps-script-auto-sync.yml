@@ -69,10 +69,6 @@ jobs:
             esac
           done < <(git diff-tree --no-commit-id --name-only -r HEAD)
 
-          if git log -1 --pretty=%B | grep -Fq '[e0-azure-live-probe]'; then
-            changed=true
-          fi
-
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
       - name: Check clasp credential availability
@@ -150,49 +146,6 @@ jobs:
             echo "::error::clasp did not report a completed push."
             exit 1
           fi
-
-      - name: Run E0 Azure live credential probe
-        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
-        shell: bash
-        run: |
-          if ! git log -1 --pretty=%B | grep -Fq '[e0-azure-live-probe]'; then
-            echo 'E0 Azure live probe marker absent; skipped.'
-            exit 0
-          fi
-
-          npx -y @google/clasp@3.4.0 run-function \
-            h3AzureSpeechCredentialProbe \
-            --user default \
-            --json > /tmp/e0-azure-live-probe.json
-
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          result=json.loads(Path('/tmp/e0-azure-live-probe.json').read_text(encoding='utf-8'))
-          response=result.get('response')
-          error=result.get('error')
-
-          if error:
-              raise SystemExit(f'Azure live probe returned error: {error!r}')
-          if not isinstance(response, dict):
-              raise SystemExit(f'Unexpected Azure live probe response type: {type(response).__name__}')
-          if response.get('ok') is not True:
-              raise SystemExit(f'Azure live probe ok != true: {response!r}')
-          if response.get('http_status') != 200:
-              raise SystemExit(f'Azure live probe HTTP != 200: {response!r}')
-          if response.get('audio_bytes_nonzero') is not True:
-              raise SystemExit(f'Azure live probe audio missing: {response!r}')
-          if response.get('persisted') is not False:
-              raise SystemExit(f'Azure live probe persisted unexpectedly: {response!r}')
-
-          print('azure_live_probe=PASS')
-          print('http_status=200')
-          print('audio_bytes_nonzero=true')
-          print(f"content_type={response.get('content_type')}")
-          print('persisted=false')
-          print('secret_values_printed=false')
-          PY
 
       - name: Read deployment inventory
         if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'

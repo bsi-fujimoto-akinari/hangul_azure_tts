@@ -1,29 +1,3 @@
-function h3AzureSpeechCredentialProbe() {
-  var c=config_();
-  var ssml='<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="ko-KR"><voice name="ko-KR-HyunsuNeural">확인.</voice></speak>';
-  var request=azureTtsRequest_(ssml,c);
-  var response=UrlFetchApp.fetch(request.url,request.params);
-  var code=response.getResponseCode();
-  var contentType=String(response.getHeaders()['Content-Type']||response.getHeaders()['content-type']||'');
-  var bytes=response.getBlob().getBytes().length;
-
-  if(code!==200){
-    throw new Error('AZURE_SPEECH_LIVE_PROBE_HTTP_'+code);
-  }
-  if(bytes<100){
-    throw new Error('AZURE_SPEECH_LIVE_PROBE_EMPTY_AUDIO');
-  }
-
-  return{
-    ok:true,
-    http_status:code,
-    audio_bytes_nonzero:true,
-    content_type:contentType,
-    secret_values_printed:false,
-    persisted:false
-  };
-}
-
 var H3_REVIEW_AUDIO_ASSET_SHEET_='review_audio_asset_v1';
 var H3_REVIEW_AUDIO_SCHEMA_='H3_REVIEW_AUDIO_ASSET_V1';
 var H3_REVIEW_AUDIO_GENERATOR_VERSION_='review-audio-v1';

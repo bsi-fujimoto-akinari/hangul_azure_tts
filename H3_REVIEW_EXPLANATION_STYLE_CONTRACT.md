@@ -1,6 +1,6 @@
 # H3 Review Explanation Style Contract
 
-CONTRACT_ID=H3-REVIEW-EXPLANATION-STYLE-20260922-V2
+CONTRACT_ID=H3-REVIEW-EXPLANATION-STYLE-20260923-V3
 
 ## 1. Purpose
 
@@ -14,12 +14,16 @@ bindings.
 
 ## 2. Meta-text scope
 
-For this contract, Japanese explanation meta-text means explanatory prose stored or
-materialized in the semantic roles corresponding to:
+For this contract, Japanese explanation meta-text is the umbrella category for
+learner-facing explanatory prose. It includes the semantic roles corresponding to:
 
-- `reason`
-- `learning_blocks[].usage`
-- `learning_blocks[].note`
+- `reason`: why the answer is correct or how it fits the source/context;
+- `learning_blocks[].usage`: how the target word/grammar/expression works;
+- `learning_blocks[].note`: supplemental nuance, contrast, caution, or other
+  information that supports the main learning point.
+
+Accordingly, `note` is a subtype of meta-text, not a parallel concept:
+`note ⊂ meta-text`.
 
 Provider-specific schemas may use equivalent fields, but the semantic role must be
 the same.
@@ -35,36 +39,75 @@ The following are NOT meta-text and are excluded from style normalization:
 - short labels, glosses, headings, vocabulary entries, pronunciation notation, and
   other fragments that do not naturally take a Japanese sentence-ending register
 
-## 3. Japanese register
+## 3. Japanese rendering style
 
-Review explanation meta-text uses Japanese plain explanatory style (常体).
+Review explanation meta-text uses concise, natural Japanese plain style, with existing
+5L Review explanations as the rendering reference.
 
-Preferred expression follows the concise, natural direction already used by 5L.
-In particular:
+"Plain style" does NOT mean mechanically converting polite endings into `だ` or
+`である`. Choose the sentence ending that gives the same compact, natural
+explanatory rhythm as 5L.
+
+Use an ordinary verbal predicate when that is the natural Japanese sentence shape,
+for example:
 
 - `～を表す。`
-- `～が適切。`
-- `～が自然。`
-- `～が自然な応答になる。`
+- `～が一致する。`
+- `～になる。`
 - `～に対応する。`
 - `～に焦点がある。`
-- `～という意味。` when the sentence naturally functions as a compact definition
+- `～ではない。`
 
-Avoid `～が合う。` as an answer-evaluation conclusion when `～が適切。` is
-clearer. Avoid mechanically closing short nominal or na-adjectival explanation
-fragments with `だ`; forms such as `表現。`, `意味。`, `自動詞。`,
-`自然。`, and `適切。` are preferred when they read naturally.
+Use a compact nominal/na-adjectival ending when it is clearer and more natural, for
+example:
 
-Do not force noun-ending fragments where a verbal sentence is clearer. Forms such as
-`～を表す。`, `～になる。`, `～が一致する。`, and
-`～に焦点がある。` remain normal. The goal is the same compact explanatory
-rhythm as 5L, not uniform truncation.
+- `～が適切。`
+- `～が自然。`
+- `～という表現。`
+- `～という意味。`
+- `～自動詞。`
+- `～固有数詞。`
 
-Source translations, example translations, quoted answer text, and Korean utterances
-must preserve their own semantic register and honorific meaning. A polite utterance
-inside an example is not a violation of this contract.
+For answer evaluation, prefer `～が適切。` over `～が合う。` when both
+could express the intended judgment.
 
-The existing 5L Review meta-text is the reference direction for register only; this
+Do not mechanically add `だ` or `である` to short explanatory fragments.
+Likewise, do not mechanically strip `だ` from every sentence. Natural predicates
+such as `対照的だ。`, `実用的だ。`, or context sentences such as
+`三日後だ。` may remain when `だ` is part of a natural ordinary sentence.
+
+The governing principle is naturalness and compactness, not formal uniformity of the
+ending.
+
+### 3.1 5L reference examples
+
+The following existing 5L patterns illustrate the target style:
+
+- `予定表では8日に東京を出発して仙台へ行き、9日に東京へ戻るため、③の
+  「1泊2日で出張」が一致する。①は英会話が土曜日、②は演劇の後に昼食、
+  ④は帰京後に出社・報告なので一致しない。`
+- `相手は試験が心配だと述べているため、具体的な勉強方法を提案する①が
+  自然な応答になる。`
+- `動作が進行中であることを表す。`
+- `相手に「～してみるのはどうですか」と柔らかく提案する。`
+- `～してもよい。許容・可能を表す。`
+- `자꾸は繰り返し起こること、계속は継続性に重点がある。`
+- `同じ予定の場面では、바로のほうが時間的な間を置かない感じが強い。`
+- `本文では材料費は受講料に含まれているため、別払いではない。`
+
+These examples are style references, not templates to be copied mechanically.
+
+### 3.2 Excluded text
+
+Source translations, answer-choice translations, `example_ja`, quoted source/answer
+text, Korean examples, and learner-facing utterances preserve their own semantic
+register and honorific meaning.
+
+For example, a translation such as
+`→ 同僚が手伝ってくれたおかげで、準備を早く終えました。`
+remains polite if that is the intended translation. It is not meta-text.
+
+The existing 5L Review meta-text is the reference direction for rendering only; this
 contract does not make historical 5L payload rows mutable.
 
 ## 4. Representative-example non-duplication
@@ -114,14 +157,20 @@ A historical style correction is presentation/explanation content only.
 
 ## 6. Future authoring policy
 
-Future Review explanation authoring must satisfy both rules before issue/lock:
+Future Review explanation authoring must satisfy all of the following before issue/lock:
 
-1. Japanese meta-text uses concise natural plain explanatory style aligned with 5L,
-   including the compact nominal-ending policy in section 3.
-2. Representative examples do not duplicate the exact correct answer surface.
+1. Japanese meta-text follows section 3: concise, natural plain explanatory Japanese
+   aligned with 5L.
+2. The renderer/author must choose between a verbal sentence and a compact nominal
+   ending by naturalness; it must not apply mechanical polite→`だ/である` conversion
+   or universal noun-ending truncation.
+3. Answer-evaluation wording prefers `適切` over `合う` when that better expresses
+   the judgment.
+4. Representative examples do not duplicate the exact correct answer surface.
+5. Text excluded by section 3.2 is not rewritten merely to satisfy meta-text style.
 
-A future authoring/audit gate may reject violations before issue. The gate must inspect
-semantic roles, not blindly convert all Japanese strings.
+A future authoring/audit gate may reject or regenerate violations before issue. The
+gate must inspect semantic roles, not blindly convert all Japanese strings.
 
 ## 7. Current migration direction
 

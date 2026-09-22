@@ -131,6 +131,107 @@ jobs:
         shell: bash
         run: npx -y @google/clasp@3.4.0 show-file-status --json
 
+      - name: GCP project readonly diagnostic
+        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
+        shell: bash
+        run: |
+          if ! git log -1 --pretty=%B | grep -Fq '[gcp-project-readonly-diagnostic]'; then
+            echo 'Diagnostic marker absent; skipped.'
+            exit 0
+          fi
+          python3 - <<'PY'
+          import json, urllib.request, urllib.error, datetime
+          from pathlib import Path
+
+          rc = json.loads((Path.home()/'.clasprc.json').read_text(encoding='utf-8'))
+          cred = (rc.get('tokens') or {}).get('default') or rc.get('token') or {}
+          token = cred.get('access_token')
+          if not token:
+              print('GCP_DIAG access_token=missing')
+              raise SystemExit(0)
+
+          headers = {'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'}
+
+          def get_json(url):
+              req = urllib.request.Request(url, headers=headers)
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as resp:
+                      return resp.status, json.loads(resp.read().decode('utf-8'))
+              except urllib.error.HTTPError as e:
+                  return e.code, None
+              except Exception:
+                  return 0, None
+
+          def post_json(url, payload):
+              req = urllib.request.Request(
+                  url,
+                  data=json.dumps(payload).encode('utf-8'),
+                  headers=headers,
+                  method='POST'
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as resp:
+                      return resp.status, json.loads(resp.read().decode('utf-8'))
+              except urllib.error.HTTPError as e:
+                  return e.code, None
+              except Exception:
+                  return 0, None
+
+          status, data = get_json(
+              'https://cloudresourcemanager.googleapis.com/v1/projects?pageSize=1000'
+          )
+          print('GCP_DIAG resource_manager_status=' + str(status))
+          if status != 200 or not data:
+              raise SystemExit(0)
+
+          projects = [
+              p for p in data.get('projects', [])
+              if p.get('lifecycleState') == 'ACTIVE' and p.get('projectId')
+          ]
+          print('GCP_DIAG accessible_active_projects=' + str(len(projects)))
+
+          since = (
+              datetime.datetime.now(datetime.timezone.utc)
+              - datetime.timedelta(days=14)
+          ).isoformat().replace('+00:00', 'Z')
+
+          matches = []
+          for p in projects:
+              pid = p['projectId']
+              payload = {
+                  'resourceNames': ['projects/' + pid],
+                  'filter': (
+                      'resource.type="app_script_function" '
+                      'AND resource.labels.function_name="processLatestPendingAudioJob" '
+                      'AND timestamp>="' + since + '"'
+                  ),
+                  'pageSize': 5,
+                  'orderBy': 'timestamp desc'
+              }
+              code, logs = post_json(
+                  'https://logging.googleapis.com/v2/entries:list',
+                  payload
+              )
+              if code == 200 and logs and logs.get('entries'):
+                  matches.append({
+                      'project_id': pid,
+                      'project_number': str(p.get('projectNumber') or ''),
+                      'default_style': pid.startswith('sys-'),
+                      'entries': len(logs.get('entries', []))
+                  })
+
+          print('GCP_DIAG logging_matches=' + str(len(matches)))
+          for m in matches:
+              print(
+                  'GCP_DIAG MATCH '
+                  'project_id=' + m['project_id'] +
+                  ' project_number=' + m['project_number'] +
+                  ' default_style=' + str(m['default_style']).lower() +
+                  ' entries=' + str(m['entries'])
+              )
+          print('GCP_DIAG secret_values_printed=false')
+          PY
+
       - name: Push audited main to Apps Script HEAD
         if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
         shell: bash

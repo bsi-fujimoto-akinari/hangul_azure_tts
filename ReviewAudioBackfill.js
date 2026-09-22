@@ -705,3 +705,5 @@ function h3ReviewAudioSelfCheck_(){
   });
   return{ok:true,set_count:p.set_count,asset_count:p.asset_count,counts:p.counts};
 }
+
+// GCP_PROJECT_READONLY_DIAGNOSTIC_20260922

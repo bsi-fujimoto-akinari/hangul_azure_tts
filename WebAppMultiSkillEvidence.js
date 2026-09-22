@@ -332,6 +332,95 @@ function h3MultiSkillWrittenLinks_(context) {
   });
 }
 
+function h3MultiSkillWrittenPreflight_(spreadsheet,context) {
+  var linksByQ=h3MultiSkillWrittenLinks_(context);
+  var meta=JSON.parse(context.questionMetaJson);
+  var total=0;
+  linksByQ.forEach(function (links,index) {
+    if (!links.length) return;
+    total += h3MultiSkillPreflight_(
+      spreadsheet,
+      {
+        level:'3級',source_family:'WRITTEN',
+        source_event_ref:'PREFLIGHT|WRITTEN|Q' + String(index+1),
+        source_set_id:context.setId,source_txn_id:'PREFLIGHT',
+        source_q_no:index+1,
+        source_surface_key:'PREFLIGHT|WRITTEN|' + context.stageId + '|Q' + String(index+1),
+        source_result:'○',
+        direct_skill_id:String(meta.questions[index].skill_id || '')
+      },
+      links
+    ).rows;
+  });
+  return {status:total ? 'PASS' : 'NO_LINKS',rows:total};
+}
+
+function h3MultiSkillListeningPreflight_(spreadsheet,context) {
+  var lm=context.logTable.map,total=0;
+  H3_WEB_PROD_SECTIONS.forEach(function (section,index) {
+    var links=h3MultiSkillListeningLinks_(context,section);
+    if (!links.length) return;
+    var log=context.logRows[index].row;
+    total += h3MultiSkillPreflight_(
+      spreadsheet,
+      {
+        level:'3級',source_family:'LISTENING',
+        source_event_ref:'PREFLIGHT|LISTENING|' + section,
+        source_set_id:context.setId,source_txn_id:'PREFLIGHT',
+        source_q_no:index+1,
+        source_surface_key:String(log[lm.SURFACE_HASH] || ''),
+        source_result:'○',
+        direct_skill_id:String(log[lm.SKILL_ID] || '')
+      },
+      links
+    ).rows;
+  });
+  return {status:total ? 'PASS' : 'NO_LINKS',rows:total};
+}
+
+function h3MultiSkillReadingPreflight_(spreadsheet,context) {
+  var total=0;
+  context.locked.items.forEach(function (item,index) {
+    var links=h3MultiSkillNormalizeAuthoredLinks_(
+      item && item.secondary_evidence_links);
+    if (!links.length) return;
+    total += h3MultiSkillPreflight_(
+      spreadsheet,
+      {
+        level:context.stage.level,source_family:'READING',
+        source_event_ref:'PREFLIGHT|READING|Q' + String(index+1),
+        source_set_id:context.stage.set_id,source_txn_id:'PREFLIGHT',
+        source_q_no:index+1,
+        source_surface_key:'READING|' + item.passage_sha256 + '|' + item.item_sha256,
+        source_result:'○',direct_skill_id:String(item.skill_id || '')
+      },
+      links
+    ).rows;
+  });
+  return {status:total ? 'PASS' : 'NO_LINKS',rows:total};
+}
+
+function h3MultiSkillTranslationV2Preflight_(spreadsheet,context) {
+  var total=0;
+  context.locked.items.forEach(function (item,index) {
+    var links=h3MultiSkillNormalizeAuthoredLinks_(
+      item && item.secondary_evidence_links);
+    if (!links.length) return;
+    total += h3MultiSkillPreflight_(
+      spreadsheet,
+      {
+        level:context.stage.level,source_family:'TRANSLATION',
+        source_event_ref:'PREFLIGHT|TRANSLATION|Q' + String(index+1),
+        source_set_id:context.stage.set_id,source_txn_id:'PREFLIGHT',
+        source_q_no:index+1,source_surface_key:String(item.surface_key || ''),
+        source_result:'○',direct_skill_id:String(item.skill_id || '')
+      },
+      links
+    ).rows;
+  });
+  return {status:total ? 'PASS' : 'NO_LINKS',rows:total};
+}
+
 function h3MultiSkillWrittenCapture_(
   spreadsheet,context,grade,txnId,createdAt
 ) {

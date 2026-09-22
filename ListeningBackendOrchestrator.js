@@ -1596,6 +1596,18 @@ function h3BackendPreflight_(
     );
   }
 
+  if (typeof h3Rs13k1PreissueValidate_ !== 'function') {
+    throw new Error(
+      'BACKEND_K1_SECONDARY_AUTHORITY_MODULE_MISSING'
+    );
+  }
+  var k1SecondaryAuthorityValidation =
+    h3Rs13k1PreissueValidate_(
+      runtimeSpreadsheet,
+      ids.k1ReadyId,
+      setNo
+    );
+
   var prestage =
     h3BackendRequirePrestage_(
       runtimeSheets[
@@ -1619,6 +1631,8 @@ function h3BackendPreflight_(
     k1ReadyId: ids.k1ReadyId,
     setNo: setNo,
     k1Record: k1Record,
+    k1SecondaryAuthorityValidation:
+      k1SecondaryAuthorityValidation,
     prestage: prestage
   };
 }

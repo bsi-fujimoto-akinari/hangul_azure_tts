@@ -9637,7 +9637,7 @@ jobs:
             fiveW.sections[0]
               .explanation
               .reason,
-            '親しい相手への誘いとして自然だ。'
+            '親しい相手への誘いとして自然。'
           );
           assert(
             fiveW.sections[0]

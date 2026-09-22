@@ -151,6 +151,16 @@ jobs:
         shell: bash
         run: npx -y @google/clasp@3.4.0 list-deployments
 
+      - name: Direct-run Review audio family-1 pilot
+        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
+        shell: bash
+        run: |
+          if ! git log -1 --pretty=%B | grep -Fq '[review-audio-pilot-family1]'; then
+            echo 'Pilot marker absent; direct run skipped.'
+            exit 0
+          fi
+          npx -y @google/clasp@3.4.0 run-function runReviewAudioPilotFamily1
+
       - name: Write run summary
         if: always()
         shell: bash

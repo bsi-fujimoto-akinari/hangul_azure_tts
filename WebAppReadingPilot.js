@@ -95,6 +95,15 @@ function h3ReadingRequireString_(
 }
 
 
+function h3ReadingSecondaryLinks_(links) {
+  if (links === undefined || links === null) return [];
+  if (typeof h3MultiSkillNormalizeAuthoredLinks_ !== 'function') {
+    throw new Error('READING_MULTI_SKILL_HELPER_MISSING');
+  }
+  return h3MultiSkillNormalizeAuthoredLinks_(links);
+}
+
+
 function h3ReadingValidateSourceBundle_(
   source
 ) {
@@ -249,6 +258,10 @@ function h3ReadingValidateSourceBundle_(
           'READING_ITEM_SKILL_SCOPE_INVALID'
         );
       }
+
+      h3ReadingSecondaryLinks_(
+        item.secondary_evidence_links
+      );
     }
   );
 
@@ -319,7 +332,11 @@ function h3ReadingLockBundle_(
           passage_id:
             source.passage.passage_id,
           passage_sha256:
-            passageSha
+            passageSha,
+          secondary_evidence_links:
+            h3ReadingSecondaryLinks_(
+              item.secondary_evidence_links
+            )
         };
 
         return {
@@ -359,6 +376,8 @@ function h3ReadingLockBundle_(
             source.passage.passage_id,
           passage_sha256:
             passageSha,
+          secondary_evidence_links:
+            hashObject.secondary_evidence_links,
           item_sha256:
             h3ReadingHash_(hashObject)
         };

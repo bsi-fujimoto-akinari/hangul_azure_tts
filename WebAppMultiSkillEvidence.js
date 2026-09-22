@@ -298,12 +298,38 @@ function h3MultiSkillPersistCommitted_(spreadsheet, event, authoredLinks, create
     }
   }
 
+  var shadowSync = {
+    schema:'H3_MULTI_SKILL_SHADOW_RESULT_V1',
+    status:'NOT_AVAILABLE'
+  };
+  if (typeof h3MultiSkillShadowObserveRows_ === 'function') {
+    try {
+      shadowSync = h3MultiSkillShadowObserveRows_(
+        spreadsheet,
+        wanted
+      );
+    } catch (shadowErr) {
+      shadowSync = {
+        schema:'H3_MULTI_SKILL_SHADOW_RESULT_V1',
+        contract_id:
+          typeof H3_MULTI_SKILL_SHADOW_CONTRACT_ID_ !== 'undefined'
+            ? H3_MULTI_SKILL_SHADOW_CONTRACT_ID_
+            : '',
+        status:'RECOVERY_REQUIRED',
+        error:String(
+          shadowErr && shadowErr.message || shadowErr
+        )
+      };
+    }
+  }
+
   return {
     schema:'H3_MULTI_SKILL_CAPTURE_RESULT_V1',
     contract_id:H3_MULTI_SKILL_CAPTURE_CONTRACT_ID_,
     status:append.length ? 'PASS' : 'NO_OP',
     written:append.length,
-    no_op:noOp
+    no_op:noOp,
+    shadow_observation_sync:shadowSync
   };
 }
 

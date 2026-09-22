@@ -103,6 +103,7 @@ jobs:
               'H3_RS14P_LIMITED_LIVE_PREFLIGHT_CONTRACT.md',
               'H3_RS13K1_K1_SECONDARY_AUTHORITY_CONTRACT.md',
               'H3_RS13G_GATE_REPORTER_CONTRACT.md',
+              'H3_RS13K1A_K1_AUTHORITY_AUTHORING_HELPER_CONTRACT.md',
               'H3_SURFACE_REVIEW_BRIDGE_CONTRACT.md',
               'Index.html',
               'Stylesheet.html',
@@ -119,6 +120,7 @@ jobs:
               '.github/workflows/rs14p-limited-live-preflight-audit.yml',
               '.github/workflows/rs13k1-k1-secondary-authority-audit.yml',
               '.github/workflows/rs13g-gate-reporter-audit.yml',
+              '.github/workflows/rs13k1a-authoring-helper-audit.yml',
           }
           tracked = set(
               subprocess.check_output(

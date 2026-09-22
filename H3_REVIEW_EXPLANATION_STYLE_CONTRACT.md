@@ -1,6 +1,6 @@
 # H3 Review Explanation Style Contract
 
-CONTRACT_ID=H3-REVIEW-EXPLANATION-STYLE-20260922-V1
+CONTRACT_ID=H3-REVIEW-EXPLANATION-STYLE-20260922-V2
 
 ## 1. Purpose
 
@@ -39,17 +39,26 @@ The following are NOT meta-text and are excluded from style normalization:
 
 Review explanation meta-text uses Japanese plain explanatory style (常体).
 
-Preferred endings include forms such as:
+Preferred expression follows the concise, natural direction already used by 5L.
+In particular:
 
 - `～を表す。`
-- `～が自然だ。`
+- `～が適切。`
+- `～が自然。`
+- `～が自然な応答になる。`
 - `～に対応する。`
 - `～に焦点がある。`
-- `～という意味になる。`
+- `～という意味。` when the sentence naturally functions as a compact definition
 
-Do not mechanically append `だ` or `である` to fragments that are naturally
-style-neutral. The goal is consistent explanatory register, not forced sentence
-rewriting.
+Avoid `～が合う。` as an answer-evaluation conclusion when `～が適切。` is
+clearer. Avoid mechanically closing short nominal or na-adjectival explanation
+fragments with `だ`; forms such as `表現。`, `意味。`, `自動詞。`,
+`自然。`, and `適切。` are preferred when they read naturally.
+
+Do not force noun-ending fragments where a verbal sentence is clearer. Forms such as
+`～を表す。`, `～になる。`, `～が一致する。`, and
+`～に焦点がある。` remain normal. The goal is the same compact explanatory
+rhythm as 5L, not uniform truncation.
 
 Source translations, example translations, quoted answer text, and Korean utterances
 must preserve their own semantic register and honorific meaning. A polite utterance
@@ -107,7 +116,8 @@ A historical style correction is presentation/explanation content only.
 
 Future Review explanation authoring must satisfy both rules before issue/lock:
 
-1. Japanese meta-text uses plain explanatory style.
+1. Japanese meta-text uses concise natural plain explanatory style aligned with 5L,
+   including the compact nominal-ending policy in section 3.
 2. Representative examples do not duplicate the exact correct answer surface.
 
 A future authoring/audit gate may reject violations before issue. The gate must inspect

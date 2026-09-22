@@ -355,6 +355,127 @@ function h3MultiSkillWrittenPreflight_(spreadsheet,context) {
   return {status:total ? 'PASS' : 'NO_LINKS',rows:total};
 }
 
+function h3MultiSkillHeaderMap_(header) {
+  var map={};
+  header.forEach(function (name,index) { map[String(name)]=index; });
+  return map;
+}
+
+function h3MultiSkillListeningStored_(spreadsheet,setId) {
+  var payloadSheet=spreadsheet.getSheetByName('listening_set_payload_v1');
+  var logSheet=spreadsheet.getSheetByName('listening_log_v1');
+  if (!payloadSheet || !logSheet) {
+    throw new Error('MULTI_SKILL_LISTENING_SHEET_MISSING');
+  }
+  var pv=payloadSheet.getDataRange().getDisplayValues();
+  var lv=logSheet.getDataRange().getDisplayValues();
+  var pm=h3MultiSkillHeaderMap_(pv[0] || []);
+  var lm=h3MultiSkillHeaderMap_(lv[0] || []);
+  ['LISTENING_SET_ID','K2_ITEM_JSON','K3_ITEM_JSON','K4_ITEM_JSON','K5_ITEM_JSON']
+    .forEach(function (name) {
+      if (typeof pm[name] !== 'number') {
+        throw new Error('MULTI_SKILL_LISTENING_PAYLOAD_COLUMN_MISSING:' + name);
+      }
+    });
+  ['PARENT_SET_ID','SECTION_KEY','SKILL_ID','SURFACE_HASH','USER_RESULT','ANSWERED_AT']
+    .forEach(function (name) {
+      if (typeof lm[name] !== 'number') {
+        throw new Error('MULTI_SKILL_LISTENING_LOG_COLUMN_MISSING:' + name);
+      }
+    });
+  var matches=pv.slice(1).filter(function (row) {
+    return String(row[pm.LISTENING_SET_ID] || '') === String(setId);
+  });
+  if (matches.length !== 1) {
+    throw new Error('MULTI_SKILL_LISTENING_PAYLOAD_COUNT:' + matches.length);
+  }
+  var payload=matches[0], items={};
+  ['K2','K3','K4','K5'].forEach(function (section) {
+    try {
+      items[section]=JSON.parse(String(payload[pm[section + '_ITEM_JSON']] || ''));
+    } catch (_err) {
+      throw new Error('MULTI_SKILL_LISTENING_ITEM_JSON_INVALID:' + section);
+    }
+  });
+  var logs=lv.slice(1).filter(function (row) {
+    return String(row[lm.PARENT_SET_ID] || '') === String(setId);
+  });
+  if (logs.length !== 5) {
+    throw new Error('MULTI_SKILL_LISTENING_LOG_COUNT:' + logs.length);
+  }
+  var order=['K1','K2','K3','K4','K5'];
+  logs.sort(function (a,b) {
+    return order.indexOf(String(a[lm.SECTION_KEY] || '')) -
+      order.indexOf(String(b[lm.SECTION_KEY] || ''));
+  });
+  return {items:items,logs:logs,logMap:lm,order:order};
+}
+
+function h3MultiSkillListeningStoredPreflight_(spreadsheet,setId) {
+  var ctx=h3MultiSkillListeningStored_(spreadsheet,setId);
+  var total=0;
+  ['K2','K3','K4','K5'].forEach(function (section) {
+    var index=ctx.order.indexOf(section);
+    var item=ctx.items[section];
+    var links=h3MultiSkillNormalizeAuthoredLinks_(
+      item && item.secondary_evidence_links);
+    if (!links.length) return;
+    var log=ctx.logs[index];
+    total += h3MultiSkillPreflight_(
+      spreadsheet,
+      {
+        level:'3級',source_family:'LISTENING',
+        source_event_ref:'PREFLIGHT|LISTENING|' + section,
+        source_set_id:String(setId),source_txn_id:'PREFLIGHT',
+        source_q_no:index+1,
+        source_surface_key:String(log[ctx.logMap.SURFACE_HASH] || ''),
+        source_result:'○',
+        direct_skill_id:String(log[ctx.logMap.SKILL_ID] || '')
+      },
+      links
+    ).rows;
+  });
+  return {status:total ? 'PASS' : 'NO_LINKS',rows:total};
+}
+
+function h3MultiSkillListeningStoredCapture_(
+  spreadsheet,setId,txnId,createdAt
+) {
+  var ctx=h3MultiSkillListeningStored_(spreadsheet,setId);
+  var total={written:0,no_op:0,status:'NO_LINKS'};
+  ['K2','K3','K4','K5'].forEach(function (section) {
+    var index=ctx.order.indexOf(section);
+    var item=ctx.items[section];
+    var links=h3MultiSkillNormalizeAuthoredLinks_(
+      item && item.secondary_evidence_links);
+    if (!links.length) return;
+    var log=ctx.logs[index];
+    var result=String(log[ctx.logMap.USER_RESULT] || '');
+    if (['○','△','×'].indexOf(result) < 0) {
+      throw new Error('MULTI_SKILL_LISTENING_RESULT_NOT_COMMITTED:' + section);
+    }
+    var r=h3MultiSkillPersistCommitted_(
+      spreadsheet,
+      {
+        level:'3級',source_family:'LISTENING',
+        source_event_ref:'LISTENING|' + txnId + '|' + section,
+        source_set_id:String(setId),source_txn_id:String(txnId),
+        source_q_no:index+1,
+        source_surface_key:String(log[ctx.logMap.SURFACE_HASH] || ''),
+        source_result:result,
+        direct_skill_id:String(log[ctx.logMap.SKILL_ID] || '')
+      },
+      links,createdAt
+    );
+    total.written+=Number(r.written||0); total.no_op+=Number(r.no_op||0);
+    total.status='PASS';
+  });
+  return Object.assign({
+    schema:'H3_MULTI_SKILL_CAPTURE_RESULT_V1',
+    contract_id:H3_MULTI_SKILL_CAPTURE_CONTRACT_ID_
+  },total);
+}
+
 function h3MultiSkillListeningPreflight_(spreadsheet,context) {
   var lm=context.logTable.map,total=0;
   H3_WEB_PROD_SECTIONS.forEach(function (section,index) {

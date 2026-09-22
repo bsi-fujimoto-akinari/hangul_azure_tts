@@ -51,6 +51,9 @@ jobs:
           if printf '%s\\n' "$message" | grep -Fq '[review-audio-e4-run]'; then
             echo 'active=true' >> "$GITHUB_OUTPUT"
             echo 'mode=run' >> "$GITHUB_OUTPUT"
+          elif printf '%s\\n' "$message" | grep -Fq '[review-audio-e4-resume]'; then
+            echo 'active=true' >> "$GITHUB_OUTPUT"
+            echo 'mode=resume' >> "$GITHUB_OUTPUT"
           elif printf '%s\\n' "$message" | grep -Fq '[review-audio-e4-clean-deploy]'; then
             echo 'active=true' >> "$GITHUB_OUTPUT"
             echo 'mode=clean' >> "$GITHUB_OUTPUT"
@@ -86,7 +89,7 @@ jobs:
             esac
           done < <(git diff-tree --no-commit-id --name-only -r HEAD)
 
-          if git log -1 --pretty=%B | grep -Eq '\\[review-audio-e4-(run|clean-deploy)\\]'; then
+          if git log -1 --pretty=%B | grep -Eq '\\[review-audio-e4-(run|resume|clean-deploy)\\]'; then
             changed=true
           fi
 
@@ -288,6 +291,67 @@ jobs:
           done
 
 
+      - name: Repair known D6 and run 8 remaining E4 batches
+        if: steps.e4mode.outputs.mode == 'resume'
+        shell: bash
+        run: |
+          npx -y @google/clasp@3.4.0 run-function \
+            runReviewAudioE4RepairKnownD6 \
+            --nondev --user default --json > /tmp/e4-repair.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data=json.loads(Path('/tmp/e4-repair.json').read_text(encoding='utf-8'))
+          if data.get('error'): raise SystemExit(f'E4 repair API error: {data["error"]!r}')
+          r=data.get('response')
+          if not isinstance(r,dict) or r.get('schema')!='H3_REVIEW_AUDIO_E4_REPAIR_V1' or r.get('status')!='DONE':
+              raise SystemExit(f'E4 repair response invalid: {r!r}')
+          if r.get('post_total_assets')!=40 or r.get('remaining_sets')!=15:
+              raise SystemExit(f'E4 repair counts invalid: {r!r}')
+          print('E4_REPAIR='+json.dumps(r,ensure_ascii=False,separators=(',',':')))
+          PY
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          expected=[
+            ('5W',2,10,50),('5W',2,10,60),('5W',2,10,70),
+            ('5W',2,10,80),('5W',2,10,90),('5W',1,5,95),
+            ('2R',2,6,101),('2T',2,4,105)
+          ]
+          Path('/tmp/e4-expected-resume.json').write_text(json.dumps(expected),encoding='utf-8')
+          PY
+          for i in $(seq 1 8); do
+            start_ms="$(date +%s%3N)"
+            npx -y @google/clasp@3.4.0 run-function \
+              runReviewAudioE4NextBatch \
+              --nondev --user default --json > "/tmp/e4-resume-${i}.json"
+            end_ms="$(date +%s%3N)"
+            python3 - "$i" "$((end_ms-start_ms))" <<'PY'
+          import json,sys
+          from pathlib import Path
+          i=int(sys.argv[1]); wall=int(sys.argv[2])
+          expected=json.loads(Path('/tmp/e4-expected-resume.json').read_text(encoding='utf-8'))[i-1]
+          data=json.loads(Path(f'/tmp/e4-resume-{i}.json').read_text(encoding='utf-8'))
+          if data.get('error'): raise SystemExit(f'resume batch {i} API error: {data["error"]!r}')
+          r=data.get('response')
+          if not isinstance(r,dict) or r.get('schema')!='H3_REVIEW_AUDIO_E4_BATCH_V1':
+              raise SystemExit(f'resume batch {i} response invalid: {r!r}')
+          family,set_count,asset_count,post_total=expected
+          checks=[
+            (r.get('family')==family,'family'),(len(r.get('sets') or [])==set_count,'set_count'),
+            (r.get('asset_count')==asset_count,'asset_count'),
+            (r.get('post_total_assets')==post_total,'post_total_assets'),
+            (r.get('complete')==(i==8),'complete')
+          ]
+          bad=[name for ok,name in checks if not ok]
+          if bad: raise SystemExit(f'resume batch {i} failed checks {bad}: {r!r}')
+          print('E4_BATCH='+json.dumps({
+            'batch':i+3,'family':r['family'],'sets':r['sets'],'assets':r['asset_count'],
+            'gas_ms':r['duration_ms'],'wall_ms':wall,'post_total':r['post_total_assets'],
+            'remaining_sets':r['remaining_sets'],'complete':r['complete']
+          },ensure_ascii=False,separators=(',',':')))
+          PY
+          done
       - name: Read deployment inventory
         if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
         shell: bash

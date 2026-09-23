@@ -376,7 +376,11 @@
 
   @media (max-width: 619px) {
     .shell {
-      width: 100%;
+      width: auto;
+      max-width: 100%;
+      box-sizing: border-box;
+      margin-left: 0;
+      margin-right: 0;
       padding-top: 10px;
       padding-left: max(10px, env(safe-area-inset-left));
       padding-right: max(10px, env(safe-area-inset-right));
@@ -582,8 +586,11 @@
   }
 
   body.mobile-device .shell {
-    width: 100%;
-    max-width: none;
+    width: auto;
+    max-width: 100%;
+    box-sizing: border-box;
+    margin-left: 0;
+    margin-right: 0;
     padding-top: 6px;
     padding-left: max(10px, env(safe-area-inset-left));
     padding-right: max(10px, env(safe-area-inset-right));

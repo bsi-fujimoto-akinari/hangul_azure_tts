@@ -3,6 +3,29 @@ var H3_FS_LOG_SHEET_ = 'family_scheduler_decision_log_v1';
 var H3_FS_STATE_SCHEMA_ = 'H3_FAMILY_SCHEDULER_STATE_V1';
 var H3_FS_OUTPUT_SCHEMA_ = 'H3_FAMILY_SCHEDULER_V1';
 var H3_FS_LIVE_RESOLVER_SCHEMA_ = 'H3_FAMILY_SCHEDULER_LIVE_RESOLVER_V1';
+var H3_FS_ISSUE_ROUTE_SCHEMA_ = 'H3_FAMILY_SCHEDULER_ISSUE_ROUTE_V1';
+var H3_FS_ISSUE_ROUTE_BINDINGS_ = {
+  L: {
+    provider_kind:'LISTENING',
+    surface_family:'5L',
+    route_target:'LISTENING'
+  },
+  W: {
+    provider_kind:'WRITTEN',
+    surface_family:'5W',
+    route_target:'WRITTEN'
+  },
+  R: {
+    provider_kind:'WRITTEN',
+    surface_family:'READING',
+    route_target:'READING'
+  },
+  T: {
+    provider_kind:'WRITTEN',
+    surface_family:'TRANSLATION',
+    route_target:'TRANSLATION'
+  }
+};
 var H3_FS_FAMILIES_ = ['L','W','R','T'];
 var H3_FS_TARGET_ = {L:0.40,W:0.36,R:0.12,T:0.12};
 var H3_FS_SET_SIZE_ = {L:5,W:5,R:2,T:2};
@@ -463,6 +486,103 @@ function h3FsResolveLive_(evaluation) {
   }
 
   throw new Error('FAMILY_SCHEDULER_LIVE_RESOLVER_ACTION_INVALID');
+}
+
+function h3FsIssueRoute_(resolved,readiness,currentLearning) {
+  if(
+    !resolved ||
+    String(resolved.schema||'')!==H3_FS_LIVE_RESOLVER_SCHEMA_ ||
+    String(resolved.mode||'')!=='LIVE_RESOLVER' ||
+    resolved.scheduler_applied!==false
+  ){
+    throw new Error('FAMILY_SCHEDULER_ISSUE_ROUTE_RESOLVER_INVALID');
+  }
+
+  var kind=String(resolved.route_kind||'');
+  var base={
+    schema:H3_FS_ISSUE_ROUTE_SCHEMA_,
+    mode:'ISSUE_ROUTE',
+    scheduler_applied:false,
+    issue_performed:false,
+    global_set_clock:Number(resolved.global_set_clock),
+    route_kind:kind,
+    family:'NONE',
+    provider_kind:'',
+    surface_family:'',
+    route_target:'',
+    current_set_id:'',
+    readiness_state:'',
+    requires_prepare:false,
+    result_status:''
+  };
+
+  if(!isFinite(base.global_set_clock)||base.global_set_clock<0){
+    throw new Error('FAMILY_SCHEDULER_ISSUE_ROUTE_CLOCK_INVALID');
+  }
+
+  if(kind==='CURRENT_SET'){
+    var setId=String(resolved.current_set_id||'');
+    if(
+      !setId ||
+      !currentLearning ||
+      String(currentLearning.set_id||'')!==setId
+    ){
+      throw new Error('FAMILY_SCHEDULER_ISSUE_ROUTE_CURRENT_MISMATCH');
+    }
+
+    var surface=String(currentLearning.surface_family||'');
+    var provider=String(currentLearning.provider_kind||'');
+    var routeTarget='';
+    if(provider==='LISTENING'&&surface==='5L')routeTarget='LISTENING';
+    else if(provider==='WRITTEN'&&surface==='5W')routeTarget='WRITTEN';
+    else if(provider==='WRITTEN'&&surface==='READING')routeTarget='READING';
+    else if(provider==='WRITTEN'&&surface==='TRANSLATION')routeTarget='TRANSLATION';
+    else throw new Error('FAMILY_SCHEDULER_ISSUE_ROUTE_CURRENT_SURFACE_INVALID');
+
+    base.current_set_id=setId;
+    base.provider_kind=provider;
+    base.surface_family=surface;
+    base.route_target=routeTarget;
+    base.readiness_state='CURRENT_SET';
+    base.result_status='READY';
+    return base;
+  }
+
+  if(currentLearning){
+    throw new Error('FAMILY_SCHEDULER_ISSUE_ROUTE_UNEXPECTED_CURRENT');
+  }
+
+  if(kind==='BLOCKED'){
+    base.readiness_state='BLOCKED';
+    base.result_status='BLOCKED';
+    return base;
+  }
+
+  if(kind==='FAMILY'){
+    var family=String(resolved.family||'');
+    var binding=H3_FS_ISSUE_ROUTE_BINDINGS_[family];
+    var ready=readiness&&readiness[family];
+
+    if(
+      !binding ||
+      !ready ||
+      ready.eligible!==true ||
+      ['READY','PREPARE_REQUIRED'].indexOf(String(ready.state||''))<0
+    ){
+      throw new Error('FAMILY_SCHEDULER_ISSUE_ROUTE_FAMILY_NOT_ELIGIBLE');
+    }
+
+    base.family=family;
+    base.provider_kind=binding.provider_kind;
+    base.surface_family=binding.surface_family;
+    base.route_target=binding.route_target;
+    base.readiness_state=String(ready.state);
+    base.requires_prepare=String(ready.state)!=='READY';
+    base.result_status='READY';
+    return base;
+  }
+
+  throw new Error('FAMILY_SCHEDULER_ISSUE_ROUTE_KIND_INVALID');
 }
 
 function h3FsSnapshot_(state,evaluation,history) {
@@ -1123,6 +1243,15 @@ function h3FamilySchedulerShadowPreview() {
 function h3FamilySchedulerLiveResolverPreview() {
   var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
   return h3FsResolveLive_(h3FsEvaluate_(ss,'3級'));
+}
+
+function h3FamilySchedulerIssueRoutePreview() {
+  var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
+  var evaluation=h3FsEvaluate_(ss,'3級');
+  var resolved=h3FsResolveLive_(evaluation);
+  var current=h3ReviewCurrentLearning_(ss);
+  var readiness=h3FsReadiness_(ss);
+  return h3FsIssueRoute_(resolved,readiness,current);
 }
 
 function h3FamilySchedulerShadowTick() {

@@ -1245,14 +1245,128 @@ function h3SurfaceReviewOpenForLearner_(
       setId
     );
 
-  if (family !== 'TRANSLATION') {
-    return context.payload;
+  if (family === 'READING') {
+    var bindings =
+      h3ReviewAudioBindingResolveAll_(
+        spreadsheet,
+        context.payload
+      );
+
+    return h3ReviewAudioApplyReadingBindings_(
+      context.payload,
+      bindings
+    );
   }
 
   return h3TranslationReviewApplyExplanationOverlay_(
     context.payload,
     context.txn.locked
   );
+}
+
+
+function h3SurfaceReviewMedia_(
+  request
+) {
+  if (
+    !request ||
+    request.schema !==
+      'H3_WEB_MEDIA_REQUEST_V1' ||
+    request.mode !== 'REVIEW' ||
+    request.review_kind !== 'WRITTEN' ||
+    request.surface_family !== 'READING' ||
+    !request.set_id ||
+    !request.asset_key ||
+    request.txn_id ||
+    request.legacy_review_id
+  ) {
+    throw new Error(
+      'SURFACE_REVIEW_AUDIO_MEDIA_REQUEST_INVALID'
+    );
+  }
+
+  var setId =
+    String(request.set_id);
+  var assetKey =
+    String(request.asset_key);
+  var spreadsheet =
+    SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+  var context =
+    h3SurfaceReviewContextBySet_(
+      spreadsheet,
+      'READING',
+      setId
+    );
+  var expected =
+    h3ReviewAudioExpectedBindings_(
+      context.payload
+    ).filter(
+      function (binding) {
+        return (
+          binding.slot_key ===
+          assetKey
+        );
+      }
+    );
+
+  if (expected.length !== 1) {
+    throw new Error(
+      'SURFACE_REVIEW_AUDIO_ASSET_NOT_ALLOWED:' +
+        assetKey
+    );
+  }
+
+  var binding =
+    h3ReviewAudioBindingResolve_(
+      spreadsheet,
+      'READING',
+      setId,
+      assetKey
+    );
+
+  if (
+    binding.asset_key !==
+      expected[0].asset_key ||
+    binding.set_id !== setId ||
+    binding.sidecar_family !== '2R'
+  ) {
+    throw new Error(
+      'SURFACE_REVIEW_AUDIO_BINDING_MISMATCH:' +
+        assetKey
+    );
+  }
+
+  var media =
+    h3DriveDataUri_(
+      binding.audio_file_id,
+      'audio/mpeg',
+      null,
+      8 * 1024 * 1024
+    );
+
+  return {
+    schema:
+      'H3_WEB_MEDIA_V1',
+    mode: 'REVIEW',
+    read_only: true,
+    provider_kind: 'WRITTEN',
+    surface_family: 'READING',
+    set_id: setId,
+    asset_key: assetKey,
+    data_uri:
+      media.data_uri,
+    mime_type:
+      media.mime_type,
+    size_bytes:
+      media.size_bytes,
+    trim_start_ms: 0,
+    fallback_url:
+      binding.audio_url,
+    review_audio_binding_contract_id:
+      H3_REVIEW_AUDIO_BINDING_CONTRACT_ID_
+  };
 }
 
 

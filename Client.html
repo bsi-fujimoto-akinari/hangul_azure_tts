@@ -3169,6 +3169,17 @@
       '本文';
     block.appendChild(title);
 
+    if (passage.audio_asset_key) {
+      block.appendChild(
+        buildAudioBlock(
+          passage.audio_asset_key,
+          passage.audio_fallback_url,
+          '',
+          true
+        )
+      );
+    }
+
     var ko =
       el(
         'div',
@@ -3195,6 +3206,13 @@
     block.appendChild(ja);
 
     root.appendChild(block);
+
+    if (passage.audio_asset_key) {
+      ensureAudioLoaded(
+        passage.audio_asset_key,
+        { background: false }
+      );
+    }
   }
 
 

@@ -298,16 +298,36 @@ function h3WrittenReviewPersistentHistory_(
 function h3WrittenReviewMedia_(
   request
 ) {
-  if (
-    !request ||
-    request.surface_family !== '5W'
-  ) {
+  if (!request) {
     return h3WrittenReviewUnavailable_();
   }
 
-  return getWrittenPersistentReviewMediaPayload_(
-    request
-  );
+  if (
+    request.surface_family === '5W'
+  ) {
+    return getWrittenPersistentReviewMediaPayload_(
+      request
+    );
+  }
+
+  if (
+    request.surface_family === 'READING'
+  ) {
+    if (
+      typeof h3SurfaceReviewMedia_ !==
+        'function'
+    ) {
+      throw new Error(
+        'SURFACE_REVIEW_MEDIA_UNAVAILABLE'
+      );
+    }
+
+    return h3SurfaceReviewMedia_(
+      request
+    );
+  }
+
+  return h3WrittenReviewUnavailable_();
 }
 
 
@@ -331,7 +351,6 @@ function h3WrittenReviewOpen_(request) {
       );
     }
     if (
-      surfaceFamily === 'TRANSLATION' &&
       typeof h3SurfaceReviewOpenForLearner_ ===
         'function'
     ) {

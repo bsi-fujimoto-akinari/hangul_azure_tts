@@ -124,48 +124,60 @@ jobs:
           print("F4 shadow observation contract PASS")
           PY
 
-      - name: F5 HOME UI preview contract
+      - name: F5 HOME read-only preview contract
         run: |
           python - <<'PY'
           from pathlib import Path
 
           index = Path("Index.html").read_text(encoding="utf-8")
+          fs = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
 
           required = [
               "family-scheduler-launcher",
               "family-scheduler-actions",
               "family-scheduler-button",
               "family-scheduler-next",
-              "'NEXT',",
+              "family-scheduler-next-family",
+              "family-scheduler-family-group",
+              "nextCaption.textContent",
+              "'NEXT'",
               "'L'",
               "'W'",
               "'R'",
               "'T'",
+              "nextButton.disabled = true",
               "button.disabled = true",
               "aria-disabled",
               "home.insertBefore(",
               "review",
               "new MutationObserver(",
               "repeat(4, minmax(0, 1fr))",
+              ".h3FamilySchedulerShadowPreview()",
           ]
           for token in required:
               if token not in index:
-                  raise SystemExit(f"missing F5 UI token: {token}")
+                  raise SystemExit(f"missing F5 read-only UI token: {token}")
 
           if index.count("family-scheduler-launcher") < 3:
               raise SystemExit("F5 launcher style/injection contract incomplete.")
 
-          forbidden = [
-              "google.script.run",
-              "h3FamilySchedulerShadowPreview",
-              "h3FamilySchedulerShadowTick",
-              "h3FamilySchedulerObserveAfterCommit_",
-          ]
           preview_start = index.index("(function () {")
           preview = index[preview_start:]
+
+          if preview.count(".h3FamilySchedulerShadowPreview()") != 1:
+              raise SystemExit("F5 must use exactly one read-only scheduler preview RPC per launcher render.")
+
+          forbidden = [
+              "h3FamilySchedulerShadowTick",
+              "h3FamilySchedulerObserveAfterCommit_",
+              "submitListeningWebAnswers",
+              "submitWrittenWebAnswers",
+              "submitReadingWebAnswers",
+              "submitTranslationWebAnswers",
+          ]
           for token in forbidden:
               if token in preview:
-                  raise SystemExit(f"F5 must remain UI-only: {token}")
+                  raise SystemExit(f"F5 read-only boundary violated: {token}")
 
           if "addEventListener" in preview:
               raise SystemExit("F5 family buttons must not have click handlers.")
@@ -173,7 +185,20 @@ jobs:
           if index.index("family-scheduler-launcher") > index.index("</head>"):
               raise SystemExit("F5 preview styles must load before body render.")
 
-          print("F5 HOME UI-only preview PASS")
+          fs_preview_start = fs.index("function h3FamilySchedulerShadowPreview()")
+          fs_preview_end = fs.index("function h3FamilySchedulerShadowTick()", fs_preview_start)
+          fs_preview = fs[fs_preview_start:fs_preview_end]
+          for token in [
+              "appendRow",
+              ".setValue(",
+              ".setValues(",
+              "h3FsAppend_(",
+              "h3FsWriteState_(",
+          ]:
+              if token in fs_preview:
+                  raise SystemExit(f"Shadow preview RPC must remain read-only: {token}")
+
+          print("F5 HOME read-only preview PASS")
           PY
 
       - name: Deterministic ranking fixture

@@ -12,11 +12,24 @@
       .family-scheduler-actions {
         display: grid;
         grid-template-columns:
-          minmax(0, 1.35fr)
-          repeat(4, minmax(0, 1fr));
-        gap: 6px;
+          minmax(0, 1.05fr)
+          minmax(0, 4fr);
+        gap: 12px;
         width: 100%;
         min-width: 0;
+        align-items: stretch;
+      }
+
+      .family-scheduler-next-wrap,
+      .family-scheduler-family-group {
+        min-width: 0;
+      }
+
+      .family-scheduler-family-group {
+        display: grid;
+        grid-template-columns:
+          repeat(4, minmax(0, 1fr));
+        gap: 6px;
       }
 
       .family-scheduler-button {
@@ -43,10 +56,40 @@
 
       .family-scheduler-button.family-scheduler-next,
       .family-scheduler-button.family-scheduler-next:disabled {
-        border-color: #222;
-        background: #222;
-        color: #fff;
-        -webkit-text-fill-color: #fff;
+        width: 100%;
+        height: 100%;
+        border: 2px solid #7b8798;
+        background: #eef2f6;
+        color: #334155;
+        -webkit-text-fill-color: #334155;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,.75);
+        display: grid;
+        place-items: center;
+        align-content: center;
+        gap: 3px;
+      }
+
+      .family-scheduler-next-caption {
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: .09em;
+        line-height: 1;
+        opacity: .72;
+      }
+
+      .family-scheduler-next-family {
+        font-size: 18px;
+        font-weight: 900;
+        line-height: 1;
+      }
+
+      body.mobile-device .review-filter-button,
+      body.mobile-device .review-sort-button {
+        min-width: 0;
+        padding-left: 5px;
+        padding-right: 5px;
+        font-size: 11px;
+        letter-spacing: 0;
       }
 
       @media (max-width: 619px) {
@@ -55,6 +98,13 @@
         }
 
         .family-scheduler-actions {
+          grid-template-columns:
+            minmax(0, 1fr)
+            minmax(0, 4fr);
+          gap: 10px;
+        }
+
+        .family-scheduler-family-group {
           gap: 5px;
         }
 
@@ -63,6 +113,10 @@
           padding-left: 2px;
           padding-right: 2px;
           font-size: 12px;
+        }
+
+        .family-scheduler-next-family {
+          font-size: 17px;
         }
       }
     </style>
@@ -131,8 +185,70 @@
           actions.className =
             'family-scheduler-actions';
 
+          var nextWrap =
+            document.createElement(
+              'div'
+            );
+          nextWrap.className =
+            'family-scheduler-next-wrap';
+
+          var nextButton =
+            document.createElement(
+              'button'
+            );
+          nextButton.type = 'button';
+          nextButton.className =
+            'family-scheduler-button family-scheduler-next';
+          nextButton.disabled = true;
+          nextButton.setAttribute(
+            'aria-disabled',
+            'true'
+          );
+          nextButton.setAttribute(
+            'aria-label',
+            '次の問題のfamilyを確認中'
+          );
+
+          var nextCaption =
+            document.createElement(
+              'span'
+            );
+          nextCaption.className =
+            'family-scheduler-next-caption';
+          nextCaption.textContent =
+            'NEXT';
+
+          var nextFamily =
+            document.createElement(
+              'span'
+            );
+          nextFamily.className =
+            'family-scheduler-next-family';
+          nextFamily.textContent =
+            '—';
+          nextFamily.setAttribute(
+            'aria-live',
+            'polite'
+          );
+
+          nextButton.appendChild(
+            nextCaption
+          );
+          nextButton.appendChild(
+            nextFamily
+          );
+          nextWrap.appendChild(
+            nextButton
+          );
+
+          var familyGroup =
+            document.createElement(
+              'div'
+            );
+          familyGroup.className =
+            'family-scheduler-family-group';
+
           [
-            'NEXT',
             'L',
             'W',
             'R',
@@ -146,11 +262,6 @@
               button.type = 'button';
               button.className =
                 'family-scheduler-button';
-              if (label === 'NEXT') {
-                button.classList.add(
-                  'family-scheduler-next'
-                );
-              }
               button.textContent =
                 label;
               button.disabled = true;
@@ -160,15 +271,83 @@
               );
               button.dataset.family =
                 label;
-              actions.appendChild(
+              familyGroup.appendChild(
                 button
               );
             }
           );
 
+          actions.appendChild(
+            nextWrap
+          );
+          actions.appendChild(
+            familyGroup
+          );
           launcher.appendChild(
             actions
           );
+
+          google.script.run
+            .withSuccessHandler(
+              function (preview) {
+                if (
+                  !home.contains(
+                    nextButton
+                  )
+                ) {
+                  return;
+                }
+
+                var family =
+                  preview &&
+                  preview.next_action ===
+                    'RECOMMEND_FAMILY' &&
+                  [
+                    'L',
+                    'W',
+                    'R',
+                    'T'
+                  ].indexOf(
+                    String(
+                      preview.recommended_family ||
+                      ''
+                    )
+                  ) >= 0
+                    ? String(
+                        preview.recommended_family
+                      )
+                    : '—';
+
+                nextFamily.textContent =
+                  family;
+                nextButton.dataset.family =
+                  family;
+                nextButton.setAttribute(
+                  'aria-label',
+                  family === '—'
+                    ? '次の問題のfamilyは未確定'
+                    : '次の問題のfamily: ' +
+                      family
+                );
+              }
+            )
+            .withFailureHandler(
+              function () {
+                if (
+                  home.contains(
+                    nextButton
+                  )
+                ) {
+                  nextFamily.textContent =
+                    '—';
+                  nextButton.setAttribute(
+                    'aria-label',
+                    '次の問題のfamilyを取得できませんでした'
+                  );
+                }
+              }
+            )
+            .h3FamilySchedulerShadowPreview();
           home.insertBefore(
             launcher,
             review

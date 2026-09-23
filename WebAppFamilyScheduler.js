@@ -831,6 +831,20 @@ function h3FsObserveCommitted_(ss,level,family,setId,selectionSource) {
 
   var history=h3FsHistory_(ss,level);
   var commit=h3FsHistoryRecord_(history,family,setId);
+
+  if(commit.global_clock<=H3_FS_F4_START_CLOCK_){
+    return {
+      schema:'H3_FAMILY_SCHEDULER_F4_OBSERVATION_V1',
+      status:'PRE_F4_COMMIT_IGNORED',
+      mode:'SHADOW',
+      scheduler_applied:false,
+      global_set_clock:commit.global_clock,
+      set_id:commit.set_id
+    };
+  }
+
+  var stateBefore=h3FsState_(ss,level);
+  var stateClockBefore=Number(stateBefore.GLOBAL.GLOBAL_SET_CLOCK||0);
   var priorClock=commit.global_clock-1;
   var prior=h3FsEvaluationAtClock_(ss,level,priorClock);
   if(!prior){
@@ -851,6 +865,19 @@ function h3FsObserveCommitted_(ss,level,family,setId,selectionSource) {
       recommended_family:String(observed.RECOMMENDED_FAMILY||''),
       actual_family:String(observed.ACTUAL_FAMILY||''),
       override_of_recommendation:observed.OVERRIDE_OF_RECOMMENDATION
+    };
+  }
+
+  if(stateClockBefore>commit.global_clock){
+    return {
+      schema:'H3_FAMILY_SCHEDULER_F4_OBSERVATION_V1',
+      status:'ALREADY_OBSERVED',
+      mode:'SHADOW',
+      scheduler_applied:false,
+      sync_status:sync.status,
+      observed_commit:observedResult,
+      global_set_clock:stateClockBefore,
+      next_evaluation:null
     };
   }
 

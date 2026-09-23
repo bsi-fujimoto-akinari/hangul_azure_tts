@@ -8365,7 +8365,7 @@ jobs:
           for needle in [
               'function h3ReviewAudioApply5WBindings_(',
               'REVIEW_AUDIO_5W_BINDING_DUPLICATE:',
-              'review_audio_binding_contract_id:',
+              'out.review_audio_binding_contract_id =',
           ]:
               if needle not in core:
                   raise SystemExit(

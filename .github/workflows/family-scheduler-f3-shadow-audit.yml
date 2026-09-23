@@ -83,22 +83,30 @@ jobs:
               if family not in web:
                   raise SystemExit(f"family hook missing: {family}")
 
-          if fs.count("appendRow([") != 2:
-              raise SystemExit("Family scheduler writes must remain two append-only log paths.")
-          if fs.count(".setValues(") != 1:
-              raise SystemExit("Family scheduler current-state write surface changed unexpectedly.")
+          # F4's original SHADOW persistence surfaces remain unchanged even
+          # after the separately audited LIMITED_LIVE issue path is added.
+          append_start = fs.index("function h3FsAppend_(ss,level,e)")
+          append_end = fs.index("function h3FsLogRows_", append_start)
+          if fs[append_start:append_end].count("appendRow([") != 1:
+              raise SystemExit("F3 evaluation append surface changed unexpectedly.")
 
-          forbidden = [
-              "issueProductionSet(",
-              "issueReading",
-              "issueTranslation",
-              "issueListening",
-              "SCHEDULER_APPLIED,true",
-              "SCHEDULER_APPLIED: true",
-          ]
-          for token in forbidden:
-              if token in fs:
-                  raise SystemExit(f"F4 live-selection token present: {token}")
+          state_start = fs.index("function h3FsWriteState_(ss,level,state)")
+          state_end = fs.index("function h3FsHistoryRecord_", state_start)
+          if fs[state_start:state_end].count(".setValues(") != 1:
+              raise SystemExit("F4 current-state write surface changed unexpectedly.")
+
+          observed_start = fs.index("function h3FsAppendCommitObserved_")
+          observed_end = fs.index("function h3FsObserveCommitted_", observed_start)
+          if fs[observed_start:observed_end].count("appendRow([") != 1:
+              raise SystemExit("F4 commit-observation append surface changed unexpectedly.")
+
+          if "schedulerApplied===true?'LIMITED_LIVE':'SHADOW'" not in fs[observed_start:observed_end]:
+              raise SystemExit("F4/LIMITED_LIVE provenance split missing.")
+
+          status_start = fs.index("function h3FamilySchedulerF4Status()")
+          status_end = fs.index("function h3FamilySchedulerShadowPreview()", status_start)
+          if "String(x.MODE||'')==='SHADOW'" not in fs[status_start:status_end]:
+              raise SystemExit("F4 status must count SHADOW observations only.")
 
           # Hook must occur only after lightweight HOME index persistence.
           listening_sync = web.index("result.home_index_sync =")

@@ -270,12 +270,24 @@ function h3FsCmp_(a,b) {
     if(a.retest_origin_result==='×')return -1;
     if(b.retest_origin_result==='×')return 1;
   }
+  if(
+    a.retest_origin_result &&
+    b.retest_origin_result
+  ){
+    if(a.retest_local_due_max!==b.retest_local_due_max){
+      return a.retest_local_due_max-b.retest_local_due_max;
+    }
+    var aog=a._retest_origin_global===null?Infinity:a._retest_origin_global;
+    var bog=b._retest_origin_global===null?Infinity:b._retest_origin_global;
+    if(aog!==bog)return aog-bog;
+  }
   var as=a.sets_since_last>=a.starvation_cap,bs=b.sets_since_last>=b.starvation_cap;
   if(as!==bs)return as?-1:1;
   if(as&&bs){
     var ar=a.sets_since_last/a.starvation_cap,br=b.sets_since_last/b.starvation_cap;
     if(ar!==br)return br-ar;
     if(a.sets_since_last!==b.sets_since_last)return b.sets_since_last-a.sets_since_last;
+    if(a.last_global_clock!==b.last_global_clock)return a.last_global_clock-b.last_global_clock;
   }
   if(a.projected_balance_loss!==b.projected_balance_loss)return a.projected_balance_loss-b.projected_balance_loss;
   var ac=a.coverage_shortfall===true,bc=b.coverage_shortfall===true;
@@ -291,8 +303,25 @@ function h3FsReason_(a,b) {
   var ap=a.retest_advance_slack===null?Infinity:a.retest_advance_slack;
   var bp=b.retest_advance_slack===null?Infinity:b.retest_advance_slack;
   if(ap!==bp||a.retest_origin_result!==b.retest_origin_result)return 'P1_RETEST_ADVANCE';
+  if(
+    a.retest_origin_result &&
+    b.retest_origin_result &&
+    (
+      a.retest_local_due_max!==b.retest_local_due_max ||
+      a._retest_origin_global!==b._retest_origin_global
+    )
+  )return 'P1_RETEST_ADVANCE';
   var as=a.sets_since_last>=a.starvation_cap,bs=b.sets_since_last>=b.starvation_cap;
-  if(as!==bs||(as&&bs&&a.sets_since_last/a.starvation_cap!==b.sets_since_last/b.starvation_cap))return 'P2_STARVATION';
+  if(
+    as!==bs ||
+    (
+      as&&bs&&(
+        a.sets_since_last/a.starvation_cap!==b.sets_since_last/b.starvation_cap ||
+        a.sets_since_last!==b.sets_since_last ||
+        a.last_global_clock!==b.last_global_clock
+      )
+    )
+  )return 'P2_STARVATION';
   if(a.projected_balance_loss!==b.projected_balance_loss)return 'P3_BALANCE';
   if((a.coverage_shortfall===true)!==(b.coverage_shortfall===true))return 'P4_COVERAGE';
   if(h3FsVecCmp_(a.skill_pressure_vector,b.skill_pressure_vector)!==0)return 'P5_SKILL_PRESSURE';
@@ -319,6 +348,7 @@ function h3FsEvaluate_(ss,level) {
       retest_advance_slack:p1?p1.slack:null,
       retest_origin_result:p1?p1.result:'',
       retest_local_due_max:p1?p1.due_max:null,
+      _retest_origin_global:p1?p1.origin_global:null,
       projected_balance_loss:h3FsBalance_(history,f),
       coverage_shortfall:null,coverage_deadline:null,
       x_due:pressure[f].x,triangle_due:pressure[f].t,near_stable:pressure[f].n,
@@ -343,10 +373,14 @@ function h3FsEvaluate_(ss,level) {
     candidate_order:[],family_metrics:metrics,current_set_id:'',result_status:'BLOCKED'
   };
   a.sort(h3FsCmp_);
+  var primaryReason=h3FsReason_(a[0],a[1]);
+  Object.keys(metrics).forEach(function(f){
+    delete metrics[f]._retest_origin_global;
+  });
   return {
     schema:H3_FS_OUTPUT_SCHEMA_,mode:'SHADOW',global_set_clock:clock,
     next_action:'RECOMMEND_FAMILY',recommended_family:a[0].family,
-    primary_reason:h3FsReason_(a[0],a[1]),
+    primary_reason:primaryReason,
     candidate_order:a.map(function(x){return x.family;}),
     family_metrics:metrics,current_set_id:'',result_status:'PASS'
   };

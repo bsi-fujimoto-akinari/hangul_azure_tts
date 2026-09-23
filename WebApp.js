@@ -136,6 +136,13 @@ function submitListeningWebAnswers(request) {
         result.after_sync
       );
 
+    result.family_scheduler_shadow =
+      h3FamilySchedulerObserveAfterCommit_(
+        'L',
+        result.set_id,
+        'LEGACY_TRIGGER'
+      );
+
     return result;
   }
 
@@ -184,6 +191,13 @@ function submitListeningWebAnswers(request) {
 
       readingResult.after_sync =
         readingReviewReadback;
+
+      readingResult.family_scheduler_shadow =
+        h3FamilySchedulerObserveAfterCommit_(
+          'R',
+          readingResult.set_id,
+          'LEGACY_TRIGGER'
+        );
 
       return readingResult;
     }
@@ -260,6 +274,13 @@ function submitListeningWebAnswers(request) {
             translationResult.set_id
         });
 
+      translationResult.family_scheduler_shadow =
+        h3FamilySchedulerObserveAfterCommit_(
+          'T',
+          translationResult.set_id,
+          'LEGACY_TRIGGER'
+        );
+
       return translationResult;
     }
 
@@ -284,6 +305,13 @@ function submitListeningWebAnswers(request) {
       h3ReviewHomeIndexUpsertAfterCommit_(
         writtenResult,
         writtenResult.after_sync
+      );
+
+    writtenResult.family_scheduler_shadow =
+      h3FamilySchedulerObserveAfterCommit_(
+        'W',
+        writtenResult.set_id,
+        'LEGACY_TRIGGER'
       );
 
     return writtenResult;

@@ -188,5 +188,52 @@ jobs:
           if (!merged.some(x=>x.obligation_key==='new')) throw new Error('F4 newer obligation did not replace prior obligation');
           if (merged.some(x=>x.obligation_key==='old')) throw new Error('F4 stale obligation survived replacement');
 
+          const originalOpen = h3FsOpenObligations_;
+          h3FsOpenObligations_ = () => ({
+            'W-SK|': {
+              skill_id:'W-SK',
+              direction:'',
+              section:'D2',
+              mark:'×',
+              gap_min:1,
+              gap_max:3,
+              last_set_id:'SET-W'
+            }
+          });
+          const wObs = h3FsNewCommitObligations_(
+            {},
+            'W',
+            {set_id:'SET-W',set_no:19,commit_key:'W|SET-W|NOW'},
+            28,
+            19
+          );
+          if (wObs.length !== 1) throw new Error('F4 W obligation creation mismatch');
+          if (wObs[0].local_due_min !== 20 || wObs[0].local_due_max !== 22) throw new Error('F4 W local due conversion mismatch');
+          if (wObs[0].global_service_deadline !== 31) throw new Error('F4 W global deadline mismatch');
+
+          h3FsOpenObligations_ = () => ({
+            'T-SK|JP_TO_KR': {
+              skill_id:'T-SK',
+              direction:'JP_TO_KR',
+              section:'',
+              mark:'△',
+              local_due_min:6,
+              local_due_max:9,
+              origin_family_clock:4,
+              last_set_id:'SET-T'
+            }
+          });
+          const tObs = h3FsNewCommitObligations_(
+            {},
+            'T',
+            {set_id:'SET-T',set_no:4,commit_key:'T|SET-T|NOW'},
+            29,
+            4
+          );
+          if (tObs.length !== 1) throw new Error('F4 T obligation creation mismatch');
+          if (tObs[0].global_service_deadline !== 34) throw new Error('F4 triangle global deadline mismatch');
+          if (tObs[0].local_due_min !== 6 || tObs[0].local_due_max !== 9) throw new Error('F4 T local due mismatch');
+          h3FsOpenObligations_ = originalOpen;
+
           console.log('F3/F4 deterministic ranking PASS');
           NODE

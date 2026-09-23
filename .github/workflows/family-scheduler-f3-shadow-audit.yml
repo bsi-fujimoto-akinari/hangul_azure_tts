@@ -124,6 +124,58 @@ jobs:
           print("F4 shadow observation contract PASS")
           PY
 
+      - name: F5 HOME UI preview contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          index = Path("Index.html").read_text(encoding="utf-8")
+
+          required = [
+              "family-scheduler-launcher",
+              "family-scheduler-actions",
+              "family-scheduler-button",
+              "family-scheduler-next",
+              "['NEXT'",
+              "'L'",
+              "'W'",
+              "'R'",
+              "'T'",
+              "button.disabled = true",
+              "aria-disabled",
+              "home.insertBefore(",
+              "review",
+              "new MutationObserver(",
+              "repeat(4, minmax(0, 1fr))",
+          ]
+          for token in required:
+              if token not in index:
+                  raise SystemExit(f"missing F5 UI token: {token}")
+
+          if index.count("family-scheduler-launcher") < 3:
+              raise SystemExit("F5 launcher style/injection contract incomplete.")
+
+          forbidden = [
+              "google.script.run",
+              "h3FamilySchedulerShadowPreview",
+              "h3FamilySchedulerShadowTick",
+              "h3FamilySchedulerObserveAfterCommit_",
+          ]
+          preview_start = index.index("(function () {")
+          preview = index[preview_start:]
+          for token in forbidden:
+              if token in preview:
+                  raise SystemExit(f"F5 must remain UI-only: {token}")
+
+          if "addEventListener" in preview:
+              raise SystemExit("F5 family buttons must not have click handlers.")
+
+          if index.index("family-scheduler-launcher") > index.index("</head>"):
+              raise SystemExit("F5 preview styles must load before body render.")
+
+          print("F5 HOME UI-only preview PASS")
+          PY
+
       - name: Deterministic ranking fixture
         run: |
           node <<'NODE'

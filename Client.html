@@ -2473,6 +2473,18 @@
       );
     }
 
+    var reviewProviderKind =
+      app.payload.mode === 'REVIEW'
+        ? String(
+            app.payload.provider_kind ||
+            app.payload.kind ||
+            ''
+          )
+        : '';
+    var writtenReviewMedia =
+      reviewProviderKind ===
+      'WRITTEN';
+
     google.script.run
       .withSuccessHandler(function (media) {
         app.mediaLoading[assetKey] = false;
@@ -2541,12 +2553,27 @@
         schema:
           'H3_WEB_MEDIA_REQUEST_V1',
         mode: app.payload.mode,
+        review_kind:
+          reviewProviderKind || null,
+        surface_family:
+          app.payload
+            .surface_family || null,
         set_id: app.payload.set_id,
         txn_id:
-          app.payload.txn_id || null,
+          writtenReviewMedia
+            ? null
+            : (
+                app.payload.txn_id ||
+                null
+              ),
         legacy_review_id:
-          app.payload
-            .legacy_review_id || null,
+          writtenReviewMedia
+            ? null
+            : (
+                app.payload
+                  .legacy_review_id ||
+                null
+              ),
         asset_key: assetKey
       });
   }

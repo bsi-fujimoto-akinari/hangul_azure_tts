@@ -295,6 +295,22 @@ function h3WrittenReviewPersistentHistory_(
 }
 
 
+function h3WrittenReviewMedia_(
+  request
+) {
+  if (
+    !request ||
+    request.surface_family !== '5W'
+  ) {
+    return h3WrittenReviewUnavailable_();
+  }
+
+  return getWrittenPersistentReviewMediaPayload_(
+    request
+  );
+}
+
+
 function h3WrittenReviewOpen_(request) {
   var surfaceFamily = String(
     request &&
@@ -345,7 +361,7 @@ function h3WrittenReviewOpen_(request) {
     );
   }
 
-  return getWrittenPersistentReviewPayload_(
+  return getWrittenPersistentReviewPayloadWithAudio_(
     request
   );
 }
@@ -438,7 +454,7 @@ function h3WrittenReviewProvider_() {
     openReview:
       h3WrittenReviewOpen_,
     openMedia:
-      h3WrittenReviewUnavailable_,
+      h3WrittenReviewMedia_,
     openReplay:
       h3WrittenReviewUnavailable_,
     openReplayMedia:

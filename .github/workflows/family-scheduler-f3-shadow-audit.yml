@@ -139,8 +139,6 @@ jobs:
               "family-scheduler-next",
               "family-scheduler-next-family",
               "family-scheduler-family-group",
-              "nextCaption.textContent",
-              "'NEXT'",
               "'L'",
               "'W'",
               "'R'",
@@ -163,6 +161,9 @@ jobs:
 
           preview_start = index.index("(function () {")
           preview = index[preview_start:]
+
+          if "family-scheduler-next-caption" in index or "nextCaption" in preview:
+              raise SystemExit("F5 NEXT caption must remain hidden; display family only.")
 
           if preview.count(".h3FamilySchedulerShadowPreview()") != 1:
               raise SystemExit("F5 must use exactly one read-only scheduler preview RPC per launcher render.")

@@ -136,7 +136,7 @@ jobs:
               "family-scheduler-actions",
               "family-scheduler-button",
               "family-scheduler-next",
-              "['NEXT'",
+              "'NEXT',",
               "'L'",
               "'W'",
               "'R'",

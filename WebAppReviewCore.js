@@ -584,7 +584,7 @@ function h3ReviewAudioApply5WBindings_(
     bindings.length !== 5
   ) {
     throw new Error(
-      'WRITTEN_REVIEW_AUDIO_PROJECTION_INVALID'
+      'REVIEW_AUDIO_5W_PROJECTION_INVALID'
     );
   }
 
@@ -616,13 +616,13 @@ function h3ReviewAudioApply5WBindings_(
         !binding.audio_url
       ) {
         throw new Error(
-          'WRITTEN_REVIEW_AUDIO_BINDING_INVALID'
+          'REVIEW_AUDIO_5W_BINDING_INVALID'
         );
       }
 
       if (seen[binding.slot_key]) {
         throw new Error(
-          'WRITTEN_REVIEW_AUDIO_BINDING_DUPLICATE:' +
+          'REVIEW_AUDIO_5W_BINDING_DUPLICATE:' +
             binding.slot_key
         );
       }
@@ -638,7 +638,7 @@ function h3ReviewAudioApply5WBindings_(
           binding.slot_key
       ) {
         throw new Error(
-          'WRITTEN_REVIEW_AUDIO_SLOT_MISMATCH:' +
+          'REVIEW_AUDIO_5W_SLOT_MISMATCH:' +
             binding.slot_key
         );
       }

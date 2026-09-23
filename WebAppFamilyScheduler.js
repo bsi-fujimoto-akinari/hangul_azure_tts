@@ -2,6 +2,7 @@ var H3_FS_STATE_SHEET_ = 'family_scheduler_state_v1';
 var H3_FS_LOG_SHEET_ = 'family_scheduler_decision_log_v1';
 var H3_FS_STATE_SCHEMA_ = 'H3_FAMILY_SCHEDULER_STATE_V1';
 var H3_FS_OUTPUT_SCHEMA_ = 'H3_FAMILY_SCHEDULER_V1';
+var H3_FS_LIVE_RESOLVER_SCHEMA_ = 'H3_FAMILY_SCHEDULER_LIVE_RESOLVER_V1';
 var H3_FS_FAMILIES_ = ['L','W','R','T'];
 var H3_FS_TARGET_ = {L:0.40,W:0.36,R:0.12,T:0.12};
 var H3_FS_SET_SIZE_ = {L:5,W:5,R:2,T:2};
@@ -397,6 +398,71 @@ function h3FsEvaluate_(ss,level) {
     candidate_order:a.map(function(x){return x.family;}),
     family_metrics:metrics,current_set_id:'',result_status:'PASS'
   };
+}
+
+function h3FsResolveLive_(evaluation) {
+  if(!evaluation || String(evaluation.schema||'')!==H3_FS_OUTPUT_SCHEMA_){
+    throw new Error('FAMILY_SCHEDULER_LIVE_RESOLVER_SCHEMA_INVALID');
+  }
+
+  var clock=Number(evaluation.global_set_clock);
+  if(!isFinite(clock) || clock<0){
+    throw new Error('FAMILY_SCHEDULER_LIVE_RESOLVER_CLOCK_INVALID');
+  }
+
+  var action=String(evaluation.next_action||'');
+  var status=String(evaluation.result_status||'');
+  var family=String(evaluation.recommended_family||'');
+  var currentSetId=String(evaluation.current_set_id||'');
+  var reason=String(evaluation.primary_reason||'');
+
+  var result={
+    schema:H3_FS_LIVE_RESOLVER_SCHEMA_,
+    mode:'LIVE_RESOLVER',
+    scheduler_applied:false,
+    global_set_clock:clock,
+    source_next_action:action,
+    primary_reason:reason,
+    route_kind:'',
+    family:'NONE',
+    current_set_id:'',
+    result_status:''
+  };
+
+  if(action==='RESUME_CURRENT'){
+    if(status!=='PASS' || !currentSetId || family!=='NONE'){
+      throw new Error('FAMILY_SCHEDULER_LIVE_RESOLVER_RESUME_INVALID');
+    }
+    result.route_kind='CURRENT_SET';
+    result.current_set_id=currentSetId;
+    result.result_status='READY';
+    return result;
+  }
+
+  if(action==='BLOCKED'){
+    if(status!=='BLOCKED' || currentSetId || family!=='NONE'){
+      throw new Error('FAMILY_SCHEDULER_LIVE_RESOLVER_BLOCKED_INVALID');
+    }
+    result.route_kind='BLOCKED';
+    result.result_status='BLOCKED';
+    return result;
+  }
+
+  if(action==='RECOMMEND_FAMILY'){
+    if(
+      status!=='PASS' ||
+      currentSetId ||
+      H3_FS_FAMILIES_.indexOf(family)<0
+    ){
+      throw new Error('FAMILY_SCHEDULER_LIVE_RESOLVER_FAMILY_INVALID');
+    }
+    result.route_kind='FAMILY';
+    result.family=family;
+    result.result_status='READY';
+    return result;
+  }
+
+  throw new Error('FAMILY_SCHEDULER_LIVE_RESOLVER_ACTION_INVALID');
 }
 
 function h3FsSnapshot_(state,evaluation,history) {
@@ -1052,6 +1118,11 @@ function h3FamilySchedulerF4Status() {
 function h3FamilySchedulerShadowPreview() {
   var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
   return h3FsEvaluate_(ss,'3級');
+}
+
+function h3FamilySchedulerLiveResolverPreview() {
+  var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
+  return h3FsResolveLive_(h3FsEvaluate_(ss,'3級'));
 }
 
 function h3FamilySchedulerShadowTick() {

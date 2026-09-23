@@ -8301,7 +8301,7 @@ jobs:
 
           for needle in [
               'function h3ReviewAudioApply5WBindings_(',
-              'WRITTEN_REVIEW_AUDIO_BINDING_DUPLICATE:',
+              'REVIEW_AUDIO_5W_BINDING_DUPLICATE:',
               'review_audio_binding_contract_id:',
           ]:
               if needle not in core:

@@ -557,7 +557,7 @@ jobs:
               raise SystemExit("F5 preview styles must load before body render.")
 
           fs_preview_start = fs.index("function h3FamilySchedulerShadowPreview()")
-          fs_preview_end = fs.index("function h3FamilySchedulerShadowTick()", fs_preview_start)
+          fs_preview_end = fs.index("function h3FamilySchedulerLiveResolverPreview()", fs_preview_start)
           fs_preview = fs[fs_preview_start:fs_preview_end]
           for token in [
               "appendRow",

@@ -4,6 +4,68 @@
     <base target="_top">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <?!= include_('Stylesheet'); ?>
+    <style>
+      .family-scheduler-launcher {
+        padding: 10px;
+      }
+
+      .family-scheduler-actions {
+        display: grid;
+        grid-template-columns:
+          minmax(0, 1.35fr)
+          repeat(4, minmax(0, 1fr));
+        gap: 6px;
+        width: 100%;
+        min-width: 0;
+      }
+
+      .family-scheduler-button {
+        min-width: 0;
+        min-height: 44px;
+        border: 1px solid #c9c9c9;
+        border-radius: 10px;
+        background: #fff;
+        padding: 9px 4px;
+        color: #4b5563;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: .02em;
+        line-height: 1;
+        opacity: 1;
+        cursor: default;
+      }
+
+      .family-scheduler-button:disabled {
+        opacity: 1;
+        color: #4b5563;
+        -webkit-text-fill-color: currentColor;
+      }
+
+      .family-scheduler-button.family-scheduler-next,
+      .family-scheduler-button.family-scheduler-next:disabled {
+        border-color: #222;
+        background: #222;
+        color: #fff;
+        -webkit-text-fill-color: #fff;
+      }
+
+      @media (max-width: 619px) {
+        .family-scheduler-launcher {
+          padding: 9px;
+        }
+
+        .family-scheduler-actions {
+          gap: 5px;
+        }
+
+        .family-scheduler-button {
+          min-height: 42px;
+          padding-left: 2px;
+          padding-right: 2px;
+          font-size: 12px;
+        }
+      }
+    </style>
   </head>
   <body>
     <main class="shell">
@@ -24,5 +86,106 @@
       window.H3_BOOT = <?!= bootJson ?>;
     </script>
     <?!= include_('Client'); ?>
+    <script>
+      (function () {
+        var home =
+          document.getElementById(
+            'home'
+          );
+        if (!home) {
+          return;
+        }
+
+        function injectFamilySchedulerPreview() {
+          if (
+            home.querySelector(
+              '.family-scheduler-launcher'
+            )
+          ) {
+            return;
+          }
+
+          var review =
+            home.querySelector(
+              '.review-library'
+            );
+          if (!review) {
+            return;
+          }
+
+          var launcher =
+            document.createElement(
+              'section'
+            );
+          launcher.className =
+            'home-card family-scheduler-launcher';
+          launcher.setAttribute(
+            'aria-label',
+            '学習メニュー'
+          );
+
+          var actions =
+            document.createElement(
+              'div'
+            );
+          actions.className =
+            'family-scheduler-actions';
+
+          [
+            'NEXT',
+            'L',
+            'W',
+            'R',
+            'T'
+          ].forEach(
+            function (label) {
+              var button =
+                document.createElement(
+                  'button'
+                );
+              button.type = 'button';
+              button.className =
+                'family-scheduler-button';
+              if (label === 'NEXT') {
+                button.classList.add(
+                  'family-scheduler-next'
+                );
+              }
+              button.textContent =
+                label;
+              button.disabled = true;
+              button.setAttribute(
+                'aria-disabled',
+                'true'
+              );
+              button.dataset.family =
+                label;
+              actions.appendChild(
+                button
+              );
+            }
+          );
+
+          launcher.appendChild(
+            actions
+          );
+          home.insertBefore(
+            launcher,
+            review
+          );
+        }
+
+        injectFamilySchedulerPreview();
+
+        new MutationObserver(
+          injectFamilySchedulerPreview
+        ).observe(
+          home,
+          {
+            childList: true
+          }
+        );
+      }());
+    </script>
   </body>
 </html>

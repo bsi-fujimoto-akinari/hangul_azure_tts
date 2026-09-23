@@ -83,22 +83,30 @@ jobs:
               if family not in web:
                   raise SystemExit(f"family hook missing: {family}")
 
-          if fs.count("appendRow([") != 2:
-              raise SystemExit("Family scheduler writes must remain two append-only log paths.")
-          if fs.count(".setValues(") != 1:
-              raise SystemExit("Family scheduler current-state write surface changed unexpectedly.")
+          # F4's original SHADOW persistence surfaces remain unchanged even
+          # after the separately audited LIMITED_LIVE issue path is added.
+          append_start = fs.index("function h3FsAppend_(ss,level,e)")
+          append_end = fs.index("function h3FsLogRows_", append_start)
+          if fs[append_start:append_end].count("appendRow([") != 1:
+              raise SystemExit("F3 evaluation append surface changed unexpectedly.")
 
-          forbidden = [
-              "issueProductionSet(",
-              "issueReading",
-              "issueTranslation",
-              "issueListening",
-              "SCHEDULER_APPLIED,true",
-              "SCHEDULER_APPLIED: true",
-          ]
-          for token in forbidden:
-              if token in fs:
-                  raise SystemExit(f"F4 live-selection token present: {token}")
+          state_start = fs.index("function h3FsWriteState_(ss,level,state)")
+          state_end = fs.index("function h3FsHistoryRecord_", state_start)
+          if fs[state_start:state_end].count(".setValues(") != 1:
+              raise SystemExit("F4 current-state write surface changed unexpectedly.")
+
+          observed_start = fs.index("function h3FsAppendCommitObserved_")
+          observed_end = fs.index("function h3FsObserveCommitted_", observed_start)
+          if fs[observed_start:observed_end].count("appendRow([") != 1:
+              raise SystemExit("F4 commit-observation append surface changed unexpectedly.")
+
+          if "schedulerApplied===true?'LIMITED_LIVE':'SHADOW'" not in fs[observed_start:observed_end]:
+              raise SystemExit("F4/LIMITED_LIVE provenance split missing.")
+
+          status_start = fs.index("function h3FamilySchedulerF4Status()")
+          status_end = fs.index("function h3FamilySchedulerShadowPreview()", status_start)
+          if "String(x.MODE||'')==='SHADOW'" not in fs[status_start:status_end]:
+              raise SystemExit("F4 status must count SHADOW observations only.")
 
           # Hook must occur only after lightweight HOME index persistence.
           listening_sync = web.index("result.home_index_sync =")
@@ -167,7 +175,7 @@ jobs:
                   raise SystemExit(f"live resolver must remain pure/unwired: {token}")
 
           preview_start = fs.index("function h3FamilySchedulerLiveResolverPreview()")
-          preview_end = fs.index("function h3FamilySchedulerShadowTick()", preview_start)
+          preview_end = fs.index("function h3FamilySchedulerIssueRoutePreview()", preview_start)
           preview = fs[preview_start:preview_end]
           for token in [
               "appendRow",
@@ -304,7 +312,7 @@ jobs:
                   raise SystemExit(f"issue routing bridge must not execute issue/submit writes: {token}")
 
           preview_start = fs.index("function h3FamilySchedulerIssueRoutePreview()")
-          preview_end = fs.index("function h3FamilySchedulerShadowTick()", preview_start)
+          preview_end = fs.index("function h3FamilySchedulerHomeNext()", preview_start)
           preview = fs[preview_start:preview_end]
           for token in [
               "appendRow",
@@ -424,6 +432,60 @@ jobs:
           console.log('Issue routing deterministic fixture PASS');
           NODE
 
+      - name: Family Scheduler live issue contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          fs = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+          index = Path("Index.html").read_text(encoding="utf-8")
+
+          required = [
+              "function h3FsFindPreparedWritten_(ss)",
+              "function h3FsFindPreparedReading_(ss)",
+              "function h3FsFindPreparedTranslation_(ss)",
+              "function h3FsIssueWritten_(ss)",
+              "function h3FsIssueReading_(ss)",
+              "function h3FsIssueTranslation_(ss)",
+              "function h3FsIssueListening_(ss)",
+              "function h3FsIssuePreparedFamily_(ss,family)",
+              "function h3FsAppendIssueApplied_(",
+              "function h3FsIssueAppliedForSet_(ss,level,setId)",
+              "schedulerApplied===true?'LIMITED_LIVE':'SHADOW'",
+              "appliedIssue?'FAMILY_SCHEDULER':selectionSource",
+              "limited_live_commit_count:liveCommits.length",
+              "'ISSUE_APPLIED'",
+              "'LIMITED_LIVE'",
+              "scheduler_applied=true",
+              "issue_performed=true",
+              "client_action='OPEN_ISSUED'",
+              "consumeK1ReadyAfterIssue_(",
+              "h3ReadingPreissueValidate_",
+              "h3TranslationV2RequireIssued_",
+              "h3WrittenValidateSourceIdentity_",
+              "FAMILY_SCHEDULER_ISSUE_CURRENT_READBACK_MISMATCH",
+          ]
+          for token in required:
+              if token not in fs:
+                  raise SystemExit(f"missing live issue token: {token}")
+
+          if "'OPEN_ISSUED'" not in index:
+              raise SystemExit("HOME NEXT client must open newly issued set.")
+
+          if "route.readiness_state ===\n                    'READY'" not in index:
+              raise SystemExit("NEXT must stay disabled while preparation is still required.")
+
+          # Existing SHADOW evaluator itself must remain read-only.
+          eval_start = fs.index("function h3FsEvaluate_(ss,level)")
+          eval_end = fs.index("function h3FsResolveLive_", eval_start)
+          evaluator = fs[eval_start:eval_end]
+          for token in ["appendRow", ".setValue(", ".setValues("]:
+              if token in evaluator:
+                  raise SystemExit(f"evaluator write boundary violated: {token}")
+
+          print("Family Scheduler live issue contract PASS")
+          PY
+
       - name: HOME NEXT activation contract
         run: |
           python - <<'PY'
@@ -495,7 +557,7 @@ jobs:
               raise SystemExit("F5 preview styles must load before body render.")
 
           fs_preview_start = fs.index("function h3FamilySchedulerShadowPreview()")
-          fs_preview_end = fs.index("function h3FamilySchedulerShadowTick()", fs_preview_start)
+          fs_preview_end = fs.index("function h3FamilySchedulerLiveResolverPreview()", fs_preview_start)
           fs_preview = fs[fs_preview_start:fs_preview_end]
           for token in [
               "appendRow",
@@ -514,20 +576,13 @@ jobs:
           rpc_end = fs.index("function h3FamilySchedulerShadowTick()", rpc_start)
           rpc = fs[rpc_start:rpc_end]
           for token in [
-              "appendRow",
-              ".setValue(",
-              ".setValues(",
-              "h3FsAppend_(",
-              "h3FsWriteState_(",
-              "consumeK1ReadyAfterIssue_(",
-              "prepareListeningBackendSet(",
               "h3WrittenSubmit_(",
               "h3ReadingSubmit_(",
               "h3TranslationSubmit_(",
               "h3TranslationV2Submit_(",
           ]:
               if token in rpc:
-                  raise SystemExit(f"HOME NEXT must not execute issue/write yet: {token}")
+                  raise SystemExit(f"HOME NEXT must never submit learner answers: {token}")
 
           print("HOME NEXT activation contract PASS")
           PY

@@ -2799,6 +2799,9 @@ jobs:
           if '<section id="home" class="home hidden"></section>' not in index:
               raise SystemExit('R3-09D HOME root is missing from Index.html.')
 
+          if 'family-scheduler-next-caption' in index or 'nextCaption' in index:
+              raise SystemExit('F5 NEXT caption returned; family-only display required.')
+
           for needle in [
               '.persistent-review-card',
               '.review-filter-button',

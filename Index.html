@@ -72,10 +72,6 @@
         padding: 0;
       }
 
-      .family-scheduler-button.family-scheduler-next:not(:disabled) {
-        cursor: pointer;
-      }
-
       body.mobile-device .review-controls-sticky {
         grid-template-columns:
           minmax(0, 5fr)
@@ -270,204 +266,47 @@
             actions
           );
 
-          function familyForRoute_(
-            route
-          ) {
-            if (
-              route &&
-              route.route_kind === 'FAMILY' &&
-              [
-                'L',
-                'W',
-                'R',
-                'T'
-              ].indexOf(
-                String(
-                  route.family || ''
-                )
-              ) >= 0
-            ) {
-              return String(
-                route.family
-              );
-            }
-
-            if (
-              route &&
-              route.route_kind ===
-                'CURRENT_SET'
-            ) {
-              var surface =
-                String(
-                  route.surface_family ||
-                  ''
-                );
-              if (surface === '5L') {
-                return 'L';
-              }
-              if (surface === '5W') {
-                return 'W';
-              }
-              if (surface === 'READING') {
-                return 'R';
-              }
-              if (
-                surface ===
-                  'TRANSLATION'
-              ) {
-                return 'T';
-              }
-            }
-
-            return '—';
-          }
-
-          function setNextState_(
-            route
-          ) {
-            if (
-              !home.contains(
-                nextButton
-              )
-            ) {
-              return;
-            }
-
-            var family =
-              familyForRoute_(
-                route
-              );
-            var actionable =
-              route &&
-              route.result_status ===
-                'READY' &&
-              (
-                route.route_kind ===
-                  'FAMILY' ||
-                route.route_kind ===
-                  'CURRENT_SET'
-              ) &&
-              family !== '—';
-
-            nextFamily.textContent =
-              family;
-            nextButton.dataset.family =
-              family;
-            nextButton.disabled =
-              !actionable;
-            nextButton.setAttribute(
-              'aria-disabled',
-              actionable
-                ? 'false'
-                : 'true'
-            );
-            nextButton.setAttribute(
-              'aria-label',
-              actionable
-                ? '次の問題のfamily: ' +
-                  family
-                : '次の問題は現在利用できません'
-            );
-          }
-
-          nextButton.addEventListener(
-            'click',
-            function () {
-              if (
-                nextButton.disabled
-              ) {
-                return;
-              }
-
-              nextButton.disabled = true;
-              nextButton.setAttribute(
-                'aria-disabled',
-                'true'
-              );
-              nextButton.setAttribute(
-                'aria-busy',
-                'true'
-              );
-
-              google.script.run
-                .withSuccessHandler(
-                  function (result) {
-                    if (
-                      !home.contains(
-                        nextButton
-                      )
-                    ) {
-                      return;
-                    }
-
-                    nextButton.removeAttribute(
-                      'aria-busy'
-                    );
-
-                    if (
-                      result &&
-                      result.client_action ===
-                        'OPEN_CURRENT' &&
-                      result.render_request
-                    ) {
-                      document.dispatchEvent(
-                        new CustomEvent(
-                          'h3-family-scheduler-open-current',
-                          {
-                            detail:
-                              result.render_request
-                          }
-                        )
-                      );
-                      return;
-                    }
-
-                    setNextState_(
-                      result
-                    );
-                    nextButton.dataset
-                      .clientAction =
-                        String(
-                          result &&
-                          result.client_action ||
-                          ''
-                        );
-                  }
-                )
-                .withFailureHandler(
-                  function () {
-                    if (
-                      home.contains(
-                        nextButton
-                      )
-                    ) {
-                      nextButton.removeAttribute(
-                        'aria-busy'
-                      );
-                      nextFamily.textContent =
-                        '—';
-                      nextButton.disabled =
-                        true;
-                      nextButton.setAttribute(
-                        'aria-disabled',
-                        'true'
-                      );
-                      nextButton.setAttribute(
-                        'aria-label',
-                        '次の問題の経路を取得できませんでした'
-                      );
-                    }
-                  }
-                )
-                .h3FamilySchedulerHomeNext();
-            }
-          );
-
           google.script.run
             .withSuccessHandler(
-              function (route) {
-                setNextState_(
-                  route
+              function (preview) {
+                if (
+                  !home.contains(
+                    nextButton
+                  )
+                ) {
+                  return;
+                }
+
+                var family =
+                  preview &&
+                  preview.next_action ===
+                    'RECOMMEND_FAMILY' &&
+                  [
+                    'L',
+                    'W',
+                    'R',
+                    'T'
+                  ].indexOf(
+                    String(
+                      preview.recommended_family ||
+                      ''
+                    )
+                  ) >= 0
+                    ? String(
+                        preview.recommended_family
+                      )
+                    : '—';
+
+                nextFamily.textContent =
+                  family;
+                nextButton.dataset.family =
+                  family;
+                nextButton.setAttribute(
+                  'aria-label',
+                  family === '—'
+                    ? '次の問題のfamilyは未確定'
+                    : '次の問題のfamily: ' +
+                      family
                 );
               }
             )
@@ -480,12 +319,6 @@
                 ) {
                   nextFamily.textContent =
                     '—';
-                  nextButton.disabled =
-                    true;
-                  nextButton.setAttribute(
-                    'aria-disabled',
-                    'true'
-                  );
                   nextButton.setAttribute(
                     'aria-label',
                     '次の問題のfamilyを取得できませんでした'
@@ -493,7 +326,7 @@
                 }
               }
             )
-            .h3FamilySchedulerIssueRoutePreview();
+            .h3FamilySchedulerShadowPreview();
           home.insertBefore(
             launcher,
             review

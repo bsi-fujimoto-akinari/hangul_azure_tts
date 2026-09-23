@@ -616,3 +616,44 @@ or mutate learner history, answers, uncertainty, score, scheduler, skill_queue, 
 state, generation history, pointers, counters, committed Reading/Translation history,
 source provenance, or existing audio file identities.
 
+## 42. E5-C 5W Review audio embedding
+
+Status: **active for 5W only**.
+
+E5-C activates the E5-B binding contract on persistent 5W Review without changing the
+locked Review authority or any E4 audio asset. The raw validated Review payload is
+cloned for learner-facing projection, `surface_family=5W` is applied to that clone,
+and all five expected E5-B bindings are resolved before the payload is returned.
+
+Each 5W card receives only display-time fields:
+
+```text
+D2 -> audio_asset_key=D2
+D3 -> audio_asset_key=D3
+D4 -> audio_asset_key=D4
+D5 -> audio_asset_key=D5
+D6 -> audio_asset_key=D6
+```
+
+`audio_fallback_url` comes from the same exact sidecar row. The existing integrated
+inline play/pause + seekbar component is reused unchanged; no second audio control is
+introduced.
+
+For media loading, Review requests now identify the provider and surface explicitly.
+A 5W media request uses `review_kind=WRITTEN`, `surface_family=5W`, `set_id`, and
+`asset_key=SLOT_KEY`. Listening-only transaction identities are omitted from Written
+media requests so provider routing remains unambiguous. The Written provider accepts
+Review media only for 5W at this stage. Reading and Translation remain unavailable
+through this media path until E5-D and E5-E.
+
+Before returning bytes, the server re-opens the exact persisted 5W Review through the
+existing source-lock validation, derives the allowlisted slots from that validated
+payload, resolves the exact E5-B sidecar tuple, and then reads only that bound file.
+There is no filename fallback, cross-set fallback, cross-family fallback, or silent
+substitution.
+
+E5-C is display/read-only integration. It does not modify locked Review JSON, Review
+binding hashes, learner history, answers, uncertainty, score, scheduler, skill_queue,
+retest state, generation history, pointers, counters, source provenance, or any of the
+90 completed 5W Review audio assets.
+

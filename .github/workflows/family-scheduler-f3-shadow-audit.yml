@@ -124,6 +124,138 @@ jobs:
           print("F4 shadow observation contract PASS")
           PY
 
+      - name: Live resolver contract (not wired)
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          fs = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+
+          required = [
+              "H3_FAMILY_SCHEDULER_LIVE_RESOLVER_V1",
+              "function h3FsResolveLive_(evaluation)",
+              "function h3FamilySchedulerLiveResolverPreview()",
+              "mode:'LIVE_RESOLVER'",
+              "scheduler_applied:false",
+              "route_kind='CURRENT_SET'",
+              "route_kind='BLOCKED'",
+              "route_kind='FAMILY'",
+              "FAMILY_SCHEDULER_LIVE_RESOLVER_SCHEMA_INVALID",
+              "FAMILY_SCHEDULER_LIVE_RESOLVER_ACTION_INVALID",
+          ]
+          for token in required:
+              if token not in fs:
+                  raise SystemExit(f"missing live resolver token: {token}")
+
+          start = fs.index("function h3FsResolveLive_(evaluation)")
+          end = fs.index("function h3FsSnapshot_", start)
+          resolver = fs[start:end]
+
+          forbidden = [
+              "appendRow",
+              ".setValue(",
+              ".setValues(",
+              "h3FsAppend_(",
+              "h3FsWriteState_(",
+              "issueProductionSet(",
+              "issueReading",
+              "issueTranslation",
+              "issueListening",
+          ]
+          for token in forbidden:
+              if token in resolver:
+                  raise SystemExit(f"live resolver must remain pure/unwired: {token}")
+
+          preview_start = fs.index("function h3FamilySchedulerLiveResolverPreview()")
+          preview_end = fs.index("function h3FamilySchedulerShadowTick()", preview_start)
+          preview = fs[preview_start:preview_end]
+          for token in [
+              "appendRow",
+              ".setValue(",
+              ".setValues(",
+              "h3FsAppend_(",
+              "h3FsWriteState_(",
+          ]:
+              if token in preview:
+                  raise SystemExit(f"live resolver preview must remain read-only: {token}")
+
+          print("Live resolver static contract PASS")
+          PY
+
+      - name: Live resolver deterministic fixture
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          vm.runInThisContext(fs.readFileSync('WebAppFamilyScheduler.js','utf8'));
+
+          function evaluation(overrides) {
+            return {
+              schema:H3_FS_OUTPUT_SCHEMA_,
+              mode:'SHADOW',
+              global_set_clock:27,
+              next_action:'RECOMMEND_FAMILY',
+              recommended_family:'W',
+              primary_reason:'P3_BALANCE',
+              candidate_order:['W','L','R','T'],
+              family_metrics:{},
+              current_set_id:'',
+              result_status:'PASS',
+              ...overrides
+            };
+          }
+
+          const family = h3FsResolveLive_(evaluation({}));
+          if (family.route_kind !== 'FAMILY') throw new Error('family route mismatch');
+          if (family.family !== 'W') throw new Error('family value mismatch');
+          if (family.result_status !== 'READY') throw new Error('family readiness mismatch');
+          if (family.scheduler_applied !== false) throw new Error('resolver must not claim application');
+
+          const resume = h3FsResolveLive_(evaluation({
+            next_action:'RESUME_CURRENT',
+            recommended_family:'NONE',
+            primary_reason:'RESUME_CURRENT',
+            candidate_order:[],
+            current_set_id:'H3-TEST-CURRENT',
+            result_status:'PASS'
+          }));
+          if (resume.route_kind !== 'CURRENT_SET') throw new Error('resume route mismatch');
+          if (resume.current_set_id !== 'H3-TEST-CURRENT') throw new Error('resume set mismatch');
+          if (resume.family !== 'NONE') throw new Error('resume family must remain NONE');
+
+          const blocked = h3FsResolveLive_(evaluation({
+            next_action:'BLOCKED',
+            recommended_family:'NONE',
+            primary_reason:'ALL_BLOCKED',
+            candidate_order:[],
+            current_set_id:'',
+            result_status:'BLOCKED'
+          }));
+          if (blocked.route_kind !== 'BLOCKED') throw new Error('blocked route mismatch');
+          if (blocked.result_status !== 'BLOCKED') throw new Error('blocked status mismatch');
+
+          const invalid = [
+            () => h3FsResolveLive_(null),
+            () => h3FsResolveLive_(evaluation({recommended_family:'X'})),
+            () => h3FsResolveLive_(evaluation({
+              next_action:'RESUME_CURRENT',
+              recommended_family:'NONE',
+              current_set_id:''
+            })),
+            () => h3FsResolveLive_(evaluation({
+              next_action:'UNKNOWN',
+              recommended_family:'NONE'
+            }))
+          ];
+          invalid.forEach((fn, i) => {
+            let threw = false;
+            try { fn(); } catch (_) { threw = true; }
+            if (!threw) throw new Error('invalid resolver case did not fail closed: '+i);
+          });
+
+          console.log('Live resolver deterministic fixture PASS');
+          NODE
+
       - name: F5 HOME read-only preview contract
         run: |
           python - <<'PY'

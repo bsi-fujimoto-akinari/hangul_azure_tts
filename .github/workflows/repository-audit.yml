@@ -9046,6 +9046,215 @@ jobs:
           print('T003 body_ja register parity: PASS')
           PY
 
+      - name: Audit learner-facing Japanese quality corrections
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          persistence = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
+
+          required = [
+              'function h3ReviewApplyListeningLearnerTextCorrections_(',
+              'function h3WrittenReviewApplyLearnerTextCorrections_(',
+              'H3-REVIEW-JA-QUALITY-20260923-V1',
+              '最近運動していないので、なんだか体が重い気がします。',
+              '友達との約束は必ず（　）なければなりません。',
+              '時間がたつのも忘れていました。',
+              '韓国文化への（　）が高いです。',
+              'ぱっと目に入りました',
+              'h3ReviewApplyListeningLearnerTextCorrections_(\n    buildPersistentReviewPayload_(',
+              'h3WrittenReviewApplyLearnerTextCorrections_(',
+          ]
+          for needle in required:
+              if needle not in persistence:
+                  raise SystemExit(
+                      f'Learner-facing Japanese correction missing: {needle}'
+                  )
+
+          start = persistence.index(
+              'function h3ReviewApplyListeningLearnerTextCorrections_('
+          )
+          end = persistence.index(
+              'function getPersistentReviewPayload_(',
+              start
+          )
+          correction_layer = persistence[start:end]
+          for forbidden in [
+              '.setValue(',
+              '.setValues(',
+              '.appendRow(',
+              '.deleteRow(',
+              'SpreadsheetApp',
+              'DriveApp',
+              '.createFile(',
+              '.setTrashed(',
+          ]:
+              if forbidden in correction_layer:
+                  raise SystemExit(
+                      f'Japanese correction layer mutates storage: {forbidden}'
+                  )
+
+          for needle in [
+              '## 45. Learner-facing Japanese quality corrections',
+              'non-authoritative',
+              'fails closed',
+          ]:
+              if needle not in architecture:
+                  raise SystemExit(
+                      f'Japanese correction architecture missing: {needle}'
+                  )
+
+          print('Learner-facing Japanese correction static boundary: PASS')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const context = {console};
+          vm.createContext(context);
+          vm.runInContext(
+            fs.readFileSync('WebAppReviewPersistence.js', 'utf8'),
+            context,
+            {filename:'WebAppReviewPersistence.js'}
+          );
+
+          function clone(value) {
+            return JSON.parse(JSON.stringify(value));
+          }
+
+          const listening = {
+            mode:'REVIEW',
+            set_id:'H3-20260919-L03',
+            sections:[
+              {section:'K1', explanation:{body_ja:'a'}},
+              {section:'K2', explanation:{body_ja:'b'}},
+              {
+                section:'K3',
+                explanation:{
+                  body_ja:'最近運動していないので、体がしょっちゅう重く感じる気がします。'
+                }
+              },
+              {section:'K4', explanation:{body_ja:'d'}},
+              {section:'K5', explanation:{body_ja:'e'}}
+            ],
+            technical:{locked:true}
+          };
+          context.__listening = listening;
+          const correctedListening = vm.runInContext(
+            'h3ReviewApplyListeningLearnerTextCorrections_(__listening)',
+            context
+          );
+          if (
+            correctedListening.sections[2].explanation.body_ja !==
+            '最近運動していないので、なんだか体が重い気がします。'
+          ) {
+            throw new Error('5L learner-facing correction mismatch.');
+          }
+          if (
+            listening.sections[2].explanation.body_ja !==
+            '最近運動していないので、体がしょっちゅう重く感じる気がします。'
+          ) {
+            throw new Error('5L source payload was mutated.');
+          }
+
+          const writtenCases = [
+            {
+              set_id:'H3-20260914-01',
+              q:4,
+              old:'・友達とした約束は必ず（　）なければなりません。\n→ ・人の秘密はきちんと（　）なければなりません。',
+              next:'・友達との約束は必ず（　）なければなりません。\n→ ・人の秘密はきちんと（　）なければなりません。'
+            },
+            {
+              set_id:'H3-20260914-02',
+              q:3,
+              old:'この映画は思ったより面白くて、時間が経つのも分かりませんでした。',
+              next:'この映画は思ったより面白くて、時間がたつのも忘れていました。'
+            },
+            {
+              set_id:'H3-20260914-02',
+              q:4,
+              old:'・韓国文化に（　）が多いです。\n→ ・その問題にはあまり（　）がありません。',
+              next:'・韓国文化への（　）が高いです。\n→ ・その問題にはあまり（　）がありません。'
+            },
+            {
+              set_id:'H3-20260917-01',
+              q:3,
+              old:'祭りの入口に立てた大きな案内板は、遠くからでも［一目で目に入りました］。',
+              next:'祭りの入口に立てた大きな案内板は、遠くからでも［ぱっと目に入りました］。'
+            }
+          ];
+
+          for (const c of writtenCases) {
+            const payload = {
+              mode:'REVIEW',
+              set_id:c.set_id,
+              sections:[1,2,3,4,5].map(
+                n => ({
+                  section:'D' + (n + 1),
+                  explanation:{
+                    body_ja:n === c.q ? c.old : 'unchanged-' + n
+                  }
+                })
+              ),
+              technical:{locked:true}
+            };
+            context.__written = payload;
+            const corrected = vm.runInContext(
+              'h3WrittenReviewApplyLearnerTextCorrections_(__written)',
+              context
+            );
+            if (
+              corrected.sections[c.q - 1].explanation.body_ja !==
+              c.next
+            ) {
+              throw new Error(
+                '5W learner-facing correction mismatch: ' + c.set_id + ':Q' + c.q
+              );
+            }
+            if (
+              payload.sections[c.q - 1].explanation.body_ja !==
+              c.old
+            ) {
+              throw new Error(
+                '5W source payload was mutated: ' + c.set_id + ':Q' + c.q
+              );
+            }
+          }
+
+          let failed = false;
+          context.__bad = {
+            mode:'REVIEW',
+            set_id:'H3-20260914-02',
+            sections:[1,2,3,4,5].map(
+              n => ({
+                explanation:{
+                  body_ja:n === 3 ? 'unexpected source text' : 'x'
+                }
+              })
+            )
+          };
+          try {
+            vm.runInContext(
+              'h3WrittenReviewApplyLearnerTextCorrections_(__bad)',
+              context
+            );
+          } catch (_err) {
+            failed = true;
+          }
+          if (!failed) {
+            throw new Error(
+              'Unexpected 5W correction source did not fail closed.'
+            );
+          }
+
+          console.log(
+            'Learner-facing Japanese correction pure audit: PASS'
+          );
+          NODE
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

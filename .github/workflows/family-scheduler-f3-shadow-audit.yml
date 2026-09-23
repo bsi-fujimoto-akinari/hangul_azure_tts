@@ -256,6 +256,174 @@ jobs:
           console.log('Live resolver deterministic fixture PASS');
           NODE
 
+      - name: Issue routing bridge contract (not executing)
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          fs = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+
+          required = [
+              "H3_FAMILY_SCHEDULER_ISSUE_ROUTE_V1",
+              "H3_FS_ISSUE_ROUTE_BINDINGS_",
+              "function h3FsIssueRoute_(resolved,readiness,currentLearning)",
+              "function h3FamilySchedulerIssueRoutePreview()",
+              "route_target:'LISTENING'",
+              "route_target:'WRITTEN'",
+              "route_target:'READING'",
+              "route_target:'TRANSLATION'",
+              "issue_performed:false",
+              "scheduler_applied:false",
+              "requires_prepare",
+              "h3ReviewCurrentLearning_(ss)",
+              "h3FsReadiness_(ss)",
+          ]
+          for token in required:
+              if token not in fs:
+                  raise SystemExit(f"missing issue routing token: {token}")
+
+          start = fs.index("function h3FsIssueRoute_(resolved,readiness,currentLearning)")
+          end = fs.index("function h3FsSnapshot_", start)
+          route = fs[start:end]
+
+          forbidden = [
+              "appendRow",
+              ".setValue(",
+              ".setValues(",
+              "h3FsAppend_(",
+              "h3FsWriteState_(",
+              "consumeK1ReadyAfterIssue_(",
+              "prepareListeningBackendSet(",
+              "h3WrittenSubmit_(",
+              "h3ReadingSubmit_(",
+              "h3TranslationSubmit_(",
+              "h3TranslationV2Submit_(",
+          ]
+          for token in forbidden:
+              if token in route:
+                  raise SystemExit(f"issue routing bridge must not execute issue/submit writes: {token}")
+
+          preview_start = fs.index("function h3FamilySchedulerIssueRoutePreview()")
+          preview_end = fs.index("function h3FamilySchedulerShadowTick()", preview_start)
+          preview = fs[preview_start:preview_end]
+          for token in [
+              "appendRow",
+              ".setValue(",
+              ".setValues(",
+              "h3FsAppend_(",
+              "h3FsWriteState_(",
+          ]:
+              if token in preview:
+                  raise SystemExit(f"issue route preview must remain read-only: {token}")
+
+          print("Issue routing bridge static contract PASS")
+          PY
+
+      - name: Issue routing deterministic fixture
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          vm.runInThisContext(fs.readFileSync('WebAppFamilyScheduler.js','utf8'));
+
+          function resolved(overrides) {
+            return {
+              schema:H3_FS_LIVE_RESOLVER_SCHEMA_,
+              mode:'LIVE_RESOLVER',
+              scheduler_applied:false,
+              global_set_clock:27,
+              source_next_action:'RECOMMEND_FAMILY',
+              primary_reason:'P3_BALANCE',
+              route_kind:'FAMILY',
+              family:'W',
+              current_set_id:'',
+              result_status:'READY',
+              ...overrides
+            };
+          }
+
+          const readiness={
+            L:{state:'READY',eligible:true,reason:''},
+            W:{state:'PREPARE_REQUIRED',eligible:true,reason:''},
+            R:{state:'PREPARE_REQUIRED',eligible:true,reason:''},
+            T:{state:'PREPARE_REQUIRED',eligible:true,reason:''}
+          };
+
+          const expected={
+            L:['LISTENING','5L','LISTENING',false],
+            W:['WRITTEN','5W','WRITTEN',true],
+            R:['WRITTEN','READING','READING',true],
+            T:['WRITTEN','TRANSLATION','TRANSLATION',true]
+          };
+
+          Object.keys(expected).forEach(family=>{
+            const route=h3FsIssueRoute_(
+              resolved({family}),
+              readiness,
+              null
+            );
+            const e=expected[family];
+            if(route.provider_kind!==e[0]) throw new Error(family+' provider mismatch');
+            if(route.surface_family!==e[1]) throw new Error(family+' surface mismatch');
+            if(route.route_target!==e[2]) throw new Error(family+' target mismatch');
+            if(route.requires_prepare!==e[3]) throw new Error(family+' prepare mismatch');
+            if(route.issue_performed!==false) throw new Error(family+' issue execution boundary violated');
+            if(route.scheduler_applied!==false) throw new Error(family+' scheduler application boundary violated');
+          });
+
+          const current=h3FsIssueRoute_(
+            resolved({
+              route_kind:'CURRENT_SET',
+              family:'NONE',
+              current_set_id:'H3-TEST-R001',
+              source_next_action:'RESUME_CURRENT'
+            }),
+            readiness,
+            {
+              set_id:'H3-TEST-R001',
+              provider_kind:'WRITTEN',
+              surface_family:'READING'
+            }
+          );
+          if(current.route_target!=='READING') throw new Error('current route target mismatch');
+          if(current.current_set_id!=='H3-TEST-R001') throw new Error('current set mismatch');
+          if(current.requires_prepare!==false) throw new Error('current must not prepare');
+
+          const blocked=h3FsIssueRoute_(
+            resolved({
+              route_kind:'BLOCKED',
+              family:'NONE',
+              result_status:'BLOCKED',
+              source_next_action:'BLOCKED'
+            }),
+            readiness,
+            null
+          );
+          if(blocked.result_status!=='BLOCKED') throw new Error('blocked route mismatch');
+
+          let threw=false;
+          try {
+            h3FsIssueRoute_(
+              resolved({family:'W'}),
+              {W:{state:'BLOCKED',eligible:false,reason:'TEST'}},
+              null
+            );
+          } catch (_) { threw=true; }
+          if(!threw) throw new Error('ineligible family did not fail closed');
+
+          threw=false;
+          try {
+            h3FsIssueRoute_(
+              resolved({family:'W'}),
+              readiness,
+              {set_id:'UNEXPECTED',provider_kind:'WRITTEN',surface_family:'5W'}
+            );
+          } catch (_) { threw=true; }
+          if(!threw) throw new Error('unexpected current learning did not fail closed');
+
+          console.log('Issue routing deterministic fixture PASS');
+          NODE
+
       - name: F5 HOME read-only preview contract
         run: |
           python - <<'PY'

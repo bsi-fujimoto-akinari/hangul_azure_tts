@@ -71,6 +71,7 @@ jobs:
               'WebAppRtSoftSignalPreflight.js',
               'WebAppK1SecondaryAuthority.js',
               'WebAppRs13GateReporter.js',
+              'WebAppFamilyScheduler.js',
               'WebAppPreissue.js',
               'WebAppReceipt.js',
               'WebAppReviewCore.js',
@@ -123,6 +124,7 @@ jobs:
               '.github/workflows/rs13k1-k1-secondary-authority-audit.yml',
               '.github/workflows/rs13g-gate-reporter-audit.yml',
               '.github/workflows/rs13k1a-authoring-helper-audit.yml',
+              '.github/workflows/family-scheduler-f3-shadow-audit.yml',
           }
           tracked = set(
               subprocess.check_output(

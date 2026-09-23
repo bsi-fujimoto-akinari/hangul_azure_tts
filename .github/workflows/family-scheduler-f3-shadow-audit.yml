@@ -424,6 +424,56 @@ jobs:
           console.log('Issue routing deterministic fixture PASS');
           NODE
 
+      - name: Family Scheduler live issue contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          fs = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+          index = Path("Index.html").read_text(encoding="utf-8")
+
+          required = [
+              "function h3FsFindPreparedWritten_(ss)",
+              "function h3FsFindPreparedReading_(ss)",
+              "function h3FsFindPreparedTranslation_(ss)",
+              "function h3FsIssueWritten_(ss)",
+              "function h3FsIssueReading_(ss)",
+              "function h3FsIssueTranslation_(ss)",
+              "function h3FsIssueListening_(ss)",
+              "function h3FsIssuePreparedFamily_(ss,family)",
+              "function h3FsAppendIssueApplied_(ss,evaluation,issued)",
+              "'ISSUE_APPLIED'",
+              "'LIMITED_LIVE'",
+              "scheduler_applied=true",
+              "issue_performed=true",
+              "client_action='OPEN_ISSUED'",
+              "consumeK1ReadyAfterIssue_(k1Id,setId,true)",
+              "h3ReadingPreissueValidate_",
+              "h3TranslationV2RequireIssued_",
+              "h3WrittenValidateSourceIdentity_",
+              "FAMILY_SCHEDULER_ISSUE_CURRENT_READBACK_MISMATCH",
+          ]
+          for token in required:
+              if token not in fs:
+                  raise SystemExit(f"missing live issue token: {token}")
+
+          if "'OPEN_ISSUED'" not in index:
+              raise SystemExit("HOME NEXT client must open newly issued set.")
+
+          if "route.readiness_state ===\n                    'READY'" not in index:
+              raise SystemExit("NEXT must stay disabled while preparation is still required.")
+
+          # Existing SHADOW evaluator itself must remain read-only.
+          eval_start = fs.index("function h3FsEvaluate_(ss,level)")
+          eval_end = fs.index("function h3FsResolveLive_", eval_start)
+          evaluator = fs[eval_start:eval_end]
+          for token in ["appendRow", ".setValue(", ".setValues("]:
+              if token in evaluator:
+                  raise SystemExit(f"evaluator write boundary violated: {token}")
+
+          print("Family Scheduler live issue contract PASS")
+          PY
+
       - name: HOME NEXT activation contract
         run: |
           python - <<'PY'
@@ -514,20 +564,13 @@ jobs:
           rpc_end = fs.index("function h3FamilySchedulerShadowTick()", rpc_start)
           rpc = fs[rpc_start:rpc_end]
           for token in [
-              "appendRow",
-              ".setValue(",
-              ".setValues(",
-              "h3FsAppend_(",
-              "h3FsWriteState_(",
-              "consumeK1ReadyAfterIssue_(",
-              "prepareListeningBackendSet(",
               "h3WrittenSubmit_(",
               "h3ReadingSubmit_(",
               "h3TranslationSubmit_(",
               "h3TranslationV2Submit_(",
           ]:
               if token in rpc:
-                  raise SystemExit(f"HOME NEXT must not execute issue/write yet: {token}")
+                  raise SystemExit(f"HOME NEXT must never submit learner answers: {token}")
 
           print("HOME NEXT activation contract PASS")
           PY

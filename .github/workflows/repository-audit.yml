@@ -8044,6 +8044,249 @@ jobs:
           );
           NODE
 
+      - name: Audit E5-B Review audio binding contract
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          core = Path('WebAppReviewCore.js').read_text(encoding='utf-8')
+          architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
+
+          required_core = [
+              'H3-REVIEW-AUDIO-BINDING-20260923-V1',
+              "'review_audio_asset_v1'",
+              'function h3ReviewAudioExpectedBindings_(',
+              'function h3ReviewAudioBindingResolve_(',
+              'function h3ReviewAudioBindingResolveAll_(',
+              "'PASSAGE_COMPLETE'",
+              "'Q1_CHOICES'",
+              "'Q2_CHOICES'",
+              "section + '_Q' + qNo",
+              "'review-audio-v2-1200ms'",
+          ]
+          for needle in required_core:
+              if needle not in core:
+                  raise SystemExit(
+                      f'E5-B Review audio binding helper missing: {needle}'
+                  )
+
+          start = core.index('var H3_REVIEW_AUDIO_BINDING_CONTRACT_ID_')
+          end = core.index('function h3ReviewProviders_()', start)
+          binding = core[start:end]
+          for forbidden in [
+              '.setValue(',
+              '.setValues(',
+              '.appendRow(',
+              '.deleteRow(',
+              'DriveApp.',
+              'UrlFetchApp.',
+              '.createFile(',
+              '.setTrashed(',
+          ]:
+              if forbidden in binding:
+                  raise SystemExit(
+                      f'E5-B binding helper unexpectedly mutates state: {forbidden}'
+                  )
+
+          for needle in [
+              '## 41. E5 Review audio binding contract',
+              'binding contract ready; learner-facing embedding is not active yet',
+              '(SURFACE_FAMILY, SET_ID, SLOT_KEY)',
+              '5L is intentionally excluded',
+              'E5-C / E5-D / E5-E',
+          ]:
+              if needle not in architecture:
+                  raise SystemExit(
+                      f'E5-B architecture contract missing: {needle}'
+                  )
+
+          print('E5-B Review audio binding static boundary: PASS')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const context = {
+            console: console,
+            h3ProdSheetRows_: sheet => sheet.table
+          };
+          vm.createContext(context);
+          vm.runInContext(
+            fs.readFileSync('WebAppReviewCore.js', 'utf8'),
+            context,
+            {filename:'WebAppReviewCore.js'}
+          );
+
+          function call(code) {
+            return vm.runInContext(code, context);
+          }
+
+          function expectThrow(code, label) {
+            let threw = false;
+            try {
+              call(code);
+            } catch (_err) {
+              threw = true;
+            }
+            if (!threw) {
+              throw new Error(label + ' did not fail closed.');
+            }
+          }
+
+          const fiveW = call(`h3ReviewAudioExpectedBindings_({
+            surface_family:'5W',
+            set_id:'W1',
+            sections:[
+              {section:'D2'},{section:'D3'},{section:'D4'},
+              {section:'D5'},{section:'D6'}
+            ]
+          })`);
+          if (
+            fiveW.map(x => x.slot_key).join(',') !==
+            'D2,D3,D4,D5,D6'
+          ) {
+            throw new Error('5W E5-B slot plan mismatch.');
+          }
+
+          const reading = call(`h3ReviewAudioExpectedBindings_({
+            surface_family:'READING',
+            set_id:'R1',
+            passage:{passage_id:'P'},
+            questions:[{q_no:1},{q_no:2}]
+          })`);
+          if (
+            reading.map(x => x.slot_key).join(',') !==
+            'PASSAGE_COMPLETE,Q1_CHOICES,Q2_CHOICES'
+          ) {
+            throw new Error('2R E5-B slot plan mismatch.');
+          }
+
+          const t001 = call(`h3ReviewAudioExpectedBindings_({
+            surface_family:'TRANSLATION',
+            set_id:'T001',
+            questions:[
+              {q_no:1,section:'P11'},
+              {q_no:2,section:'P11'}
+            ]
+          })`);
+          if (
+            t001.map(x => x.slot_key).join(',') !==
+            'P11_Q1,P11_Q2'
+          ) {
+            throw new Error('T001 actual slot layout mismatch.');
+          }
+
+          const mixed = call(`h3ReviewAudioExpectedBindings_({
+            surface_family:'TRANSLATION',
+            set_id:'T003',
+            questions:[
+              {q_no:1,section:'P11'},
+              {q_no:2,section:'P12'}
+            ]
+          })`);
+          if (
+            mixed.map(x => x.slot_key).join(',') !==
+            'P11_Q1,P12_Q2'
+          ) {
+            throw new Error('Mixed Translation slot layout mismatch.');
+          }
+
+          expectThrow(
+            `h3ReviewAudioExpectedBindings_({
+              surface_family:'5L',
+              set_id:'L1',
+              sections:[]
+            })`,
+            '5L exclusion'
+          );
+
+          const headers = call(
+            'H3_REVIEW_AUDIO_BINDING_HEADERS_.slice()'
+          );
+          const map = {};
+          headers.forEach((name, index) => map[name] = index);
+
+          function validRow() {
+            const row = new Array(headers.length).fill('');
+            const put = (name, value) => row[map[name]] = value;
+            put('SCHEMA', 'H3_REVIEW_AUDIO_ASSET_V1');
+            put('SURFACE_FAMILY', '5W');
+            put('SET_ID', 'W1');
+            put('SLOT_KEY', 'D2');
+            put('SOURCE_REF_JSON', '{"sheet":"source"}');
+            put('SELECTION_JSON', '{"mode":"test"}');
+            put('AUDIO_TEXT', '가');
+            put(
+              'AUDIO_TEXT_SHA256',
+              'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+            );
+            put('VOICE_ASSIGNMENT_JSON', '{"primary":{"id":"voice"}}');
+            put('AUDIO_FILE_ID', 'file-id');
+            put('AUDIO_URL', 'https://drive.google.com/file/d/file-id/view');
+            put(
+              'DRIVE_FOLDER_ID',
+              '1dLf1KhHic8SU-4XOGueZSM55vznS024C'
+            );
+            put('STATUS', 'DONE');
+            put('ERROR', '');
+            put('GENERATOR_VERSION', 'review-audio-v2-1200ms');
+            return row;
+          }
+
+          function installRows(rows) {
+            context.__bindingSheet = {
+              table: {
+                header: headers.slice(),
+                map: Object.assign({}, map),
+                rows: rows
+              }
+            };
+            context.__bindingSpreadsheet = {
+              getSheetByName: name =>
+                name === 'review_audio_asset_v1'
+                  ? context.__bindingSheet
+                  : null
+            };
+          }
+
+          installRows([validRow()]);
+          const resolved = call(
+            "h3ReviewAudioBindingResolve_(__bindingSpreadsheet,'5W','W1','D2')"
+          );
+          if (
+            resolved.schema !== 'H3_REVIEW_AUDIO_BINDING_V1' ||
+            resolved.asset_key !== 'D2' ||
+            resolved.audio_file_id !== 'file-id' ||
+            resolved.read_only !== true
+          ) {
+            throw new Error('Exact E5-B binding resolution mismatch.');
+          }
+
+          installRows([]);
+          expectThrow(
+            "h3ReviewAudioBindingResolve_(__bindingSpreadsheet,'5W','W1','D2')",
+            'missing binding'
+          );
+
+          installRows([validRow(), validRow()]);
+          expectThrow(
+            "h3ReviewAudioBindingResolve_(__bindingSpreadsheet,'5W','W1','D2')",
+            'duplicate binding'
+          );
+
+          const invalid = validRow();
+          invalid[map.STATUS] = 'PREPARED';
+          installRows([invalid]);
+          expectThrow(
+            "h3ReviewAudioBindingResolve_(__bindingSpreadsheet,'5W','W1','D2')",
+            'non-DONE binding'
+          );
+
+          console.log('E5-B Review audio binding pure audit: PASS');
+          NODE
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

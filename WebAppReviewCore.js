@@ -3575,6 +3575,856 @@ function h3ReviewCurrentLearning_(
 }
 
 
+function h3ConfirmedStabilityCoverage_(
+  spreadsheet
+) {
+  var families = [
+    'L',
+    'W',
+    'R',
+    'T'
+  ];
+  var active = {
+    L: {},
+    W: {},
+    R: {},
+    T: {}
+  };
+  var stable = {
+    L: {},
+    W: {},
+    R: {},
+    T: {}
+  };
+  var evidence = {
+    L: {},
+    W: {},
+    R: {},
+    T: {}
+  };
+  var rtStableMeta = {};
+
+  function familyForSkill(skillId) {
+    var id = String(skillId || '');
+
+    if (/^H3-K[1-5]-SK/.test(id)) {
+      return 'L';
+    }
+    if (/^H3-P(?:[1-7])-SK/.test(id)) {
+      return 'W';
+    }
+    if (/^H3-P(?:8|9|10)-SK/.test(id)) {
+      return 'R';
+    }
+    if (/^H3-P(?:11|12)-SK/.test(id)) {
+      return 'T';
+    }
+
+    return '';
+  }
+
+  function uniqueCount(map) {
+    return Object.keys(map || {}).length;
+  }
+
+  function evidenceKey(
+    family,
+    skillId,
+    direction
+  ) {
+    if (family === 'T') {
+      return (
+        String(skillId || '') +
+        '|' +
+        String(direction || '')
+      );
+    }
+
+    return String(skillId || '');
+  }
+
+  function ensureEvidence(
+    family,
+    skillId,
+    direction
+  ) {
+    var key =
+      evidenceKey(
+        family,
+        skillId,
+        direction
+      );
+
+    if (!evidence[family][key]) {
+      evidence[family][key] = {
+        sets: {},
+        surfaces: {},
+        sections: {}
+      };
+    }
+
+    return evidence[family][key];
+  }
+
+  function addCorrectEvidence(
+    family,
+    skillId,
+    direction,
+    setId,
+    surfaceKey,
+    sectionKey
+  ) {
+    if (
+      !active[family] ||
+      !active[family][skillId]
+    ) {
+      return;
+    }
+
+    var item =
+      ensureEvidence(
+        family,
+        skillId,
+        direction
+      );
+    var normalizedSet =
+      String(setId || '');
+    var normalizedSurface =
+      String(surfaceKey || '');
+    var normalizedSection =
+      String(sectionKey || '');
+
+    if (normalizedSet) {
+      item.sets[normalizedSet] =
+        true;
+    }
+    if (normalizedSurface) {
+      item.surfaces[
+        normalizedSurface
+      ] = true;
+    }
+    if (normalizedSection) {
+      item.sections[
+        normalizedSection
+      ] = true;
+    }
+  }
+
+  var masterSheet =
+    spreadsheet.getSheetByName(
+      'skill_master_v1'
+    );
+  if (!masterSheet) {
+    throw new Error(
+      'CONFIRMED_STABILITY_SKILL_MASTER_MISSING'
+    );
+  }
+
+  var master =
+    h3ReviewTable_(
+      masterSheet
+    );
+  h3ProdRequireColumns_(
+    master,
+    [
+      'SKILL_ID',
+      'LEVEL',
+      'SECTION',
+      'NOTES'
+    ],
+    'skill_master_v1'
+  );
+
+  master.rows.forEach(
+    function (row) {
+      var level =
+        String(
+          row[master.map.LEVEL] || ''
+        );
+      if (
+        level !== '3級' &&
+        level !== '3급'
+      ) {
+        return;
+      }
+
+      var skillId =
+        String(
+          row[
+            master.map.SKILL_ID
+          ] || ''
+        );
+      var family =
+        familyForSkill(skillId);
+      var notes =
+        String(
+          row[master.map.NOTES] || ''
+        );
+
+      if (
+        !family ||
+        notes.indexOf(
+          'T8C_PLANNED_NOT_ACTIVE'
+        ) >= 0
+      ) {
+        return;
+      }
+
+      active[family][skillId] = {
+        section:
+          String(
+            row[
+              master.map.SECTION
+            ] || ''
+          )
+      };
+    }
+  );
+
+  var queueSheet =
+    spreadsheet.getSheetByName(
+      'skill_queue_v1'
+    );
+  if (!queueSheet) {
+    throw new Error(
+      'CONFIRMED_STABILITY_SKILL_QUEUE_MISSING'
+    );
+  }
+
+  var queue =
+    h3ReviewTable_(
+      queueSheet
+    );
+  h3ProdRequireColumns_(
+    queue,
+    [
+      'SKILL_ID',
+      'STABILITY_STATUS'
+    ],
+    'skill_queue_v1'
+  );
+
+  queue.rows.forEach(
+    function (row) {
+      var skillId =
+        String(
+          row[
+            queue.map.SKILL_ID
+          ] || ''
+        );
+      var family =
+        familyForSkill(skillId);
+
+      if (
+        (family === 'L' ||
+          family === 'W') &&
+        active[family][skillId] &&
+        String(
+          row[
+            queue.map
+              .STABILITY_STATUS
+          ] || ''
+        ) === 'STABLE'
+      ) {
+        stable[family][skillId] =
+          true;
+      }
+    }
+  );
+
+  var rtQueueSheet =
+    spreadsheet.getSheetByName(
+      'rt_skill_queue_v1'
+    );
+  if (!rtQueueSheet) {
+    throw new Error(
+      'CONFIRMED_STABILITY_RT_QUEUE_MISSING'
+    );
+  }
+
+  var rtQueue =
+    h3ReviewTable_(
+      rtQueueSheet
+    );
+  h3ProdRequireColumns_(
+    rtQueue,
+    [
+      'LEVEL',
+      'FAMILY',
+      'SKILL_ID',
+      'TRANSLATION_DIRECTION',
+      'STABILITY_STATUS',
+      'SECTION_EVIDENCE_JSON'
+    ],
+    'rt_skill_queue_v1'
+  );
+
+  rtQueue.rows.forEach(
+    function (row) {
+      var level =
+        String(
+          row[rtQueue.map.LEVEL] || ''
+        );
+      if (
+        level !== '3級' &&
+        level !== '3급'
+      ) {
+        return;
+      }
+
+      var familyName =
+        String(
+          row[
+            rtQueue.map.FAMILY
+          ] || ''
+        );
+      var family =
+        familyName === 'READING'
+          ? 'R'
+          : (
+              familyName ===
+                'TRANSLATION'
+                ? 'T'
+                : ''
+            );
+      var skillId =
+        String(
+          row[
+            rtQueue.map.SKILL_ID
+          ] || ''
+        );
+      var direction =
+        String(
+          row[
+            rtQueue.map
+              .TRANSLATION_DIRECTION
+          ] || ''
+        );
+
+      if (
+        !family ||
+        !active[family][skillId] ||
+        String(
+          row[
+            rtQueue.map
+              .STABILITY_STATUS
+          ] || ''
+        ) !== 'STABLE'
+      ) {
+        return;
+      }
+
+      var key =
+        evidenceKey(
+          family,
+          skillId,
+          direction
+        );
+      stable[family][key] =
+        true;
+
+      var sectionEvidence = {};
+      try {
+        sectionEvidence =
+          JSON.parse(
+            String(
+              row[
+                rtQueue.map
+                  .SECTION_EVIDENCE_JSON
+              ] || '{}'
+            )
+          ) || {};
+      } catch (_err) {
+        sectionEvidence = {};
+      }
+
+      rtStableMeta[
+        family + '|' + key
+      ] = {
+        required_sections:
+          Object.keys(
+            sectionEvidence
+          ).length > 1
+            ? 2
+            : 1
+      };
+    }
+  );
+
+  var writtenSheet =
+    spreadsheet.getSheetByName(
+      'generation_log_v1'
+    );
+  if (writtenSheet) {
+    var written =
+      h3ReviewTable_(
+        writtenSheet
+      );
+    h3ProdRequireColumns_(
+      written,
+      [
+        'SET_ID',
+        'SKILL_ID',
+        'SURFACE_HASH',
+        'STATUS',
+        'USER_RESULT'
+      ],
+      'generation_log_v1'
+    );
+
+    written.rows.forEach(
+      function (row) {
+        if (
+          String(
+            row[
+              written.map.STATUS
+            ] || ''
+          ) !== 'ANSWERED' ||
+          String(
+            row[
+              written.map
+                .USER_RESULT
+            ] || ''
+          ) !== '○'
+        ) {
+          return;
+        }
+
+        var skillId =
+          String(
+            row[
+              written.map.SKILL_ID
+            ] || ''
+          );
+        if (
+          familyForSkill(skillId) !==
+            'W'
+        ) {
+          return;
+        }
+
+        addCorrectEvidence(
+          'W',
+          skillId,
+          '',
+          row[
+            written.map.SET_ID
+          ],
+          row[
+            written.map
+              .SURFACE_HASH
+          ],
+          ''
+        );
+      }
+    );
+  }
+
+  var listeningSheet =
+    spreadsheet.getSheetByName(
+      'listening_log_v1'
+    );
+  if (listeningSheet) {
+    var listening =
+      h3ReviewTable_(
+        listeningSheet
+      );
+    h3ProdRequireColumns_(
+      listening,
+      [
+        'PARENT_SET_ID',
+        'SKILL_ID',
+        'SURFACE_HASH',
+        'STATUS',
+        'USER_RESULT'
+      ],
+      'listening_log_v1'
+    );
+
+    listening.rows.forEach(
+      function (row) {
+        if (
+          String(
+            row[
+              listening.map.STATUS
+            ] || ''
+          ) !== 'VALID' ||
+          String(
+            row[
+              listening.map
+                .USER_RESULT
+            ] || ''
+          ) !== '○'
+        ) {
+          return;
+        }
+
+        var skillId =
+          String(
+            row[
+              listening.map
+                .SKILL_ID
+            ] || ''
+          );
+        if (
+          familyForSkill(skillId) !==
+            'L'
+        ) {
+          return;
+        }
+
+        addCorrectEvidence(
+          'L',
+          skillId,
+          '',
+          row[
+            listening.map
+              .PARENT_SET_ID
+          ],
+          row[
+            listening.map
+              .SURFACE_HASH
+          ],
+          ''
+        );
+      }
+    );
+  }
+
+  var rtEvidenceSheet =
+    spreadsheet.getSheetByName(
+      'rt_evidence_v1'
+    );
+  if (!rtEvidenceSheet) {
+    throw new Error(
+      'CONFIRMED_STABILITY_RT_EVIDENCE_MISSING'
+    );
+  }
+
+  var rtEvidence =
+    h3ReviewTable_(
+      rtEvidenceSheet
+    );
+  h3ProdRequireColumns_(
+    rtEvidence,
+    [
+      'LEVEL',
+      'FAMILY',
+      'SKILL_ID',
+      'TRANSLATION_DIRECTION',
+      'SECTION_KEY',
+      'SET_ID',
+      'SURFACE_KEY',
+      'RESULT'
+    ],
+    'rt_evidence_v1'
+  );
+
+  rtEvidence.rows.forEach(
+    function (row) {
+      var level =
+        String(
+          row[
+            rtEvidence.map.LEVEL
+          ] || ''
+        );
+      if (
+        (
+          level !== '3級' &&
+          level !== '3급'
+        ) ||
+        String(
+          row[
+            rtEvidence.map.RESULT
+          ] || ''
+        ) !== '○'
+      ) {
+        return;
+      }
+
+      var familyName =
+        String(
+          row[
+            rtEvidence.map.FAMILY
+          ] || ''
+        );
+      var family =
+        familyName === 'READING'
+          ? 'R'
+          : (
+              familyName ===
+                'TRANSLATION'
+                ? 'T'
+                : ''
+            );
+      var skillId =
+        String(
+          row[
+            rtEvidence.map.SKILL_ID
+          ] || ''
+        );
+      var direction =
+        String(
+          row[
+            rtEvidence.map
+              .TRANSLATION_DIRECTION
+          ] || ''
+        );
+
+      if (
+        !family ||
+        familyForSkill(skillId) !==
+          family ||
+        (
+          family === 'T' &&
+          !direction
+        )
+      ) {
+        return;
+      }
+
+      addCorrectEvidence(
+        family,
+        skillId,
+        direction,
+        row[
+          rtEvidence.map.SET_ID
+        ],
+        row[
+          rtEvidence.map
+            .SURFACE_KEY
+        ],
+        row[
+          rtEvidence.map
+            .SECTION_KEY
+        ]
+      );
+    }
+  );
+
+  function breadthPass(
+    family,
+    skillId,
+    key
+  ) {
+    var item =
+      evidence[family][key] || {
+        sets: {},
+        surfaces: {},
+        sections: {}
+      };
+    var required =
+      2;
+
+    if (
+      family === 'L' &&
+      /^H3-K[145]-SK/.test(
+        skillId
+      )
+    ) {
+      required = 3;
+    }
+
+    if (
+      uniqueCount(
+        item.sets
+      ) < required ||
+      uniqueCount(
+        item.surfaces
+      ) < required
+    ) {
+      return false;
+    }
+
+    if (family === 'R') {
+      var meta =
+        rtStableMeta[
+          'R|' + key
+        ] || {
+          required_sections: 1
+        };
+
+      if (
+        uniqueCount(
+          item.sections
+        ) <
+          Number(
+            meta.required_sections ||
+            1
+          )
+      ) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  var byFilter = {};
+  var familyRates = [];
+
+  families.forEach(
+    function (family) {
+      var denominator =
+        Object.keys(
+          active[family]
+        ).length;
+      var stableCount = 0;
+      var confirmedCount = 0;
+
+      Object.keys(
+        active[family]
+      ).forEach(
+        function (skillId) {
+          if (
+            family === 'T'
+          ) {
+            var stableKeys =
+              Object.keys(
+                stable.T
+              ).filter(
+                function (key) {
+                  return (
+                    key.indexOf(
+                      skillId + '|'
+                    ) === 0
+                  );
+                }
+              );
+
+            if (stableKeys.length) {
+              stableCount += 1;
+            }
+
+            var confirmed =
+              stableKeys.some(
+                function (key) {
+                  return breadthPass(
+                    'T',
+                    skillId,
+                    key
+                  );
+                }
+              );
+
+            if (confirmed) {
+              confirmedCount += 1;
+            }
+
+            return;
+          }
+
+          var key =
+            evidenceKey(
+              family,
+              skillId,
+              ''
+            );
+
+          if (
+            stable[family][key]
+          ) {
+            stableCount += 1;
+
+            if (
+              breadthPass(
+                family,
+                skillId,
+                key
+              )
+            ) {
+              confirmedCount += 1;
+            }
+          }
+        }
+      );
+
+      var rate =
+        denominator > 0
+          ? confirmedCount /
+            denominator
+          : 0;
+      var percent =
+        Math.round(
+          rate * 1000
+        ) / 10;
+
+      byFilter[family] = {
+        numerator:
+          confirmedCount,
+        denominator:
+          denominator,
+        stable_count:
+          stableCount,
+        rate: rate,
+        percent: percent
+      };
+      familyRates.push(rate);
+    }
+  );
+
+  var allRate =
+    familyRates.length
+      ? familyRates.reduce(
+          function (sum, value) {
+            return sum + value;
+          },
+          0
+        ) /
+        familyRates.length
+      : 0;
+
+  byFilter.ALL = {
+    aggregation:
+      'FAMILY_MACRO_AVERAGE',
+    family_count:
+      familyRates.length,
+    rate: allRate,
+    percent:
+      Math.round(
+        allRate * 1000
+      ) / 10
+  };
+
+  return {
+    schema:
+      'H3_CONFIRMED_STABILITY_COVERAGE_V1',
+    level: '3級',
+    definition:
+      'Share of active skills that are stable and pass the breadth gate.',
+    active_skill_definition:
+      'Formal 3級 skills currently included in live learning.',
+    evidence_basis:
+      'DIRECT_CORRECT_EVIDENCE',
+    all_aggregation:
+      'FAMILY_MACRO_AVERAGE',
+    breadth_gate: {
+      W:
+        '>=2 surfaces and >=2 sets',
+      L:
+        '>=2 audio surfaces and >=2 sets; K1/K4/K5 require >=3 and >=3',
+      R:
+        '>=2 text surfaces and >=2 sets; cross-section stable evidence requires >=2 sections',
+      T:
+        '>=2 sentence surfaces and >=2 sets within the same direction'
+    },
+    by_filter: byFilter
+  };
+}
+
+
+function getConfirmedStabilityCoverage() {
+  var spreadsheet =
+    SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+
+  return h3ConfirmedStabilityCoverage_(
+    spreadsheet
+  );
+}
+
+
 function buildReviewHomePayload_() {
   var spreadsheet =
     SpreadsheetApp.openById(

@@ -596,6 +596,21 @@
     padding-right: max(10px, env(safe-area-inset-right));
     padding-bottom: calc(20px + env(safe-area-inset-bottom));
   }
+  /*
+   * Apps Script /dev can expose a desktop-width iframe on iPhone and then
+   * scale it through the mobile viewport emulation above. In that mode the
+   * visible right edge consumes one gutter. Keep the existing left gutter as
+   * the reference and reserve the same amount at the shell's right edge.
+   */
+  body.mobile-device.mobile-viewport-emulated .shell {
+    width: calc(
+      100% - max(10px, env(safe-area-inset-left))
+    );
+    max-width: calc(
+      100% - max(10px, env(safe-area-inset-left))
+    );
+  }
+
   body.mobile-device .page-header {
     margin-bottom: 8px;
   }

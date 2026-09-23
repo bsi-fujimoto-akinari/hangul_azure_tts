@@ -9460,6 +9460,57 @@ jobs:
           );
           NODE
 
+      - name: Audit E5-G Review audio close contract
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
+          core = Path('WebAppReviewCore.js').read_text(encoding='utf-8')
+          written = Path('WebAppReviewWrittenAdapter.js').read_text(encoding='utf-8')
+
+          for needle in [
+              '## 47. E5-F / E5-G Review audio close',
+              'H3-REVIEW-AUDIO-E5-CLOSE-20260923-V1',
+              'exact 105/105 mapping',
+              '5W = 18 sets x 5 slots = 90',
+              '2R = 3 sets x 3 slots = 9',
+              '2T = 3 sets x 2 slots = 6',
+              'Review audio work item ⑬ / E5 is **CLOSED**',
+              'must not be rerun merely for closeout',
+          ]:
+              if needle not in architecture:
+                  raise SystemExit(
+                      f'E5-G close contract missing: {needle}'
+                  )
+
+          for needle in [
+              'function h3ReviewAudioBindingResolve_(',
+              'function h3ReviewAudioBindingResolveAll_(',
+              'function h3ReviewAudioApply5WBindings_(',
+              'function h3ReviewAudioApplyReadingBindings_(',
+              'function h3ReviewAudioApplyTranslationBindings_(',
+          ]:
+              if needle not in core:
+                  raise SystemExit(
+                      f'E5 close lost binding invariant: {needle}'
+                  )
+
+          for needle in [
+              "request.surface_family === '5W'",
+              "request.surface_family === 'READING'",
+              "request.surface_family === 'TRANSLATION'",
+              'openMedia:\n      h3WrittenReviewMedia_,',
+          ]:
+              if needle not in written:
+                  raise SystemExit(
+                      f'E5 close lost provider routing invariant: {needle}'
+                  )
+
+          print('E5-G Review audio close contract: PASS')
+          PY
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

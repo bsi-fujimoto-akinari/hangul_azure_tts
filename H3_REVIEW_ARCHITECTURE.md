@@ -804,3 +804,44 @@ Arrows are not used as substitutes for speaker changes in D6 dialogue translatio
 Unexpected speaker structure or translation-line cardinality fails closed. This layer
 does not rewrite any already answered question surface or any historical source row.
 
+## 47. E5-F / E5-G Review audio close
+
+Close contract ID: `H3-REVIEW-AUDIO-E5-CLOSE-20260923-V1`.
+
+E5-F regression validation is complete. Learner-facing iPhone validation confirmed the
+integrated inline play/pause + seekbar behavior for 5W, Reading, and Translation Review.
+The runtime binding audit confirmed an exact 105/105 mapping with no duplicate,
+missing/non-unique, extra, invalid, or error asset rows:
+
+```text
+5W = 18 sets x 5 slots = 90
+2R = 3 sets x 3 slots = 9
+2T = 3 sets x 2 slots = 6
+TOTAL = 105
+```
+
+The Translation layouts are derived from persisted question roles, including the mixed
+T003 layout. 5L remains on its existing Listening Review provider and is outside the E5
+sidecar binding contract; current and legacy Listening Review authorities remain locked.
+
+The E5-F safety checks require all of the following:
+
+- correct asset per card/role;
+- no answer/source binding metadata leaked through media responses;
+- no filename, nearest-set, cross-set, cross-family, or wrong-slot substitution;
+- media failure remains fail-closed apart from retrying the same exact asset;
+- compact Review visual and the existing inline audio component are retained;
+- no learner history, answer, uncertainty, score, Review authority, scheduler,
+  skill_queue, retest, generation history, source provenance, counter, or pointer
+  mutation is introduced by E5.
+
+E5-G formal close is valid only when this close contract is present on `main` and the
+same current-main revision has a successful Repository audit and successful Apps Script
+auto-sync; the deployment inventory must still show the Web deployment tracking
+`@HEAD` and the intentional API executable deployment at version 9. A fresh runtime
+readback must still show 105/105 Review audio assets `DONE` with zero errors and the
+protected 5W/5L/R-T state unchanged.
+
+When those conditions hold, Review audio work item ⑬ / E5 is **CLOSED**. Completed E4
+generation/backfill and E5 binding/embedding must not be rerun merely for closeout.
+

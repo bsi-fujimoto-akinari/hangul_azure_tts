@@ -415,6 +415,11 @@ function h3FsSnapshot_(state,evaluation,history) {
 }
 
 function h3FsAppend_(ss,level,e) {
+  if(h3FsEvaluationAtClock_(ss,level,e.global_set_clock)){
+    throw new Error(
+      'FAMILY_SCHEDULER_EVALUATION_ALREADY_EXISTS:'+e.global_set_clock
+    );
+  }
   var sh=ss.getSheetByName(H3_FS_LOG_SHEET_);
   if(!sh)throw new Error('FAMILY_SCHEDULER_LOG_SHEET_MISSING');
   var t=h3FsTable_(sh); h3FsRequire_(t,H3_FS_LOG_HEADERS_,H3_FS_LOG_SHEET_);
@@ -929,9 +934,20 @@ function h3FamilySchedulerObserveAfterCommit_(
   setId,
   selectionSource
 ) {
-  var lock=LockService.getScriptLock();
+  var lock=LockService.getScriptLock(),acquired=false;
   try{
-    lock.waitLock(30000);
+    acquired=lock.tryLock(2000);
+    if(!acquired){
+      return {
+        schema:'H3_FAMILY_SCHEDULER_F4_OBSERVATION_V1',
+        status:'RECOVERY_REQUIRED',
+        mode:'SHADOW',
+        scheduler_applied:false,
+        family:String(family||''),
+        set_id:String(setId||''),
+        error:'FAMILY_SCHEDULER_SHADOW_LOCK_BUSY'
+      };
+    }
     var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
     return h3FsObserveCommitted_(
       ss,
@@ -951,7 +967,9 @@ function h3FamilySchedulerObserveAfterCommit_(
       error:String(err&&err.message?err.message:err)
     };
   } finally {
-    try{lock.releaseLock();}catch(_ignore){}
+    if(acquired){
+      try{lock.releaseLock();}catch(_ignore){}
+    }
   }
 }
 
@@ -1040,11 +1058,31 @@ function h3FamilySchedulerShadowTick() {
   var lock=LockService.getScriptLock(); lock.waitLock(30000);
   try{
     var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
-    var e=h3FsEvaluate_(ss,'3級'),log=h3FsAppend_(ss,'3級',e);
+    var e=h3FsEvaluate_(ss,'3級');
+    var existing=h3FsEvaluationAtClock_(ss,'3級',e.global_set_clock);
+    if(existing){
+      if(
+        String(existing.RECOMMENDED_FAMILY||'')!==String(e.recommended_family||'') ||
+        String(existing.PRIMARY_REASON||'')!==String(e.primary_reason||'') ||
+        String(existing.CANDIDATE_ORDER_JSON||'')!==JSON.stringify(e.candidate_order)
+      ){
+        throw new Error(
+          'FAMILY_SCHEDULER_DETERMINISM_REPLAY_MISMATCH:'+e.global_set_clock
+        );
+      }
+      e.event_id=String(existing.EVENT_ID||'');
+      e.decision_id=String(existing.DECISION_ID||'');
+      e.snapshot_sha256=String(existing.SNAPSHOT_SHA256||'');
+      e.scheduler_applied=false;
+      e.log_status='ALREADY_RECORDED';
+      return e;
+    }
+    var log=h3FsAppend_(ss,'3級',e);
     e.event_id=log.event_id;
     e.decision_id=log.decision_id;
     e.snapshot_sha256=log.snapshot_sha256;
     e.scheduler_applied=false;
+    e.log_status='RECORDED';
     return e;
   } finally {
     lock.releaseLock();

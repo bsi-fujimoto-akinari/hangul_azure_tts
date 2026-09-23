@@ -942,7 +942,7 @@ var H3_TRANSLATION_V2_EXPLANATION_OVERLAY_ = {
       '0f05dc338afa019ccba9389e3cf949093b3450ffdd0ea8d7400f8f25f3e59abf',
     explanation: {
       body_ja:
-        'こういうものは最近めったにありません。',
+        'こういうものは最近めったにない。',
       reason:
             '보기 드물다 は「見ることが珍しい」から「めったに見ない、珍しい」を表す。この文脈では④「めったにない。」が対応する。',
       learning_blocks: [
@@ -959,7 +959,7 @@ var H3_TRANSLATION_V2_EXPLANATION_OVERLAY_ = {
       '36052f02dbc145ddd880529d268fad9d143fc4b194facf94896dfebf4deaa2cb',
     explanation: {
       body_ja:
-        '彼は周囲の顔色を気にしすぎて、会議で自分の考えを言えませんでした。',
+        '彼は周囲の顔色を気にしすぎて、会議で自分の考えを言えなかった。',
       reason:
             '눈치를 보다 は「顔色・反応をうかがう」、-느라 はある行為が原因で後続の望ましくない結果になったことを表す。したがって① 주변 사람들의 눈치를 너무 보느라 が最も自然。',
       learning_blocks: [

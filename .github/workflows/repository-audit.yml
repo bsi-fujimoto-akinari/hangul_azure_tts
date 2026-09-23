@@ -9015,6 +9015,37 @@ jobs:
           );
           NODE
 
+      - name: Audit T003 body_ja register parity
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          bridge = Path('WebAppSurfaceReviewBridge.js').read_text(encoding='utf-8')
+
+          required = [
+              "こういうものは最近めったにない。",
+              "彼は周囲の顔色を気にしすぎて、会議で自分の考えを言えなかった。",
+          ]
+          for text in required:
+              if text not in bridge:
+                  raise SystemExit(
+                      f'T003 plain-register body_ja missing: {text}'
+                  )
+
+          forbidden = [
+              "こういうものは最近めったにありません。",
+              "彼は周囲の顔色を気にしすぎて、会議で自分の考えを言えませんでした。",
+          ]
+          for text in forbidden:
+              if text in bridge:
+                  raise SystemExit(
+                      f'T003 polite-register body_ja remains: {text}'
+                  )
+
+          print('T003 body_ja register parity: PASS')
+          PY
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

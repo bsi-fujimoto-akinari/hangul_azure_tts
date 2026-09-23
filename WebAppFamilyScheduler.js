@@ -277,8 +277,8 @@ function h3FsCmp_(a,b) {
     if(a.retest_local_due_max!==b.retest_local_due_max){
       return a.retest_local_due_max-b.retest_local_due_max;
     }
-    var aog=a._retest_origin_global===null?Infinity:a._retest_origin_global;
-    var bog=b._retest_origin_global===null?Infinity:b._retest_origin_global;
+    var aog=a._retest_origin_global==null?Infinity:Number(a._retest_origin_global);
+    var bog=b._retest_origin_global==null?Infinity:Number(b._retest_origin_global);
     if(aog!==bog)return aog-bog;
   }
   var as=a.sets_since_last>=a.starvation_cap,bs=b.sets_since_last>=b.starvation_cap;
@@ -359,19 +359,29 @@ function h3FsEvaluate_(ss,level) {
       ]
     };
   });
-  if(current.set_id)return {
-    schema:H3_FS_OUTPUT_SCHEMA_,mode:'SHADOW',global_set_clock:clock,
-    next_action:'RESUME_CURRENT',recommended_family:'NONE',
-    primary_reason:'RESUME_CURRENT',candidate_order:[],
-    family_metrics:metrics,current_set_id:current.set_id,result_status:'PASS'
-  };
+  if(current.set_id){
+    Object.keys(metrics).forEach(function(f){
+      delete metrics[f]._retest_origin_global;
+    });
+    return {
+      schema:H3_FS_OUTPUT_SCHEMA_,mode:'SHADOW',global_set_clock:clock,
+      next_action:'RESUME_CURRENT',recommended_family:'NONE',
+      primary_reason:'RESUME_CURRENT',candidate_order:[],
+      family_metrics:metrics,current_set_id:current.set_id,result_status:'PASS'
+    };
+  }
   var a=H3_FS_FAMILIES_.map(function(f){return metrics[f];})
     .filter(function(x){return x.eligible;});
-  if(!a.length)return {
-    schema:H3_FS_OUTPUT_SCHEMA_,mode:'SHADOW',global_set_clock:clock,
-    next_action:'BLOCKED',recommended_family:'NONE',primary_reason:'ALL_BLOCKED',
-    candidate_order:[],family_metrics:metrics,current_set_id:'',result_status:'BLOCKED'
-  };
+  if(!a.length){
+    Object.keys(metrics).forEach(function(f){
+      delete metrics[f]._retest_origin_global;
+    });
+    return {
+      schema:H3_FS_OUTPUT_SCHEMA_,mode:'SHADOW',global_set_clock:clock,
+      next_action:'BLOCKED',recommended_family:'NONE',primary_reason:'ALL_BLOCKED',
+      candidate_order:[],family_metrics:metrics,current_set_id:'',result_status:'BLOCKED'
+    };
+  }
   a.sort(h3FsCmp_);
   var primaryReason=h3FsReason_(a[0],a[1]);
   Object.keys(metrics).forEach(function(f){

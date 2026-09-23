@@ -78,5 +78,23 @@ jobs:
           const b = [L,W,Rp1,T].sort(h3FsCmp_);
           if (b[0].family !== 'R') throw new Error('P1 must dominate');
           if (h3FsReason_(b[0],b[1]) !== 'P1_RETEST_ADVANCE') throw new Error('P1 reason mismatch');
+
+          const R_due5 = {...R,retest_advance_slack:1,retest_origin_result:'×',retest_local_due_max:5,_retest_origin_global:10};
+          const T_due6 = {...T,retest_advance_slack:1,retest_origin_result:'×',retest_local_due_max:6,_retest_origin_global:1};
+          const c = [T_due6,R_due5].sort(h3FsCmp_);
+          if (c[0].family !== 'R') throw new Error('P1 due_max tie-break mismatch');
+          if (h3FsReason_(c[0],c[1]) !== 'P1_RETEST_ADVANCE') throw new Error('P1 due_max reason mismatch');
+
+          const R_old = {...R,retest_advance_slack:1,retest_origin_result:'×',retest_local_due_max:5,_retest_origin_global:8};
+          const T_new = {...T,retest_advance_slack:1,retest_origin_result:'×',retest_local_due_max:5,_retest_origin_global:9};
+          const d = [T_new,R_old].sort(h3FsCmp_);
+          if (d[0].family !== 'R') throw new Error('P1 origin-global tie-break mismatch');
+
+          const L_equal = {...L,sets_since_last:6,starvation_cap:6,last_global_clock:20,projected_balance_loss:.50};
+          const W_equal = {...W,sets_since_last:6,starvation_cap:6,last_global_clock:21,projected_balance_loss:.01};
+          const e = [W_equal,L_equal].sort(h3FsCmp_);
+          if (e[0].family !== 'L') throw new Error('P2 oldest-family tie-break mismatch');
+          if (h3FsReason_(e[0],e[1]) !== 'P2_STARVATION') throw new Error('P2 tie-break reason mismatch');
+
           console.log('F3 deterministic ranking PASS');
           NODE

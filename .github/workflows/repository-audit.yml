@@ -8602,7 +8602,7 @@ jobs:
               'h3ReviewAudioApplyReadingBindings_(',
               'h3ReviewAudioBindingResolve_(',
               'h3DriveDataUri_(',
-              "surface_family: 'READING'",
+              "family === 'READING'",
           ]:
               if needle not in bridge:
                   raise SystemExit(

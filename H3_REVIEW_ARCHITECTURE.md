@@ -657,3 +657,45 @@ binding hashes, learner history, answers, uncertainty, score, scheduler, skill_q
 retest state, generation history, pointers, counters, source provenance, or any of the
 90 completed 5W Review audio assets.
 
+## 43. E5-D 2R Review audio embedding
+
+Status: **active for Reading Review; Translation remains unavailable until E5-E**.
+
+E5-D activates the E5-B binding contract for persisted Reading Review without changing
+the locked Reading Review payload/binding authority or any E4 audio asset. The exact
+validated Reading Review is cloned for learner-facing projection and receives three
+display-time bindings:
+
+```text
+passage block -> PASSAGE_COMPLETE
+Q1 Review card -> Q1_CHOICES
+Q2 Review card -> Q2_CHOICES
+```
+
+The passage audio fields are attached to `payload.passage`. Question-choice audio
+fields are attached to the corresponding `payload.sections[index]`, where the same
+validated Reading payload binds each section to `payload.questions[index]` and its
+exact `q_no`. The persisted `reading_review_payload_v1.REVIEW_JSON` remains
+unchanged.
+
+The passage uses the existing integrated inline play/pause + seekbar component, now
+rendered inside the existing Reading passage card before the Korean passage text.
+The two question cards already use the shared persistent Review audio component and
+therefore require no new control implementation.
+
+For media loading, the WRITTEN provider accepts `surface_family=READING` in addition
+to the already active 5W path. A Reading media request contains no Listening transaction
+identity and is resolved only by the validated tuple
+`(2R, SET_ID, SLOT_KEY)`. Before bytes are returned, the server re-opens the exact
+locked Reading Review through `h3SurfaceReviewContextBySet_`, derives the allowlisted
+Reading slots from that validated payload, resolves exactly one E5-B sidecar row, and
+reads only that bound file.
+
+No filename fallback, cross-set fallback, cross-family fallback, slot substitution, or
+silent degradation is allowed. Missing/duplicate/non-DONE/malformed bindings fail closed.
+
+E5-D does not activate Translation Review audio, does not change replay behavior, and
+does not mutate learner history, score, answers, uncertainty, scheduler, queues, retest
+state, generation history, pointers, counters, source provenance, Review authority, or
+the nine completed 2R Review audio assets.
+

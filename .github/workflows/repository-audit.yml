@@ -8287,6 +8287,266 @@ jobs:
           console.log('E5-B Review audio binding pure audit: PASS');
           NODE
 
+      - name: Audit E5-C 5W Review audio embedding
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          adapter = Path('WebAppReviewWrittenAdapter.js').read_text(encoding='utf-8')
+          client = Path('Client.html').read_text(encoding='utf-8')
+          architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
+
+          for needle in [
+              'function h3WrittenReviewAttach5WAudio_(',
+              'function h3WrittenReviewMedia_(',
+              'h3ReviewAudioBindingResolveAll_(',
+              "request.surface_family !== '5W'",
+              "provider_kind: 'WRITTEN'",
+              "surface_family: '5W'",
+              'review_audio_binding_contract_id:',
+              'openMedia:\n      h3WrittenReviewMedia_,',
+          ]:
+              if needle not in adapter:
+                  raise SystemExit(
+                      f'E5-C 5W adapter integration missing: {needle}'
+                  )
+
+          for needle in [
+              'var reviewProviderKind =',
+              "reviewProviderKind ===\n      'WRITTEN'",
+              'review_kind:\n          reviewProviderKind || null,',
+              'surface_family:\n          app.payload\n            .surface_family || null,',
+              'writtenReviewMedia\n            ? null',
+          ]:
+              if needle not in client:
+                  raise SystemExit(
+                      f'E5-C client media routing missing: {needle}'
+                  )
+
+          start = adapter.index('function h3WrittenReviewAttach5WAudio_(')
+          end = adapter.index('function h3WrittenReviewOpen_(', start)
+          e5c = adapter[start:end]
+          for forbidden in [
+              '.setValue(',
+              '.setValues(',
+              '.appendRow(',
+              '.deleteRow(',
+              '.createFile(',
+              '.setTrashed(',
+          ]:
+              if forbidden in e5c:
+                  raise SystemExit(
+                      f'E5-C unexpectedly mutates persistent state: {forbidden}'
+                  )
+
+          for needle in [
+              '## 42. E5-C 5W Review audio embedding',
+              'active for 5W only',
+              'Reading and Translation remain unavailable',
+              'source-lock validation',
+          ]:
+              if needle not in architecture:
+                  raise SystemExit(
+                      f'E5-C architecture contract missing: {needle}'
+                  )
+
+          print('E5-C 5W Review audio static boundary: PASS')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const context = {
+            console: console,
+            h3ProdSheetRows_: sheet => sheet.table,
+            H3_WEB_RUNTIME_SPREADSHEET_ID: 'runtime'
+          };
+          vm.createContext(context);
+          vm.runInContext(
+            fs.readFileSync('WebAppReviewCore.js', 'utf8'),
+            context,
+            {filename:'WebAppReviewCore.js'}
+          );
+          vm.runInContext(
+            fs.readFileSync('WebAppReviewWrittenAdapter.js', 'utf8'),
+            context,
+            {filename:'WebAppReviewWrittenAdapter.js'}
+          );
+
+          const headers = vm.runInContext(
+            'H3_REVIEW_AUDIO_BINDING_HEADERS_.slice()',
+            context
+          );
+          const map = {};
+          headers.forEach((name, index) => map[name] = index);
+
+          function row(slot) {
+            const out = new Array(headers.length).fill('');
+            const put = (name, value) => out[map[name]] = value;
+            put('SCHEMA', 'H3_REVIEW_AUDIO_ASSET_V1');
+            put('SURFACE_FAMILY', '5W');
+            put('SET_ID', 'H3-20260913-01');
+            put('SLOT_KEY', slot);
+            put('SOURCE_REF_JSON', '{"sheet":"locked_review"}');
+            put('SELECTION_JSON', '{"slot":"' + slot + '"}');
+            put('AUDIO_TEXT', '가');
+            put(
+              'AUDIO_TEXT_SHA256',
+              'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+            );
+            put('VOICE_ASSIGNMENT_JSON', '{"primary":{"id":"voice"}}');
+            put('AUDIO_FILE_ID', 'file-' + slot);
+            put('AUDIO_URL', 'https://example.invalid/' + slot);
+            put(
+              'DRIVE_FOLDER_ID',
+              '1dLf1KhHic8SU-4XOGueZSM55vznS024C'
+            );
+            put('STATUS', 'DONE');
+            put('ERROR', '');
+            put('GENERATOR_VERSION', 'review-audio-v2-1200ms');
+            return out;
+          }
+
+          const sidecar = {
+            table: {
+              header: headers.slice(),
+              map: Object.assign({}, map),
+              rows: ['D2','D3','D4','D5','D6'].map(row)
+            }
+          };
+          const spreadsheet = {
+            getSheetByName: name =>
+              name === 'review_audio_asset_v1'
+                ? sidecar
+                : null
+          };
+          context.SpreadsheetApp = {
+            openById: () => spreadsheet
+          };
+
+          const payload = {
+            schema: 'TEST',
+            mode: 'REVIEW',
+            kind: 'WRITTEN',
+            read_only: true,
+            set_id: 'H3-20260913-01',
+            sections: ['D2','D3','D4','D5','D6'].map(
+              section => ({
+                section,
+                audio_asset_key: null,
+                audio_fallback_url: null
+              })
+            )
+          };
+          context.__payload = payload;
+
+          const decorated = vm.runInContext(
+            'h3WrittenReviewAttach5WAudio_(__payload)',
+            context
+          );
+
+          if (
+            decorated.sections
+              .map(x => x.audio_asset_key)
+              .join(',') !==
+            'D2,D3,D4,D5,D6'
+          ) {
+            throw new Error(
+              'E5-C five-card audio-key projection mismatch.'
+            );
+          }
+          if (
+            payload.sections.some(
+              x => x.audio_asset_key !== null ||
+                   x.audio_fallback_url !== null
+            )
+          ) {
+            throw new Error(
+              'E5-C mutated the source Review payload.'
+            );
+          }
+
+          context.getWrittenPersistentReviewPayload_ =
+            () => JSON.parse(JSON.stringify(payload));
+          context.h3DriveDataUri_ =
+            fileId => ({
+              data_uri:
+                'data:audio/mpeg;base64,' + fileId,
+              mime_type: 'audio/mpeg',
+              size_bytes: 123
+            });
+
+          const media = vm.runInContext(
+            `h3WrittenReviewMedia_({
+              schema:'H3_WEB_MEDIA_REQUEST_V1',
+              mode:'REVIEW',
+              review_kind:'WRITTEN',
+              surface_family:'5W',
+              set_id:'H3-20260913-01',
+              txn_id:null,
+              legacy_review_id:null,
+              asset_key:'D2'
+            })`,
+            context
+          );
+
+          if (
+            media.provider_kind !== 'WRITTEN' ||
+            media.surface_family !== '5W' ||
+            media.asset_key !== 'D2' ||
+            media.fallback_url !==
+              'https://example.invalid/D2'
+          ) {
+            throw new Error(
+              'E5-C 5W media response mismatch.'
+            );
+          }
+
+          function expectThrow(code, label) {
+            let threw = false;
+            try {
+              vm.runInContext(code, context);
+            } catch (_err) {
+              threw = true;
+            }
+            if (!threw) {
+              throw new Error(
+                label + ' did not fail closed.'
+              );
+            }
+          }
+
+          expectThrow(
+            `h3WrittenReviewMedia_({
+              schema:'H3_WEB_MEDIA_REQUEST_V1',
+              mode:'REVIEW',
+              review_kind:'WRITTEN',
+              surface_family:'READING',
+              set_id:'H3-20260913-01',
+              asset_key:'D2'
+            })`,
+            'Reading premature activation'
+          );
+          expectThrow(
+            `h3WrittenReviewMedia_({
+              schema:'H3_WEB_MEDIA_REQUEST_V1',
+              mode:'REVIEW',
+              review_kind:'WRITTEN',
+              surface_family:'5W',
+              set_id:'H3-20260913-01',
+              txn_id:'listening-identity',
+              asset_key:'D2'
+            })`,
+            'Written media with Listening identity'
+          );
+
+          console.log(
+            'E5-C 5W Review audio pure audit: PASS'
+          );
+          NODE
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

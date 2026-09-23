@@ -90,6 +90,485 @@ function h3ReviewTable_(sheet) {
 }
 
 
+var H3_REVIEW_AUDIO_BINDING_CONTRACT_ID_ =
+  'H3-REVIEW-AUDIO-BINDING-20260923-V1';
+var H3_REVIEW_AUDIO_BINDING_SHEET_ =
+  'review_audio_asset_v1';
+var H3_REVIEW_AUDIO_BINDING_SCHEMA_ =
+  'H3_REVIEW_AUDIO_ASSET_V1';
+var H3_REVIEW_AUDIO_BINDING_GENERATOR_ =
+  'review-audio-v2-1200ms';
+var H3_REVIEW_AUDIO_BINDING_HEADERS_ = [
+  'SCHEMA',
+  'SURFACE_FAMILY',
+  'SET_ID',
+  'SLOT_KEY',
+  'SOURCE_REF_JSON',
+  'SELECTION_JSON',
+  'AUDIO_TEXT',
+  'AUDIO_TEXT_SHA256',
+  'VOICE_ASSIGNMENT_JSON',
+  'AUDIO_FILE_ID',
+  'AUDIO_URL',
+  'DRIVE_FOLDER_ID',
+  'STATUS',
+  'CREATED_AT',
+  'UPDATED_AT',
+  'ERROR',
+  'GENERATOR_VERSION'
+];
+var H3_REVIEW_AUDIO_BINDING_FOLDERS_ = {
+  '5W': '1dLf1KhHic8SU-4XOGueZSM55vznS024C',
+  '2R': '18V3zOrKRhIgTCL_McrXjWDu6OIZupNn5',
+  '2T': '1zRCRDdP3G6tpkyGHU619xYUf0dW1UsUv'
+};
+
+
+function h3ReviewAudioSidecarFamily_(surfaceFamily) {
+  var family = String(surfaceFamily || '');
+  var map = {
+    '5W': '5W',
+    'READING': '2R',
+    'TRANSLATION': '2T'
+  };
+  var sidecar = map[family];
+
+  if (!sidecar) {
+    throw new Error(
+      'REVIEW_AUDIO_BINDING_SURFACE_UNSUPPORTED:' +
+        family
+    );
+  }
+
+  return sidecar;
+}
+
+
+function h3ReviewAudioValidateSlot_(
+  sidecarFamily,
+  slotKey
+) {
+  var family = String(sidecarFamily || '');
+  var slot = String(slotKey || '');
+  var valid = false;
+
+  if (family === '5W') {
+    valid = [
+      'D2', 'D3', 'D4', 'D5', 'D6'
+    ].indexOf(slot) >= 0;
+  } else if (family === '2R') {
+    valid = [
+      'PASSAGE_COMPLETE',
+      'Q1_CHOICES',
+      'Q2_CHOICES'
+    ].indexOf(slot) >= 0;
+  } else if (family === '2T') {
+    valid =
+      /^(?:P11|P12)_Q[12]$/.test(
+        slot
+      );
+  }
+
+  if (!valid) {
+    throw new Error(
+      'REVIEW_AUDIO_BINDING_SLOT_INVALID:' +
+        family + ':' + slot
+    );
+  }
+
+  return slot;
+}
+
+
+function h3ReviewAudioQuestionNo_(
+  question,
+  label
+) {
+  var qNo = Number(
+    question && question.q_no
+  );
+
+  if (
+    !Number.isInteger(qNo) ||
+    qNo < 1 ||
+    qNo > 2
+  ) {
+    throw new Error(
+      'REVIEW_AUDIO_BINDING_QNO_INVALID:' +
+        label
+    );
+  }
+
+  return qNo;
+}
+
+
+function h3ReviewAudioExpectedBindings_(payload) {
+  if (
+    !payload ||
+    typeof payload !== 'object' ||
+    Array.isArray(payload) ||
+    !payload.set_id
+  ) {
+    throw new Error(
+      'REVIEW_AUDIO_BINDING_PAYLOAD_INVALID'
+    );
+  }
+
+  var surfaceFamily = String(
+    payload.surface_family || ''
+  );
+  var sidecarFamily =
+    h3ReviewAudioSidecarFamily_(
+      surfaceFamily
+    );
+  var out = [];
+
+  if (surfaceFamily === '5W') {
+    if (
+      !Array.isArray(payload.sections) ||
+      payload.sections.length !== 5
+    ) {
+      throw new Error(
+        'REVIEW_AUDIO_BINDING_5W_SECTION_COUNT'
+      );
+    }
+
+    payload.sections.forEach(
+      function (section, index) {
+        var slot =
+          h3ReviewAudioValidateSlot_(
+            sidecarFamily,
+            section && section.section
+          );
+
+        out.push({
+          target: 'SECTION',
+          target_index: index,
+          q_no: index + 1,
+          slot_key: slot
+        });
+      }
+    );
+  } else if (
+    surfaceFamily === 'READING'
+  ) {
+    if (
+      !payload.passage ||
+      !Array.isArray(payload.questions) ||
+      payload.questions.length !== 2
+    ) {
+      throw new Error(
+        'REVIEW_AUDIO_BINDING_READING_SHAPE'
+      );
+    }
+
+    out.push({
+      target: 'PASSAGE',
+      target_index: null,
+      q_no: null,
+      slot_key: 'PASSAGE_COMPLETE'
+    });
+
+    payload.questions.forEach(
+      function (question, index) {
+        var qNo =
+          h3ReviewAudioQuestionNo_(
+            question,
+            'READING'
+          );
+
+        out.push({
+          target: 'QUESTION_CHOICES',
+          target_index: index,
+          q_no: qNo,
+          slot_key:
+            h3ReviewAudioValidateSlot_(
+              sidecarFamily,
+              'Q' + qNo + '_CHOICES'
+            )
+        });
+      }
+    );
+  } else if (
+    surfaceFamily === 'TRANSLATION'
+  ) {
+    if (
+      !Array.isArray(payload.questions) ||
+      payload.questions.length !== 2
+    ) {
+      throw new Error(
+        'REVIEW_AUDIO_BINDING_TRANSLATION_SHAPE'
+      );
+    }
+
+    payload.questions.forEach(
+      function (question, index) {
+        var qNo =
+          h3ReviewAudioQuestionNo_(
+            question,
+            'TRANSLATION'
+          );
+        var section = String(
+          question &&
+          (
+            question.section ||
+            question.section_key
+          ) ||
+          ''
+        ).replace(/^H3-/, '');
+
+        if (
+          section !== 'P11' &&
+          section !== 'P12'
+        ) {
+          throw new Error(
+            'REVIEW_AUDIO_BINDING_TRANSLATION_SECTION:' +
+              section
+          );
+        }
+
+        out.push({
+          target: 'QUESTION',
+          target_index: index,
+          q_no: qNo,
+          slot_key:
+            h3ReviewAudioValidateSlot_(
+              sidecarFamily,
+              section + '_Q' + qNo
+            )
+        });
+      }
+    );
+  }
+
+  var seen = {};
+  out.forEach(function (binding) {
+    if (seen[binding.slot_key]) {
+      throw new Error(
+        'REVIEW_AUDIO_BINDING_EXPECTED_DUPLICATE:' +
+          binding.slot_key
+      );
+    }
+
+    seen[binding.slot_key] = true;
+    binding.surface_family =
+      surfaceFamily;
+    binding.sidecar_family =
+      sidecarFamily;
+    binding.set_id =
+      String(payload.set_id);
+    binding.asset_key =
+      binding.slot_key;
+  });
+
+  return out;
+}
+
+
+function h3ReviewAudioBindingTable_(
+  spreadsheet
+) {
+  var sheet = spreadsheet.getSheetByName(
+    H3_REVIEW_AUDIO_BINDING_SHEET_
+  );
+
+  if (!sheet) {
+    throw new Error(
+      'REVIEW_AUDIO_BINDING_SHEET_MISSING'
+    );
+  }
+
+  var table = h3ReviewTable_(sheet);
+
+  if (
+    JSON.stringify(table.header) !==
+    JSON.stringify(
+      H3_REVIEW_AUDIO_BINDING_HEADERS_
+    )
+  ) {
+    throw new Error(
+      'REVIEW_AUDIO_BINDING_HEADER_MISMATCH'
+    );
+  }
+
+  return table;
+}
+
+
+function h3ReviewAudioParseJsonField_(
+  value,
+  code
+) {
+  try {
+    return JSON.parse(
+      String(value || '')
+    );
+  } catch (_err) {
+    throw new Error(code);
+  }
+}
+
+
+function h3ReviewAudioBindingResolve_(
+  spreadsheet,
+  surfaceFamily,
+  setId,
+  slotKey
+) {
+  var family =
+    h3ReviewAudioSidecarFamily_(
+      surfaceFamily
+    );
+  var normalizedSetId =
+    String(setId || '');
+  var slot =
+    h3ReviewAudioValidateSlot_(
+      family,
+      slotKey
+    );
+
+  if (!normalizedSetId) {
+    throw new Error(
+      'REVIEW_AUDIO_BINDING_SET_ID_MISSING'
+    );
+  }
+
+  var table =
+    h3ReviewAudioBindingTable_(
+      spreadsheet
+    );
+  var matches = table.rows.filter(
+    function (row) {
+      return (
+        String(
+          row[
+            table.map.SURFACE_FAMILY
+          ] || ''
+        ) === family &&
+        String(
+          row[table.map.SET_ID] || ''
+        ) === normalizedSetId &&
+        String(
+          row[table.map.SLOT_KEY] || ''
+        ) === slot
+      );
+    }
+  );
+
+  if (matches.length !== 1) {
+    throw new Error(
+      'REVIEW_AUDIO_BINDING_COUNT:' +
+        family + ':' +
+        normalizedSetId + ':' +
+        slot + ':' +
+        matches.length
+    );
+  }
+
+  var row = matches[0];
+  var get = function (name) {
+    return String(
+      row[table.map[name]] || ''
+    );
+  };
+
+  if (
+    get('SCHEMA') !==
+      H3_REVIEW_AUDIO_BINDING_SCHEMA_ ||
+    get('STATUS') !== 'DONE' ||
+    get('ERROR') ||
+    get('GENERATOR_VERSION') !==
+      H3_REVIEW_AUDIO_BINDING_GENERATOR_ ||
+    get('DRIVE_FOLDER_ID') !==
+      H3_REVIEW_AUDIO_BINDING_FOLDERS_[
+        family
+      ] ||
+    !get('AUDIO_FILE_ID') ||
+    !get('AUDIO_URL') ||
+    !/^[0-9a-f]{64}$/.test(
+      get('AUDIO_TEXT_SHA256')
+    )
+  ) {
+    throw new Error(
+      'REVIEW_AUDIO_BINDING_ROW_INVALID:' +
+        family + ':' +
+        normalizedSetId + ':' +
+        slot
+    );
+  }
+
+  var sourceRef =
+    h3ReviewAudioParseJsonField_(
+      get('SOURCE_REF_JSON'),
+      'REVIEW_AUDIO_BINDING_SOURCE_REF_INVALID'
+    );
+  var selection =
+    h3ReviewAudioParseJsonField_(
+      get('SELECTION_JSON'),
+      'REVIEW_AUDIO_BINDING_SELECTION_INVALID'
+    );
+
+  h3ReviewAudioParseJsonField_(
+    get('VOICE_ASSIGNMENT_JSON'),
+    'REVIEW_AUDIO_BINDING_VOICE_INVALID'
+  );
+
+  return {
+    schema:
+      'H3_REVIEW_AUDIO_BINDING_V1',
+    contract_id:
+      H3_REVIEW_AUDIO_BINDING_CONTRACT_ID_,
+    read_only: true,
+    surface_family:
+      String(surfaceFamily),
+    sidecar_family: family,
+    set_id: normalizedSetId,
+    slot_key: slot,
+    asset_key: slot,
+    source_ref: sourceRef,
+    selection: selection,
+    audio_text_sha256:
+      get('AUDIO_TEXT_SHA256'),
+    audio_file_id:
+      get('AUDIO_FILE_ID'),
+    audio_url:
+      get('AUDIO_URL'),
+    drive_folder_id:
+      get('DRIVE_FOLDER_ID'),
+    generator_version:
+      get('GENERATOR_VERSION')
+  };
+}
+
+
+function h3ReviewAudioBindingResolveAll_(
+  spreadsheet,
+  payload
+) {
+  return h3ReviewAudioExpectedBindings_(
+    payload
+  ).map(function (expected) {
+    var resolved =
+      h3ReviewAudioBindingResolve_(
+        spreadsheet,
+        expected.surface_family,
+        expected.set_id,
+        expected.slot_key
+      );
+
+    resolved.target =
+      expected.target;
+    resolved.target_index =
+      expected.target_index;
+    resolved.q_no =
+      expected.q_no;
+
+    return resolved;
+  });
+}
+
+
 function h3ReviewProviders_() {
   var providers = [
     h3ListeningReviewProvider_()

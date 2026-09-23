@@ -2469,7 +2469,7 @@ jobs:
           for needle in [
               'function h3WrittenReviewPersistentHistory_(',
               'h3WrittenReviewAllHistoryEntries_(',
-              'getWrittenPersistentReviewPayload_(',
+              'getWrittenPersistentReviewPayloadWithAudio_(',
               'historyEntries:',
               'h3WrittenReviewPersistentHistory_',
               'currentLearning:',
@@ -2513,17 +2513,18 @@ jobs:
                       f'Unexpected direct Written WebApp route: {forbidden}'
                   )
 
-          # Written Review must not expose replay or media through the staged provider.
+          # 5W Review media is active; replay remains unavailable.
           for needle in [
               'openMedia:',
-              'h3WrittenReviewUnavailable_',
+              'h3WrittenReviewMedia_',
               'openReplay:',
+              'h3WrittenReviewUnavailable_',
               'openReplayMedia:',
               'gradeReplay:',
           ]:
               if needle not in written:
                   raise SystemExit(
-                      f'Written unavailable capability guard missing: {needle}'
+                      f'Written 5W media/replay capability guard missing: {needle}'
                   )
           PY
 
@@ -2594,7 +2595,33 @@ jobs:
               assert.strictEqual(request.review_kind, 'WRITTEN');
               assert.strictEqual(request.set_id, 'H3-20260918-03');
               return writtenReview;
-            }
+            },
+            getWrittenPersistentReviewPayloadWithAudio_:request => {
+              assert.strictEqual(request.review_kind, 'WRITTEN');
+              assert.strictEqual(request.set_id, 'H3-20260918-03');
+              const out = JSON.parse(JSON.stringify(writtenReview));
+              out.surface_family = '5W';
+              out.sections.forEach(part => {
+                part.audio_asset_key = part.section;
+                part.audio_fallback_url =
+                  'https://example.invalid/' + part.section;
+              });
+              return out;
+            },
+            getWrittenPersistentReviewMediaPayload_:request => ({
+              schema:'H3_WEB_MEDIA_V1',
+              mode:'REVIEW',
+              read_only:true,
+              provider_kind:'WRITTEN',
+              surface_family:'5W',
+              set_id:request.set_id,
+              asset_key:request.asset_key,
+              data_uri:'data:audio/mpeg;base64,test',
+              mime_type:'audio/mpeg',
+              size_bytes:4,
+              trim_start_ms:0,
+              fallback_url:'https://example.invalid/' + request.asset_key
+            })
           });
 
           vm.runInContext(source, context, {
@@ -2626,6 +2653,42 @@ jobs:
           ));
           assert.strictEqual(review.kind, 'WRITTEN');
           assert.strictEqual(review.sections.length, 5);
+          assert.strictEqual(review.surface_family, '5W');
+          assert.strictEqual(
+            review.sections
+              .map(part => part.audio_asset_key)
+              .join(','),
+            'D2,D3,D4,D5,D6'
+          );
+
+          context.__media = {
+            schema:'H3_WEB_MEDIA_REQUEST_V1',
+            mode:'REVIEW',
+            review_kind:'WRITTEN',
+            surface_family:'5W',
+            set_id:'H3-20260918-03',
+            txn_id:null,
+            legacy_review_id:null,
+            asset_key:'D2'
+          };
+          const writtenMedia = JSON.parse(JSON.stringify(
+            vm.runInContext(
+              'h3ReviewMediaRequest_(__media)',
+              context
+            )
+          ));
+          assert.strictEqual(
+            writtenMedia.provider_kind,
+            'WRITTEN'
+          );
+          assert.strictEqual(
+            writtenMedia.surface_family,
+            '5W'
+          );
+          assert.strictEqual(
+            writtenMedia.asset_key,
+            'D2'
+          );
 
           context.__replay = {
             schema:'H3_WEB_RENDER_REQUEST_V1',

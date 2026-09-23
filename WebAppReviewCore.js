@@ -4413,6 +4413,18 @@ function h3ConfirmedStabilityCoverage_(
 }
 
 
+function getConfirmedStabilityCoverage() {
+  var spreadsheet =
+    SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+
+  return h3ConfirmedStabilityCoverage_(
+    spreadsheet
+  );
+}
+
+
 function buildReviewHomePayload_() {
   var spreadsheet =
     SpreadsheetApp.openById(
@@ -4429,21 +4441,10 @@ function buildReviewHomePayload_() {
       h3ReviewHomeHistory_(
         spreadsheet
       ),
-    confirmed_stability_coverage:
-      h3ConfirmedStabilityCoverage_(
-        spreadsheet
-      ),
     review_filters: [
       'ALL',
       'LISTENING',
       'WRITTEN'
-    ],
-    review_family_filters: [
-      'ALL',
-      'L',
-      'W',
-      'R',
-      'T'
     ],
     review_sorts: [
       'RECENT',

@@ -657,6 +657,166 @@ function h3ReviewAudioApply5WBindings_(
 }
 
 
+function h3ReviewAudioApplyReadingBindings_(
+  payload,
+  bindings
+) {
+  if (
+    !payload ||
+    payload.mode !== 'REVIEW' ||
+    payload.kind !== 'WRITTEN' ||
+    payload.surface_family !== 'READING' ||
+    !payload.set_id ||
+    !payload.passage ||
+    !Array.isArray(payload.questions) ||
+    payload.questions.length !== 2 ||
+    !Array.isArray(payload.sections) ||
+    payload.sections.length !== 2 ||
+    !Array.isArray(bindings) ||
+    bindings.length !== 3
+  ) {
+    throw new Error(
+      'REVIEW_AUDIO_2R_PROJECTION_INVALID'
+    );
+  }
+
+  var out =
+    JSON.parse(
+      JSON.stringify(payload)
+    );
+  var seen = {};
+  var passageCount = 0;
+  var questionCount = 0;
+
+  bindings.forEach(
+    function (binding) {
+      if (
+        !binding ||
+        binding.surface_family !==
+          'READING' ||
+        binding.sidecar_family !== '2R' ||
+        binding.set_id !==
+          String(payload.set_id) ||
+        !binding.slot_key ||
+        binding.asset_key !==
+          binding.slot_key ||
+        !binding.audio_url
+      ) {
+        throw new Error(
+          'REVIEW_AUDIO_2R_BINDING_INVALID'
+        );
+      }
+
+      if (seen[binding.slot_key]) {
+        throw new Error(
+          'REVIEW_AUDIO_2R_BINDING_DUPLICATE:' +
+            binding.slot_key
+        );
+      }
+      seen[binding.slot_key] = true;
+
+      if (binding.target === 'PASSAGE') {
+        if (
+          binding.slot_key !==
+            'PASSAGE_COMPLETE' ||
+          binding.target_index !== null ||
+          binding.q_no !== null
+        ) {
+          throw new Error(
+            'REVIEW_AUDIO_2R_PASSAGE_BINDING_INVALID'
+          );
+        }
+
+        out.passage.audio_asset_key =
+          binding.asset_key;
+        out.passage.audio_fallback_url =
+          binding.audio_url;
+        passageCount += 1;
+        return;
+      }
+
+      if (
+        binding.target !==
+          'QUESTION_CHOICES' ||
+        !Number.isInteger(
+          binding.target_index
+        ) ||
+        binding.target_index < 0 ||
+        binding.target_index >=
+          out.sections.length ||
+        !Number.isInteger(
+          binding.q_no
+        ) ||
+        (
+          binding.q_no !== 1 &&
+          binding.q_no !== 2
+        ) ||
+        binding.slot_key !==
+          (
+            'Q' +
+            binding.q_no +
+            '_CHOICES'
+          )
+      ) {
+        throw new Error(
+          'REVIEW_AUDIO_2R_QUESTION_BINDING_INVALID'
+        );
+      }
+
+      var question =
+        out.questions[
+          binding.target_index
+        ];
+      var section =
+        out.sections[
+          binding.target_index
+        ];
+
+      if (
+        !question ||
+        !section ||
+        Number(question.q_no) !==
+          binding.q_no ||
+        (
+          question.item_id &&
+          section.item_id &&
+          String(question.item_id) !==
+            String(section.item_id)
+        )
+      ) {
+        throw new Error(
+          'REVIEW_AUDIO_2R_QUESTION_TARGET_MISMATCH:' +
+            binding.slot_key
+        );
+      }
+
+      section.audio_asset_key =
+        binding.asset_key;
+      section.audio_fallback_url =
+        binding.audio_url;
+      questionCount += 1;
+    }
+  );
+
+  if (
+    passageCount !== 1 ||
+    questionCount !== 2 ||
+    !seen.PASSAGE_COMPLETE ||
+    !seen.Q1_CHOICES ||
+    !seen.Q2_CHOICES
+  ) {
+    throw new Error(
+      'REVIEW_AUDIO_2R_BINDING_CARDINALITY'
+    );
+  }
+
+  out.review_audio_binding_contract_id =
+    H3_REVIEW_AUDIO_BINDING_CONTRACT_ID_;
+
+  return out;
+}
+
+
 function h3ReviewProviders_() {
   var providers = [
     h3ListeningReviewProvider_()

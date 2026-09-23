@@ -26,6 +26,40 @@
     reviewCompletionRefreshPending: false
   };
 
+  window.addEventListener(
+    'h3-family-scheduler-open-current',
+    function (event) {
+      var request =
+        event &&
+        event.detail;
+      if (
+        !request ||
+        request.schema !==
+          'H3_WEB_RENDER_REQUEST_V1' ||
+        [
+          'LISTENING',
+          'WRITTEN'
+        ].indexOf(
+          String(
+            request.mode || ''
+          )
+        ) < 0 ||
+        !String(
+          request.set_id || ''
+        )
+      ) {
+        showError(
+          '次の問題の経路を確認できません。'
+        );
+        return;
+      }
+
+      loadSet(
+        request
+      );
+    }
+  );
+
   document.addEventListener('DOMContentLoaded', function () {
     applyDeviceProfile();
 

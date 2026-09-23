@@ -424,7 +424,7 @@ jobs:
           console.log('Issue routing deterministic fixture PASS');
           NODE
 
-      - name: HOME NEXT activation contract
+      - name: F5 HOME read-only preview contract
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -450,9 +450,7 @@ jobs:
               "review",
               "new MutationObserver(",
               "repeat(4, minmax(0, 1fr))",
-              "nextButton.addEventListener(",
-              ".h3FamilySchedulerIssueRoutePreview()",
-              ".h3FamilySchedulerHomeNext()",
+              ".h3FamilySchedulerShadowPreview()",
           ]
           for token in required:
               if token not in index:
@@ -467,11 +465,8 @@ jobs:
           if "family-scheduler-next-caption" in index or "nextCaption" in preview:
               raise SystemExit("F5 NEXT caption must remain hidden; display family only.")
 
-          if preview.count(".h3FamilySchedulerIssueRoutePreview()") != 1:
-              raise SystemExit("HOME NEXT must use exactly one fresh route preview RPC per launcher render.")
-
-          if preview.count(".h3FamilySchedulerHomeNext()") != 1:
-              raise SystemExit("HOME NEXT must use exactly one activation RPC from its click handler.")
+          if preview.count(".h3FamilySchedulerShadowPreview()") != 1:
+              raise SystemExit("F5 must use exactly one read-only scheduler preview RPC per launcher render.")
 
           forbidden = [
               "h3FamilySchedulerShadowTick",
@@ -485,11 +480,8 @@ jobs:
               if token in preview:
                   raise SystemExit(f"F5 read-only boundary violated: {token}")
 
-          if preview.count("nextButton.addEventListener(") != 1:
-              raise SystemExit("HOME NEXT must have exactly one click handler.")
-
-          if "button.addEventListener(" in preview:
-              raise SystemExit("Manual L/W/R/T buttons must remain disabled without click handlers.")
+          if "addEventListener" in preview:
+              raise SystemExit("F5 family buttons must not have click handlers.")
 
           if index.index("family-scheduler-launcher") > index.index("</head>"):
               raise SystemExit("F5 preview styles must load before body render.")
@@ -507,29 +499,7 @@ jobs:
               if token in fs_preview:
                   raise SystemExit(f"Shadow preview RPC must remain read-only: {token}")
 
-          if "h3FamilySchedulerHomeNext" not in fs:
-              raise SystemExit("HOME NEXT server RPC missing.")
-
-          rpc_start = fs.index("function h3FamilySchedulerHomeNext()")
-          rpc_end = fs.index("function h3FamilySchedulerShadowTick()", rpc_start)
-          rpc = fs[rpc_start:rpc_end]
-          for token in [
-              "appendRow",
-              ".setValue(",
-              ".setValues(",
-              "h3FsAppend_(",
-              "h3FsWriteState_(",
-              "consumeK1ReadyAfterIssue_(",
-              "prepareListeningBackendSet(",
-              "h3WrittenSubmit_(",
-              "h3ReadingSubmit_(",
-              "h3TranslationSubmit_(",
-              "h3TranslationV2Submit_(",
-          ]:
-              if token in rpc:
-                  raise SystemExit(f"HOME NEXT must not execute issue/write yet: {token}")
-
-          print("HOME NEXT activation contract PASS")
+          print("F5 HOME read-only preview PASS")
           PY
 
       - name: Deterministic ranking fixture

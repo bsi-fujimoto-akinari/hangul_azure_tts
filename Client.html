@@ -18,7 +18,7 @@
     mediaCache: {},
     mediaTrimMs: {},
     mediaLoading: {},
-    reviewKindFilter: 'ALL',
+    reviewFamilyFilter: 'ALL',
     reviewSort: 'REVIEW_LEVEL',
     reviewVisited: {},
     reviewCompletionPending: false,
@@ -79,7 +79,7 @@
     app.mediaTrimMs = {};
     app.mediaLoading = {};
     app.mediaRetryCount = {};
-    app.reviewKindFilter = 'ALL';
+    app.reviewFamilyFilter = 'ALL';
     app.reviewSort = 'REVIEW_LEVEL';
     app.reviewVisited = {};
     app.reviewCompletionPending = false;
@@ -1133,6 +1133,104 @@
   }
 
 
+  function reviewFamilyKeyForEntry_(
+    entry
+  ) {
+    var surfaceFamily =
+      String(
+        entry &&
+        entry.surface_family ||
+        ''
+      );
+
+    if (
+      surfaceFamily === '5L' ||
+      (
+        !surfaceFamily &&
+        entry &&
+        entry.review_kind ===
+          'LISTENING'
+      )
+    ) {
+      return 'L';
+    }
+
+    if (
+      surfaceFamily === 'READING'
+    ) {
+      return 'R';
+    }
+
+    if (
+      surfaceFamily === 'TRANSLATION'
+    ) {
+      return 'T';
+    }
+
+    return 'W';
+  }
+
+
+  function updateReviewHeaderStats_(
+    history,
+    shown
+  ) {
+    var library =
+      history.closest
+        ? history.closest(
+            '.review-library'
+          )
+        : null;
+
+    if (!library) {
+      return;
+    }
+
+    var count =
+      library.querySelector(
+        '.home-history-count'
+      );
+    if (count) {
+      count.textContent =
+        String(shown);
+    }
+
+    var metric =
+      library.querySelector(
+        '.home-stability-rate'
+      );
+    if (!metric) {
+      return;
+    }
+
+    var coverage =
+      app.payload &&
+      app.payload
+        .confirmed_stability_coverage;
+    var byFilter =
+      coverage &&
+      coverage.by_filter;
+    var bucket =
+      byFilter &&
+      byFilter[
+        app.reviewFamilyFilter
+      ];
+    var percent =
+      bucket &&
+      Number(bucket.percent);
+
+    metric.textContent =
+      isFinite(percent)
+        ? percent.toFixed(1) + '%'
+        : '—';
+    metric.setAttribute(
+      'aria-label',
+      'Confirmed Stability Coverage ' +
+        metric.textContent
+    );
+  }
+
+
   function applyReviewHistoryView_(
     history
   ) {
@@ -1185,16 +1283,16 @@
 
     var shown = 0;
     nodes.forEach(function (node) {
-      var kind =
+      var family =
         String(
-          node.dataset.reviewKind ||
-          'LISTENING'
+          node.dataset.reviewFamily ||
+          ''
         );
       var visible =
-        app.reviewKindFilter ===
+        app.reviewFamilyFilter ===
           'ALL' ||
-        kind ===
-          app.reviewKindFilter;
+        family ===
+          app.reviewFamilyFilter;
 
       node.classList.toggle(
         'hidden',
@@ -1216,6 +1314,11 @@
         shown !== 0
       );
     }
+
+    updateReviewHeaderStats_(
+      history,
+      shown
+    );
   }
 
 
@@ -1268,28 +1371,36 @@
     var reviewTitle =
       document.createElement('h3');
     reviewTitle.textContent =
-      '復習';
+      'Review';
     reviewTitleWrap.appendChild(
       reviewTitle
     );
 
-    if (
-      payload.review_history &&
-      payload.review_history.length
-    ) {
-      var count =
-        document.createElement('span');
-      count.className =
-        'home-history-count';
-      count.textContent =
-        String(
-          payload.review_history
-            .length
-        );
-      reviewTitleWrap.appendChild(
-        count
+    var count =
+      document.createElement('span');
+    count.className =
+      'home-history-count';
+    count.textContent =
+      String(
+        payload.review_history &&
+        payload.review_history.length ||
+        0
       );
-    }
+    reviewTitleWrap.appendChild(
+      count
+    );
+
+    var stabilityRate =
+      document.createElement('span');
+    stabilityRate.className =
+      'home-stability-rate';
+    stabilityRate.textContent =
+      '—';
+    stabilityRate.title =
+      'Confirmed Stability Coverage';
+    reviewTitleWrap.appendChild(
+      stabilityRate
+    );
 
     reviewHead.appendChild(
       reviewTitleWrap
@@ -1320,12 +1431,20 @@
         label: 'ALL'
       },
       {
-        key: 'LISTENING',
+        key: 'L',
         label: 'L'
       },
       {
-        key: 'WRITTEN',
+        key: 'W',
         label: 'W'
+      },
+      {
+        key: 'R',
+        label: 'R'
+      },
+      {
+        key: 'T',
+        label: 'T'
       }
     ].forEach(function (spec) {
       var button =
@@ -1341,20 +1460,20 @@
       button.classList.toggle(
         'active',
         spec.key ===
-          app.reviewKindFilter
+          app.reviewFamilyFilter
       );
       button.setAttribute(
         'aria-pressed',
         String(
           spec.key ===
-          app.reviewKindFilter
+          app.reviewFamilyFilter
         )
       );
 
       button.addEventListener(
         'click',
         function () {
-          app.reviewKindFilter =
+          app.reviewFamilyFilter =
             spec.key;
 
           Array.prototype
@@ -1517,6 +1636,10 @@
 
             item.dataset.reviewKind =
               kind;
+            item.dataset.reviewFamily =
+              reviewFamilyKeyForEntry_(
+                entry
+              );
             item.dataset.reviewLevel =
               String(reviewLevel);
             item.dataset.answeredAt =

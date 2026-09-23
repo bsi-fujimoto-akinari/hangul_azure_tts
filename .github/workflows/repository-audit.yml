@@ -9279,6 +9279,187 @@ jobs:
           );
           NODE
 
+      - name: Audit D6 Japanese dialogue presentation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          persistence = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
+
+          for needle in [
+              'function h3WrittenReviewApplyDialogueTranslationPresentation_(',
+              'function h3WrittenReviewApplyLearnerProjection_(',
+              'WRITTEN_REVIEW_DIALOGUE_TRANSLATION_COUNT_MISMATCH',
+              'H3-REVIEW-D6-DIALOGUE-JA-20260923-V1',
+              'return h3WrittenReviewApplyLearnerProjection_(',
+          ]:
+              if needle not in persistence:
+                  raise SystemExit(
+                      f'D6 Japanese dialogue presentation missing: {needle}'
+                  )
+
+          start = persistence.index(
+              'function h3WrittenReviewApplyDialogueTranslationPresentation_('
+          )
+          end = persistence.index(
+              'function getPersistentReviewPayload_(',
+              start
+          )
+          projection = persistence[start:end]
+
+          for forbidden in [
+              '.setValue(',
+              '.setValues(',
+              '.appendRow(',
+              '.deleteRow(',
+              'SpreadsheetApp',
+              'DriveApp',
+              '.createFile(',
+              '.setTrashed(',
+          ]:
+              if forbidden in projection:
+                  raise SystemExit(
+                      f'D6 presentation unexpectedly mutates storage: {forbidden}'
+                  )
+
+          for needle in [
+              '## 46. D6 Japanese dialogue presentation',
+              'issued Korean dialogue',
+              'Arrows are not used as substitutes for speaker changes',
+              'does not rewrite any already answered question surface',
+          ]:
+              if needle not in architecture:
+                  raise SystemExit(
+                      f'D6 presentation architecture missing: {needle}'
+                  )
+
+          print('D6 Japanese dialogue static boundary: PASS')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const context = {console};
+          vm.createContext(context);
+          vm.runInContext(
+            fs.readFileSync('WebAppReviewPersistence.js', 'utf8'),
+            context,
+            {filename:'WebAppReviewPersistence.js'}
+          );
+
+          function runCase(name, components, bodyJa, expected) {
+            const payload = {
+              mode:'REVIEW',
+              set_id:'TEST-' + name,
+              sections:[
+                {section:'D2', explanation:{body_ja:'x'}},
+                {section:'D3', explanation:{body_ja:'x'}},
+                {section:'D4', explanation:{body_ja:'x'}},
+                {section:'D5', explanation:{body_ja:'x'}},
+                {
+                  section:'D6',
+                  question_surface:{
+                    dialogue_components:components
+                  },
+                  explanation:{
+                    body_ja:bodyJa
+                  }
+                }
+              ],
+              technical:{locked:true}
+            };
+
+            context.__payload = payload;
+            const out = vm.runInContext(
+              'h3WrittenReviewApplyDialogueTranslationPresentation_(__payload)',
+              context
+            );
+
+            if (out.sections[4].explanation.body_ja !== expected) {
+              throw new Error(
+                name + ' dialogue presentation mismatch:\n' +
+                out.sections[4].explanation.body_ja
+              );
+            }
+            if (payload.sections[4].explanation.body_ja !== bodyJa) {
+              throw new Error(name + ' source payload mutated.');
+            }
+          }
+
+          runCase(
+            'blank-middle',
+            [
+              'A：어제 발표회에서 수진 씨가 정말 인상적이었어요.',
+              'B：(　　　　　　　　　　)',
+              'A：네. 목이 아픈데도 끝까지 발표를 마쳤잖아요.'
+            ],
+            '昨日の発表会でスジンさんが本当に印象的でした。\n→ はい。喉が痛いのに最後まで発表をやり遂げたじゃないですか。',
+            'A：昨日の発表会でスジンさんが本当に印象的でした。\nB：(　　　　　　　　　　)\nA：はい。喉が痛いのに最後まで発表をやり遂げたじゃないですか。'
+          );
+
+          runCase(
+            'blank-end',
+            [
+              'A：시험에 합격했다면서요?',
+              'B：네. 생각보다 좋은 결과가 나왔어요.',
+              'A：(　)'
+            ],
+            'A：試験に合格したそうですね？\n→ B：はい。思ったより良い結果が出ました。',
+            'A：試験に合格したそうですね？\nB：はい。思ったより良い結果が出ました。\nA：(　)'
+          );
+
+          runCase(
+            'four-turn',
+            [
+              'A：지하철역 근처에서 길을 잃었어요.',
+              'B：지금 어디예요?',
+              'A：편의점 앞이에요.',
+              'B：(　)'
+            ],
+            '地下鉄駅の近くで道に迷いました。\n→ 今どこですか？\n→ コンビニの前です。',
+            'A：地下鉄駅の近くで道に迷いました。\nB：今どこですか？\nA：コンビニの前です。\nB：(　)'
+          );
+
+          let failed = false;
+          context.__bad = {
+            mode:'REVIEW',
+            set_id:'TEST-bad',
+            sections:[{
+              section:'D6',
+              question_surface:{
+                dialogue_components:[
+                  'A：질문',
+                  'B：(　)',
+                  'A：답'
+                ]
+              },
+              explanation:{
+                body_ja:'質問だけ'
+              }
+            }]
+          };
+          try {
+            vm.runInContext(
+              'h3WrittenReviewApplyDialogueTranslationPresentation_(__bad)',
+              context
+            );
+          } catch (_err) {
+            failed = true;
+          }
+          if (!failed) {
+            throw new Error(
+              'D6 translation cardinality mismatch did not fail closed.'
+            );
+          }
+
+          console.log(
+            'D6 Japanese dialogue pure presentation audit: PASS'
+          );
+          NODE
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

@@ -780,3 +780,27 @@ Current exact corrections:
 Each correction accepts only the exact old text or the already-corrected text. Any
 unexpected source text fails closed rather than applying a fuzzy replacement.
 
+## 46. D6 Japanese dialogue presentation
+
+Contract ID: `H3-REVIEW-D6-DIALOGUE-JA-20260923-V1`.
+
+Written D6 Review keeps the issued Korean dialogue, choices, answer key, learner answer,
+score, and all persisted Review authority immutable. Only the learner-facing Japanese
+translation presentation is normalized after the existing authority and explanation
+overlay validation.
+
+The formatter uses the persisted `question_surface.dialogue_components` as the speaker
+and blank-position authority. Japanese translation lines are mapped in dialogue order;
+the blank turn is reinserted from the issued Korean structure. The learner-facing block
+therefore preserves the original speaker sequence, for example:
+
+```text
+A：昨日の発表会でスジンさんが本当に印象的でした。
+B：（　　　　　　　　　　）
+A：はい。喉が痛いのに最後まで発表をやり遂げたじゃないですか。
+```
+
+Arrows are not used as substitutes for speaker changes in D6 dialogue translations.
+Unexpected speaker structure or translation-line cardinality fails closed. This layer
+does not rewrite any already answered question surface or any historical source row.
+

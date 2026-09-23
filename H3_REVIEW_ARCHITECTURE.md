@@ -699,3 +699,47 @@ does not mutate learner history, score, answers, uncertainty, scheduler, queues,
 state, generation history, pointers, counters, source provenance, Review authority, or
 the nine completed 2R Review audio assets.
 
+## 44. E5-E 2T Review audio embedding
+
+Status: **active for Translation Review**.
+
+E5-E activates the E5-B binding contract for persisted Translation Review without
+changing the locked Translation Review payload/binding authority or any E4 audio asset.
+The exact validated Translation Review is first passed through the existing explanation
+overlay and is then cloned for learner-facing audio projection.
+
+The slot is always derived from each persisted question's actual role:
+
+```text
+slot = {normalized question.section}_Q{question.q_no}
+```
+
+Only P11/P12 and q_no 1/2 are valid. There is no assumption that one Translation set
+uses one section. Current persisted layouts are therefore resolved as:
+
+```text
+T001 -> P11_Q1 / P11_Q2
+T002 -> P12_Q1 / P12_Q2
+T003 -> P11_Q1 / P12_Q2
+```
+
+The resulting `audio_asset_key` and `audio_fallback_url` are attached only to the
+learner-facing question projection. The client Translation normalizer carries those
+fields into the two common persistent Review cards, which reuse the existing integrated
+inline play/pause + seekbar component.
+
+The WRITTEN Review media path now accepts `surface_family=TRANSLATION` as well as 5W
+and READING. Before bytes are returned, the server re-opens the exact locked Translation
+Review through `h3SurfaceReviewContextBySet_`, derives the allowlisted slots from that
+persisted question layout, resolves exactly one `(2T, SET_ID, SLOT_KEY)` sidecar row,
+and reads only that bound file.
+
+No filename fallback, cross-set fallback, cross-family fallback, P11/P12 substitution,
+or fixed-layout inference is allowed. Missing, duplicate, non-DONE, malformed, or
+role-mismatched bindings fail closed.
+
+E5-E does not change replay behavior and does not mutate learner history, score,
+answers, uncertainty, scheduler, queues, retest state, generation history, pointers,
+counters, source provenance, Review authority, explanations, or the six completed 2T
+Review audio assets.
+

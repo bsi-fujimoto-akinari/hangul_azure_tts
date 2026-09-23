@@ -817,6 +817,132 @@ function h3ReviewAudioApplyReadingBindings_(
 }
 
 
+function h3ReviewAudioApplyTranslationBindings_(
+  payload,
+  bindings
+) {
+  if (
+    !payload ||
+    payload.mode !== 'REVIEW' ||
+    payload.kind !== 'WRITTEN' ||
+    payload.surface_family !== 'TRANSLATION' ||
+    !payload.set_id ||
+    !Array.isArray(payload.questions) ||
+    payload.questions.length !== 2 ||
+    !Array.isArray(bindings) ||
+    bindings.length !== 2
+  ) {
+    throw new Error(
+      'REVIEW_AUDIO_2T_PROJECTION_INVALID'
+    );
+  }
+
+  var out =
+    JSON.parse(
+      JSON.stringify(payload)
+    );
+  var seen = {};
+  var questionCount = 0;
+
+  bindings.forEach(
+    function (binding) {
+      if (
+        !binding ||
+        binding.target !== 'QUESTION' ||
+        binding.surface_family !==
+          'TRANSLATION' ||
+        binding.sidecar_family !== '2T' ||
+        binding.set_id !==
+          String(payload.set_id) ||
+        !Number.isInteger(
+          binding.target_index
+        ) ||
+        binding.target_index < 0 ||
+        binding.target_index >=
+          out.questions.length ||
+        !Number.isInteger(
+          binding.q_no
+        ) ||
+        (
+          binding.q_no !== 1 &&
+          binding.q_no !== 2
+        ) ||
+        !binding.slot_key ||
+        binding.asset_key !==
+          binding.slot_key ||
+        !binding.audio_url
+      ) {
+        throw new Error(
+          'REVIEW_AUDIO_2T_BINDING_INVALID'
+        );
+      }
+
+      if (seen[binding.slot_key]) {
+        throw new Error(
+          'REVIEW_AUDIO_2T_BINDING_DUPLICATE:' +
+            binding.slot_key
+        );
+      }
+      seen[binding.slot_key] = true;
+
+      var question =
+        out.questions[
+          binding.target_index
+        ];
+      var qNo =
+        Number(
+          question &&
+          question.q_no
+        );
+      var section =
+        String(
+          question &&
+          (
+            question.section ||
+            question.section_key
+          ) ||
+          ''
+        ).replace(/^H3-/, '');
+      var expectedSlot =
+        section + '_Q' + qNo;
+
+      if (
+        !question ||
+        (
+          section !== 'P11' &&
+          section !== 'P12'
+        ) ||
+        qNo !== binding.q_no ||
+        expectedSlot !==
+          binding.slot_key
+      ) {
+        throw new Error(
+          'REVIEW_AUDIO_2T_QUESTION_TARGET_MISMATCH:' +
+            binding.slot_key
+        );
+      }
+
+      question.audio_asset_key =
+        binding.asset_key;
+      question.audio_fallback_url =
+        binding.audio_url;
+      questionCount += 1;
+    }
+  );
+
+  if (questionCount !== 2) {
+    throw new Error(
+      'REVIEW_AUDIO_2T_BINDING_CARDINALITY'
+    );
+  }
+
+  out.review_audio_binding_contract_id =
+    H3_REVIEW_AUDIO_BINDING_CONTRACT_ID_;
+
+  return out;
+}
+
+
 function h3ReviewProviders_() {
   var providers = [
     h3ListeningReviewProvider_()

@@ -1258,9 +1258,20 @@ function h3SurfaceReviewOpenForLearner_(
     );
   }
 
-  return h3TranslationReviewApplyExplanationOverlay_(
-    context.payload,
-    context.txn.locked
+  var translationPayload =
+    h3TranslationReviewApplyExplanationOverlay_(
+      context.payload,
+      context.txn.locked
+    );
+  var translationBindings =
+    h3ReviewAudioBindingResolveAll_(
+      spreadsheet,
+      translationPayload
+    );
+
+  return h3ReviewAudioApplyTranslationBindings_(
+    translationPayload,
+    translationBindings
   );
 }
 
@@ -1268,13 +1279,21 @@ function h3SurfaceReviewOpenForLearner_(
 function h3SurfaceReviewMedia_(
   request
 ) {
+  var family =
+    String(
+      request &&
+      request.surface_family ||
+      ''
+    );
+
   if (
     !request ||
     request.schema !==
       'H3_WEB_MEDIA_REQUEST_V1' ||
     request.mode !== 'REVIEW' ||
     request.review_kind !== 'WRITTEN' ||
-    request.surface_family !== 'READING' ||
+    ['READING', 'TRANSLATION']
+      .indexOf(family) < 0 ||
     !request.set_id ||
     !request.asset_key ||
     request.txn_id ||
@@ -1296,7 +1315,7 @@ function h3SurfaceReviewMedia_(
   var context =
     h3SurfaceReviewContextBySet_(
       spreadsheet,
-      'READING',
+      family,
       setId
     );
   var expected =
@@ -1321,16 +1340,21 @@ function h3SurfaceReviewMedia_(
   var binding =
     h3ReviewAudioBindingResolve_(
       spreadsheet,
-      'READING',
+      family,
       setId,
       assetKey
     );
+  var expectedSidecarFamily =
+    family === 'READING'
+      ? '2R'
+      : '2T';
 
   if (
     binding.asset_key !==
       expected[0].asset_key ||
     binding.set_id !== setId ||
-    binding.sidecar_family !== '2R'
+    binding.sidecar_family !==
+      expectedSidecarFamily
   ) {
     throw new Error(
       'SURFACE_REVIEW_AUDIO_BINDING_MISMATCH:' +
@@ -1352,7 +1376,7 @@ function h3SurfaceReviewMedia_(
     mode: 'REVIEW',
     read_only: true,
     provider_kind: 'WRITTEN',
-    surface_family: 'READING',
+    surface_family: family,
     set_id: setId,
     asset_key: assetKey,
     data_uri:

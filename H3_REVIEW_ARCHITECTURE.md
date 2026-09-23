@@ -547,3 +547,72 @@ authorities remain immutable and any historical correction must use a validated,
 source-bound overlay/display layer. No learner result, Review identity, source binding,
 scheduler, skill_queue, retest state, counter, or pointer may be changed merely to
 satisfy explanation style.
+
+## 41. E5 Review audio binding contract
+
+Contract ID: `H3-REVIEW-AUDIO-BINDING-20260923-V1`.
+
+Status at E5-B: **binding contract ready; learner-facing embedding is not active yet**.
+E5-B adds only read-only binding/validation helpers. It does not attach audio keys to
+Review payloads, change the media route, or alter the existing inline audio component.
+
+The E4 sidecar `review_audio_asset_v1` is the persisted Review-audio asset authority
+for the E4 families only after the corresponding persistent Review/source authority has
+already passed its existing validation. The exact lookup identity is:
+
+```text
+(SURFACE_FAMILY, SET_ID, SLOT_KEY)
+```
+
+No filename-based, nearest-set, cross-family, cross-set, or first-row fallback is
+permitted. A lookup must resolve exactly one row. The row must retain the exact
+17-column schema, `SCHEMA=H3_REVIEW_AUDIO_ASSET_V1`, `STATUS=DONE`, empty
+`ERROR`, `GENERATOR_VERSION=review-audio-v2-1200ms`, a non-empty file ID/URL,
+a valid audio-text SHA-256, and the canonical family folder. Missing, duplicate, stale,
+wrong-family, wrong-folder, malformed, or non-DONE rows fail closed.
+
+Review surface to sidecar-family mapping is fixed:
+
+```text
+5W          -> 5W
+READING     -> 2R
+TRANSLATION -> 2T
+```
+
+5L is intentionally excluded from this E5 binding contract and continues to use its
+existing validated Listening Review media path.
+
+Slot derivation is deterministic from the already validated Review payload:
+
+```text
+5W:
+  D2 -> D2
+  D3 -> D3
+  D4 -> D4
+  D5 -> D5
+  D6 -> D6
+
+READING:
+  shared passage -> PASSAGE_COMPLETE
+  question q_no=1 -> Q1_CHOICES
+  question q_no=2 -> Q2_CHOICES
+
+TRANSLATION:
+  slot = {normalized section}_Q{q_no}
+  section is exactly P11 or P12
+  examples:
+    T001 actual layout -> P11_Q1, P11_Q2
+    mixed layout may  -> P11_Q1, P12_Q2
+```
+
+The client-facing logical `asset_key` for these future Review integrations is the
+validated `SLOT_KEY`; file ID and URL are resolved server-side from the exact tuple and
+are never selectors. E5-B exposes a read-only expected-binding plan and an exact
+sidecar resolver, but deliberately does not inject them into 5W/2R/2T Review payloads.
+That activation belongs to E5-C / E5-D / E5-E respectively.
+
+The binding layer must never write or regenerate audio, rewrite locked Review payloads,
+or mutate learner history, answers, uncertainty, score, scheduler, skill_queue, retest
+state, generation history, pointers, counters, committed Reading/Translation history,
+source provenance, or existing audio file identities.
+

@@ -343,9 +343,13 @@
                 'READY' &&
               (
                 route.route_kind ===
-                  'FAMILY' ||
-                route.route_kind ===
-                  'CURRENT_SET'
+                  'CURRENT_SET' ||
+                (
+                  route.route_kind ===
+                    'FAMILY' &&
+                  route.readiness_state ===
+                    'READY'
+                )
               ) &&
               family !== '—';
 
@@ -406,8 +410,12 @@
 
                     if (
                       result &&
-                      result.client_action ===
-                        'OPEN_CURRENT' &&
+                      [
+                        'OPEN_CURRENT',
+                        'OPEN_ISSUED'
+                      ].indexOf(
+                        result.client_action
+                      ) >= 0 &&
                       result.render_request
                     ) {
                       document.dispatchEvent(

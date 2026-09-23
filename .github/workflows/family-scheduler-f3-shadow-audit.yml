@@ -175,7 +175,7 @@ jobs:
                   raise SystemExit(f"live resolver must remain pure/unwired: {token}")
 
           preview_start = fs.index("function h3FamilySchedulerLiveResolverPreview()")
-          preview_end = fs.index("function h3FamilySchedulerShadowTick()", preview_start)
+          preview_end = fs.index("function h3FamilySchedulerIssueRoutePreview()", preview_start)
           preview = fs[preview_start:preview_end]
           for token in [
               "appendRow",
@@ -312,7 +312,7 @@ jobs:
                   raise SystemExit(f"issue routing bridge must not execute issue/submit writes: {token}")
 
           preview_start = fs.index("function h3FamilySchedulerIssueRoutePreview()")
-          preview_end = fs.index("function h3FamilySchedulerShadowTick()", preview_start)
+          preview_end = fs.index("function h3FamilySchedulerHomeNext()", preview_start)
           preview = fs[preview_start:preview_end]
           for token in [
               "appendRow",

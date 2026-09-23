@@ -1373,6 +1373,226 @@ function h3WrittenReviewApplyLearnerTextCorrections_(
 }
 
 
+function h3WrittenReviewDialogueBlank_(
+  text
+) {
+  return /^[（(][\s　]*[）)]$/.test(
+    String(text || '').trim()
+  );
+}
+
+
+function h3WrittenReviewDialogueLine_(
+  text
+) {
+  var match =
+    String(text || '').trim().match(
+      /^([AB])\s*[:：]\s*(.*)$/
+    );
+
+  if (!match) {
+    throw new Error(
+      'WRITTEN_REVIEW_DIALOGUE_COMPONENT_INVALID'
+    );
+  }
+
+  return {
+    speaker: match[1],
+    content: match[2]
+  };
+}
+
+
+function h3WrittenReviewDialogueJaLines_(
+  text
+) {
+  return String(text || '')
+    .split(/\r?\n/)
+    .map(
+      function (line) {
+        return String(line || '')
+          .replace(/^\s*→\s*/, '')
+          .trim();
+      }
+    )
+    .filter(
+      function (line) {
+        return Boolean(line);
+      }
+    );
+}
+
+
+function h3WrittenReviewApplyDialogueTranslationPresentation_(
+  payload
+) {
+  if (
+    !payload ||
+    payload.mode !== 'REVIEW' ||
+    !Array.isArray(payload.sections)
+  ) {
+    return payload;
+  }
+
+  var matches =
+    payload.sections.filter(
+      function (part) {
+        return (
+          part &&
+          part.section === 'D6'
+        );
+      }
+    );
+
+  if (matches.length === 0) {
+    return payload;
+  }
+
+  if (matches.length !== 1) {
+    throw new Error(
+      'WRITTEN_REVIEW_DIALOGUE_SECTION_COUNT_INVALID'
+    );
+  }
+
+  var part =
+    matches[0];
+  var components =
+    part.question_surface &&
+    Array.isArray(
+      part.question_surface
+        .dialogue_components
+    )
+      ? part.question_surface
+          .dialogue_components
+      : [];
+  var explanation =
+    part.explanation;
+
+  if (
+    components.length < 2 ||
+    !explanation ||
+    typeof explanation !== 'object' ||
+    !String(
+      explanation.body_ja || ''
+    )
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_DIALOGUE_PRESENTATION_SOURCE_MISSING'
+    );
+  }
+
+  var parsed =
+    components.map(
+      h3WrittenReviewDialogueLine_
+    );
+  var jaLines =
+    h3WrittenReviewDialogueJaLines_(
+      explanation.body_ja
+    );
+  var translated = [];
+
+  jaLines.forEach(
+    function (line) {
+      var match =
+        line.match(
+          /^([AB])\s*[:：]\s*(.*)$/
+        );
+      var content =
+        match
+          ? match[2]
+          : line;
+
+      if (
+        !h3WrittenReviewDialogueBlank_(
+          content
+        )
+      ) {
+        translated.push(content);
+      }
+    }
+  );
+
+  var needed =
+    parsed.filter(
+      function (line) {
+        return !h3WrittenReviewDialogueBlank_(
+          line.content
+        );
+      }
+    ).length;
+
+  if (translated.length !== needed) {
+    throw new Error(
+      'WRITTEN_REVIEW_DIALOGUE_TRANSLATION_COUNT_MISMATCH'
+    );
+  }
+
+  var index = 0;
+  var formatted =
+    parsed.map(
+      function (line) {
+        if (
+          h3WrittenReviewDialogueBlank_(
+            line.content
+          )
+        ) {
+          return (
+            line.speaker +
+            '：' +
+            line.content
+          );
+        }
+
+        var value =
+          translated[index];
+        index += 1;
+
+        return (
+          line.speaker +
+          '：' +
+          value
+        );
+      }
+    ).join('\n');
+
+  var out =
+    JSON.parse(
+      JSON.stringify(payload)
+    );
+  var outPart =
+    out.sections.filter(
+      function (item) {
+        return (
+          item &&
+          item.section === 'D6'
+        );
+      }
+    )[0];
+
+  outPart.explanation.body_ja =
+    formatted;
+
+  out.technical =
+    out.technical || {};
+  out.technical
+    .dialogue_translation_format_id =
+      'H3-REVIEW-D6-DIALOGUE-JA-20260923-V1';
+
+  return out;
+}
+
+
+function h3WrittenReviewApplyLearnerProjection_(
+  payload
+) {
+  return h3WrittenReviewApplyDialogueTranslationPresentation_(
+    h3WrittenReviewApplyLearnerTextCorrections_(
+      payload
+    )
+  );
+}
+
+
 function getPersistentReviewPayload_(
   request
 ) {
@@ -4942,7 +5162,7 @@ function getWrittenPersistentReviewPayload_(
         spreadsheet,
         setId
       );
-    return h3WrittenReviewApplyLearnerTextCorrections_(
+    return h3WrittenReviewApplyLearnerProjection_(
       h3WrittenReviewApplyAnsweredAtBackfill_(
         spreadsheet,
         h3WrittenReviewApplyExplanationOverlay_(
@@ -4960,7 +5180,7 @@ function getWrittenPersistentReviewPayload_(
       spreadsheet,
       setId
     );
-  return h3WrittenReviewApplyLearnerTextCorrections_(
+  return h3WrittenReviewApplyLearnerProjection_(
     h3WrittenReviewApplyAnsweredAtBackfill_(
       spreadsheet,
       h3WrittenReviewApplyExplanationOverlay_(

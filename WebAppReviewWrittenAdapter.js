@@ -311,7 +311,8 @@ function h3WrittenReviewMedia_(
   }
 
   if (
-    request.surface_family === 'READING'
+    request.surface_family === 'READING' ||
+    request.surface_family === 'TRANSLATION'
   ) {
     if (
       typeof h3SurfaceReviewMedia_ !==

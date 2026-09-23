@@ -9171,34 +9171,39 @@ jobs:
             throw new Error('5L source payload was mutated.');
           }
 
-          const writtenCases = [
+          const writtenPayloads = [
             {
               set_id:'H3-20260914-01',
-              q:4,
-              old:'・友達とした約束は必ず（　）なければなりません。\n→ ・人の秘密はきちんと（　）なければなりません。',
-              next:'・友達との約束は必ず（　）なければなりません。\n→ ・人の秘密はきちんと（　）なければなりません。'
+              oldByQ:{
+                4:'・友達とした約束は必ず（　）なければなりません。\n→ ・人の秘密はきちんと（　）なければなりません。'
+              },
+              nextByQ:{
+                4:'・友達との約束は必ず（　）なければなりません。\n→ ・人の秘密はきちんと（　）なければなりません。'
+              }
             },
             {
               set_id:'H3-20260914-02',
-              q:3,
-              old:'この映画は思ったより面白くて、時間が経つのも分かりませんでした。',
-              next:'この映画は思ったより面白くて、時間がたつのも忘れていました。'
-            },
-            {
-              set_id:'H3-20260914-02',
-              q:4,
-              old:'・韓国文化に（　）が多いです。\n→ ・その問題にはあまり（　）がありません。',
-              next:'・韓国文化への（　）が高いです。\n→ ・その問題にはあまり（　）がありません。'
+              oldByQ:{
+                3:'この映画は思ったより面白くて、時間が経つのも分かりませんでした。',
+                4:'・韓国文化に（　）が多いです。\n→ ・その問題にはあまり（　）がありません。'
+              },
+              nextByQ:{
+                3:'この映画は思ったより面白くて、時間がたつのも忘れていました。',
+                4:'・韓国文化への（　）が高いです。\n→ ・その問題にはあまり（　）がありません。'
+              }
             },
             {
               set_id:'H3-20260917-01',
-              q:3,
-              old:'祭りの入口に立てた大きな案内板は、遠くからでも［一目で目に入りました］。',
-              next:'祭りの入口に立てた大きな案内板は、遠くからでも［ぱっと目に入りました］。'
+              oldByQ:{
+                3:'祭りの入口に立てた大きな案内板は、遠くからでも［一目で目に入りました］。'
+              },
+              nextByQ:{
+                3:'祭りの入口に立てた大きな案内板は、遠くからでも［ぱっと目に入りました］。'
+              }
             }
           ];
 
-          for (const c of writtenCases) {
+          for (const c of writtenPayloads) {
             const payload = {
               mode:'REVIEW',
               set_id:c.set_id,
@@ -9206,7 +9211,9 @@ jobs:
                 n => ({
                   section:'D' + (n + 1),
                   explanation:{
-                    body_ja:n === c.q ? c.old : 'unchanged-' + n
+                    body_ja:
+                      c.oldByQ[n] ||
+                      'unchanged-' + n
                   }
                 })
               ),
@@ -9217,21 +9224,27 @@ jobs:
               'h3WrittenReviewApplyLearnerTextCorrections_(__written)',
               context
             );
-            if (
-              corrected.sections[c.q - 1].explanation.body_ja !==
-              c.next
-            ) {
-              throw new Error(
-                '5W learner-facing correction mismatch: ' + c.set_id + ':Q' + c.q
-              );
-            }
-            if (
-              payload.sections[c.q - 1].explanation.body_ja !==
-              c.old
-            ) {
-              throw new Error(
-                '5W source payload was mutated: ' + c.set_id + ':Q' + c.q
-              );
+
+            for (const qNoText of Object.keys(c.nextByQ)) {
+              const qNo = Number(qNoText);
+              if (
+                corrected.sections[qNo - 1].explanation.body_ja !==
+                c.nextByQ[qNo]
+              ) {
+                throw new Error(
+                  '5W learner-facing correction mismatch: ' +
+                    c.set_id + ':Q' + qNo
+                );
+              }
+              if (
+                payload.sections[qNo - 1].explanation.body_ja !==
+                c.oldByQ[qNo]
+              ) {
+                throw new Error(
+                  '5W source payload was mutated: ' +
+                    c.set_id + ':Q' + qNo
+                );
+              }
             }
           }
 

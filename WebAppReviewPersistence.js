@@ -1187,6 +1187,192 @@ function h3ReviewValidateRequest_(request) {
   return txnId;
 }
 
+function h3ReviewApplyListeningLearnerTextCorrections_(
+  payload
+) {
+  if (
+    !payload ||
+    payload.mode !== 'REVIEW' ||
+    !payload.set_id ||
+    !Array.isArray(payload.sections)
+  ) {
+    return payload;
+  }
+
+  if (
+    String(payload.set_id) !==
+      'H3-20260919-L03'
+  ) {
+    return payload;
+  }
+
+  var out =
+    JSON.parse(
+      JSON.stringify(payload)
+    );
+  var section =
+    out.sections.filter(
+      function (item) {
+        return (
+          item &&
+          item.section === 'K3'
+        );
+      }
+    );
+
+  if (section.length !== 1) {
+    throw new Error(
+      'LISTENING_REVIEW_TEXT_CORRECTION_TARGET_INVALID'
+    );
+  }
+
+  var explanation =
+    section[0].explanation;
+  var oldText =
+    '最近運動していないので、体がしょっちゅう重く感じる気がします。';
+  var newText =
+    '最近運動していないので、なんだか体が重い気がします。';
+
+  if (
+    !explanation ||
+    typeof explanation !== 'object'
+  ) {
+    throw new Error(
+      'LISTENING_REVIEW_TEXT_CORRECTION_EXPLANATION_MISSING'
+    );
+  }
+
+  if (
+    explanation.body_ja === oldText
+  ) {
+    explanation.body_ja = newText;
+  } else if (
+    explanation.body_ja !== newText
+  ) {
+    throw new Error(
+      'LISTENING_REVIEW_TEXT_CORRECTION_SOURCE_MISMATCH'
+    );
+  }
+
+  out.technical =
+    out.technical || {};
+  out.technical
+    .learner_text_correction_id =
+      'H3-REVIEW-JA-QUALITY-20260923-V1';
+
+  return out;
+}
+
+
+function h3WrittenReviewApplyLearnerTextCorrections_(
+  payload
+) {
+  if (
+    !payload ||
+    payload.mode !== 'REVIEW' ||
+    !payload.set_id ||
+    !Array.isArray(payload.sections)
+  ) {
+    return payload;
+  }
+
+  var corrections = {
+    'H3-20260914-01': {
+      4: {
+        old:
+          '・友達とした約束は必ず（　）なければなりません。\n→ ・人の秘密はきちんと（　）なければなりません。',
+        next:
+          '・友達との約束は必ず（　）なければなりません。\n→ ・人の秘密はきちんと（　）なければなりません。'
+      }
+    },
+    'H3-20260914-02': {
+      3: {
+        old:
+          'この映画は思ったより面白くて、時間が経つのも分かりませんでした。',
+        next:
+          'この映画は思ったより面白くて、時間がたつのも忘れていました。'
+      },
+      4: {
+        old:
+          '・韓国文化に（　）が多いです。\n→ ・その問題にはあまり（　）がありません。',
+        next:
+          '・韓国文化への（　）が高いです。\n→ ・その問題にはあまり（　）がありません。'
+      }
+    },
+    'H3-20260917-01': {
+      3: {
+        old:
+          '祭りの入口に立てた大きな案内板は、遠くからでも［一目で目に入りました］。',
+        next:
+          '祭りの入口に立てた大きな案内板は、遠くからでも［ぱっと目に入りました］。'
+      }
+    }
+  };
+  var byQuestion =
+    corrections[
+      String(payload.set_id)
+    ];
+
+  if (!byQuestion) {
+    return payload;
+  }
+
+  var out =
+    JSON.parse(
+      JSON.stringify(payload)
+    );
+
+  Object.keys(byQuestion).forEach(
+    function (qNoText) {
+      var qNo =
+        Number(qNoText);
+      var section =
+        out.sections[qNo - 1];
+      var correction =
+        byQuestion[qNoText];
+
+      if (
+        !section ||
+        !section.explanation ||
+        typeof section.explanation !==
+          'object'
+      ) {
+        throw new Error(
+          'WRITTEN_REVIEW_TEXT_CORRECTION_TARGET_INVALID:' +
+            String(payload.set_id) +
+            ':Q' + qNo
+        );
+      }
+
+      if (
+        section.explanation.body_ja ===
+          correction.old
+      ) {
+        section.explanation.body_ja =
+          correction.next;
+      } else if (
+        section.explanation.body_ja !==
+          correction.next
+      ) {
+        throw new Error(
+          'WRITTEN_REVIEW_TEXT_CORRECTION_SOURCE_MISMATCH:' +
+            String(payload.set_id) +
+            ':Q' + qNo
+        );
+      }
+    }
+  );
+
+  out.technical =
+    out.technical || {};
+  out.technical
+    .learner_text_correction_id =
+      'H3-REVIEW-JA-QUALITY-20260923-V1';
+
+  return out;
+}
+
+
 function getPersistentReviewPayload_(
   request
 ) {
@@ -1194,8 +1380,10 @@ function getPersistentReviewPayload_(
     h3ReviewValidateRequest_(
       request
     );
-  return buildPersistentReviewPayload_(
-    txnId
+  return h3ReviewApplyListeningLearnerTextCorrections_(
+    buildPersistentReviewPayload_(
+      txnId
+    )
   );
 }
 
@@ -4754,13 +4942,15 @@ function getWrittenPersistentReviewPayload_(
         spreadsheet,
         setId
       );
-    return h3WrittenReviewApplyAnsweredAtBackfill_(
-      spreadsheet,
-      h3WrittenReviewApplyExplanationOverlay_(
+    return h3WrittenReviewApplyLearnerTextCorrections_(
+      h3WrittenReviewApplyAnsweredAtBackfill_(
         spreadsheet,
-        productionContext.payload,
-        'WRITTEN_PRODUCTION_WEB',
-        productionContext.reviewSha256
+        h3WrittenReviewApplyExplanationOverlay_(
+          spreadsheet,
+          productionContext.payload,
+          'WRITTEN_PRODUCTION_WEB',
+          productionContext.reviewSha256
+        )
       )
     );
   }
@@ -4770,15 +4960,17 @@ function getWrittenPersistentReviewPayload_(
       spreadsheet,
       setId
     );
-  return h3WrittenReviewApplyAnsweredAtBackfill_(
-    spreadsheet,
-    h3WrittenReviewApplyExplanationOverlay_(
+  return h3WrittenReviewApplyLearnerTextCorrections_(
+    h3WrittenReviewApplyAnsweredAtBackfill_(
       spreadsheet,
-      h3WrittenReviewNormalizePersistent_(
-        legacyContext
-      ),
-      legacyContext.sourceMode,
-      legacyContext.reconstructionSha256
+      h3WrittenReviewApplyExplanationOverlay_(
+        spreadsheet,
+        h3WrittenReviewNormalizePersistent_(
+          legacyContext
+        ),
+        legacyContext.sourceMode,
+        legacyContext.reconstructionSha256
+      )
     )
   );
 }

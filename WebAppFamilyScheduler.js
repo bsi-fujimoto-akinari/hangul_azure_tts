@@ -1100,7 +1100,7 @@ function h3FsSyncCommittedHistory_(ss,level,family,setId) {
   };
 }
 
-function h3FsAppendCommitObserved_(ss,level,prior,commit,family,selectionSource) {
+function h3FsAppendCommitObserved_(ss,level,prior,commit,family,selectionSource,schedulerApplied) {
   var sh=ss.getSheetByName(H3_FS_LOG_SHEET_);
   if(!sh)throw new Error('FAMILY_SCHEDULER_LOG_SHEET_MISSING');
   var suffix=h3FsSha_(
@@ -1118,7 +1118,7 @@ function h3FsAppendCommitObserved_(ss,level,prior,commit,family,selectionSource)
     'COMMIT_OBSERVED',
     new Date().toISOString(),
     level,
-    'SHADOW',
+    schedulerApplied===true?'LIMITED_LIVE':'SHADOW',
     Number(prior.GLOBAL_SET_CLOCK||0),
     String(prior.SNAPSHOT_SHA256||''),
     String(prior.NEXT_ACTION||''),
@@ -1129,12 +1129,14 @@ function h3FsAppendCommitObserved_(ss,level,prior,commit,family,selectionSource)
     '',
     family,
     selectionSource||'LEGACY_TRIGGER',
-    false,
+    schedulerApplied===true,
     override,
     commit.set_id,
     commit.commit_key,
     'COMMITTED',
-    'F4 SHADOW observation; actual family did not originate from scheduler.'
+    schedulerApplied===true
+      ? 'LIMITED LIVE observation; actual family originated from Family Scheduler.'
+      : 'F4 SHADOW observation; actual family did not originate from scheduler.'
   ]);
   SpreadsheetApp.flush();
   return {
@@ -1143,6 +1145,22 @@ function h3FsAppendCommitObserved_(ss,level,prior,commit,family,selectionSource)
     actual_family:family,
     override_of_recommendation:override
   };
+}
+
+function h3FsIssueAppliedForSet_(ss,level,setId) {
+  var rows=h3FsLogRows_(ss,level),found=[];
+  rows.forEach(function(x){
+    if(
+      String(x.EVENT_KIND||'')==='ISSUE_APPLIED' &&
+      String(x.MODE||'')==='LIMITED_LIVE' &&
+      String(x.CURRENT_SET_ID||'')===String(setId||'') &&
+      String(x.SCHEDULER_APPLIED).toUpperCase()==='TRUE'
+    )found.push(x);
+  });
+  if(found.length>1){
+    throw new Error('FAMILY_SCHEDULER_DUPLICATE_ISSUE_APPLIED:'+setId);
+  }
+  return found.length?found[0]:null;
 }
 
 function h3FsObserveCommitted_(ss,level,family,setId,selectionSource) {
@@ -1177,8 +1195,15 @@ function h3FsObserveCommitted_(ss,level,family,setId,selectionSource) {
   var observed=h3FsCommitObservedByKey_(ss,level,commit.commit_key);
   var observedResult;
   if(!observed){
+    var appliedIssue=h3FsIssueAppliedForSet_(ss,level,setId);
     observedResult=h3FsAppendCommitObserved_(
-      ss,level,prior,commit,family,selectionSource
+      ss,
+      level,
+      prior,
+      commit,
+      family,
+      appliedIssue?'FAMILY_SCHEDULER':selectionSource,
+      !!appliedIssue
     );
   } else {
     observedResult={
@@ -1296,7 +1321,14 @@ function h3FamilySchedulerF4Status() {
   var commits=rows.filter(function(x){
     return (
       String(x.EVENT_KIND||'')==='COMMIT_OBSERVED' &&
+      String(x.MODE||'')==='SHADOW' &&
       Number(x.GLOBAL_SET_CLOCK)>=H3_FS_F4_START_CLOCK_
+    );
+  });
+  var liveCommits=rows.filter(function(x){
+    return (
+      String(x.EVENT_KIND||'')==='COMMIT_OBSERVED' &&
+      String(x.MODE||'')==='LIMITED_LIVE'
     );
   });
   var evaluations=rows.filter(function(x){
@@ -1361,6 +1393,7 @@ function h3FamilySchedulerF4Status() {
     unresolved_prospective_obligations:unresolved,
     missed_global_service_deadlines:missed,
     scheduler_applied_true_count:appliedViolations,
+    limited_live_commit_count:liveCommits.length,
     evaluation_count:evaluations.length
   };
 }
@@ -1434,7 +1467,8 @@ function h3FamilySchedulerHomeNext() {
       result_status:String(route.result_status||''),
       client_action:'NONE',
       render_request:null,
-      issue_event_id:''
+      issue_event_id:'',
+      issue_log_status:''
     };
 
     if(route.result_status==='BLOCKED'){
@@ -1480,7 +1514,13 @@ function h3FamilySchedulerHomeNext() {
       out.requires_prepare=false;
       out.client_action='OPEN_ISSUED';
       out.render_request=issued.render_request;
-      out.issue_event_id=h3FsAppendIssueApplied_(ss,evaluation,issued);
+      try {
+        out.issue_event_id=h3FsAppendIssueApplied_(ss,evaluation,issued);
+        out.issue_log_status='RECORDED';
+      } catch(_logErr) {
+        out.issue_event_id='';
+        out.issue_log_status='RECOVERY_REQUIRED';
+      }
       return out;
     }
 
@@ -1824,10 +1864,11 @@ function h3FsAppendIssueApplied_(ss,evaluation,issued) {
   h3FsRequire_(t,H3_FS_LOG_HEADERS_,H3_FS_LOG_SHEET_);
   var prior=h3FsEvaluationAtClock_(ss,'3級',evaluation.global_set_clock);
   var decisionId=prior?String(prior.DECISION_ID||''):'';
+  var snapshotSha=prior?String(prior.SNAPSHOT_SHA256||''):'';
   var eventId='H3FS-I-'+Utilities.getUuid();
   sh.appendRow([
     eventId,decisionId,'ISSUE_APPLIED',new Date().toISOString(),'3級','LIMITED_LIVE',
-    evaluation.global_set_clock,'',evaluation.next_action,evaluation.recommended_family,
+    evaluation.global_set_clock,snapshotSha,evaluation.next_action,evaluation.recommended_family,
     evaluation.primary_reason,JSON.stringify(evaluation.candidate_order),
     JSON.stringify(evaluation.family_metrics),issued.set_id,issued.family,
     'FAMILY_SCHEDULER',true,false,'','',

@@ -596,21 +596,6 @@
     padding-right: max(10px, env(safe-area-inset-right));
     padding-bottom: calc(20px + env(safe-area-inset-bottom));
   }
-  /*
-   * Apps Script /dev can expose a desktop-width iframe on iPhone and then
-   * scale it through the mobile viewport emulation above. In that mode the
-   * visible right edge consumes one gutter. Keep the existing left gutter as
-   * the reference and reserve the same amount at the shell's right edge.
-   */
-  body.mobile-device.mobile-viewport-emulated .shell {
-    width: calc(
-      100% - max(10px, env(safe-area-inset-left))
-    );
-    max-width: calc(
-      100% - max(10px, env(safe-area-inset-left))
-    );
-  }
-
   body.mobile-device .page-header {
     margin-bottom: 8px;
   }
@@ -806,7 +791,18 @@
 
   .home {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     gap: 12px;
+  }
+
+  .home > *,
+  .home-card,
+  .review-library {
+    min-width: 0;
+    max-width: 100%;
   }
 
   .home-hero,
@@ -921,6 +917,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    min-width: 0;
+    max-width: 100%;
     margin: 10px -2px 0;
     padding: 8px 2px;
     background: rgba(255,255,255,.96);
@@ -1286,31 +1284,31 @@
     }
 
     .review-controls-sticky {
+      display: grid;
+      grid-template-columns:
+        minmax(0, 1fr)
+        minmax(0, .78fr);
       align-items: center;
-      flex-direction: row;
-      justify-content: space-between;
       gap: 8px;
       padding-top: 7px;
       padding-bottom: 7px;
     }
 
-    .review-history-filters {
-      flex: 0 0 auto;
+    .review-history-filters,
+    .review-history-sorts {
+      width: 100%;
+      min-width: 0;
     }
 
-    .review-history-sorts {
-      flex: 0 1 auto;
+    .review-filter-button,
+    .review-sort-button {
+      flex: 1 1 0;
       min-width: 0;
     }
 
     .review-filter-button {
-      min-width: 34px;
       padding-left: 8px;
       padding-right: 8px;
-    }
-
-    .review-filter-button:first-child {
-      min-width: 46px;
     }
 
     .review-sort-button {

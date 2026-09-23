@@ -6,6 +6,8 @@ var H3_FS_FAMILIES_ = ['L','W','R','T'];
 var H3_FS_TARGET_ = {L:0.40,W:0.36,R:0.12,T:0.12};
 var H3_FS_SET_SIZE_ = {L:5,W:5,R:2,T:2};
 var H3_FS_CAP_ = {L:6,W:6,R:7,T:7};
+var H3_FS_F4_START_CLOCK_ = 27;
+var H3_FS_F4_TARGET_COMMITS_ = 20;
 var H3_FS_STATE_HEADERS_ = [
   'LEVEL','STATE_SCOPE','SCHEMA_VERSION','MODE','ACTIVATED_AT',
   'ACTIVATION_COMMIT_KEY','GLOBAL_SET_CLOCK','LAST_PROCESSED_COMMIT_KEY',
@@ -71,16 +73,16 @@ function h3FsFamily_(surface) {
 
 function h3FsHistory_(ss,level) {
   var t=h3FsTable_(ss.getSheetByName('review_home_index_v1'));
-  h3FsRequire_(t,['SET_ID','ANSWERED_AT','TOTAL','STATUS','SURFACE_FAMILY','LEVEL'],'review_home_index_v1');
+  h3FsRequire_(t,['SET_ID','SET_NO','ANSWERED_AT','TOTAL','STATUS','SURFACE_FAMILY','LEVEL'],'review_home_index_v1');
   var a=[];
   t.rows.forEach(function(r){
     if(String(r[t.map.STATUS]||'')!=='ACTIVE')return;
     if(String(r[t.map.LEVEL]||'')!==level)return;
     var f=h3FsFamily_(r[t.map.SURFACE_FAMILY]);
     if(!f)return;
-    var id=String(r[t.map.SET_ID]||''),at=String(r[t.map.ANSWERED_AT]||''),total=Number(r[t.map.TOTAL]||0);
-    if(!id||!at||!Number.isInteger(total)||total<1)throw new Error('FAMILY_SCHEDULER_HISTORY_INVALID');
-    a.push({family:f,set_id:id,answered_at:at,total:total});
+    var id=String(r[t.map.SET_ID]||''),at=String(r[t.map.ANSWERED_AT]||''),total=Number(r[t.map.TOTAL]||0),setNo=Number(r[t.map.SET_NO]||0);
+    if(!id||!at||!Number.isInteger(total)||total<1||!Number.isInteger(setNo)||setNo<1)throw new Error('FAMILY_SCHEDULER_HISTORY_INVALID');
+    a.push({family:f,set_id:id,set_no:setNo,answered_at:at,total:total});
   });
   a.sort(function(x,y){
     var d=Date.parse(x.answered_at)-Date.parse(y.answered_at);
@@ -109,10 +111,11 @@ function h3FsState_(ss,level) {
   var t=h3FsTable_(sh);
   h3FsRequire_(t,H3_FS_STATE_HEADERS_,H3_FS_STATE_SHEET_);
   var s={};
-  t.rows.forEach(function(r){
+  t.rows.forEach(function(r,rowIndex){
     if(String(r[t.map.LEVEL]||'')!==level)return;
     var k=String(r[t.map.STATE_SCOPE]||''),o={};
     H3_FS_STATE_HEADERS_.forEach(function(h){o[h]=r[t.map[h]];});
+    o._rowNumber=rowIndex+2;
     if(s[k])throw new Error('FAMILY_SCHEDULER_DUPLICATE_SCOPE:'+k);
     s[k]=o;
   });
@@ -428,6 +431,577 @@ function h3FsAppend_(ss,level,e) {
   ]);
   SpreadsheetApp.flush();
   return {event_id:eid,decision_id:did,snapshot_sha256:sha};
+}
+
+
+function h3FsLogRows_(ss,level) {
+  var t=h3FsTable_(ss.getSheetByName(H3_FS_LOG_SHEET_));
+  h3FsRequire_(t,H3_FS_LOG_HEADERS_,H3_FS_LOG_SHEET_);
+  var out=[];
+  t.rows.forEach(function(r,rowIndex){
+    if(String(r[t.map.LEVEL]||'')!==level)return;
+    var o={_rowNumber:rowIndex+2};
+    H3_FS_LOG_HEADERS_.forEach(function(h){o[h]=r[t.map[h]];});
+    out.push(o);
+  });
+  return out;
+}
+
+function h3FsEvaluationAtClock_(ss,level,clock) {
+  var a=h3FsLogRows_(ss,level),found=[];
+  a.forEach(function(x){
+    if(
+      String(x.EVENT_KIND||'')==='EVALUATION' &&
+      String(x.MODE||'')==='SHADOW' &&
+      Number(x.GLOBAL_SET_CLOCK)===Number(clock)
+    ) found.push(x);
+  });
+  if(found.length>1)throw new Error('FAMILY_SCHEDULER_DUPLICATE_EVALUATION_CLOCK:'+clock);
+  return found.length?found[0]:null;
+}
+
+function h3FsCommitObservedByKey_(ss,level,commitKey) {
+  var a=h3FsLogRows_(ss,level),found=[];
+  a.forEach(function(x){
+    if(
+      String(x.EVENT_KIND||'')==='COMMIT_OBSERVED' &&
+      String(x.COMMIT_KEY||'')===String(commitKey)
+    ) found.push(x);
+  });
+  if(found.length>1)throw new Error('FAMILY_SCHEDULER_DUPLICATE_COMMIT_OBSERVED:'+commitKey);
+  return found.length?found[0]:null;
+}
+
+function h3FsStateValues_(o) {
+  return H3_FS_STATE_HEADERS_.map(function(h){
+    return o[h]===undefined?'':o[h];
+  });
+}
+
+function h3FsWriteState_(ss,level,state) {
+  var scopes=['GLOBAL'].concat(H3_FS_FAMILIES_);
+  var rows=scopes.map(function(k){return state[k];});
+  rows.forEach(function(o){
+    if(!o||!o._rowNumber)throw new Error('FAMILY_SCHEDULER_STATE_ROWNUMBER_MISSING');
+    o.STATE_SHA256=h3FsStateHash_(o);
+  });
+  var sorted=rows.slice().sort(function(a,b){return a._rowNumber-b._rowNumber;});
+  for(var i=1;i<sorted.length;i++){
+    if(sorted[i]._rowNumber!==sorted[i-1]._rowNumber+1){
+      throw new Error('FAMILY_SCHEDULER_STATE_ROWS_NOT_CONTIGUOUS');
+    }
+  }
+  var sh=ss.getSheetByName(H3_FS_STATE_SHEET_);
+  sh.getRange(
+    sorted[0]._rowNumber,
+    1,
+    sorted.length,
+    H3_FS_STATE_HEADERS_.length
+  ).setValues(sorted.map(h3FsStateValues_));
+  SpreadsheetApp.flush();
+  var readback=h3FsState_(ss,level);
+  scopes.forEach(function(k){
+    if(String(readback[k].STATE_SHA256)!==String(state[k].STATE_SHA256)){
+      throw new Error('FAMILY_SCHEDULER_STATE_WRITE_READBACK_MISMATCH:'+k);
+    }
+  });
+  return readback;
+}
+
+function h3FsHistoryRecord_(history,family,setId) {
+  var found=history.filter(function(x){
+    return x.family===family && x.set_id===setId;
+  });
+  if(found.length!==1)throw new Error('FAMILY_SCHEDULER_COMMIT_HISTORY_IDENTITY_INVALID:'+family+':'+setId);
+  return found[0];
+}
+
+function h3FsObligationBaseKey_(skillId,direction) {
+  return String(skillId||'')+'|'+String(direction||'');
+}
+
+function h3FsOpenObligations_(ss,family) {
+  var out={};
+  if(family==='L'){
+    var ls=h3FsKv_(ss,'listening_state_v1');
+    var plan=h3FsJson_(ls.OVERLOAD_PLAN_JSON||'',{});
+    (plan.active_obligations||[]).forEach(function(a){
+      var mark=String(a.latest_result||'');
+      if(['×','△'].indexOf(mark)<0)return;
+      var skill=String(a.skill_id||'');
+      if(!skill)return;
+      out[h3FsObligationBaseKey_(skill,'')]={
+        skill_id:skill,
+        direction:'',
+        section:String(a.section||''),
+        mark:mark,
+        local_due_min:Number(a.due_min_set_no),
+        local_due_max:Number(a.due_max_set_no),
+        origin_family_clock:Number(a.origin_set_no||0)
+      };
+    });
+    return out;
+  }
+
+  if(family==='W'){
+    var w=h3FsTable_(ss.getSheetByName('skill_queue_v1'));
+    h3FsRequire_(w,[
+      'SKILL_ID','EFFECTIVE_STATE','LAST_RESULT',
+      'RETEST_MIN_GAP_SETS','RETEST_MAX_GAP_SETS',
+      'LAST_ISSUED_SET_ID','STATE_OVERRIDE','NOTES'
+    ],'skill_queue_v1');
+    w.rows.forEach(function(r){
+      var skill=String(r[w.map.SKILL_ID]||'');
+      if(!skill)return;
+      if(!(/^H3-P[2-6]-SK/.test(skill)||/^RT-H3-/.test(skill)))return;
+      if(String(r[w.map.NOTES]||'').indexOf('T8C_PLANNED_NOT_ACTIVE')>=0)return;
+      var state=String(r[w.map.EFFECTIVE_STATE]||'');
+      var mark=String(r[w.map.LAST_RESULT]||'');
+      if(
+        ['RETEST_WRONG','RETEST_UNCERTAIN'].indexOf(state)<0 ||
+        ['×','△'].indexOf(mark)<0
+      )return;
+      var override=String(r[w.map.STATE_OVERRIDE]||''),section='';
+      var m=/SECTION=([^;]+)/.exec(override);
+      if(m)section=m[1];
+      out[h3FsObligationBaseKey_(skill,'')]={
+        skill_id:skill,
+        direction:'',
+        section:section,
+        mark:mark,
+        gap_min:Number(r[w.map.RETEST_MIN_GAP_SETS]||0),
+        gap_max:Number(r[w.map.RETEST_MAX_GAP_SETS]||0),
+        last_set_id:String(r[w.map.LAST_ISSUED_SET_ID]||'')
+      };
+    });
+    return out;
+  }
+
+  var rt=h3FsTable_(ss.getSheetByName('rt_skill_queue_v1'));
+  h3FsRequire_(rt,[
+    'LEVEL','FAMILY','SKILL_ID','TRANSLATION_DIRECTION',
+    'LATEST_RESULT','STRICT_ORIGIN_CLOCK','DUE_MIN','DUE_MAX',
+    'LAST_SET_ID','STABILITY_STATUS'
+  ],'rt_skill_queue_v1');
+  var target=family==='R'?'READING':'TRANSLATION';
+  rt.rows.forEach(function(r){
+    if(String(r[rt.map.LEVEL]||'')!=='3級')return;
+    if(String(r[rt.map.FAMILY]||'')!==target)return;
+    var mark=String(r[rt.map.LATEST_RESULT]||'');
+    if(['×','△'].indexOf(mark)<0)return;
+    if(String(r[rt.map.STABILITY_STATUS]||'')==='STABLE')return;
+    var skill=String(r[rt.map.SKILL_ID]||'');
+    var direction=String(r[rt.map.TRANSLATION_DIRECTION]||'');
+    if(!skill)return;
+    out[h3FsObligationBaseKey_(skill,direction)]={
+      skill_id:skill,
+      direction:direction,
+      section:'',
+      mark:mark,
+      local_due_min:Number(r[rt.map.DUE_MIN]||0),
+      local_due_max:Number(r[rt.map.DUE_MAX]||0),
+      origin_family_clock:Number(r[rt.map.STRICT_ORIGIN_CLOCK]||0),
+      last_set_id:String(r[rt.map.LAST_SET_ID]||'')
+    };
+  });
+  return out;
+}
+
+function h3FsReconcileObligations_(ss,family,currentJson) {
+  var current=h3FsJson_(currentJson||'[]',[]);
+  var open=h3FsOpenObligations_(ss,family),kept=[];
+  current.forEach(function(x){
+    var k=h3FsObligationBaseKey_(x.skill_id,x.direction);
+    var a=open[k];
+    if(!a)return;
+    if(String(a.mark||'')!==String(x.origin_result||''))return;
+    if(a.local_due_min){
+      x.local_due_min=Number(a.local_due_min);
+      x.local_due_max=Number(a.local_due_max);
+    }
+    kept.push(x);
+  });
+  kept.sort(function(a,b){
+    return String(a.obligation_key).localeCompare(String(b.obligation_key));
+  });
+  return kept;
+}
+
+function h3FsNewCommitObligations_(ss,family,commit,globalClock,familyClock) {
+  var out=[],open=h3FsOpenObligations_(ss,family);
+
+  Object.keys(open).sort().forEach(function(k){
+    var a=open[k],isNew=false,localMin=0,localMax=0,originClock=familyClock;
+
+    if(family==='L'){
+      isNew=Number(a.origin_family_clock)===Number(commit.set_no);
+      localMin=Number(a.local_due_min);
+      localMax=Number(a.local_due_max);
+      originClock=Number(a.origin_family_clock);
+    } else if(family==='W'){
+      isNew=String(a.last_set_id||'')===String(commit.set_id);
+      localMin=familyClock+Number(a.gap_min||0);
+      localMax=familyClock+Number(a.gap_max||0);
+    } else {
+      isNew=String(a.last_set_id||'')===String(commit.set_id);
+      localMin=Number(a.local_due_min);
+      localMax=Number(a.local_due_max);
+      originClock=Number(a.origin_family_clock);
+      if(isNew && originClock!==Number(familyClock)){
+        throw new Error('FAMILY_SCHEDULER_RT_ORIGIN_CLOCK_MISMATCH:'+family+':'+a.skill_id);
+      }
+    }
+
+    if(!isNew)return;
+    if(!localMin||!localMax||localMin>localMax){
+      throw new Error('FAMILY_SCHEDULER_NEW_OBLIGATION_DUE_INVALID:'+family+':'+a.skill_id);
+    }
+
+    var mark=String(a.mark||'');
+    var direction=String(a.direction||'');
+    out.push({
+      obligation_key:[
+        'H3FSO',family,a.skill_id,direction,commit.commit_key
+      ].join('|'),
+      skill_id:String(a.skill_id||''),
+      direction:direction,
+      section:String(a.section||''),
+      origin_result:mark,
+      origin_family_clock:Number(originClock),
+      origin_global_clock:Number(globalClock),
+      local_due_min:Number(localMin),
+      local_due_max:Number(localMax),
+      global_service_deadline:Number(globalClock)+(mark==='×'?3:5),
+      origin_set_id:String(commit.set_id),
+      origin_commit_key:String(commit.commit_key)
+    });
+  });
+
+  out.sort(function(a,b){
+    return String(a.obligation_key).localeCompare(String(b.obligation_key));
+  });
+  return out;
+}
+
+function h3FsMergeObligations_(existing,newOnes) {
+  var m={};
+  existing.forEach(function(x){
+    m[h3FsObligationBaseKey_(x.skill_id,x.direction)]=x;
+  });
+  newOnes.forEach(function(x){
+    m[h3FsObligationBaseKey_(x.skill_id,x.direction)]=x;
+  });
+  return Object.keys(m).sort().map(function(k){return m[k];});
+}
+
+function h3FsSyncCommittedHistory_(ss,level,family,setId) {
+  var state=h3FsState_(ss,level);
+  var history=h3FsHistory_(ss,level);
+  var commit=h3FsHistoryRecord_(history,family,setId);
+  var oldClock=Number(state.GLOBAL.GLOBAL_SET_CLOCK||0);
+
+  if(commit.global_clock<=oldClock){
+    return {
+      status:'ALREADY_SYNCED',
+      previous_clock:commit.global_clock-1,
+      global_clock:oldClock,
+      commit:commit,
+      state:state
+    };
+  }
+
+  if(commit.global_clock!==oldClock+1 || history.length!==oldClock+1){
+    throw new Error(
+      'FAMILY_SCHEDULER_COMMIT_CLOCK_GAP:state='+
+      oldClock+':commit='+commit.global_clock+':history='+history.length
+    );
+  }
+
+  var previous=history[oldClock-1];
+  if(
+    oldClock>0 &&
+    (
+      !previous ||
+      String(previous.commit_key)!==
+        String(state.GLOBAL.LAST_PROCESSED_COMMIT_KEY||'')
+    )
+  ){
+    throw new Error('FAMILY_SCHEDULER_PREVIOUS_COMMIT_CHECKPOINT_MISMATCH');
+  }
+
+  var now=new Date().toISOString();
+  var reconciled={};
+  H3_FS_FAMILIES_.forEach(function(f){
+    reconciled[f]=h3FsReconcileObligations_(
+      ss,
+      f,
+      state[f].PROSPECTIVE_OBLIGATIONS_JSON
+    );
+  });
+
+  var familyHistory=history.filter(function(x){return x.family===family;});
+  var newOnes=h3FsNewCommitObligations_(
+    ss,
+    family,
+    commit,
+    commit.global_clock,
+    familyHistory.length
+  );
+  reconciled[family]=h3FsMergeObligations_(
+    reconciled[family],
+    newOnes
+  );
+
+  state.GLOBAL.GLOBAL_SET_CLOCK=history.length;
+  state.GLOBAL.LAST_PROCESSED_COMMIT_KEY=commit.commit_key;
+  state.GLOBAL.LAST_PROCESSED_COMMIT_AT=commit.answered_at;
+
+  H3_FS_FAMILIES_.forEach(function(f){
+    var fh=history.filter(function(x){return x.family===f;});
+    var last=fh.length?fh[fh.length-1]:null;
+    state[f].LAST_GLOBAL_CLOCK=last?last.global_clock:'';
+    state[f].LAST_COMMITTED_SET_ID=last?last.set_id:'';
+    state[f].LAST_COMMITTED_AT=last?last.answered_at:'';
+    state[f].FAMILY_COMMITTED_SET_COUNT=fh.length;
+    state[f].PROSPECTIVE_OBLIGATIONS_JSON=JSON.stringify(reconciled[f]);
+    state[f].LAST_STATE_SYNC_AT=now;
+  });
+  state.GLOBAL.LAST_STATE_SYNC_AT=now;
+
+  var readback=h3FsWriteState_(ss,level,state);
+  return {
+    status:'SYNCED',
+    previous_clock:oldClock,
+    global_clock:history.length,
+    commit:commit,
+    state:readback,
+    new_obligations:newOnes.length
+  };
+}
+
+function h3FsAppendCommitObserved_(ss,level,prior,commit,family,selectionSource) {
+  var sh=ss.getSheetByName(H3_FS_LOG_SHEET_);
+  if(!sh)throw new Error('FAMILY_SCHEDULER_LOG_SHEET_MISSING');
+  var suffix=h3FsSha_(
+    String(commit.commit_key)+'|'+String(prior.DECISION_ID||'')
+  ).slice(0,12)+'-'+Utilities.getUuid().slice(0,8);
+  var recommended=String(prior.RECOMMENDED_FAMILY||'');
+  var override=(
+    H3_FS_FAMILIES_.indexOf(recommended)>=0
+      ? recommended!==family
+      : ''
+  );
+  sh.appendRow([
+    'H3FS-C-'+suffix,
+    String(prior.DECISION_ID||''),
+    'COMMIT_OBSERVED',
+    new Date().toISOString(),
+    level,
+    'SHADOW',
+    Number(prior.GLOBAL_SET_CLOCK||0),
+    String(prior.SNAPSHOT_SHA256||''),
+    String(prior.NEXT_ACTION||''),
+    recommended,
+    String(prior.PRIMARY_REASON||''),
+    String(prior.CANDIDATE_ORDER_JSON||'[]'),
+    String(prior.FAMILY_METRICS_JSON||'{}'),
+    '',
+    family,
+    selectionSource||'LEGACY_TRIGGER',
+    false,
+    override,
+    commit.set_id,
+    commit.commit_key,
+    'COMMITTED',
+    'F4 SHADOW observation; actual family did not originate from scheduler.'
+  ]);
+  SpreadsheetApp.flush();
+  return {
+    status:'COMMITTED',
+    recommended_family:recommended,
+    actual_family:family,
+    override_of_recommendation:override
+  };
+}
+
+function h3FsObserveCommitted_(ss,level,family,setId,selectionSource) {
+  if(H3_FS_FAMILIES_.indexOf(family)<0){
+    throw new Error('FAMILY_SCHEDULER_FAMILY_INVALID:'+family);
+  }
+
+  var history=h3FsHistory_(ss,level);
+  var commit=h3FsHistoryRecord_(history,family,setId);
+  var priorClock=commit.global_clock-1;
+  var prior=h3FsEvaluationAtClock_(ss,level,priorClock);
+  if(!prior){
+    throw new Error('FAMILY_SCHEDULER_PRIOR_EVALUATION_MISSING:'+priorClock);
+  }
+
+  var sync=h3FsSyncCommittedHistory_(ss,level,family,setId);
+
+  var observed=h3FsCommitObservedByKey_(ss,level,commit.commit_key);
+  var observedResult;
+  if(!observed){
+    observedResult=h3FsAppendCommitObserved_(
+      ss,level,prior,commit,family,selectionSource
+    );
+  } else {
+    observedResult={
+      status:'ALREADY_RECORDED',
+      recommended_family:String(observed.RECOMMENDED_FAMILY||''),
+      actual_family:String(observed.ACTUAL_FAMILY||''),
+      override_of_recommendation:observed.OVERRIDE_OF_RECOMMENDATION
+    };
+  }
+
+  var next=h3FsEvaluationAtClock_(ss,level,commit.global_clock);
+  var nextResult;
+  if(!next){
+    var e=h3FsEvaluate_(ss,level);
+    if(Number(e.global_set_clock)!==Number(commit.global_clock)){
+      throw new Error('FAMILY_SCHEDULER_POSTCOMMIT_EVAL_CLOCK_MISMATCH');
+    }
+    var logged=h3FsAppend_(ss,level,e);
+    nextResult={
+      recommended_family:e.recommended_family,
+      primary_reason:e.primary_reason,
+      decision_id:logged.decision_id,
+      event_id:logged.event_id
+    };
+  } else {
+    var replay=h3FsEvaluate_(ss,level);
+    if(
+      String(next.RECOMMENDED_FAMILY||'')!==String(replay.recommended_family||'') ||
+      String(next.PRIMARY_REASON||'')!==String(replay.primary_reason||'') ||
+      String(next.CANDIDATE_ORDER_JSON||'')!==JSON.stringify(replay.candidate_order)
+    ){
+      throw new Error('FAMILY_SCHEDULER_DETERMINISM_REPLAY_MISMATCH:'+commit.global_clock);
+    }
+    nextResult={
+      recommended_family:String(next.RECOMMENDED_FAMILY||''),
+      primary_reason:String(next.PRIMARY_REASON||''),
+      decision_id:String(next.DECISION_ID||''),
+      event_id:String(next.EVENT_ID||'')
+    };
+  }
+
+  return {
+    schema:'H3_FAMILY_SCHEDULER_F4_OBSERVATION_V1',
+    status:'PASS',
+    mode:'SHADOW',
+    scheduler_applied:false,
+    sync_status:sync.status,
+    observed_commit:observedResult,
+    global_set_clock:commit.global_clock,
+    next_evaluation:nextResult
+  };
+}
+
+function h3FamilySchedulerObserveAfterCommit_(
+  family,
+  setId,
+  selectionSource
+) {
+  var lock=LockService.getScriptLock();
+  try{
+    lock.waitLock(30000);
+    var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
+    return h3FsObserveCommitted_(
+      ss,
+      '3級',
+      family,
+      String(setId||''),
+      selectionSource||'LEGACY_TRIGGER'
+    );
+  } catch(err) {
+    return {
+      schema:'H3_FAMILY_SCHEDULER_F4_OBSERVATION_V1',
+      status:'RECOVERY_REQUIRED',
+      mode:'SHADOW',
+      scheduler_applied:false,
+      family:String(family||''),
+      set_id:String(setId||''),
+      error:String(err&&err.message?err.message:err)
+    };
+  } finally {
+    try{lock.releaseLock();}catch(_ignore){}
+  }
+}
+
+function h3FamilySchedulerF4Status() {
+  var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
+  var level='3級',state=h3FsState_(ss,level),history=h3FsHistory_(ss,level);
+  var rows=h3FsLogRows_(ss,level);
+  var commits=rows.filter(function(x){
+    return (
+      String(x.EVENT_KIND||'')==='COMMIT_OBSERVED' &&
+      Number(x.GLOBAL_SET_CLOCK)>=H3_FS_F4_START_CLOCK_
+    );
+  });
+  var evaluations=rows.filter(function(x){
+    return (
+      String(x.EVENT_KIND||'')==='EVALUATION' &&
+      Number(x.GLOBAL_SET_CLOCK)>=H3_FS_F4_START_CLOCK_
+    );
+  });
+
+  var overrides=0,matches=0,appliedViolations=0,byFamily={L:0,W:0,R:0,T:0};
+  commits.forEach(function(x){
+    var actual=String(x.ACTUAL_FAMILY||''),recommended=String(x.RECOMMENDED_FAMILY||'');
+    if(byFamily[actual]!==undefined)byFamily[actual]++;
+    if(recommended===actual)matches++;
+    else if(H3_FS_FAMILIES_.indexOf(recommended)>=0)overrides++;
+    if(String(x.SCHEDULER_APPLIED).toUpperCase()==='TRUE')appliedViolations++;
+  });
+  evaluations.forEach(function(x){
+    if(String(x.SCHEDULER_APPLIED).toUpperCase()==='TRUE')appliedViolations++;
+  });
+
+  var unresolved=0,missed=0;
+  H3_FS_FAMILIES_.forEach(function(f){
+    var a=h3FsJson_(state[f].PROSPECTIVE_OBLIGATIONS_JSON||'[]',[]);
+    unresolved+=a.length;
+    a.forEach(function(x){
+      if(Number(x.global_service_deadline)<Number(state.GLOBAL.GLOBAL_SET_CLOCK||0))missed++;
+    });
+  });
+
+  var observedQuestions={L:0,W:0,R:0,T:0};
+  history.forEach(function(x){
+    if(Number(x.global_clock)<=H3_FS_F4_START_CLOCK_)return;
+    observedQuestions[x.family]+=x.total;
+  });
+  var totalObservedQuestions=0;
+  H3_FS_FAMILIES_.forEach(function(f){totalObservedQuestions+=observedQuestions[f];});
+  var observedShares={};
+  H3_FS_FAMILIES_.forEach(function(f){
+    observedShares[f]=totalObservedQuestions
+      ? observedQuestions[f]/totalObservedQuestions
+      : 0;
+  });
+
+  var remaining=Math.max(0,H3_FS_F4_TARGET_COMMITS_-commits.length);
+  return {
+    schema:'H3_FAMILY_SCHEDULER_F4_STATUS_V1',
+    mode:'SHADOW',
+    start_global_clock:H3_FS_F4_START_CLOCK_,
+    target_commits:H3_FS_F4_TARGET_COMMITS_,
+    observed_commits:commits.length,
+    remaining_commits:remaining,
+    gate_status:remaining>0?'OBSERVING':'READY_FOR_F4_REVIEW',
+    current_global_set_clock:Number(state.GLOBAL.GLOBAL_SET_CLOCK||0),
+    history_global_set_clock:history.length,
+    state_history_aligned:Number(state.GLOBAL.GLOBAL_SET_CLOCK||0)===history.length,
+    recommendation_match_count:matches,
+    manual_override_count:overrides,
+    actual_family_count:byFamily,
+    observed_question_count:observedQuestions,
+    observed_question_share:observedShares,
+    unresolved_prospective_obligations:unresolved,
+    missed_global_service_deadlines:missed,
+    scheduler_applied_true_count:appliedViolations,
+    evaluation_count:evaluations.length
+  };
 }
 
 function h3FamilySchedulerShadowPreview() {

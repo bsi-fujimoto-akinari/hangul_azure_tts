@@ -1,0 +1,82 @@
+name: Family Scheduler F3 Shadow Audit
+
+on:
+  push:
+    branches: [ main, "feat/**", "fix/**" ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax check
+        run: node --check WebAppFamilyScheduler.js
+
+      - name: Contract audit
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("WebAppFamilyScheduler.js")
+          text = p.read_text(encoding="utf-8")
+          required = [
+              "family_scheduler_state_v1",
+              "family_scheduler_decision_log_v1",
+              "h3FamilySchedulerShadowPreview",
+              "h3FamilySchedulerShadowTick",
+              "P1_RETEST_ADVANCE",
+              "P2_STARVATION",
+              "P3_BALANCE",
+              "P4_COVERAGE",
+              "P5_SKILL_PRESSURE",
+              "P6_TIEBREAK",
+              "scheduler not applied to issue selection",
+          ]
+          for token in required:
+              if token not in text:
+                  raise SystemExit(f"missing contract token: {token}")
+          forbidden = [
+              "SCHEDULER_APPLIED,true",
+              "SCHEDULER_APPLIED: true",
+              "issueProductionSet(",
+              "issueReading",
+              "issueTranslation",
+              "issueListening",
+          ]
+          for token in forbidden:
+              if token in text:
+                  raise SystemExit(f"F3 live-wiring token present: {token}")
+          print("F3 static contract PASS")
+          PY
+
+      - name: Deterministic ranking fixture
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          vm.runInThisContext(fs.readFileSync('WebAppFamilyScheduler.js','utf8'));
+
+          const base = {
+            retest_advance_slack: null,
+            retest_origin_result: '',
+            coverage_shortfall: null
+          };
+          const L = {...base,family:'L',sets_since_last:7,starvation_cap:6,projected_balance_loss:.32,skill_pressure_vector:[2,0,0],last_global_clock:20};
+          const W = {...base,family:'W',sets_since_last:6,starvation_cap:6,projected_balance_loss:.12,skill_pressure_vector:[2,2,2],last_global_clock:21};
+          const R = {...base,family:'R',sets_since_last:1,starvation_cap:7,projected_balance_loss:.22,skill_pressure_vector:[2,0,0],last_global_clock:26};
+          const T = {...base,family:'T',sets_since_last:0,starvation_cap:7,projected_balance_loss:.22,skill_pressure_vector:[1,2,0],last_global_clock:27};
+          const a = [T,R,W,L].sort(h3FsCmp_);
+          if (a.map(x=>x.family).join(',') !== 'L,W,R,T') throw new Error('baseline order mismatch');
+          if (h3FsReason_(a[0],a[1]) !== 'P2_STARVATION') throw new Error('baseline reason mismatch');
+
+          const Rp1 = {...R,retest_advance_slack:0,retest_origin_result:'×'};
+          const b = [L,W,Rp1,T].sort(h3FsCmp_);
+          if (b[0].family !== 'R') throw new Error('P1 must dominate');
+          if (h3FsReason_(b[0],b[1]) !== 'P1_RETEST_ADVANCE') throw new Error('P1 reason mismatch');
+          console.log('F3 deterministic ranking PASS');
+          NODE

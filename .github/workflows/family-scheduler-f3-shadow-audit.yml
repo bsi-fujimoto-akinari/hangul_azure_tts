@@ -54,6 +54,76 @@ jobs:
           print("F3 static contract PASS")
           PY
 
+      - name: F4 shadow observation contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          fs = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+          web = Path("WebApp.js").read_text(encoding="utf-8")
+
+          required = [
+              "H3_FS_F4_START_CLOCK_ = 27",
+              "H3_FS_F4_TARGET_COMMITS_ = 20",
+              "function h3FamilySchedulerObserveAfterCommit_(",
+              "function h3FamilySchedulerF4Status()",
+              "COMMIT_OBSERVED",
+              "F4 SHADOW observation",
+              "status:'RECOVERY_REQUIRED'",
+              "scheduler_applied:false",
+          ]
+          for token in required:
+              if token not in fs:
+                  raise SystemExit(f"missing F4 contract token: {token}")
+
+          if web.count("h3FamilySchedulerObserveAfterCommit_(") != 4:
+              raise SystemExit("F4 must wire exactly four family post-commit hooks.")
+
+          for family in ["'L'", "'W'", "'R'", "'T'"]:
+              if family not in web:
+                  raise SystemExit(f"family hook missing: {family}")
+
+          if fs.count("appendRow([") != 2:
+              raise SystemExit("Family scheduler writes must remain two append-only log paths.")
+          if fs.count(".setValues(") != 1:
+              raise SystemExit("Family scheduler current-state write surface changed unexpectedly.")
+
+          forbidden = [
+              "issueProductionSet(",
+              "issueReading",
+              "issueTranslation",
+              "issueListening",
+              "SCHEDULER_APPLIED,true",
+              "SCHEDULER_APPLIED: true",
+          ]
+          for token in forbidden:
+              if token in fs:
+                  raise SystemExit(f"F4 live-selection token present: {token}")
+
+          # Hook must occur only after lightweight HOME index persistence.
+          listening_sync = web.index("result.home_index_sync =")
+          listening_obs = web.index("result.family_scheduler_shadow =")
+          if not listening_sync < listening_obs:
+              raise SystemExit("Listening observer precedes HOME commit sync.")
+
+          reading_sync = web.index("readingResult.home_index_sync =")
+          reading_obs = web.index("readingResult.family_scheduler_shadow =")
+          if not reading_sync < reading_obs:
+              raise SystemExit("Reading observer precedes HOME commit sync.")
+
+          translation_sync = web.index("translationResult.home_index_sync =")
+          translation_obs = web.index("translationResult.family_scheduler_shadow =")
+          if not translation_sync < translation_obs:
+              raise SystemExit("Translation observer precedes HOME commit sync.")
+
+          written_sync = web.index("writtenResult.home_index_sync =")
+          written_obs = web.index("writtenResult.family_scheduler_shadow =")
+          if not written_sync < written_obs:
+              raise SystemExit("Written observer precedes HOME commit sync.")
+
+          print("F4 shadow observation contract PASS")
+          PY
+
       - name: Deterministic ranking fixture
         run: |
           node <<'NODE'
@@ -96,5 +166,27 @@ jobs:
           if (e[0].family !== 'L') throw new Error('P2 oldest-family tie-break mismatch');
           if (h3FsReason_(e[0],e[1]) !== 'P2_STARVATION') throw new Error('P2 tie-break reason mismatch');
 
-          console.log('F3 deterministic ranking PASS');
+          const existing = [{
+            obligation_key:'old',
+            skill_id:'SK1',
+            direction:'',
+            origin_result:'×'
+          }];
+          const replacement = [{
+            obligation_key:'new',
+            skill_id:'SK1',
+            direction:'',
+            origin_result:'△'
+          },{
+            obligation_key:'other',
+            skill_id:'SK2',
+            direction:'',
+            origin_result:'×'
+          }];
+          const merged = h3FsMergeObligations_(existing,replacement);
+          if (merged.length !== 2) throw new Error('F4 obligation merge count mismatch');
+          if (!merged.some(x=>x.obligation_key==='new')) throw new Error('F4 newer obligation did not replace prior obligation');
+          if (merged.some(x=>x.obligation_key==='old')) throw new Error('F4 stale obligation survived replacement');
+
+          console.log('F3/F4 deterministic ranking PASS');
           NODE

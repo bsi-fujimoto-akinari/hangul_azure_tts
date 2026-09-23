@@ -3310,8 +3310,12 @@
             explanation:
               question.explanation ||
               null,
-            audio_asset_key: null,
-            audio_fallback_url: null
+            audio_asset_key:
+              question.audio_asset_key ||
+              null,
+            audio_fallback_url:
+              question.audio_fallback_url ||
+              null
           };
         }
       );

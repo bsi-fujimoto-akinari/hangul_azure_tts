@@ -1254,65 +1254,6 @@ function h3FamilySchedulerIssueRoutePreview() {
   return h3FsIssueRoute_(resolved,readiness,current);
 }
 
-function h3FamilySchedulerHomeNext() {
-  var route=h3FamilySchedulerIssueRoutePreview();
-  var out={
-    schema:'H3_FAMILY_SCHEDULER_HOME_NEXT_V1',
-    scheduler_applied:false,
-    issue_performed:false,
-    route_kind:String(route.route_kind||''),
-    family:String(route.family||'NONE'),
-    provider_kind:String(route.provider_kind||''),
-    surface_family:String(route.surface_family||''),
-    route_target:String(route.route_target||''),
-    current_set_id:String(route.current_set_id||''),
-    readiness_state:String(route.readiness_state||''),
-    requires_prepare:route.requires_prepare===true,
-    result_status:String(route.result_status||''),
-    client_action:'NONE',
-    render_request:null
-  };
-
-  if(route.result_status==='BLOCKED'){
-    out.client_action='BLOCKED';
-    return out;
-  }
-
-  if(route.result_status!=='READY'){
-    throw new Error('FAMILY_SCHEDULER_HOME_NEXT_ROUTE_NOT_READY');
-  }
-
-  if(route.route_kind==='CURRENT_SET'){
-    var mode=
-      route.provider_kind==='LISTENING'
-        ? 'LISTENING'
-        : 'WRITTEN';
-    out.client_action='OPEN_CURRENT';
-    out.render_request={
-      schema:'H3_WEB_RENDER_REQUEST_V1',
-      mode:mode,
-      surface_family:
-        route.surface_family==='READING' ||
-        route.surface_family==='TRANSLATION'
-          ? route.surface_family
-          : null,
-      set_id:route.current_set_id,
-      txn_id:null
-    };
-    return out;
-  }
-
-  if(route.route_kind==='FAMILY'){
-    out.client_action=
-      route.requires_prepare
-        ? 'PREPARE_REQUIRED'
-        : 'READY_TO_ISSUE';
-    return out;
-  }
-
-  throw new Error('FAMILY_SCHEDULER_HOME_NEXT_ROUTE_KIND_INVALID');
-}
-
 function h3FamilySchedulerShadowTick() {
   var lock=LockService.getScriptLock(); lock.waitLock(30000);
   try{

@@ -569,6 +569,94 @@ function h3ReviewAudioBindingResolveAll_(
 }
 
 
+function h3ReviewAudioApply5WBindings_(
+  payload,
+  bindings
+) {
+  if (
+    !payload ||
+    payload.mode !== 'REVIEW' ||
+    payload.kind !== 'WRITTEN' ||
+    !payload.set_id ||
+    !Array.isArray(payload.sections) ||
+    payload.sections.length !== 5 ||
+    !Array.isArray(bindings) ||
+    bindings.length !== 5
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_AUDIO_PROJECTION_INVALID'
+    );
+  }
+
+  var out =
+    JSON.parse(
+      JSON.stringify(payload)
+    );
+  out.surface_family = '5W';
+
+  var seen = {};
+  bindings.forEach(
+    function (binding) {
+      if (
+        !binding ||
+        binding.target !== 'SECTION' ||
+        !Number.isInteger(
+          binding.target_index
+        ) ||
+        binding.target_index < 0 ||
+        binding.target_index >=
+          out.sections.length ||
+        binding.surface_family !== '5W' ||
+        binding.sidecar_family !== '5W' ||
+        binding.set_id !==
+          String(payload.set_id) ||
+        !binding.slot_key ||
+        binding.asset_key !==
+          binding.slot_key ||
+        !binding.audio_url
+      ) {
+        throw new Error(
+          'WRITTEN_REVIEW_AUDIO_BINDING_INVALID'
+        );
+      }
+
+      if (seen[binding.slot_key]) {
+        throw new Error(
+          'WRITTEN_REVIEW_AUDIO_BINDING_DUPLICATE:' +
+            binding.slot_key
+        );
+      }
+      seen[binding.slot_key] = true;
+
+      var section =
+        out.sections[
+          binding.target_index
+        ];
+      if (
+        !section ||
+        String(section.section || '') !==
+          binding.slot_key
+      ) {
+        throw new Error(
+          'WRITTEN_REVIEW_AUDIO_SLOT_MISMATCH:' +
+            binding.slot_key
+        );
+      }
+
+      section.audio_asset_key =
+        binding.asset_key;
+      section.audio_fallback_url =
+        binding.audio_url;
+    }
+  );
+
+  out.review_audio_binding_contract_id =
+    H3_REVIEW_AUDIO_BINDING_CONTRACT_ID_;
+
+  return out;
+}
+
+
 function h3ReviewProviders_() {
   var providers = [
     h3ListeningReviewProvider_()

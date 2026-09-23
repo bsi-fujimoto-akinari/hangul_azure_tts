@@ -8597,7 +8597,7 @@ jobs:
 
           for needle in [
               'function h3SurfaceReviewMedia_(',
-              "request.surface_family !== 'READING'",
+              "['READING', 'TRANSLATION']",
               'h3ReviewAudioBindingResolveAll_(',
               'h3ReviewAudioApplyReadingBindings_(',
               'h3ReviewAudioBindingResolve_(',
@@ -8796,6 +8796,222 @@ jobs:
 
           console.log(
             'E5-D 2R Review audio pure projection audit: PASS'
+          );
+          NODE
+
+      - name: Audit E5-E 2T Review audio embedding
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          core = Path('WebAppReviewCore.js').read_text(encoding='utf-8')
+          bridge = Path('WebAppSurfaceReviewBridge.js').read_text(encoding='utf-8')
+          adapter = Path('WebAppReviewWrittenAdapter.js').read_text(encoding='utf-8')
+          client = Path('Client.html').read_text(encoding='utf-8')
+          architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
+
+          for needle in [
+              'function h3ReviewAudioApplyTranslationBindings_(',
+              'REVIEW_AUDIO_2T_BINDING_DUPLICATE:',
+              'REVIEW_AUDIO_2T_QUESTION_TARGET_MISMATCH:',
+              'out.review_audio_binding_contract_id =',
+          ]:
+              if needle not in core:
+                  raise SystemExit(
+                      f'E5-E Translation projection helper missing: {needle}'
+                  )
+
+          for needle in [
+              'var translationPayload =',
+              'var translationBindings =',
+              'h3ReviewAudioApplyTranslationBindings_(',
+              "['READING', 'TRANSLATION']",
+              "family === 'READING'",
+              "'2T'",
+              'surface_family: family',
+          ]:
+              if needle not in bridge:
+                  raise SystemExit(
+                      f'E5-E Translation bridge/media integration missing: {needle}'
+                  )
+
+          start = bridge.index('function h3SurfaceReviewOpenForLearner_(')
+          end = bridge.index('function h3SurfaceReviewBuildPayload_(', start)
+          runtime = bridge[start:end]
+          for forbidden in [
+              '.setValue(',
+              '.setValues(',
+              '.appendRow(',
+              '.deleteRow(',
+              '.createFile(',
+              '.setTrashed(',
+          ]:
+              if forbidden in runtime:
+                  raise SystemExit(
+                      f'E5-E Translation runtime path mutates state: {forbidden}'
+                  )
+
+          for needle in [
+              "request.surface_family === 'READING'",
+              "request.surface_family === 'TRANSLATION'",
+              'h3SurfaceReviewMedia_(',
+          ]:
+              if needle not in adapter:
+                  raise SystemExit(
+                      f'E5-E Written provider route missing: {needle}'
+                  )
+
+          for needle in [
+              'audio_asset_key:\n              question.audio_asset_key ||',
+              'audio_fallback_url:\n              question.audio_fallback_url ||',
+              'part.audio_asset_key',
+          ]:
+              if needle not in client:
+                  raise SystemExit(
+                      f'E5-E Translation client normalization missing: {needle}'
+                  )
+
+          for needle in [
+              '## 44. E5-E 2T Review audio embedding',
+              'active for Translation Review',
+              'T001 -> P11_Q1 / P11_Q2',
+              'T002 -> P12_Q1 / P12_Q2',
+              'T003 -> P11_Q1 / P12_Q2',
+              'fixed-layout inference is allowed',
+          ]:
+              if needle not in architecture:
+                  raise SystemExit(
+                      f'E5-E architecture contract missing: {needle}'
+                  )
+
+          print('E5-E 2T Review audio static boundary: PASS')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const context = {
+            console: console,
+            h3ProdSheetRows_: sheet => sheet.table
+          };
+          vm.createContext(context);
+          vm.runInContext(
+            fs.readFileSync('WebAppReviewCore.js', 'utf8'),
+            context,
+            {filename:'WebAppReviewCore.js'}
+          );
+
+          function project(setId, questions, slots) {
+            const payload = {
+              schema:'H3_PERSISTENT_TRANSLATION_REVIEW_PAYLOAD_V1',
+              mode:'REVIEW',
+              kind:'WRITTEN',
+              provider_kind:'WRITTEN',
+              surface_family:'TRANSLATION',
+              read_only:true,
+              persisted:true,
+              set_id:setId,
+              questions:questions.map((question, index) => ({
+                q_no:index + 1,
+                section:question.section,
+                section_key:'H3-' + question.section,
+                item_id:question.item_id
+              }))
+            };
+            const bindings = slots.map((slot, index) => ({
+              target:'QUESTION',
+              target_index:index,
+              q_no:index + 1,
+              slot_key:slot,
+              surface_family:'TRANSLATION',
+              sidecar_family:'2T',
+              set_id:setId,
+              asset_key:slot,
+              audio_url:'https://example.invalid/' + slot
+            }));
+            context.__payload = payload;
+            context.__bindings = bindings;
+            const decorated = vm.runInContext(
+              'h3ReviewAudioApplyTranslationBindings_(__payload,__bindings)',
+              context
+            );
+
+            if (
+              decorated.questions
+                .map(x => x.audio_asset_key)
+                .join(',') !==
+              slots.join(',')
+            ) {
+              throw new Error(
+                'E5-E Translation projection mismatch for ' + setId
+              );
+            }
+            if (
+              payload.questions.some(
+                x => x.audio_asset_key
+              )
+            ) {
+              throw new Error(
+                'E5-E mutated source Translation payload for ' + setId
+              );
+            }
+            return {payload, bindings, decorated};
+          }
+
+          project(
+            'H3-20260921-T001',
+            [
+              {section:'P11',item_id:'OFF-H3-P11-001'},
+              {section:'P11',item_id:'OFF-H3-P11-002'}
+            ],
+            ['P11_Q1','P11_Q2']
+          );
+
+          project(
+            'H3-20260921-T002',
+            [
+              {section:'P12',item_id:'OFF-H3-P12-001'},
+              {section:'P12',item_id:'OFF-H3-P12-002'}
+            ],
+            ['P12_Q1','P12_Q2']
+          );
+
+          const mixed = project(
+            'H3-20260922-T003',
+            [
+              {section:'P11',item_id:'OFF-H3-P11-003'},
+              {section:'P12',item_id:'AUTH-H3-P12-RT-SK017-001'}
+            ],
+            ['P11_Q1','P12_Q2']
+          );
+
+          const bad = JSON.parse(
+            JSON.stringify(mixed.bindings)
+          );
+          bad[1].slot_key = 'P11_Q2';
+          bad[1].asset_key = 'P11_Q2';
+          context.__payload = mixed.payload;
+          context.__bad = bad;
+
+          let failed = false;
+          try {
+            vm.runInContext(
+              'h3ReviewAudioApplyTranslationBindings_(__payload,__bad)',
+              context
+            );
+          } catch (_err) {
+            failed = true;
+          }
+          if (!failed) {
+            throw new Error(
+              'E5-E mixed-layout mismatch did not fail closed.'
+            );
+          }
+
+          console.log(
+            'E5-E 2T Review audio pure projection audit: PASS'
           );
           NODE
 

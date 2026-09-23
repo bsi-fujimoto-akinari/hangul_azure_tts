@@ -743,3 +743,40 @@ answers, uncertainty, scheduler, queues, retest state, generation history, point
 counters, source provenance, Review authority, explanations, or the six completed 2T
 Review audio assets.
 
+## 45. Learner-facing Japanese quality corrections
+
+Contract ID: `H3-REVIEW-JA-QUALITY-20260923-V1`.
+
+This layer is deliberately learner-facing and non-authoritative. It runs only after the
+existing locked Review/source/explanation authority has passed its normal validation.
+It clones the Review payload and applies exact-match Japanese wording corrections. The
+stored authority, stored hashes, provenance, score/history, audio, scheduler state, and
+bindings remain unchanged.
+
+Current exact corrections:
+
+```text
+5L H3-20260919-L03 K3
+  最近運動していないので、体がしょっちゅう重く感じる気がします。
+  -> 最近運動していないので、なんだか体が重い気がします。
+
+5W H3-20260914-01 Q4
+  友達とした約束
+  -> 友達との約束
+
+5W H3-20260914-02 Q3
+  時間が経つのも分かりませんでした
+  -> 時間がたつのも忘れていました
+
+5W H3-20260914-02 Q4
+  韓国文化に（　）が多いです
+  -> 韓国文化への（　）が高いです
+
+5W H3-20260917-01 Q3
+  一目で目に入りました
+  -> ぱっと目に入りました
+```
+
+Each correction accepts only the exact old text or the already-corrected text. Any
+unexpected source text fails closed rather than applying a fuzzy replacement.
+

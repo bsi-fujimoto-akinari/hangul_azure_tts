@@ -295,6 +295,207 @@ function h3WrittenReviewPersistentHistory_(
 }
 
 
+function h3WrittenReviewAttach5WAudio_(
+  payload
+) {
+  if (
+    !payload ||
+    payload.mode !== 'REVIEW' ||
+    payload.kind !== 'WRITTEN' ||
+    !payload.set_id ||
+    !Array.isArray(payload.sections) ||
+    payload.sections.length !== 5
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_AUDIO_PAYLOAD_INVALID'
+    );
+  }
+
+  var out =
+    h3WrittenReviewClone_(payload);
+  out.surface_family = '5W';
+
+  var spreadsheet =
+    SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+  var bindings =
+    h3ReviewAudioBindingResolveAll_(
+      spreadsheet,
+      out
+    );
+
+  if (
+    bindings.length !==
+    out.sections.length
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_AUDIO_BINDING_COUNT'
+    );
+  }
+
+  bindings.forEach(
+    function (binding) {
+      if (
+        binding.target !== 'SECTION' ||
+        !Number.isInteger(
+          binding.target_index
+        ) ||
+        binding.target_index < 0 ||
+        binding.target_index >=
+          out.sections.length
+      ) {
+        throw new Error(
+          'WRITTEN_REVIEW_AUDIO_TARGET_INVALID'
+        );
+      }
+
+      var section =
+        out.sections[
+          binding.target_index
+        ];
+
+      if (
+        !section ||
+        String(section.section || '') !==
+          binding.slot_key
+      ) {
+        throw new Error(
+          'WRITTEN_REVIEW_AUDIO_SLOT_MISMATCH:' +
+            binding.slot_key
+        );
+      }
+
+      section.audio_asset_key =
+        binding.asset_key;
+      section.audio_fallback_url =
+        binding.audio_url;
+    }
+  );
+
+  out.review_audio_binding_contract_id =
+    H3_REVIEW_AUDIO_BINDING_CONTRACT_ID_;
+
+  return out;
+}
+
+
+function h3WrittenReviewMedia_(
+  request
+) {
+  if (
+    !request ||
+    request.schema !==
+      'H3_WEB_MEDIA_REQUEST_V1' ||
+    request.mode !== 'REVIEW' ||
+    request.review_kind !== 'WRITTEN' ||
+    request.surface_family !== '5W' ||
+    !request.set_id ||
+    !request.asset_key ||
+    request.txn_id ||
+    request.legacy_review_id
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_AUDIO_MEDIA_REQUEST_INVALID'
+    );
+  }
+
+  var setId =
+    String(request.set_id);
+  var assetKey =
+    String(request.asset_key);
+
+  var review =
+    getWrittenPersistentReviewPayload_({
+      schema:
+        'H3_WEB_RENDER_REQUEST_V1',
+      mode: 'REVIEW',
+      review_kind: 'WRITTEN',
+      surface_family: '5W',
+      set_id: setId,
+      txn_id: null,
+      legacy_review_id: null
+    });
+  var bindingPayload =
+    h3WrittenReviewClone_(review);
+  bindingPayload.surface_family =
+    '5W';
+
+  var expected =
+    h3ReviewAudioExpectedBindings_(
+      bindingPayload
+    ).filter(
+      function (binding) {
+        return (
+          binding.slot_key ===
+          assetKey
+        );
+      }
+    );
+
+  if (expected.length !== 1) {
+    throw new Error(
+      'WRITTEN_REVIEW_AUDIO_ASSET_NOT_ALLOWED:' +
+        assetKey
+    );
+  }
+
+  var spreadsheet =
+    SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+  var binding =
+    h3ReviewAudioBindingResolve_(
+      spreadsheet,
+      '5W',
+      setId,
+      assetKey
+    );
+
+  if (
+    binding.asset_key !==
+      expected[0].asset_key ||
+    binding.set_id !== setId ||
+    binding.sidecar_family !== '5W'
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_AUDIO_BINDING_MISMATCH:' +
+        assetKey
+    );
+  }
+
+  var media =
+    h3DriveDataUri_(
+      binding.audio_file_id,
+      'audio/mpeg',
+      null,
+      8 * 1024 * 1024
+    );
+
+  return {
+    schema:
+      'H3_WEB_MEDIA_V1',
+    mode: 'REVIEW',
+    read_only: true,
+    provider_kind: 'WRITTEN',
+    surface_family: '5W',
+    set_id: setId,
+    asset_key: assetKey,
+    data_uri:
+      media.data_uri,
+    mime_type:
+      media.mime_type,
+    size_bytes:
+      media.size_bytes,
+    trim_start_ms: 0,
+    fallback_url:
+      binding.audio_url,
+    review_audio_binding_contract_id:
+      H3_REVIEW_AUDIO_BINDING_CONTRACT_ID_
+  };
+}
+
+
 function h3WrittenReviewOpen_(request) {
   var surfaceFamily = String(
     request &&
@@ -345,8 +546,10 @@ function h3WrittenReviewOpen_(request) {
     );
   }
 
-  return getWrittenPersistentReviewPayload_(
-    request
+  return h3WrittenReviewAttach5WAudio_(
+    getWrittenPersistentReviewPayload_(
+      request
+    )
   );
 }
 
@@ -438,7 +641,7 @@ function h3WrittenReviewProvider_() {
     openReview:
       h3WrittenReviewOpen_,
     openMedia:
-      h3WrittenReviewUnavailable_,
+      h3WrittenReviewMedia_,
     openReplay:
       h3WrittenReviewUnavailable_,
     openReplayMedia:

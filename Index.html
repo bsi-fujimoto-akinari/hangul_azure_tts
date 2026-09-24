@@ -341,14 +341,20 @@
               route &&
               route.result_status ===
                 'READY' &&
+              route.client_action !==
+                'AUTHORING_REQUIRED' &&
               (
                 route.route_kind ===
                   'CURRENT_SET' ||
                 (
                   route.route_kind ===
                     'FAMILY' &&
-                  route.readiness_state ===
-                    'READY'
+                  [
+                    'READY',
+                    'PREPARE_REQUIRED'
+                  ].indexOf(
+                    route.readiness_state
+                  ) >= 0
                 )
               ) &&
               family !== '—';

@@ -55,6 +55,8 @@ var H3_FS_AUTHORING_CONTRACT_ID_ =
   'H3-SEMANTIC-AUTHORING-QUEUE-20260924-V1';
 var H3_FS_AUTHORING_REQUEST_SCHEMA_ =
   'H3_FAMILY_SCHEDULER_AUTHORING_JOB_REQUEST_V1';
+var H3_FS_AUTHORING_RECONCILIATION_SCHEMA_ =
+  'H3_FAMILY_SCHEDULER_AUTHORING_RECONCILIATION_V1';
 var H3_FS_AUTHORING_RECOVERY_POLICY_ID_ =
   'H3-SEMANTIC-AUTHORING-RECOVERY-20260924-V1';
 var H3_FS_AUTHORING_CLAIM_STALE_MINUTES_ = 120;
@@ -1359,21 +1361,17 @@ function h3FsAuthoringTargetIdentity_(ss,family,prep) {
   throw new Error('FAMILY_SCHEDULER_AUTHORING_FAMILY_INVALID:'+family);
 }
 
-function h3FsAuthoringUpsert_(ss,level,evaluation,prep) {
+function h3FsAuthoringJobSpec_(ss,level,evaluation,prep) {
   if(!prep||String(prep.status||'')!=='AUTHORING_REQUIRED'){
-    return {status:'NO_JOB',reason:'NOT_AUTHORING_REQUIRED'};
+    throw new Error('FAMILY_SCHEDULER_AUTHORING_SPEC_NOT_REQUIRED');
   }
-
   var family=String(prep.family||evaluation.recommended_family||'');
   if(H3_FS_FAMILIES_.indexOf(family)<0){
     throw new Error('FAMILY_SCHEDULER_AUTHORING_FAMILY_INVALID:'+family);
   }
-
-  var q=h3FsAuthoringQueue_(ss);
   var identity=h3FsAuthoringTargetIdentity_(ss,family,prep);
   var metric=
-    evaluation.family_metrics &&
-    evaluation.family_metrics[family]
+    evaluation.family_metrics && evaluation.family_metrics[family]
       ? evaluation.family_metrics[family]
       : {};
   var schedulerContext={
@@ -1422,13 +1420,41 @@ function h3FsAuthoringUpsert_(ss,level,evaluation,prep) {
     source_constraint:sourceConstraint,
     authoring_request:authoringRequest
   });
-  var idempotencyKey='H3AQK-'+h3FsSha_({
-    contract_id:H3_FS_AUTHORING_CONTRACT_ID_,
+  return {
     family:family,
-    target_id:identity.target_id,
-    target_kind:identity.target_kind,
-    snapshot_sha256:snapshot
-  });
+    identity:identity,
+    scheduler_context:schedulerContext,
+    source_constraint:sourceConstraint,
+    authoring_request:authoringRequest,
+    snapshot_sha256:snapshot,
+    idempotency_key:'H3AQK-'+h3FsSha_({
+      contract_id:H3_FS_AUTHORING_CONTRACT_ID_,
+      family:family,
+      target_id:identity.target_id,
+      target_kind:identity.target_kind,
+      snapshot_sha256:snapshot
+    })
+  };
+}
+
+function h3FsAuthoringUpsert_(ss,level,evaluation,prep) {
+  if(!prep||String(prep.status||'')!=='AUTHORING_REQUIRED'){
+    return {status:'NO_JOB',reason:'NOT_AUTHORING_REQUIRED'};
+  }
+
+  var family=String(prep.family||evaluation.recommended_family||'');
+  if(H3_FS_FAMILIES_.indexOf(family)<0){
+    throw new Error('FAMILY_SCHEDULER_AUTHORING_FAMILY_INVALID:'+family);
+  }
+
+  var q=h3FsAuthoringQueue_(ss);
+  var spec=h3FsAuthoringJobSpec_(ss,level,evaluation,prep);
+  var identity=spec.identity;
+  var schedulerContext=spec.scheduler_context;
+  var sourceConstraint=spec.source_constraint;
+  var authoringRequest=spec.authoring_request;
+  var snapshot=spec.snapshot_sha256;
+  var idempotencyKey=spec.idempotency_key;
   var existing=null;
   q.table.rows.forEach(function(r,i){
     if(String(r[q.table.map.IDEMPOTENCY_KEY]||'')!==idempotencyKey)return;
@@ -1510,6 +1536,271 @@ function h3FsAuthoringUpsert_(ss,level,evaluation,prep) {
     target_id:identity.target_id,
     target_kind:identity.target_kind
   };
+}
+
+function h3FsAuthoringPreparationPreview_(ss,family) {
+  if(family==='L')return h3FsBuildListeningPrepare_(ss);
+  if(family==='W')return h3FsPrepareWritten_(ss);
+
+  if(family==='R'){
+    var preparedR=h3FsFindPreparedReading_(ss);
+    if(preparedR){
+      return {
+        status:'PREISSUE_READY',family:'R',
+        set_id:String(preparedR.stage.set_id||'')
+      };
+    }
+    var rOb=h3FsRtDueObligations_(ss,'READING','');
+    if(!rOb.length){
+      return {
+        status:'AUTHORING_REQUIRED',family:'R',
+        authoring_target:'READING_NO_DUE_SOURCE'
+      };
+    }
+    var rSel=h3FsReadingGroupForObligation_(ss,rOb[0]);
+    if(!rSel){
+      return {
+        status:'AUTHORING_REQUIRED',family:'R',
+        authoring_target:'READING_RETEST_SOURCE:'+rOb[0].skill_id,
+        skill_id:rOb[0].skill_id
+      };
+    }
+    return {
+      status:'PREPARE_REQUIRED',family:'R',
+      skill_id:rOb[0].skill_id,
+      section_key:rSel.section_key,
+      source_group_id:rSel.group_id
+    };
+  }
+
+  if(family==='T'){
+    var preparedT=h3FsFindPreparedTranslation_(ss);
+    if(preparedT){
+      return {
+        status:'LOCKED',family:'T',
+        set_id:String(preparedT.stage.set_id||'')
+      };
+    }
+    var selection=h3FsTranslationSelection_(ss);
+    if(!selection.obligations.length){
+      return {
+        status:'AUTHORING_REQUIRED',family:'T',
+        authoring_target:
+          'TRANSLATION_DIRECTION_POOL:'+selection.missing_direction
+      };
+    }
+    var used=h3FsTranslationUsed_(ss),itemIds=[];
+    for(var i=0;i<selection.obligations.length;i++){
+      var obligation=selection.obligations[i];
+      var item=h3FsTranslationSourceForObligation_(ss,obligation,used);
+      if(!item){
+        return {
+          status:'AUTHORING_REQUIRED',family:'T',
+          authoring_target:
+            'TRANSLATION_RETEST_SURFACE:'+
+            obligation.skill_id+':'+obligation.direction,
+          skill_id:obligation.skill_id,
+          translation_direction:obligation.direction
+        };
+      }
+      itemIds.push(item.item_id);
+      used.item_ids.push(item.item_id);
+      used.item_map[item.item_id]=true;
+      used.surface_keys.push(item.surface_key);
+    }
+    return {
+      status:'PREPARE_REQUIRED',family:'T',
+      profile:selection.profile,
+      skill_ids:selection.obligations.map(function(x){return x.skill_id;}),
+      source_item_ids:itemIds
+    };
+  }
+
+  throw new Error('FAMILY_SCHEDULER_AUTHORING_FAMILY_INVALID:'+family);
+}
+
+function h3FsAuthoringQueueMatch_(q,level,spec) {
+  var exact=[],history=[];
+  q.table.rows.forEach(function(r,i){
+    var x={
+      row_number:i+2,
+      job_id:String(r[q.table.map.JOB_ID]||''),
+      level:String(r[q.table.map.LEVEL]||''),
+      family:String(r[q.table.map.FAMILY]||''),
+      target_id:String(r[q.table.map.TARGET_ID]||''),
+      target_kind:String(r[q.table.map.TARGET_KIND]||''),
+      status:String(r[q.table.map.STATUS]||''),
+      snapshot_sha256:String(r[q.table.map.SNAPSHOT_SHA256]||''),
+      idempotency_key:String(r[q.table.map.IDEMPOTENCY_KEY]||'')
+    };
+    if(
+      x.level===String(level) &&
+      x.family===spec.family &&
+      x.target_id===spec.identity.target_id &&
+      x.target_kind===spec.identity.target_kind
+    )history.push(x);
+    if(x.idempotency_key===spec.idempotency_key)exact.push(x);
+  });
+  if(exact.length>1){
+    throw new Error(
+      'FAMILY_SCHEDULER_AUTHORING_DUPLICATE_IDEMPOTENCY_KEY:'+
+      spec.idempotency_key
+    );
+  }
+  return {exact:exact.length?exact[0]:null,history:history};
+}
+
+function h3FsAuthoringReconciliationDecision_(
+  readinessState,
+  preparationStatus,
+  jobStatus
+) {
+  var ready=String(readinessState||'');
+  var prep=String(preparationStatus||'');
+  var job=String(jobStatus||'');
+  if(ready==='READY'){
+    return {action:'NO_ACTION',reason:'READY'};
+  }
+  if(ready!=='PREPARE_REQUIRED'){
+    return {
+      action:'NO_ACTION',
+      reason:'READINESS_'+(ready||'UNKNOWN')
+    };
+  }
+  if(prep!=='AUTHORING_REQUIRED'){
+    return {
+      action:'NO_ACTION',
+      reason:'DETERMINISTIC_PREPARATION_AVAILABLE'
+    };
+  }
+  if(!job){
+    return {action:'ENSURE_OPEN',reason:'MISSING_AUTHORING_JOB'};
+  }
+  if(['OPEN','CLAIMED','FAILED_RETRYABLE'].indexOf(job)>=0){
+    return {action:'EXISTING_NO_DUPLICATE',reason:'ACTIVE_JOB_'+job};
+  }
+  if(job==='COMPLETED'){
+    return {action:'BLOCKED_HISTORY',reason:'COMPLETED_NOT_READY'};
+  }
+  if(job==='SUPERSEDED'||job==='FAILED_BLOCKED'){
+    return {action:'BLOCKED_HISTORY',reason:'HISTORICAL_'+job};
+  }
+  return {action:'BLOCKED_HISTORY',reason:'UNKNOWN_JOB_STATUS_'+job};
+}
+
+function h3FsAuthoringReconciliationPreviewCore_(ss,level) {
+  var evaluation=h3FsEvaluate_(ss,level);
+  var out={
+    schema:H3_FS_AUTHORING_RECONCILIATION_SCHEMA_,
+    mode:'READ_ONLY_PREVIEW',
+    global_set_clock:Number(evaluation.global_set_clock||0),
+    recommended_family:String(evaluation.recommended_family||'NONE'),
+    readiness_state:'',
+    preparation_status:'',
+    action:'NO_ACTION',
+    reason:'',
+    target_id:'',
+    target_kind:'',
+    snapshot_sha256:'',
+    idempotency_key:'',
+    existing_job_id:'',
+    existing_job_status:'',
+    target_history_count:0,
+    write_performed:false
+  };
+  if(String(evaluation.next_action||'')!=='RECOMMEND_FAMILY'){
+    out.reason='SCHEDULER_'+String(evaluation.next_action||'UNKNOWN');
+    return {public_result:out,evaluation:evaluation,prep:null,spec:null};
+  }
+
+  var family=String(evaluation.recommended_family||'');
+  if(H3_FS_FAMILIES_.indexOf(family)<0){
+    throw new Error('FAMILY_SCHEDULER_RECONCILIATION_FAMILY_INVALID');
+  }
+  var readiness=h3FsReadiness_(ss),current=readiness[family];
+  if(!current||current.eligible!==true){
+    out.readiness_state=current?String(current.state||''):'UNKNOWN';
+    out.reason='FAMILY_NOT_ELIGIBLE';
+    return {public_result:out,evaluation:evaluation,prep:null,spec:null};
+  }
+  out.readiness_state=String(current.state||'');
+  if(out.readiness_state==='READY'){
+    out.reason='READY';
+    return {public_result:out,evaluation:evaluation,prep:null,spec:null};
+  }
+
+  var prep=h3FsAuthoringPreparationPreview_(ss,family);
+  out.preparation_status=String(prep.status||'');
+  var noJobDecision=h3FsAuthoringReconciliationDecision_(
+    out.readiness_state,
+    out.preparation_status,
+    ''
+  );
+  if(out.preparation_status!=='AUTHORING_REQUIRED'){
+    out.action=noJobDecision.action;
+    out.reason=noJobDecision.reason;
+    return {public_result:out,evaluation:evaluation,prep:prep,spec:null};
+  }
+
+  var spec=h3FsAuthoringJobSpec_(ss,level,evaluation,prep);
+  var q=h3FsAuthoringQueue_(ss);
+  var match=h3FsAuthoringQueueMatch_(q,level,spec);
+  var exact=match.exact;
+  var decision=h3FsAuthoringReconciliationDecision_(
+    out.readiness_state,
+    out.preparation_status,
+    exact?exact.status:''
+  );
+  out.action=decision.action;
+  out.reason=decision.reason;
+  out.target_id=spec.identity.target_id;
+  out.target_kind=spec.identity.target_kind;
+  out.snapshot_sha256=spec.snapshot_sha256;
+  out.idempotency_key=spec.idempotency_key;
+  out.target_history_count=match.history.length;
+  if(exact){
+    out.existing_job_id=exact.job_id;
+    out.existing_job_status=exact.status;
+  }
+  return {public_result:out,evaluation:evaluation,prep:prep,spec:spec};
+}
+
+function h3FamilySchedulerAuthoringReconciliationPreview() {
+  var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
+  return h3FsAuthoringReconciliationPreviewCore_(ss,'3級').public_result;
+}
+
+function h3FamilySchedulerAuthoringReconciliationEnsure() {
+  var lock=LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
+    var first=h3FsAuthoringReconciliationPreviewCore_(ss,'3級');
+    if(first.public_result.action!=='ENSURE_OPEN'){
+      return first.public_result;
+    }
+    var confirm=h3FsAuthoringReconciliationPreviewCore_(ss,'3級');
+    if(
+      confirm.public_result.action!=='ENSURE_OPEN' ||
+      !confirm.spec || !first.spec ||
+      confirm.spec.idempotency_key!==first.spec.idempotency_key
+    ){
+      return confirm.public_result;
+    }
+    var ensured=h3FsAuthoringUpsert_(
+      ss,'3級',confirm.evaluation,confirm.prep
+    );
+    var out=confirm.public_result;
+    out.write_performed=String(ensured.status||'')==='OPEN_CREATED';
+    out.ensure_status=String(ensured.status||'');
+    out.existing_job_id=String(ensured.job_id||'');
+    out.existing_job_status=String(ensured.job_status||'OPEN');
+    out.action='EXISTING_NO_DUPLICATE';
+    out.reason=out.write_performed?'OPEN_ENSURED':'ACTIVE_JOB_OPEN';
+    return out;
+  } finally {
+    try{lock.releaseLock();}catch(_ignore){}
+  }
 }
 
 function h3FsSemanticAuthoringBridge_(ss,level,evaluation) {

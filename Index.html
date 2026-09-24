@@ -639,35 +639,17 @@
         function placeMonitorPanel_(
           panel
         ) {
-          var review =
-            home.querySelector(
-              '.review-library'
-            );
-          if (!review || !panel) {
+          if (!panel) {
             return false;
           }
 
-          var launcher =
-            home.querySelector(
-              '.family-scheduler-launcher'
-            );
           if (
-            launcher &&
-            launcher.nextElementSibling !==
+            home.firstElementChild !==
               panel
-          ) {
-            launcher.insertAdjacentElement(
-              'afterend',
-              panel
-            );
-          } else if (
-            !launcher &&
-            panel.nextElementSibling !==
-              review
           ) {
             home.insertBefore(
               panel,
-              review
+              home.firstElementChild
             );
           }
           return true;
@@ -749,18 +731,28 @@
 
           var head =
             monitorEl_(
-              'div',
-              'monitor-home-head'
+              'button',
+              'monitor-home-head monitor-home-toggle'
             );
+          head.type = 'button';
+          head.setAttribute(
+            'aria-expanded',
+            'false'
+          );
+          head.setAttribute(
+            'aria-controls',
+            'monitor-home-details'
+          );
+
           var titleWrap =
             monitorEl_(
-              'div',
+              'span',
               'monitor-home-title'
             );
           titleWrap.appendChild(
             monitorEl_(
-              'h3',
-              '',
+              'span',
+              'monitor-home-heading',
               'Monitor'
             )
           );
@@ -776,6 +768,12 @@
           head.appendChild(
             titleWrap
           );
+
+          var headActions =
+            monitorEl_(
+              'span',
+              'monitor-home-head-actions'
+            );
           var overall =
             monitorEl_(
               'span',
@@ -786,11 +784,48 @@
             String(
               model.status || ''
             );
-          head.appendChild(
+          headActions.appendChild(
             overall
+          );
+          headActions.appendChild(
+            monitorEl_(
+              'span',
+              'monitor-home-chevron',
+              '▾'
+            )
+          );
+          head.appendChild(
+            headActions
           );
           panel.appendChild(
             head
+          );
+
+          var details =
+            monitorEl_(
+              'div',
+              'monitor-home-details'
+            );
+          details.id =
+            'monitor-home-details';
+          details.hidden = true;
+
+          head.addEventListener(
+            'click',
+            function () {
+              var expanded =
+                head.getAttribute(
+                  'aria-expanded'
+                ) === 'true';
+              head.setAttribute(
+                'aria-expanded',
+                expanded
+                  ? 'false'
+                  : 'true'
+              );
+              details.hidden =
+                expanded;
+            }
           );
 
           var grid =
@@ -1012,7 +1047,7 @@
             rs14
           );
 
-          panel.appendChild(
+          details.appendChild(
             grid
           );
 
@@ -1084,8 +1119,11 @@
               list
             );
           }
-          panel.appendChild(
+          details.appendChild(
             events
+          );
+          panel.appendChild(
+            details
           );
         }
 

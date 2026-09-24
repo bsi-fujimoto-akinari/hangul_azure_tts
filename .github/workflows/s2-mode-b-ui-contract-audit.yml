@@ -1,0 +1,246 @@
+name: S2 Mode B UI Contract Audit
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax check
+        run: |
+          node --check WebAppFamilyScheduler.js
+
+      - name: Static contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          server = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+          client = Path("FamilyLauncher.html").read_text(encoding="utf-8")
+          index = Path("Index.html").read_text(encoding="utf-8")
+
+          required_server = [
+              "H3_FAMILY_SCHEDULER_FAMILY_LAUNCH_PREVIEW_V1",
+              "H3_FAMILY_SCHEDULER_FAMILY_LAUNCH_RESULT_V1",
+              "MODE_B_FAMILY_SPECIFIC_LAUNCH_ONLY_IF_ELIGIBLE",
+              "function h3FsFamilyLaunchPreviewCore_(ss)",
+              "function h3FamilySchedulerFamilyLaunchPreview()",
+              "function h3FsManualFamilyResolved_(",
+              "function h3FsHomeFamilyLocked_(family)",
+              "function h3FamilySchedulerHomeFamily(family)",
+              "selection_source:",
+              "'FAMILY_SPECIFIC_LAUNCH'",
+          ]
+          for token in required_server:
+              if token not in server:
+                  raise SystemExit(f"missing S2 server token: {token}")
+
+          preview_start = server.index(
+              "function h3FsFamilyLaunchPreviewCore_(ss)"
+          )
+          preview_end = server.index(
+              "function h3FamilySchedulerFamilyLaunchPreview()",
+              preview_start,
+          )
+          preview = server[preview_start:preview_end]
+          for token in [
+              "appendRow(",
+              ".setValue(",
+              ".setValues(",
+              "h3FsAppend_(",
+              "h3FsPrepareWritten_(",
+              "h3FsPrepareReading_(",
+              "h3FsPrepareTranslation_(",
+              "prepareListeningBackendSet(",
+              "h3FsIssuePreparedFamily_(",
+          ]:
+              if token in preview:
+                  raise SystemExit(
+                      f"family launch preview must remain read-only: {token}"
+                  )
+
+          locked_start = server.index(
+              "function h3FsHomeFamilyLocked_(family)"
+          )
+          locked_end = server.index(
+              "function h3FamilySchedulerHomeFamily(family)",
+              locked_start,
+          )
+          locked = server[locked_start:locked_end]
+          if "h3FsIssuePreparedFamily_(" not in locked:
+              raise SystemExit("manual family launch must use canonical family issue")
+          for token in [
+              "h3FsAppendIssueApplied_(",
+              "scheduler_applied=true",
+              "h3WrittenSubmit_(",
+              "h3ReadingSubmit_(",
+              "h3TranslationSubmit_(",
+              "h3TranslationV2Submit_(",
+          ]:
+              if token in locked:
+                  raise SystemExit(
+                      f"manual family launch boundary violated: {token}"
+                  )
+
+          public_start = server.index(
+              "function h3FamilySchedulerHomeFamily(family)"
+          )
+          public_end = server.index(
+              "function h3FsHomeNextLocked_()",
+              public_start,
+          )
+          public = server[public_start:public_end]
+          if "prepareListeningBackendSet(" not in public:
+              raise SystemExit(
+                  "manual listening launch must prepare outside scheduler lock"
+              )
+          for token in [
+              "h3WrittenSubmit_(",
+              "h3ReadingSubmit_(",
+              "h3TranslationSubmit_(",
+              "h3TranslationV2Submit_(",
+          ]:
+              if token in public:
+                  raise SystemExit(
+                      f"manual public route must not submit answers: {token}"
+                  )
+
+          required_client = [
+              "H3_FAMILY_SCHEDULER_FAMILY_LAUNCH_PREVIEW_V1",
+              "MODE_B_FAMILY_SPECIFIC_LAUNCH_ONLY_IF_ELIGIBLE",
+              ".h3FamilySchedulerFamilyLaunchPreview()",
+              ".h3FamilySchedulerHomeFamily(",
+              "button.addEventListener(",
+              "OPEN_CURRENT",
+              "OPEN_ISSUED",
+              "h3-family-scheduler-open-current",
+          ]
+          for token in required_client:
+              if token not in client:
+                  raise SystemExit(f"missing S2 client token: {token}")
+
+          for token in [
+              "h3FamilySchedulerHomeNext(",
+              "submitListeningWebAnswers",
+              "h3WrittenSubmit_(",
+              "h3ReadingSubmit_(",
+              "h3TranslationV2Submit_(",
+          ]:
+              if token in client:
+                  raise SystemExit(
+                      f"family launcher must not own NEXT/submit: {token}"
+                  )
+
+          if "<?!= include_('FamilyLauncher'); ?>" not in index:
+              raise SystemExit("FamilyLauncher include missing")
+
+          print("S2 Mode B static contract PASS")
+          PY
+
+      - name: Preview fixture
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          vm.runInThisContext(
+            fs.readFileSync(
+              'WebAppFamilyScheduler.js',
+              'utf8'
+            )
+          );
+
+          function assert(ok, msg) {
+            if (!ok) throw new Error(msg);
+          }
+
+          h3FsEvaluate_ = () => ({
+            schema:H3_FS_OUTPUT_SCHEMA_,
+            mode:'SHADOW',
+            global_set_clock:27,
+            next_action:'RECOMMEND_FAMILY',
+            recommended_family:'L',
+            primary_reason:'P3_BALANCE',
+            result_status:'PASS'
+          });
+          h3ReviewCurrentLearning_ = () => null;
+          h3FsReadiness_ = () => ({
+            L:{state:'PREPARE_REQUIRED',eligible:true,reason:''},
+            W:{state:'READY',eligible:true,reason:''},
+            R:{state:'PREPARE_REQUIRED',eligible:true,reason:''},
+            T:{state:'BLOCKED',eligible:false,reason:'RT_GATE'}
+          });
+          h3FsAuthoringPreparationPreview_ = (_, family) =>
+            family === 'L'
+              ? {status:'READY_TO_PREPARE',family:'L'}
+              : {status:'AUTHORING_REQUIRED',family:'R',authoring_target:'FIXTURE:R'};
+
+          let out = h3FsFamilyLaunchPreviewCore_({}, '3級');
+          assert(
+            out.scheduler_applied === false,
+            'preview must not apply scheduler'
+          );
+          assert(
+            out.recommended_family === 'L',
+            'preview must preserve recommendation'
+          );
+          assert(
+            out.families.L.client_action === 'LAUNCH' &&
+            out.families.L.requires_prepare === true,
+            'L deterministic preparation should be launchable'
+          );
+          assert(
+            out.families.W.client_action === 'LAUNCH' &&
+            out.families.W.requires_prepare === false,
+            'W READY should be launchable'
+          );
+          assert(
+            out.families.R.client_action === 'AUTHORING_REQUIRED' &&
+            out.families.R.result_status === 'BLOCKED',
+            'R authoring gate must not be bypassed'
+          );
+          assert(
+            out.families.T.client_action === 'BLOCKED',
+            'T blocked gate must remain blocked'
+          );
+
+          h3FsEvaluate_ = () => ({
+            schema:H3_FS_OUTPUT_SCHEMA_,
+            mode:'SHADOW',
+            global_set_clock:27,
+            next_action:'RESUME_CURRENT',
+            recommended_family:'',
+            current_set_id:'H3-CURRENT-W',
+            primary_reason:'CURRENT',
+            result_status:'PASS'
+          });
+          h3ReviewCurrentLearning_ = () => ({
+            set_id:'H3-CURRENT-W',
+            provider_kind:'WRITTEN',
+            surface_family:'5W'
+          });
+
+          out = h3FsFamilyLaunchPreviewCore_({}, '3級');
+          assert(
+            out.families.W.client_action === 'OPEN_CURRENT' &&
+            out.families.W.current_set_id === 'H3-CURRENT-W',
+            'current W must be resumable'
+          );
+          ['L','R','T'].forEach(family => {
+            assert(
+              out.families[family].client_action === 'BLOCKED' &&
+              out.families[family].reason === 'CURRENT_OTHER_FAMILY',
+              family + ' must not launch beside current W'
+            );
+          });
+
+          console.log('S2 Mode B preview fixture PASS');
+          NODE

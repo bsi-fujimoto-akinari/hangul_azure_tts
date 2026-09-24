@@ -501,7 +501,7 @@ function h3FsTranslationOfficialCandidates_(ss,obligation,used) {
     var item=h3FsOneRowBy_(tables.items,'ITEM_ID',itemId,'TRANSLATION_ITEM');
     var answer=h3FsOneRowBy_(tables.answers,'ITEM_ID',itemId,'TRANSLATION_ANSWER');
     var sectionKey=String(answer[tables.answers.map.SECTION_KEY]||'');
-    var direction=h3Rs10DirectionForSection_(sectionKey);
+    var direction=h3TranslationDirectionForSection_(sectionKey);
     if(direction!==obligation.direction)return;
     if(
       String(item[tables.items.map.LEVEL]||'')!=='3級'||
@@ -550,7 +550,15 @@ function h3FsTranslationSourceForObligation_(ss,obligation,used) {
         used.item_ids
       );
       return all[i];
-    }catch(_err){}
+    }catch(err){
+      var message=String(err&&err.message||err);
+      if(
+        message.indexOf('TRANSLATION_V2_RETEST_SURFACE_REUSED')<0 &&
+        message.indexOf('TRANSLATION_V2_RETEST_ITEM_REUSED')<0
+      ){
+        throw err;
+      }
+    }
   }
   return null;
 }

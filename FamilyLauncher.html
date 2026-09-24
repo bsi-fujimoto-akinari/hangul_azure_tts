@@ -1,0 +1,183 @@
+<script>
+(function () {
+  'use strict';
+
+  var families = ['L', 'W', 'R', 'T'];
+
+  function buttons_() {
+    var out = {};
+    var nodes =
+      document.querySelectorAll(
+        '.family-scheduler-family-group .family-scheduler-button'
+      );
+    Array.prototype.forEach.call(
+      nodes,
+      function (button) {
+        var family =
+          String(
+            button.dataset.family || ''
+          );
+        if (
+          families.indexOf(family) >= 0
+        ) {
+          out[family] = button;
+        }
+      }
+    );
+    return out;
+  }
+
+  function applyState_(
+    family,
+    state
+  ) {
+    var button =
+      buttons_()[family];
+    if (!button) return;
+
+    var action =
+      String(
+        state &&
+        state.client_action || ''
+      );
+    var enabled =
+      state &&
+      state.result_status === 'READY' &&
+      (
+        action === 'LAUNCH' ||
+        action === 'OPEN_CURRENT'
+      );
+
+    button.disabled = !enabled;
+    button.setAttribute(
+      'aria-disabled',
+      enabled ? 'false' : 'true'
+    );
+    button.dataset.clientAction =
+      action;
+  }
+
+  function applyPreview_(
+    preview
+  ) {
+    var valid =
+      preview &&
+      preview.schema ===
+        'H3_FAMILY_SCHEDULER_FAMILY_LAUNCH_PREVIEW_V1' &&
+      preview.button_mode ===
+        'MODE_B_FAMILY_SPECIFIC_LAUNCH_ONLY_IF_ELIGIBLE' &&
+      preview.families;
+
+    families.forEach(
+      function (family) {
+        applyState_(
+          family,
+          valid
+            ? preview.families[family]
+            : null
+        );
+      }
+    );
+  }
+
+  function refresh_() {
+    google.script.run
+      .withSuccessHandler(
+        applyPreview_
+      )
+      .withFailureHandler(
+        function () {
+          applyPreview_(null);
+        }
+      )
+      .h3FamilySchedulerFamilyLaunchPreview();
+  }
+
+  function openResult_(
+    result
+  ) {
+    if (
+      result &&
+      (
+        result.client_action ===
+          'OPEN_CURRENT' ||
+        result.client_action ===
+          'OPEN_ISSUED'
+      ) &&
+      result.render_request
+    ) {
+      document.dispatchEvent(
+        new CustomEvent(
+          'h3-family-scheduler-open-current',
+          {
+            detail:
+              result.render_request
+          }
+        )
+      );
+      return;
+    }
+    refresh_();
+  }
+
+  function bind_() {
+    var map = buttons_();
+    families.forEach(
+      function (family) {
+        var button = map[family];
+        if (
+          !button ||
+          button.dataset
+            .familyLauncherBound ===
+              'true'
+        ) {
+          return;
+        }
+
+        button.dataset
+          .familyLauncherBound =
+            'true';
+        button.addEventListener(
+          'click',
+          function () {
+            if (button.disabled) {
+              return;
+            }
+            button.disabled = true;
+            button.setAttribute(
+              'aria-disabled',
+              'true'
+            );
+            google.script.run
+              .withSuccessHandler(
+                openResult_
+              )
+              .withFailureHandler(
+                refresh_
+              )
+              .h3FamilySchedulerHomeFamily(
+                family
+              );
+          }
+        );
+      }
+    );
+    refresh_();
+  }
+
+  var home =
+    document.getElementById('home');
+  if (!home) return;
+
+  bind_();
+  new MutationObserver(
+    bind_
+  ).observe(
+    home,
+    {
+      childList: true,
+      subtree: true
+    }
+  );
+}());
+</script>

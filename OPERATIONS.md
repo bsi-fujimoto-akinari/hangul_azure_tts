@@ -461,3 +461,50 @@ Fresh S3-start acceptance baseline on 2026-09-24:
 L=PREPARE_REQUIRED, W=READY, R=PREPARE_REQUIRED, T=PREPARE_REQUIRED.
 This baseline is for READ_ONLY verification only and does not authorize
 materialization, issue, submit, or semantic generation.
+
+## S4-R4-H production monitoring cutover
+
+Contract: `H3_MONITOR_PRODUCTION_TRIGGER_V1`.
+
+The canonical monitoring path is one Apps Script time-driven installable trigger
+calling `h3MonitoringObserverEmailRun` once per hour. The trigger is owned by
+the deploying user and is independent of learner issue/submit flows.
+
+Production lifecycle functions:
+
+- `h3MonitoringProductionPreflight()` — READ_ONLY; requires recipient config
+  READY, a HEALTHY observer with zero action-required events at cutover, and a
+  trigger state of ABSENT or READY.
+- `h3MonitoringProductionTriggerStatus()` — READ_ONLY trigger inventory for the
+  exact `h3MonitoringObserverEmailRun` handler.
+- `h3MonitoringProductionTriggerEnsure()` — creates the hourly trigger only
+  from an exact ABSENT state, persists its unique trigger identity and cadence
+  metadata in Script Properties, and requires exact READY readback. Re-running
+  against the same verified trigger is a no-op.
+- `h3MonitoringProductionTriggerRemove()` — recovery-only removal of exactly
+  one verified production trigger. Duplicate or identity-mismatched state is
+  fail-closed and is never mass-deleted.
+
+Exactly one matching trigger is allowed. More than one matching trigger,
+or one trigger whose CLOCK source/identity metadata cannot be verified, is an
+ERROR and blocks cutover. The implementation uses
+`ScriptApp.newTrigger(...).timeBased().everyHours(1)` and requires the explicit
+`script.scriptapp` OAuth scope.
+
+The production trigger may update only monitoring-owned persistence
+(`monitor_observer_v1` and, only when an action-required event exists or an
+existing notification state resolves, `monitor_notification_v1`). It must not
+perform semantic authoring, learner issue/submit, learner-history/score
+mutation, pointer/counter changes, Family Scheduler mutation, RS13 closure, or
+RS14 activation.
+
+No synthetic action-required event or test email is created during cutover.
+The first production verification uses the naturally HEALTHY runtime and must
+report zero action-required events and `email_sent=false`. The deduplicated
+notification contract from S4-R4-F remains authoritative for future real
+action-required transitions.
+
+The legacy ChatGPT Work monitoring tasks remain paused after cutover; they are
+not deleted or re-enabled. Their paused state is retained as rollback/audit
+evidence while Apps Script observer + HOME + deduplicated email becomes the
+canonical monitoring path.

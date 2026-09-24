@@ -392,6 +392,15 @@ function h3FsReadingGroupForObligation_(ss,obligation) {
   return candidates.length?candidates[0]:null;
 }
 
+function h3FsCanonicalReadingPassageText_(value) {
+  return String(value || '')
+    .split('\n')
+    .map(function (line) {
+      return line.replace(/ +$/, '');
+    })
+    .join('\n');
+}
+
 function h3FsBuildReadingSource_(ss,selected) {
   var tables=h3FsOfficialTables_(ss);
   var g=selected.group;
@@ -449,8 +458,12 @@ function h3FsBuildReadingSource_(ss,selected) {
         'H3-'+sectionCode+'-G'+selected.group_id,
       site_group_id:selected.group_id,
       group_role:String(g[tables.groups.map.GROUP_ROLE]||''),
-      passage_ko:String(g[tables.groups.map.PASSAGE_RAW]||''),
-      passage_ja:String(g[tables.groups.map.PASSAGE_JA_RAW]||''),
+      passage_ko:h3FsCanonicalReadingPassageText_(
+        g[tables.groups.map.PASSAGE_RAW]
+      ),
+      passage_ja:h3FsCanonicalReadingPassageText_(
+        g[tables.groups.map.PASSAGE_JA_RAW]
+      ),
       source_site_item_id:
         String(g[tables.groups.map.PASSAGE_SOURCE_SITE_ITEM_ID]||''),
       source_batch_id:String(g[tables.groups.map.SOURCE_BATCH_ID]||'')
@@ -471,6 +484,8 @@ function h3FsReadingStageObjects_(table) {
 }
 
 function h3FsPrepareReading_(ss) {
+  h3FsReadingProjectionRecoveryGate_(ss);
+
   var existing=h3FsFindPreparedReading_(ss);
   if(existing){
     return {

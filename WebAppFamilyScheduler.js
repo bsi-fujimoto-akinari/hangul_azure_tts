@@ -388,16 +388,8 @@ function h3FsReadiness_(ss) {
   if(String(ls.PRODUCTION_GATE||'')!=='NORMAL_LIVE_ACTIVE'||String(ls.ANSWER_SYNC_PHASE||'')!=='IDLE') {
     out.L={state:'BLOCKED',eligible:false,reason:'LISTENING_RUNTIME_GATE'};
   } else {
-    var next=Number(ls.NEXT_LISTENING_SET_NO||0),ready=false,count=0;
-    var p=h3FsTable_(ss.getSheetByName('listening_set_payload_v1'));
-    h3FsRequire_(p,['LISTENING_SET_NO','STATUS','ISSUED_AT'],'listening_set_payload_v1');
-    p.rows.forEach(function(r){
-      if(Number(r[p.map.LISTENING_SET_NO]||0)!==next)return;
-      if(String(r[p.map.STATUS]||'')==='AUDIO_BOUND'&&!String(r[p.map.ISSUED_AT]||'')){
-        ready=true;count++;
-      }
-    });
-    if(count>1)throw new Error('FAMILY_SCHEDULER_LISTENING_PREPARED_AMBIGUOUS');
+    var next=Number(ls.NEXT_LISTENING_SET_NO||0);
+    var ready=!!h3FsReadyListeningPayload_(ss,next);
     out.L={state:ready?'READY':'PREPARE_REQUIRED',eligible:true,reason:''};
   }
 
@@ -2344,21 +2336,7 @@ function h3FsLatestReadyK1_(ss) {
     }
   });
   if(!candidates.length)return null;
-
-  candidates.sort(function(a,b){
-    var at=Date.parse(a.createdAt),bt=Date.parse(b.createdAt);
-    if(!Number.isFinite(at)||!Number.isFinite(bt)){
-      throw new Error('FAMILY_SCHEDULER_K1_READY_TIMESTAMP_INVALID');
-    }
-    if(at!==bt)return bt-at;
-    return String(b.id).localeCompare(String(a.id));
-  });
-
-  if(
-    candidates.length>1 &&
-    candidates[0].createdAt===candidates[1].createdAt &&
-    candidates[0].id===candidates[1].id
-  ){
+  if(candidates.length>1){
     throw new Error('FAMILY_SCHEDULER_K1_READY_AMBIGUOUS');
   }
 
@@ -2395,6 +2373,162 @@ function h3FsReadyListeningPrestage_(ss,nextSetNo) {
     throw new Error('FAMILY_SCHEDULER_LISTENING_PRESTAGE_AMBIGUOUS');
   }
   return found.length?found[0]:null;
+}
+
+function h3FsReadyListeningPayload_(ss,nextSetNo) {
+  var sh=ss.getSheetByName('listening_set_payload_v1');
+  if(!sh)return null;
+  var t=h3FsTable_(sh);
+  h3FsRequire_(t,[
+    'LISTENING_SET_ID','LISTENING_SET_NO','STATUS',
+    'K1_READY_ID','ISSUED_AT'
+  ],'listening_set_payload_v1');
+
+  var found=[];
+  t.rows.forEach(function(r,i){
+    if(
+      Number(r[t.map.LISTENING_SET_NO]||0)===Number(nextSetNo) &&
+      String(r[t.map.STATUS]||'')==='AUDIO_BOUND' &&
+      !String(r[t.map.ISSUED_AT]||'')
+    ){
+      found.push({
+        row:r,
+        rowNumber:i+2,
+        set_id:String(r[t.map.LISTENING_SET_ID]||''),
+        k1_ready_id:String(r[t.map.K1_READY_ID]||'')
+      });
+    }
+  });
+  if(found.length>1){
+    throw new Error('FAMILY_SCHEDULER_LISTENING_PREPARED_AMBIGUOUS');
+  }
+  return found.length?found[0]:null;
+}
+
+function h3FsLockedListeningPayload_(ss,nextSetNo) {
+  var sh=ss.getSheetByName('listening_set_payload_v1');
+  if(!sh)return null;
+  var t=h3FsTable_(sh);
+  h3FsRequire_(t,[
+    'LISTENING_SET_ID','LISTENING_SET_NO','STATUS',
+    'K1_READY_ID','ISSUED_AT'
+  ],'listening_set_payload_v1');
+
+  var found=[];
+  t.rows.forEach(function(r,i){
+    if(
+      Number(r[t.map.LISTENING_SET_NO]||0)===Number(nextSetNo) &&
+      String(r[t.map.STATUS]||'')==='LOCKED' &&
+      !String(r[t.map.ISSUED_AT]||'')
+    ){
+      found.push({
+        row:r,
+        rowNumber:i+2,
+        set_id:String(r[t.map.LISTENING_SET_ID]||''),
+        k1_ready_id:String(r[t.map.K1_READY_ID]||'')
+      });
+    }
+  });
+  if(found.length>1){
+    throw new Error('FAMILY_SCHEDULER_LISTENING_RESUME_PAYLOAD_AMBIGUOUS');
+  }
+  return found.length?found[0]:null;
+}
+
+function h3FsBoundListeningK1Row_(ss,k1ReadyId,setId) {
+  var sh=ss.getSheetByName('listening_k1_ready_v1');
+  if(!sh)return null;
+  var t=h3FsTable_(sh);
+  h3FsRequire_(t,[
+    'K1_READY_ID','STATUS','BOUND_LISTENING_SET_ID','CONSUMED_AT'
+  ],'listening_k1_ready_v1');
+
+  var found=[];
+  t.rows.forEach(function(r,i){
+    if(String(r[t.map.K1_READY_ID]||'')===String(k1ReadyId||'')){
+      found.push({row:r,rowNumber:i+2});
+    }
+  });
+  if(found.length>1){
+    throw new Error('FAMILY_SCHEDULER_LISTENING_BOUND_K1_AMBIGUOUS');
+  }
+  if(!found.length)return null;
+
+  var r=found[0].row;
+  if(
+    String(r[t.map.STATUS]||'')!=='READY' ||
+    String(r[t.map.BOUND_LISTENING_SET_ID]||'')!==String(setId||'') ||
+    String(r[t.map.CONSUMED_AT]||'')
+  ){
+    throw new Error('FAMILY_SCHEDULER_LISTENING_BOUND_K1_STATE_INVALID');
+  }
+  return found[0];
+}
+
+function h3FsBoundListeningPrestage_(ss,nextSetNo,setId) {
+  var sh=ss.getSheetByName(H3_BACKEND_PRESTAGE_TAB);
+  if(!sh)return null;
+  var t=h3FsTable_(sh);
+  h3FsRequire_(t,H3_BACKEND_PRESTAGE_HEADERS,H3_BACKEND_PRESTAGE_TAB);
+
+  var found=[];
+  t.rows.forEach(function(r,i){
+    if(
+      String(r[t.map.STATUS]||'')==='BOUND' &&
+      Number(r[t.map.TARGET_LISTENING_SET_NO]||0)===Number(nextSetNo) &&
+      String(r[t.map.BOUND_LISTENING_SET_ID]||'')===String(setId||'') &&
+      !String(r[t.map.CONSUMED_AT]||'')
+    ){
+      found.push({
+        row:r,
+        rowNumber:i+2,
+        id:String(r[t.map.PRESTAGE_ID]||'')
+      });
+    }
+  });
+  if(found.length>1){
+    throw new Error('FAMILY_SCHEDULER_LISTENING_BOUND_PRESTAGE_AMBIGUOUS');
+  }
+  return found.length?found[0]:null;
+}
+
+function h3FsResumableListeningPrepare_(ss,nextSetNo) {
+  var payload=h3FsLockedListeningPayload_(ss,nextSetNo);
+  if(!payload)return null;
+  if(!payload.set_id||!payload.k1_ready_id){
+    throw new Error('FAMILY_SCHEDULER_LISTENING_RESUME_PAYLOAD_INVALID');
+  }
+
+  var k1=h3FsBoundListeningK1Row_(
+    ss,
+    payload.k1_ready_id,
+    payload.set_id
+  );
+  if(!k1){
+    throw new Error('FAMILY_SCHEDULER_LISTENING_RESUME_K1_MISSING');
+  }
+
+  var prestage=h3FsBoundListeningPrestage_(
+    ss,
+    nextSetNo,
+    payload.set_id
+  );
+  if(!prestage){
+    throw new Error('FAMILY_SCHEDULER_LISTENING_RESUME_PRESTAGE_MISSING');
+  }
+
+  return {
+    status:'READY_TO_PREPARE',
+    authoring_target:'',
+    family:'L',
+    prestage_id:prestage.id,
+    resume:true,
+    request:{
+      schema:H3_BACKEND_PREPARE_SCHEMA,
+      set_id:payload.set_id,
+      k1_ready_id:payload.k1_ready_id
+    }
+  };
 }
 
 function h3FsAllocateListeningSetId_(ss) {
@@ -2454,6 +2588,9 @@ function h3FsBuildListeningPrepare_(ss) {
     );
   }
 
+  var resume=h3FsResumableListeningPrepare_(ss,next);
+  if(resume)return resume;
+
   var k1=h3FsLatestReadyK1_(ss);
   if(!k1){
     return {
@@ -2478,6 +2615,7 @@ function h3FsBuildListeningPrepare_(ss) {
     authoring_target:'',
     family:'L',
     prestage_id:prestage.id,
+    resume:false,
     request:{
       schema:H3_BACKEND_PREPARE_SCHEMA,
       set_id:h3FsAllocateListeningSetId_(ss),
@@ -3063,7 +3201,7 @@ function h3FsIssueListening_(ss) {
         var ids=logSheet
           .getRange(
             firstLogRow,
-            2,
+            lt.map.PARENT_SET_ID+1,
             rows.length,
             1
           )

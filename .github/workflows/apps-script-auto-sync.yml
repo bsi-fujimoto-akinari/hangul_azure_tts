@@ -373,7 +373,33 @@ jobs:
             echo "::error::Temporary credentialed smoke is one-attempt only; workflow reruns are not authorized."
             exit 1
           fi
-          if ! printf '%s' "$INTENDED_SMOKE_SHA" | grep -Eq '^[0-9a-f]{40}        shell: bash
+          python3 - "$INTENDED_SMOKE_SHA" <<'PY'
+          import re
+          import sys
+
+          if re.fullmatch(r'[0-9a-f]{40}', sys.argv[1]) is None:
+              raise SystemExit(
+                  'intended_smoke_sha must be one immutable 40-character commit SHA.'
+              )
+          PY
+          if [ "$INTENDED_SMOKE_SHA" != "$SOURCE_SHA" ]; then
+            echo "::error::Temporary credentialed smoke is restricted to the explicitly intended audited SHA."
+            exit 1
+          fi
+          if [ "$SOURCE_ATTESTED" != "true" ]; then
+            echo "::error::Development-mode smoke requires a successful immediate Apps Script source attestation."
+            exit 1
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      # Any temporary clasp run-function step must be inserted immediately after
+      # smoke_boundary and gated by:
+      #   if: steps.smoke_boundary.outputs.ready == 'true'
+      # Repository audit rejects run-function usage that does not use this boundary.
+
+      - name: Read deployment inventory
+        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
+        shell: bash
         run: npx -y @google/clasp@3.4.0 list-deployments
 
 

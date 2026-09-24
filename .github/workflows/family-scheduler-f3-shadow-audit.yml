@@ -1657,7 +1657,7 @@ jobs:
             snapshot.status !== 'HEALTHY' ||
             snapshot.write_performed !== false ||
             snapshot.sources.map(x=>x.source_id).join(',') !==
-              'RUNTIME_AUTHORITY,SEMANTIC_AUTHORING_QUEUE,RS13_RS14_GATE' ||
+              'RS13_RS14_GATE,RUNTIME_AUTHORITY,SEMANTIC_AUTHORING_QUEUE' ||
             snapshot.sources.find(
               x=>x.source_id==='SEMANTIC_AUTHORING_QUEUE'
             ).data.semantic_write_performed !== false

@@ -1639,6 +1639,15 @@ jobs:
           const fakeSs = {
             getId:()=>H3_WEB_RUNTIME_SPREADSHEET_ID
           };
+          h3MonitoringRs13Rs14Source_ = () => ({
+            status:'OK',
+            data:{
+              schema:H3_MONITOR_RS13_RS14_SCHEMA_,
+              monitor_contract:'S4-R4-D',
+              observer_write_performed:false
+            },
+            action_required_events:[]
+          });
           const snapshot = h3MonitoringObserverSnapshot_(
             '3級',
             h3MonitoringObserverSourceSpecs_(fakeSs),
@@ -1648,7 +1657,7 @@ jobs:
             snapshot.status !== 'HEALTHY' ||
             snapshot.write_performed !== false ||
             snapshot.sources.map(x=>x.source_id).join(',') !==
-              'RUNTIME_AUTHORITY,SEMANTIC_AUTHORING_QUEUE' ||
+              'RS13_RS14_GATE,RUNTIME_AUTHORITY,SEMANTIC_AUTHORING_QUEUE' ||
             snapshot.sources.find(
               x=>x.source_id==='SEMANTIC_AUTHORING_QUEUE'
             ).data.semantic_write_performed !== false
@@ -1660,6 +1669,424 @@ jobs:
           console.log(
             'S4-R4-C semantic authoring queue observer fixture PASS'
           );
+          NODE
+
+      - name: S4-R4-D RS13 RS14 gate observer static contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          fs = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+          required = [
+              "H3_MONITOR_RS13_RS14_GATE_SOURCE_V1",
+              "RS13_RS14_GATE",
+              "H3-RS13G-GATE-REPORTER-20260922-V1",
+              "H3-RS13K1-K1-SECONDARY-AUTHORITY-20260922-V1",
+              "function h3MonitoringRs13Rs14ValidateReport_(report)",
+              "function h3MonitoringRs13Rs14K1AuthorityHealth_(ss)",
+              "function h3MonitoringRs13Rs14FromReport_(report,k1Health)",
+              "function h3MonitoringRs13Rs14Source_(ss)",
+              "RS13_FIRST_GENUINE_EVIDENCE",
+              "RS13_RECONCILIATION_BAD",
+              "RS13_SAFETY_BAD",
+              "RS13_EXPLICIT_REVIEW_READY",
+              "RS14P_GATE_PASS",
+              "RS13_RS14_AUTHORITY_UNREADABLE",
+              "MANUAL_ACTIVATION_REQUIRED",
+              "observer_write_performed:false",
+              "reconciliation_write_performed:false",
+              "historical_backfill_performed:false",
+              "rs13_close_performed:false",
+              "rs14_activation_performed:false",
+              "thresholds_changed:false",
+          ]
+          for token in required:
+              if token not in fs:
+                  raise SystemExit(
+                      f"missing S4-R4-D gate observer token: {token}"
+                  )
+
+          source_specs_start = fs.index(
+              "function h3MonitoringObserverSourceSpecs_(ss)"
+          )
+          source_specs_end = fs.index(
+              "function h3MonitoringObserverPreview()",
+              source_specs_start,
+          )
+          source_specs = fs[source_specs_start:source_specs_end]
+          for token in [
+              "H3_MONITOR_RS13_RS14_SOURCE_ID_",
+              "h3MonitoringRs13Rs14Source_(ss)",
+          ]:
+              if token not in source_specs:
+                  raise SystemExit(
+                      f"S4-R4-D source not wired into common observer: {token}"
+                  )
+
+          start = fs.index(
+              "// S4-R4-D RS13/RS14 GATE OBSERVER START"
+          )
+          end = fs.index(
+              "// S4-R4-D RS13/RS14 GATE OBSERVER END",
+              start,
+          )
+          observer = fs[start:end]
+          forbidden = [
+              "appendRow(",
+              ".setValue(",
+              ".setValues(",
+              "insertSheet(",
+              "deleteRow(",
+              "deleteRows(",
+              "h3MultiSkillShadowReconcile_(",
+              "h3MultiSkillShadowPersistEvidenceValues_(",
+              "h3Rs13k1aAuthor_(",
+              "h3Rs13k1aOpenRuntimeSpreadsheet_(",
+              "h3FsAuthoringUpsert_(",
+              "h3FsIssuePreparedFamily_(",
+              "h3FamilySchedulerObserveAfterCommit_(",
+              "h3WrittenSubmit_(",
+              "h3ReadingSubmit_(",
+              "h3TranslationV2Submit_(",
+              "MailApp.",
+              "GmailApp.",
+              "ScriptApp.newTrigger",
+              "PropertiesService.",
+          ]
+          for token in forbidden:
+              if token in observer:
+                  raise SystemExit(
+                      f"S4-R4-D observer crossed protected boundary: {token}"
+                  )
+
+          if "H3_MONITOR_RS13_RS14_THRESHOLDS_" not in observer:
+              raise SystemExit("S4-R4-D frozen threshold validation missing")
+
+          print("S4-R4-D RS13/RS14 gate observer static contract PASS")
+          PY
+
+      - name: S4-R4-D RS13 RS14 gate observer fixture
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+
+          global.hash_ = value =>
+            crypto.createHash('sha256').update(String(value)).digest('hex');
+          global.SpreadsheetApp = {flush:()=>{}};
+          global.H3_WEB_RUNTIME_SPREADSHEET_ID = 'fixture-runtime';
+
+          vm.runInThisContext(
+            fs.readFileSync('WebAppFamilyScheduler.js','utf8')
+          );
+
+          function assert(ok,msg) {
+            if (!ok) throw new Error(msg);
+          }
+
+          const baseReport = () => ({
+            schema:'H3_RS13G_GATE_REPORT_V1',
+            contract_id:'H3-RS13G-GATE-REPORTER-20260922-V1',
+            read_only:true,
+            writes_performed:0,
+            evidence:{
+              committed_rows:0,
+              distinct_event_count:0,
+              source_family_count:0,
+              concept_count:0,
+              contributory_rows:0,
+              incidental_rows:0,
+              correct_rows:0,
+              triangle_rows:0,
+              wrong_rows:0
+            },
+            reconciliation:{
+              expected_observation_rows:0,
+              actual_observation_rows:0,
+              exact_match_rows:0,
+              missing_observation_ids:[],
+              conflict_observation_ids:[],
+              orphan_observation_ids:[],
+              exact:true
+            },
+            rs13:{
+              state:'AWAIT_REAL_DATA',
+              explicit_review_ready:false,
+              close_automatic:false
+            },
+            rs14p:{
+              activation_gate:{
+                schema:'H3_RS14P_ACTIVATION_GATE_V1',
+                contract_id:'H3-RS14P-LIMITED-LIVE-PREFLIGHT-20260922-V1',
+                gate_pass:false,
+                metrics:{
+                  observed_rows:0,
+                  distinct_event_count:0,
+                  concept_count:0,
+                  source_family_count:0,
+                  noncorrect_count:0,
+                  unsafe_rows:0,
+                  scheduler_applied_true:0
+                },
+                reasons:[
+                  'INSUFFICIENT_DISTINCT_EVENTS',
+                  'INSUFFICIENT_CONCEPTS',
+                  'INSUFFICIENT_SOURCE_FAMILIES',
+                  'NO_X_OR_TRIANGLE'
+                ]
+              },
+              progress:{
+                distinct_events:{current:0,required:6,remaining:6},
+                concepts:{current:0,required:2,remaining:2},
+                source_families:{current:0,required:2,remaining:2},
+                require_noncorrect:{current:0,satisfied:false},
+                unsafe_rows:{current:0,required:0,satisfied:true},
+                scheduler_applied_true:{
+                  current:0,required:0,satisfied:true
+                }
+              },
+              live_activation_automatic:false
+            },
+            next_advisory:'RS13_AWAIT_FIRST_REAL_SECONDARY_EVIDENCE'
+          });
+
+          const k1Health = {
+            contract_id:'H3-RS13K1-K1-SECONDARY-AUTHORITY-20260922-V1',
+            sheet:'listening_k1_secondary_authority_v1',
+            row_count:0,
+            skill_level_concept_inference:false,
+            historical_backfill:false,
+            state_transfer:false
+          };
+
+          const healthy =
+            h3MonitoringRs13Rs14FromReport_(baseReport(),k1Health);
+          assert(healthy.status==='OK','D healthy status mismatch');
+          assert(
+            healthy.action_required_events.length===0,
+            'D AWAIT_REAL_DATA must not notify'
+          );
+          assert(
+            healthy.data.observer_write_performed===false &&
+            healthy.data.reconciliation_write_performed===false &&
+            healthy.data.historical_backfill_performed===false &&
+            healthy.data.rs13_close_performed===false &&
+            healthy.data.rs14_activation_performed===false &&
+            healthy.data.thresholds_changed===false,
+            'D protected-write boundary mismatch'
+          );
+
+          const thresholdOnly=baseReport();
+          thresholdOnly.rs14p.progress.distinct_events.current=6;
+          thresholdOnly.rs14p.progress.distinct_events.remaining=0;
+          thresholdOnly.rs14p.activation_gate.metrics.distinct_event_count=6;
+          const thresholdOnlyResult =
+            h3MonitoringRs13Rs14FromReport_(thresholdOnly,k1Health);
+          assert(
+            thresholdOnlyResult.action_required_events.length===0,
+            'D individual threshold progress must remain HOME-only'
+          );
+
+          const review=baseReport();
+          review.evidence.committed_rows=2;
+          review.reconciliation.expected_observation_rows=2;
+          review.reconciliation.actual_observation_rows=2;
+          review.reconciliation.exact_match_rows=2;
+          review.rs13.state='EXPLICIT_REVIEW_READY';
+          review.rs13.explicit_review_ready=true;
+          const reviewResult =
+            h3MonitoringRs13Rs14FromReport_(review,k1Health);
+          assert(reviewResult.status==='WARNING','D review status mismatch');
+          assert(
+            reviewResult.action_required_events
+              .map(x=>x.event_type).sort().join(',') === [
+                'RS13_EXPLICIT_REVIEW_READY',
+                'RS13_FIRST_GENUINE_EVIDENCE'
+              ].sort().join(','),
+            'D first-evidence/review event mapping mismatch'
+          );
+
+          const reconciliation=baseReport();
+          reconciliation.evidence.committed_rows=1;
+          reconciliation.reconciliation.expected_observation_rows=1;
+          reconciliation.reconciliation.missing_observation_ids=['MSO|1'];
+          reconciliation.reconciliation.exact=false;
+          reconciliation.rs13.state='RECONCILIATION_REQUIRED';
+          const reconciliationResult =
+            h3MonitoringRs13Rs14FromReport_(
+              reconciliation,k1Health
+            );
+          assert(
+            reconciliationResult.action_required_events
+              .map(x=>x.event_type).includes('RS13_RECONCILIATION_BAD'),
+            'D reconciliation event missing'
+          );
+
+          const safety=baseReport();
+          safety.evidence.committed_rows=1;
+          safety.reconciliation.expected_observation_rows=1;
+          safety.reconciliation.actual_observation_rows=1;
+          safety.reconciliation.exact_match_rows=1;
+          safety.rs13.state='SAFETY_REVIEW_REQUIRED';
+          safety.rs14p.activation_gate.metrics.unsafe_rows=1;
+          safety.rs14p.progress.unsafe_rows.current=1;
+          safety.rs14p.progress.unsafe_rows.satisfied=false;
+          const safetyResult =
+            h3MonitoringRs13Rs14FromReport_(safety,k1Health);
+          assert(
+            safetyResult.action_required_events
+              .map(x=>x.event_type).includes('RS13_SAFETY_BAD'),
+            'D safety event missing'
+          );
+
+          const gate=baseReport();
+          gate.evidence.committed_rows=6;
+          gate.reconciliation.expected_observation_rows=6;
+          gate.reconciliation.actual_observation_rows=6;
+          gate.reconciliation.exact_match_rows=6;
+          gate.rs13.state='EXPLICIT_REVIEW_READY';
+          gate.rs13.explicit_review_ready=true;
+          gate.rs14p.activation_gate.gate_pass=true;
+          gate.rs14p.activation_gate.metrics={
+            observed_rows:6,
+            distinct_event_count:6,
+            concept_count:2,
+            source_family_count:2,
+            noncorrect_count:1,
+            unsafe_rows:0,
+            scheduler_applied_true:0
+          };
+          gate.rs14p.activation_gate.reasons=[];
+          gate.rs14p.progress.distinct_events={
+            current:6,required:6,remaining:0
+          };
+          gate.rs14p.progress.concepts={
+            current:2,required:2,remaining:0
+          };
+          gate.rs14p.progress.source_families={
+            current:2,required:2,remaining:0
+          };
+          gate.rs14p.progress.require_noncorrect={
+            current:1,satisfied:true
+          };
+          const gateResult =
+            h3MonitoringRs13Rs14FromReport_(gate,k1Health);
+          const gateEvent=gateResult.action_required_events.find(
+            x=>x.event_type==='RS14P_GATE_PASS'
+          );
+          assert(
+            gateEvent &&
+            gateEvent.detail==='MANUAL_ACTIVATION_REQUIRED',
+            'D RS14 gate event must require manual activation'
+          );
+
+          const drift=baseReport();
+          drift.rs14p.progress.distinct_events.required=5;
+          let driftFailed=false;
+          try {
+            h3MonitoringRs13Rs14FromReport_(drift,k1Health);
+          } catch(err) {
+            driftFailed=String(err.message||err).includes(
+              'MONITOR_RS13_RS14_THRESHOLD_DRIFT'
+            );
+          }
+          assert(driftFailed,'D threshold drift did not fail closed');
+
+          const originalReporter =
+            global.h3Rs13gGateReport_;
+          global.h3Rs13gGateReport_ = () => {
+            throw new Error('fixture authority unreadable');
+          };
+          global.h3Rs13k1DescribeContract_ = () => ({
+            contract_id:
+              'H3-RS13K1-K1-SECONDARY-AUTHORITY-20260922-V1',
+            skill_level_concept_inference:false,
+            historical_backfill:false,
+            state_transfer:false
+          });
+          global.H3_RS13K1_AUTHORITY_SHEET_ =
+            'listening_k1_secondary_authority_v1';
+          global.H3_RS13K1_AUTHORITY_HEADERS_ = ['AUTHORITY_ID'];
+          global.h3Rs13k1ReadValues_ = () => [['AUTHORITY_ID']];
+          global.h3Rs13k1RequireExactHeader_ = values => ({
+            map:{AUTHORITY_ID:0},
+            rows:values.slice(1)
+          });
+          const sourceError=h3MonitoringRs13Rs14Source_({});
+          assert(
+            sourceError.status==='ERROR' &&
+            sourceError.data.observer_write_performed===false &&
+            sourceError.action_required_events.length===1 &&
+            sourceError.action_required_events[0].event_type===
+              'RS13_RS14_AUTHORITY_UNREADABLE',
+            'D authority failure did not fail closed'
+          );
+
+          global.h3Rs13gGateReport_ = () => baseReport();
+          const sourceHealthy=h3MonitoringRs13Rs14Source_({});
+          assert(
+            sourceHealthy.status==='OK' &&
+            sourceHealthy.data.k1_authority.row_count===0,
+            'D source/K1 health integration mismatch'
+          );
+          global.h3Rs13gGateReport_ = originalReporter;
+
+          h3FsAuthoringHealthCore_ = () => ({
+            schema:'H3_FAMILY_SCHEDULER_AUTHORING_OBSERVABILITY_V1',
+            mode:'READ_ONLY_HEALTH',
+            level:'3級',
+            generated_at:'2026-09-24T12:00:00.000Z',
+            recovery_policy:h3FsAuthoringRecoveryPolicy_(),
+            queue_total_rows:0,
+            queue_count_by_status:{},
+            oldest_OPEN_age_minutes:null,
+            oldest_CLAIMED_age_minutes:null,
+            stale_CLAIMED_count:0,
+            FAILED_RETRYABLE_due_count:0,
+            FAILED_BLOCKED_count:0,
+            completed_recent_window_hours:24,
+            completed_recent_count:0,
+            superseded_count:0,
+            duplicate_idempotency_violation_count:0,
+            duplicate_idempotency_keys:[],
+            retry_exhausted_not_blocked_count:0,
+            timestamp_finding_count:0,
+            missing_job_reconciliation_finding_count:0,
+            missing_job_reconciliation_findings:[],
+            reconciliation_status:'PASS',
+            reconciliation_error:'',
+            reconciliation:null,
+            alert_states:{
+              stale_claimed:false,
+              retry_due:false,
+              failed_blocked:false,
+              duplicate_idempotency:false,
+              retry_exhausted_not_blocked:false,
+              timestamp_finding:false,
+              missing_authoring_job:false,
+              reconciliation_error:false
+            },
+            write_performed:false
+          });
+          global.h3Rs13gGateReport_ = () => baseReport();
+          const fakeSs={getId:()=>H3_WEB_RUNTIME_SPREADSHEET_ID};
+          const snapshot=h3MonitoringObserverSnapshot_(
+            '3級',
+            h3MonitoringObserverSourceSpecs_(fakeSs),
+            Date.parse('2026-09-24T12:00:00Z')
+          );
+          assert(
+            snapshot.status==='HEALTHY' &&
+            snapshot.sources.map(x=>x.source_id).join(',')===
+              'RS13_RS14_GATE,RUNTIME_AUTHORITY,SEMANTIC_AUTHORING_QUEUE' &&
+            snapshot.sources.find(
+              x=>x.source_id==='RS13_RS14_GATE'
+            ).data.observer_write_performed===false,
+            'D common observer integration mismatch'
+          );
+
+          console.log('S4-R4-D RS13/RS14 gate observer fixture PASS');
           NODE
 
       - name: Deterministic ranking fixture

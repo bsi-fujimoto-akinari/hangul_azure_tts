@@ -1480,6 +1480,7 @@ jobs:
           global.hash_ = value =>
             crypto.createHash('sha256').update(String(value)).digest('hex');
           global.SpreadsheetApp = {flush:()=>{}};
+          global.H3_WEB_RUNTIME_SPREADSHEET_ID = 'fixture-runtime';
 
           vm.runInThisContext(
             fs.readFileSync('WebAppFamilyScheduler.js','utf8')

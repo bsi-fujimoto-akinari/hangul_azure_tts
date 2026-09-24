@@ -63,6 +63,9 @@ var H3_FS_AUTHORING_REQUEST_SCHEMA_ =
   'H3_FAMILY_SCHEDULER_AUTHORING_JOB_REQUEST_V1';
 var H3_FS_AUTHORING_RECONCILIATION_SCHEMA_ =
   'H3_FAMILY_SCHEDULER_AUTHORING_RECONCILIATION_V1';
+var H3_FS_AUTHORING_OBSERVABILITY_SCHEMA_ =
+  'H3_FAMILY_SCHEDULER_AUTHORING_OBSERVABILITY_V1';
+var H3_FS_AUTHORING_OBSERVABILITY_RECENT_HOURS_ = 24;
 var H3_FS_AUTHORING_RECOVERY_POLICY_ID_ =
   'H3-SEMANTIC-AUTHORING-RECOVERY-20260924-V1';
 var H3_FS_AUTHORING_CLAIM_STALE_MINUTES_ = 120;
@@ -1807,6 +1810,202 @@ function h3FamilySchedulerAuthoringReconciliationEnsure() {
   } finally {
     try{lock.releaseLock();}catch(_ignore){}
   }
+}
+
+function h3FsAuthoringTimestampMs_(value) {
+  if(value===null||value===undefined||value==='')return null;
+  var t;
+  if(Object.prototype.toString.call(value)==='[object Date]'){
+    t=value.getTime();
+  } else {
+    t=Date.parse(String(value));
+  }
+  return isFinite(t)?t:null;
+}
+
+function h3FsAuthoringAgeMinutes_(value,nowMs) {
+  var t=h3FsAuthoringTimestampMs_(value);
+  if(t===null)return null;
+  var age=(Number(nowMs)-t)/60000;
+  if(!isFinite(age))return null;
+  return Math.max(0,Math.floor(age));
+}
+
+function h3FsAuthoringHealthFromTable_(table,nowMs) {
+  h3FsRequire_(
+    table,
+    H3_FS_AUTHORING_QUEUE_HEADERS_,
+    H3_FS_AUTHORING_QUEUE_SHEET_
+  );
+  var m=table.map;
+  var counts={};
+  var oldestOpen=null,oldestClaimed=null;
+  var staleClaimed=0,retryDue=0,failedBlocked=0;
+  var recentCompleted=0,superseded=0,retryExhaustedNotBlocked=0;
+  var timestampFindings=0;
+  var idempotencyCounts={};
+
+  function bumpStatus_(status) {
+    status=String(status||'BLANK');
+    counts[status]=(counts[status]||0)+1;
+  }
+  function maxAge_(current,value) {
+    return current===null||value>current?value:current;
+  }
+
+  table.rows.forEach(function(r){
+    var status=String(r[m.STATUS]||'');
+    var attempts=Number(r[m.ATTEMPT_COUNT]||0);
+    var key=String(r[m.IDEMPOTENCY_KEY]||'');
+    bumpStatus_(status);
+
+    if(key){
+      idempotencyCounts[key]=(idempotencyCounts[key]||0)+1;
+    }
+
+    if(status==='OPEN'){
+      var openAge=h3FsAuthoringAgeMinutes_(r[m.CREATED_AT],nowMs);
+      if(openAge===null)timestampFindings++;
+      else oldestOpen=maxAge_(oldestOpen,openAge);
+    }
+
+    if(status==='CLAIMED'){
+      var claimedAge=h3FsAuthoringAgeMinutes_(r[m.CLAIMED_AT],nowMs);
+      if(claimedAge===null)timestampFindings++;
+      else {
+        oldestClaimed=maxAge_(oldestClaimed,claimedAge);
+        if(claimedAge>=H3_FS_AUTHORING_CLAIM_STALE_MINUTES_)staleClaimed++;
+      }
+    }
+
+    if(status==='FAILED_RETRYABLE'){
+      var retryAge=h3FsAuthoringAgeMinutes_(r[m.UPDATED_AT],nowMs);
+      if(retryAge===null)timestampFindings++;
+      else if(
+        attempts<H3_FS_AUTHORING_MAX_ATTEMPTS_ &&
+        retryAge>=H3_FS_AUTHORING_RETRY_BACKOFF_MINUTES_
+      ){
+        retryDue++;
+      }
+      if(attempts>=H3_FS_AUTHORING_MAX_ATTEMPTS_){
+        retryExhaustedNotBlocked++;
+      }
+    }
+
+    if(status==='FAILED_BLOCKED')failedBlocked++;
+
+    if(status==='COMPLETED'){
+      var completedAge=h3FsAuthoringAgeMinutes_(r[m.COMPLETED_AT],nowMs);
+      if(completedAge===null)timestampFindings++;
+      else if(
+        completedAge<=
+          H3_FS_AUTHORING_OBSERVABILITY_RECENT_HOURS_*60
+      ){
+        recentCompleted++;
+      }
+    }
+
+    if(status==='SUPERSEDED')superseded++;
+  });
+
+  var duplicateKeys=Object.keys(idempotencyCounts)
+    .filter(function(k){return idempotencyCounts[k]>1;})
+    .sort();
+
+  return {
+    queue_total_rows:table.rows.length,
+    queue_count_by_status:counts,
+    oldest_OPEN_age_minutes:oldestOpen,
+    oldest_CLAIMED_age_minutes:oldestClaimed,
+    stale_CLAIMED_count:staleClaimed,
+    FAILED_RETRYABLE_due_count:retryDue,
+    FAILED_BLOCKED_count:failedBlocked,
+    completed_recent_window_hours:
+      H3_FS_AUTHORING_OBSERVABILITY_RECENT_HOURS_,
+    completed_recent_count:recentCompleted,
+    superseded_count:superseded,
+    duplicate_idempotency_violation_count:duplicateKeys.length,
+    duplicate_idempotency_keys:duplicateKeys,
+    retry_exhausted_not_blocked_count:retryExhaustedNotBlocked,
+    timestamp_finding_count:timestampFindings
+  };
+}
+
+function h3FsAuthoringHealthCore_(ss,level,nowMs) {
+  var q=h3FsAuthoringQueue_(ss);
+  var metrics=h3FsAuthoringHealthFromTable_(q.table,nowMs);
+  var reconciliation=null;
+  var reconciliationError='';
+  var missing=[];
+
+  try {
+    reconciliation=
+      h3FsAuthoringReconciliationPreviewCore_(ss,level).public_result;
+    if(
+      String(reconciliation.action||'')==='ENSURE_OPEN' &&
+      String(reconciliation.reason||'')==='MISSING_AUTHORING_JOB'
+    ){
+      missing.push({
+        family:String(reconciliation.recommended_family||''),
+        target_id:String(reconciliation.target_id||''),
+        target_kind:String(reconciliation.target_kind||''),
+        idempotency_key:String(reconciliation.idempotency_key||''),
+        reason:'MISSING_AUTHORING_JOB'
+      });
+    }
+  } catch(err) {
+    reconciliationError=String(
+      err&&err.message ? err.message : err
+    );
+  }
+
+  return {
+    schema:H3_FS_AUTHORING_OBSERVABILITY_SCHEMA_,
+    mode:'READ_ONLY_HEALTH',
+    level:String(level),
+    generated_at:new Date(Number(nowMs)).toISOString(),
+    recovery_policy:h3FsAuthoringRecoveryPolicy_(),
+    queue_total_rows:metrics.queue_total_rows,
+    queue_count_by_status:metrics.queue_count_by_status,
+    oldest_OPEN_age_minutes:metrics.oldest_OPEN_age_minutes,
+    oldest_CLAIMED_age_minutes:metrics.oldest_CLAIMED_age_minutes,
+    stale_CLAIMED_count:metrics.stale_CLAIMED_count,
+    FAILED_RETRYABLE_due_count:metrics.FAILED_RETRYABLE_due_count,
+    FAILED_BLOCKED_count:metrics.FAILED_BLOCKED_count,
+    completed_recent_window_hours:metrics.completed_recent_window_hours,
+    completed_recent_count:metrics.completed_recent_count,
+    superseded_count:metrics.superseded_count,
+    duplicate_idempotency_violation_count:
+      metrics.duplicate_idempotency_violation_count,
+    duplicate_idempotency_keys:metrics.duplicate_idempotency_keys,
+    retry_exhausted_not_blocked_count:
+      metrics.retry_exhausted_not_blocked_count,
+    timestamp_finding_count:metrics.timestamp_finding_count,
+    missing_job_reconciliation_finding_count:missing.length,
+    missing_job_reconciliation_findings:missing,
+    reconciliation_status:
+      reconciliationError ? 'ERROR' : 'PASS',
+    reconciliation_error:reconciliationError,
+    reconciliation:reconciliation,
+    alert_states:{
+      stale_claimed:metrics.stale_CLAIMED_count>0,
+      retry_due:metrics.FAILED_RETRYABLE_due_count>0,
+      failed_blocked:metrics.FAILED_BLOCKED_count>0,
+      duplicate_idempotency:
+        metrics.duplicate_idempotency_violation_count>0,
+      retry_exhausted_not_blocked:
+        metrics.retry_exhausted_not_blocked_count>0,
+      timestamp_finding:metrics.timestamp_finding_count>0,
+      missing_authoring_job:missing.length>0,
+      reconciliation_error:!!reconciliationError
+    },
+    write_performed:false
+  };
+}
+
+function h3FamilySchedulerAuthoringHealthPreview() {
+  var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
+  return h3FsAuthoringHealthCore_(ss,'3級',Date.now());
 }
 
 function h3FsSemanticAuthoringBridge_(ss,level,evaluation) {

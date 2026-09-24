@@ -5422,7 +5422,6 @@ function h3MonitoringProductionTriggerStatus_() {
 }
 
 function h3MonitoringProductionTriggerStatus() {
-  h3MonitoringProductionRequireScopes_();
   return h3MonitoringProductionTriggerStatus_();
 }
 
@@ -5470,7 +5469,6 @@ function h3MonitoringProductionPreflight_() {
 }
 
 function h3MonitoringProductionPreflight() {
-  h3MonitoringProductionRequireScopes_();
   return h3MonitoringProductionPreflight_();
 }
 

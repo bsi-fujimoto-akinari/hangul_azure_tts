@@ -905,14 +905,72 @@ function h3FsPrepFinalClassify_(readinessState,eligible,prepStatus) {
 function h3FsPrepFinalListeningIdentity_(ss,prep) {
   var ls=h3FsKv_(ss,'listening_state_v1');
   var next=Number(ls.NEXT_LISTENING_SET_NO||0);
-  var k1=h3FsLatestReadyK1_(ss);
-  var ps=h3FsReadyListeningPrestage_(ss,next);
+  var readyPayload=h3FsReadyListeningPayload_(ss,next);
+  var lockedPayload=null;
+
+  if(!readyPayload){
+    lockedPayload=h3FsLockedListeningPayload_(ss,next);
+  }
+
+  var boundPayload=readyPayload||lockedPayload;
+  var k1=null;
+  var ps=null;
+
+  if(boundPayload){
+    var request=prep&&prep.request?prep.request:null;
+    if(
+      request &&
+      (
+        String(request.set_id||'')!==String(boundPayload.set_id||'') ||
+        String(request.k1_ready_id||'')!==String(boundPayload.k1_ready_id||'')
+      )
+    ){
+      throw new Error(
+        'FAMILY_SCHEDULER_PREP_FINAL_LISTENING_RESUME_IDENTITY_DRIFT'
+      );
+    }
+
+    var boundK1=h3FsBoundListeningK1Row_(
+      ss,
+      boundPayload.k1_ready_id,
+      boundPayload.set_id
+    );
+    if(!boundK1){
+      throw new Error(
+        'FAMILY_SCHEDULER_PREP_FINAL_BOUND_K1_MISSING'
+      );
+    }
+
+    ps=h3FsBoundListeningPrestage_(
+      ss,
+      next,
+      boundPayload.set_id
+    );
+    if(!ps){
+      throw new Error(
+        'FAMILY_SCHEDULER_PREP_FINAL_BOUND_PRESTAGE_MISSING'
+      );
+    }
+
+    k1={
+      id:String(boundPayload.k1_ready_id||''),
+      rowNumber:boundK1.rowNumber
+    };
+  } else {
+    k1=h3FsLatestReadyK1_(ss);
+    ps=h3FsReadyListeningPrestage_(ss,next);
+  }
+
   var out={
     kind:'LISTENING_COMPONENTS',
     next_listening_set_no:next,
+    listening_set_id:boundPayload
+      ? String(boundPayload.set_id||'')
+      : '',
     k1:null,
     k2_k5:null
   };
+
   if(k1){
     var kt=h3FsTable_(ss.getSheetByName('listening_k1_ready_v1'));
     h3FsRequire_(kt,[
@@ -922,7 +980,9 @@ function h3FsPrepFinalListeningIdentity_(ss,prep) {
       return String(row[kt.map.K1_READY_ID]||'')===String(k1.id||'');
     });
     if(kr.length!==1){
-      throw new Error('FAMILY_SCHEDULER_PREP_FINAL_K1_IDENTITY_COUNT:'+kr.length);
+      throw new Error(
+        'FAMILY_SCHEDULER_PREP_FINAL_K1_IDENTITY_COUNT:'+kr.length
+      );
     }
     out.k1={
       k1_ready_id:String(k1.id||''),
@@ -931,6 +991,7 @@ function h3FsPrepFinalListeningIdentity_(ss,prep) {
       audit_result:String(kr[0][kt.map.AUDIT_RESULT]||'')
     };
   }
+
   if(ps){
     var pt=h3FsTable_(ss.getSheetByName(H3_BACKEND_PRESTAGE_TAB));
     h3FsRequire_(pt,[
@@ -949,16 +1010,21 @@ function h3FsPrepFinalListeningIdentity_(ss,prep) {
     var x=pr[0];
     out.k2_k5={
       prestage_id:String(ps.id||''),
-      target_listening_set_no:Number(x[pt.map.TARGET_LISTENING_SET_NO]||0),
+      target_listening_set_no:Number(
+        x[pt.map.TARGET_LISTENING_SET_NO]||0
+      ),
       policy_id:String(x[pt.map.POLICY_ID]||''),
       primary_policy_id:String(x[pt.map.PRIMARY_POLICY_ID]||''),
       scheduler_snapshot_sha256:String(
         x[pt.map.SCHEDULER_SNAPSHOT_SHA256]||''
       ),
-      source_provenance_json:String(x[pt.map.SOURCE_PROVENANCE_JSON]||''),
+      source_provenance_json:String(
+        x[pt.map.SOURCE_PROVENANCE_JSON]||''
+      ),
       prestage_sha256:String(x[pt.map.PRESTAGE_SHA256]||'')
     };
   }
+
   return out;
 }
 

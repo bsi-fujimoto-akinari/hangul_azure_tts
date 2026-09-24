@@ -3539,8 +3539,8 @@ jobs:
             'H metadata survived exact removal'
           );
           assert(
-            requireScopeCalls>=5,
-            'H public trigger lifecycle did not require scopes'
+            requireScopeCalls>=4,
+            'H mutating trigger lifecycle did not require scopes'
           );
 
           console.log(

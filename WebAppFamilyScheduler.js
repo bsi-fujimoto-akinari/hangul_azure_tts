@@ -272,17 +272,148 @@ function h3FsCurrent_(ss,history) {
   return {ambiguous:false,set_id:found.length?found[0]:''};
 }
 
-function h3FsFindPreparedWritten_(ss) {
+function h3FsWrittenPointerState_(ss) {
   var gs=h3FsKv_(ss,'generation_state_v1');
-  var stageId=String(gs.WRITTEN_NEXT_STAGE_ID||'');
-  if(!stageId){
-    var block=Number(gs.NEXT_BLOCK_NO||0);
-    var offset=Number(gs.NEXT_SET_OFFSET||0);
-    if(Number.isInteger(block)&&block>0&&Number.isInteger(offset)&&offset>0){
-      stageId='STD-B'+String(block).padStart(3,'0')+'-S'+String(offset);
-    }
+  var block=Number(gs.NEXT_BLOCK_NO||0);
+  var offset=Number(gs.NEXT_SET_OFFSET||0);
+  if(
+    !Number.isInteger(block)||block<1||
+    !Number.isInteger(offset)||offset<1
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_WRITTEN_POINTER_INVALID'
+    );
   }
-  if(!stageId)return null;
+
+  var derived=
+    'STD-B'+String(block).padStart(3,'0')+
+    '-S'+String(offset);
+  var nextId=String(
+    gs.WRITTEN_NEXT_STAGE_ID||''
+  ).trim();
+  var canonicalId=String(
+    gs.WRITTEN_NEXT_STAGE_CANONICAL_ID||''
+  ).trim();
+
+  if(
+    !nextId||
+    !canonicalId||
+    nextId!==canonicalId||
+    nextId!==derived
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_WRITTEN_POINTER_DIVERGED'
+    );
+  }
+  if(
+    String(
+      gs.WRITTEN_NEXT_STAGE_STATUS||''
+    )!=='READY_TO_PATCH'
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_WRITTEN_POINTER_STATUS_INVALID'
+    );
+  }
+
+  return {
+    stage_id:nextId,
+    block_no:block,
+    set_offset:offset,
+    state:gs
+  };
+}
+
+function h3FsWrittenAnswerSyncGate_(ss,stageId) {
+  var pointer=h3FsWrittenPointerState_(ss);
+  if(
+    String(stageId||'')!==pointer.stage_id
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_WRITTEN_SYNC_STAGE_POINTER_MISMATCH'
+    );
+  }
+
+  var sh=ss.getSheetByName(
+    'written_answer_sync_v1'
+  );
+  if(!sh){
+    throw new Error(
+      'FAMILY_SCHEDULER_WRITTEN_SYNC_JOURNAL_MISSING'
+    );
+  }
+  var t=h3FsTable_(sh);
+  h3FsRequire_(t,[
+    'TXN_ID','SET_ID','STATUS','PHASE',
+    'NEXT_STAGE_ID','NEXT_STAGE_STATUS',
+    'COMPLETED_AT','ERROR'
+  ],'written_answer_sync_v1');
+
+  var found=[];
+  t.rows.forEach(function(r,i){
+    if(
+      String(
+        r[t.map.NEXT_STAGE_ID]||''
+      )===pointer.stage_id
+    ){
+      found.push({
+        row:r,
+        rowNumber:i+2
+      });
+    }
+  });
+  if(found.length!==1){
+    throw new Error(
+      'FAMILY_SCHEDULER_WRITTEN_SYNC_COUNT:'+
+      found.length
+    );
+  }
+
+  var row=found[0].row;
+  var setId=String(
+    row[t.map.SET_ID]||''
+  );
+  if(
+    String(row[t.map.STATUS]||'')!=='COMMITTED'||
+    String(row[t.map.PHASE]||'')!=='CORE_COMPLETE'||
+    String(row[t.map.NEXT_STAGE_STATUS]||'')!=='READY_TO_PATCH'||
+    !String(row[t.map.COMPLETED_AT]||'')||
+    String(row[t.map.ERROR]||'')
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_WRITTEN_SYNC_NOT_CORE_COMPLETE'
+    );
+  }
+
+  var gs=pointer.state;
+  if(
+    !setId||
+    String(gs.ANSWER_SYNC_PHASE||'')!=='COMPLETE'||
+    String(gs.ANSWER_SYNC_SET_ID||'')!==setId||
+    String(gs.ANSWER_SYNC_STATUS||'')!==
+      setId+'_CORE_COMPLETE'||
+    String(gs.WRITTEN_LAST_SYNCED_SET||'')!==setId
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_WRITTEN_SYNC_STATE_DRIFT'
+    );
+  }
+
+  return {
+    txn_id:String(row[t.map.TXN_ID]||''),
+    set_id:setId,
+    stage_id:pointer.stage_id,
+    status:'COMMITTED',
+    phase:'CORE_COMPLETE'
+  };
+}
+
+function h3FsFindPreparedWritten_(ss) {
+  var pointer=h3FsWrittenPointerState_(ss);
+  var stageId=pointer.stage_id;
+  h3FsWrittenAnswerSyncGate_(
+    ss,
+    stageId
+  );
 
   var sh=ss.getSheetByName('written_set_stage_v1');
   if(!sh)return null;
@@ -317,11 +448,44 @@ function h3FsFindPreparedWritten_(ss) {
     if(!String(r[m[required[i]]]||'').trim())return null;
   }
 
-  var answers=h3WrittenParseJson_(r[m.ANSWER_KEY_JSON],'FAMILY_SCHEDULER_WRITTEN_ANSWER_KEY_INVALID');
-  var meta=h3WrittenParseJson_(r[m.QUESTION_META_JSON],'FAMILY_SCHEDULER_WRITTEN_META_INVALID');
-  if(!Array.isArray(answers)||answers.length!==5||!meta||!Array.isArray(meta.questions)||meta.questions.length!==5){
+  var answers=h3WrittenParseJson_(
+    r[m.ANSWER_KEY_JSON],
+    'FAMILY_SCHEDULER_WRITTEN_ANSWER_KEY_INVALID'
+  );
+  var meta=h3WrittenParseJson_(
+    r[m.QUESTION_META_JSON],
+    'FAMILY_SCHEDULER_WRITTEN_META_INVALID'
+  );
+  if(
+    !Array.isArray(answers)||
+    answers.length!==5||
+    !meta||
+    !Array.isArray(meta.questions)||
+    meta.questions.length!==5||
+    !Array.isArray(meta.planned_slots)||
+    meta.planned_slots.length!==5
+  ){
     return null;
   }
+
+  meta.planned_slots.forEach(
+    function(slot,index){
+      if(
+        Number(slot.q)!==index+1||
+        !String(slot.section||'')||
+        !String(slot.bucket||'')
+      ){
+        throw new Error(
+          'FAMILY_SCHEDULER_WRITTEN_SLOT_INVALID:'+
+          (index+1)
+        );
+      }
+    }
+  );
+  h3WrittenNewfmtValidatePlannedSlots_(
+    meta.planned_slots
+  );
+
   return x;
 }
 
@@ -3694,6 +3858,7 @@ function h3FsHomeNextLocked_() {
       preparation_performed:false,
       preparation_status:'',
       prepared_set_id:'',
+      prepared_stage_id:'',
       route_kind:String(route.route_kind||''),
       family:String(route.family||'NONE'),
       provider_kind:String(route.provider_kind||''),
@@ -3764,7 +3929,8 @@ function h3FsHomeNextLocked_() {
             out.client_action='AUTHORING_REQUIRED';
             out.authoring_target=wPrep.authoring_target;
             out.preparation_status=wPrep.status;
-            out.prepared_set_id=wPrep.stage_id;
+            out.prepared_set_id='PENDING_ALLOCATION';
+            out.prepared_stage_id=wPrep.stage_id;
             out.prepare_request=wPrep.authoring_request;
             return out;
           }
@@ -3774,7 +3940,8 @@ function h3FsHomeNextLocked_() {
             );
           }
           out.preparation_status='READY';
-          out.prepared_set_id=wPrep.stage_id;
+          out.prepared_set_id='PENDING_ALLOCATION';
+          out.prepared_stage_id=wPrep.stage_id;
           out.requires_prepare=false;
           route.requires_prepare=false;
         } else if(route.family==='R'||route.family==='T'){
@@ -4096,6 +4263,7 @@ function h3FsHomeFamilyBase_(
     preparation_performed:false,
     preparation_status:'',
     prepared_set_id:'',
+    prepared_stage_id:'',
     global_set_clock:Number(
       evaluation.global_set_clock
     ),
@@ -4292,6 +4460,8 @@ function h3FsHomeFamilyLocked_(family) {
           out.preparation_status=
             wPrep.status;
           out.prepared_set_id=
+            'PENDING_ALLOCATION';
+          out.prepared_stage_id=
             wPrep.stage_id;
           out.prepare_request=
             wPrep.authoring_request;
@@ -4306,6 +4476,8 @@ function h3FsHomeFamilyLocked_(family) {
         }
         out.preparation_status='READY';
         out.prepared_set_id=
+          'PENDING_ALLOCATION';
+        out.prepared_stage_id=
           wPrep.stage_id;
         out.requires_prepare=false;
       } else if(

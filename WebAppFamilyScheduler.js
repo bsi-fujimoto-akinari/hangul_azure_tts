@@ -2347,12 +2347,15 @@ function h3MonitoringObserverStoredSnapshot_(ss,level) {
   if(!matches.length)return null;
   var r=matches[0];
   var snapshot=h3FsJson_(r[m.SNAPSHOT_JSON],null);
+  var expectedHash=snapshot
+    ? h3MonitoringObserverSnapshotHash_(snapshot)
+    : '';
   if(
     !snapshot ||
     String(snapshot.schema||'')!==H3_MONITOR_OBSERVER_SNAPSHOT_SCHEMA_ ||
     String(r[m.SCHEMA_VERSION]||'')!==H3_MONITOR_OBSERVER_SCHEMA_ ||
-    String(r[m.SNAPSHOT_SHA256]||'')!==
-      h3MonitoringObserverSnapshotHash_(snapshot)
+    String(snapshot.snapshot_sha256||'')!==expectedHash ||
+    String(r[m.SNAPSHOT_SHA256]||'')!==expectedHash
   ){
     throw new Error('MONITOR_OBSERVER_STORED_SNAPSHOT_INVALID');
   }

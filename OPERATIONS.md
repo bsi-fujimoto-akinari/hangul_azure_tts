@@ -29,6 +29,31 @@ Before local synchronization, require a clean worktree. Use `git fetch` and `git
 
 This workflow changes neither versioned `/exec` deployments nor Script Properties, Sheets, Drive assets, Azure configuration, or learner state. Deployment promotion is a separate, explicitly authorized operation. Reverse synchronization with `clasp pull` is recovery-only and must return through a reviewed branch and pull request.
 
+### Authorized read-only Apps Script live smoke
+
+For an explicitly authorized read-only smoke of a function already present in Apps Script HEAD, the verified path is:
+
+```text
+GitHub main
+-> Repository audit PASS
+-> existing allowlisted GitHub Actions workflow
+-> existing CLASPRC_JSON
+-> verify exact .clasp.json scriptId
+-> clasp run-function <function> --json
+-> validate returned read-only contract
+-> fresh protected-runtime readback
+-> remove any temporary CI job
+-> cleanup PR + main audit PASS
+```
+
+Use the existing clasp credential unchanged unless a separate authentication change is explicitly required. Materialize it only inside the GitHub Actions job as `~/.clasprc.json` with restrictive permissions; never print or commit it. For a HEAD smoke, `clasp run-function` is used in its default development mode; do not add `--nondev` unless a versioned API-executable run is the explicit target.
+
+Before creating or tracking any new `.github/workflows/*.yml` file, inspect the repository-audit tracked-file allowlist and existing workflow capabilities. Prefer an existing allowlisted workflow when it can perform the bounded operation. A one-off new workflow file must not be introduced merely as a shortcut; adding a new tracked workflow is itself a repository-policy change and requires intentional allowlist review.
+
+When a direct workflow-dispatch action is unavailable but the authorized smoke still needs GitHub-hosted credentials, a temporary bounded job may be added to an existing allowlisted workflow, provided the PR diff is limited to that purpose. The job must verify the exact Apps Script target before execution, call only the explicitly authorized read-only function, validate the expected schema/mode and an explicit no-write result when the function contract provides one, and must not promote a versioned deployment or change OAuth credentials, manifest scopes, Script Properties, learner state, queue state, scheduler state, counters, or pointers.
+
+After the smoke, remove the temporary job through a follow-up PR. Require fresh main-audit success after cleanup. If the smoke reads protected runtime data, compare fresh post-run state with the pre-run baseline and fail closed on any unexpected mutation.
+
 ## 4. Secrets and tracked files
 
 Never commit credentials, `.clasprc.json`, `.env`, private keys, tokens, or generated local state. `.clasp.json` is tracked because it identifies the canonical Apps Script project; changing it requires explicit target verification.

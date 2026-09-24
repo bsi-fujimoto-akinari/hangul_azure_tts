@@ -964,6 +964,284 @@ jobs:
           print("HOME NEXT activation contract PASS")
           PY
 
+      - name: P04 Written gate contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          fs = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+          prep = Path(
+              "WebAppFamilySchedulerPreparation.js"
+          ).read_text(encoding="utf-8")
+
+          required_fs = [
+              "function h3FsWrittenPointerState_(ss)",
+              "function h3FsWrittenAnswerSyncGate_(ss,stageId)",
+              "FAMILY_SCHEDULER_WRITTEN_POINTER_DIVERGED",
+              "FAMILY_SCHEDULER_WRITTEN_SYNC_NOT_CORE_COMPLETE",
+              "FAMILY_SCHEDULER_WRITTEN_SYNC_STATE_DRIFT",
+              "h3WrittenNewfmtValidatePlannedSlots_(",
+              "prepared_stage_id:''",
+              "out.prepared_set_id='PENDING_ALLOCATION';",
+              "out.prepared_stage_id=wPrep.stage_id;",
+          ]
+          for token in required_fs:
+              if token not in fs:
+                  raise SystemExit(
+                      f"missing P04 Written gate token: {token}"
+                  )
+
+          if "out.prepared_set_id=wPrep.stage_id;" in fs:
+              raise SystemExit(
+                  "P04 must not expose STAGE_ID as learner SET_ID."
+              )
+
+          required_prep = [
+              "function h3FsWrittenCanonicalStageId_(ss)",
+              "FAMILY_SCHEDULER_WRITTEN_POINTER_DIVERGED",
+              "h3FsWrittenAnswerSyncGate_(ss,stageId);",
+              "h3WrittenNewfmtValidatePlannedSlots_(slots);",
+          ]
+          for token in required_prep:
+              if token not in prep:
+                  raise SystemExit(
+                      f"missing P04 authoring gate token: {token}"
+                  )
+
+          find_start = fs.index(
+              "function h3FsFindPreparedWritten_(ss)"
+          )
+          find_end = fs.index(
+              "function h3FsFindPreparedReading_(ss)",
+              find_start,
+          )
+          find_body = fs[find_start:find_end]
+          for token in [
+              "h3FsWrittenPointerState_(ss)",
+              "h3FsWrittenAnswerSyncGate_(",
+              "h3WrittenNewfmtValidatePlannedSlots_(",
+          ]:
+              if token not in find_body:
+                  raise SystemExit(
+                      f"Prepared Written readiness missing gate: {token}"
+                  )
+
+          print("P04 Written gate static contract PASS")
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          vm.runInThisContext(
+            fs.readFileSync('WebAppFamilyScheduler.js','utf8')
+          );
+          vm.runInThisContext(
+            fs.readFileSync('WebAppWrittenNewfmt.js','utf8')
+          );
+
+          // Isolate the Written runtime validator from the source-contract
+          // module; the fixture only needs one canonical 3級 D5 definition.
+          global.H3_NEWFMT_SOURCE_CONTRACT_ID_ =
+            'H3-2026-NEWFMT-SOURCE-20260921-V1';
+          global.h3NewfmtCanUseCurrentH3Ratio_ = () => true;
+          global.h3NewfmtDefinitionForSlot_ = (level,section) => {
+            if(level!=='3級' || section!=='筆5／共通') {
+              throw new Error('fixture NEWFMT slot mismatch');
+            }
+            return {
+              format_id:'H3_D5_COMMON2',
+              level:'3級',
+              item_count:2,
+              points_each:1,
+              total_points:2,
+              answer_type:'MULTIPLE_CHOICE',
+              prompt_semantics:'ONE_EXPRESSION_FITS_BOTH_BLANKS',
+              source_status:'SOURCE_BOUND'
+            };
+          };
+
+          function assert(ok,msg) {
+            if (!ok) throw new Error(msg);
+          }
+          function table(headers,rows) {
+            return {
+              headers,
+              map:Object.fromEntries(headers.map((h,i)=>[h,i])),
+              rows
+            };
+          }
+
+          const syncHeaders=[
+            'TXN_ID','SET_ID','STAGE_ID','CREATED_AT','STATUS','PHASE',
+            'QUEUE_E_SHA256','PLAN_JSON','PLAN_SHA256','PRESTATE_JSON',
+            'PRESTATE_SHA256','POSTSTATE_JSON','POSTSTATE_SHA256',
+            'NEXT_STAGE_ID','NEXT_STAGE_STATUS','COMPLETED_AT','ERROR'
+          ];
+          const stageHeaders=[
+            'STAGE_ID','STATUS','QUESTIONS_LOG_TEMPLATE','ANSWER_KEY_JSON',
+            'QUESTION_META_JSON','Q1_AUDIO','Q2_AUDIO','Q3_AUDIO','Q4_AUDIO',
+            'Q5A1','Q5B1','Q5A2','APPROVED_SOURCE','POLICY_ID',
+            'SOURCE_SNAPSHOT_ID','ACTUAL_SET_ID','ISSUED_AT'
+          ];
+
+          let state={
+            STATUS:'VERIFIED',
+            NEXT_BLOCK_NO:'2',
+            NEXT_SET_OFFSET:'1',
+            WRITTEN_NEXT_STAGE_ID:'STD-B002-S1',
+            WRITTEN_NEXT_STAGE_CANONICAL_ID:'STD-B002-S1',
+            WRITTEN_NEXT_STAGE_STATUS:'READY_TO_PATCH',
+            ANSWER_SYNC_PHASE:'COMPLETE',
+            ANSWER_SYNC_SET_ID:'H3-20260920-01',
+            ANSWER_SYNC_STATUS:'H3-20260920-01_CORE_COMPLETE',
+            WRITTEN_LAST_SYNCED_SET:'H3-20260920-01'
+          };
+          let syncStatus='COMMITTED';
+          let syncPhase='CORE_COMPLETE';
+          let stageRows=[];
+
+          const ss={
+            getSheetByName(name) {
+              if(name==='written_answer_sync_v1') {
+                return {name};
+              }
+              if(name==='written_set_stage_v1') {
+                return {name};
+              }
+              return null;
+            }
+          };
+
+          h3FsKv_=()=>({...state});
+          h3FsRequire_=()=>{};
+          h3WrittenParseJson_=(value,code)=>{
+            try {
+              return JSON.parse(String(value||''));
+            } catch (_err) {
+              throw new Error(code);
+            }
+          };
+          h3FsTable_=sh=>{
+            if(sh.name==='written_answer_sync_v1') {
+              const r=new Array(syncHeaders.length).fill('');
+              const m=Object.fromEntries(syncHeaders.map((h,i)=>[h,i]));
+              r[m.TXN_ID]='H3TX-test';
+              r[m.SET_ID]='H3-20260920-01';
+              r[m.STATUS]=syncStatus;
+              r[m.PHASE]=syncPhase;
+              r[m.NEXT_STAGE_ID]='STD-B002-S1';
+              r[m.NEXT_STAGE_STATUS]='READY_TO_PATCH';
+              r[m.COMPLETED_AT]='2026-09-20T19:19:12+09:00';
+              return table(syncHeaders,[r]);
+            }
+            if(sh.name==='written_set_stage_v1') {
+              return table(stageHeaders,stageRows);
+            }
+            return table([],[]);
+          };
+
+          const good=h3FsWrittenPointerState_(ss);
+          assert(
+            good.stage_id==='STD-B002-S1',
+            'valid pointer did not resolve'
+          );
+
+          state.WRITTEN_NEXT_STAGE_CANONICAL_ID='STD-B099-S9';
+          let threw=false;
+          try {
+            h3FsWrittenPointerState_(ss);
+          } catch(err) {
+            threw=String(err.message).includes(
+              'FAMILY_SCHEDULER_WRITTEN_POINTER_DIVERGED'
+            );
+          }
+          assert(threw,'divergent Written pointers must STOP');
+          state.WRITTEN_NEXT_STAGE_CANONICAL_ID='STD-B002-S1';
+
+          syncStatus='PREPARED';
+          threw=false;
+          try {
+            h3FsWrittenAnswerSyncGate_(ss,'STD-B002-S1');
+          } catch(err) {
+            threw=String(err.message).includes(
+              'FAMILY_SCHEDULER_WRITTEN_SYNC_NOT_CORE_COMPLETE'
+            );
+          }
+          assert(threw,'PREPARED answer sync must STOP');
+
+          syncStatus='RECOVERY_REQUIRED';
+          threw=false;
+          try {
+            h3FsWrittenAnswerSyncGate_(ss,'STD-B002-S1');
+          } catch(err) {
+            threw=String(err.message).includes(
+              'FAMILY_SCHEDULER_WRITTEN_SYNC_NOT_CORE_COMPLETE'
+            );
+          }
+          assert(threw,'RECOVERY_REQUIRED answer sync must STOP');
+
+          syncStatus='COMMITTED';
+          syncPhase='CORE_COMPLETE';
+          assert(
+            h3FsWrittenAnswerSyncGate_(ss,'STD-B002-S1').status===
+              'COMMITTED',
+            'committed CORE_COMPLETE sync did not pass'
+          );
+
+          const meta={
+            questions:[{},{},{},{},{}],
+            planned_slots:[
+              {q:1,section:'筆2／語彙',bucket:'TOWMI'},
+              {q:2,section:'筆3／文法',bucket:'TOWMI'},
+              {q:3,section:'筆4／置換',bucket:'TOWMI'},
+              {
+                q:4,
+                section:'筆5／共通',
+                bucket:'NEWFMT',
+                ...h3WrittenNewfmtSlotMetadata_(
+                  'NEWFMT',
+                  '筆5／共通'
+                )
+              },
+              {q:5,section:'筆6／応答',bucket:'OFFICIAL'}
+            ]
+          };
+          const stage=new Array(stageHeaders.length).fill('');
+          const sm=Object.fromEntries(stageHeaders.map((h,i)=>[h,i]));
+          stage[sm.STAGE_ID]='STD-B002-S1';
+          stage[sm.STATUS]='READY_TO_PATCH';
+          stage[sm.QUESTIONS_LOG_TEMPLATE]='questions';
+          stage[sm.ANSWER_KEY_JSON]=JSON.stringify([1,2,3,4,1]);
+          stage[sm.QUESTION_META_JSON]=JSON.stringify(meta);
+          for(const h of [
+            'Q1_AUDIO','Q2_AUDIO','Q3_AUDIO','Q4_AUDIO',
+            'Q5A1','Q5B1','Q5A2','APPROVED_SOURCE','POLICY_ID',
+            'SOURCE_SNAPSHOT_ID'
+          ]) stage[sm[h]]='x';
+          stageRows=[stage];
+
+          assert(
+            h3FsFindPreparedWritten_(ss).stage_id==='STD-B002-S1',
+            'valid prepared Written stage did not pass'
+          );
+
+          const badMeta=JSON.parse(JSON.stringify(meta));
+          delete badMeta.planned_slots[3].format_source_status;
+          stage[sm.QUESTION_META_JSON]=JSON.stringify(badMeta);
+          threw=false;
+          try {
+            h3FsFindPreparedWritten_(ss);
+          } catch(err) {
+            threw=String(err.message).includes(
+              'WRITTEN_NEWFMT_SLOT_METADATA_MISMATCH'
+            );
+          }
+          assert(threw,'malformed NEWFMT metadata must STOP');
+
+          console.log('P04 Written gate deterministic fixture PASS');
+          NODE
+
       - name: W/R/T preparation contract
         run: |
           python - <<'PY'

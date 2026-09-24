@@ -18,22 +18,46 @@ var H3_FS_W_AUTHORING_REQUEST_SCHEMA_ =
 
 function h3FsWrittenCanonicalStageId_(ss) {
   var gs=h3FsKv_(ss,'generation_state_v1');
-  var stageId=String(
-    gs.WRITTEN_NEXT_STAGE_ID||
-    gs.WRITTEN_NEXT_STAGE_CANONICAL_ID||
-    ''
-  );
-  if(stageId)return stageId;
-
   var block=Number(gs.NEXT_BLOCK_NO||0);
   var offset=Number(gs.NEXT_SET_OFFSET||0);
   if(
     !Number.isInteger(block)||block<1||
     !Number.isInteger(offset)||offset<1
   ){
-    throw new Error('FAMILY_SCHEDULER_WRITTEN_POINTER_INVALID');
+    throw new Error(
+      'FAMILY_SCHEDULER_WRITTEN_POINTER_INVALID'
+    );
   }
-  return 'STD-B'+String(block).padStart(3,'0')+'-S'+String(offset);
+
+  var derived=
+    'STD-B'+String(block).padStart(3,'0')+
+    '-S'+String(offset);
+  var nextId=String(
+    gs.WRITTEN_NEXT_STAGE_ID||''
+  ).trim();
+  var canonicalId=String(
+    gs.WRITTEN_NEXT_STAGE_CANONICAL_ID||''
+  ).trim();
+
+  if(
+    !nextId||
+    !canonicalId||
+    nextId!==canonicalId||
+    nextId!==derived
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_WRITTEN_POINTER_DIVERGED'
+    );
+  }
+  if(
+    String(gs.WRITTEN_NEXT_STAGE_STATUS||'')!==
+      'READY_TO_PATCH'
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_WRITTEN_POINTER_STATUS_INVALID'
+    );
+  }
+  return nextId;
 }
 
 function h3FsPrepareWritten_(ss) {
@@ -49,6 +73,7 @@ function h3FsPrepareWritten_(ss) {
   }
 
   var stageId=h3FsWrittenCanonicalStageId_(ss);
+  h3FsWrittenAnswerSyncGate_(ss,stageId);
   var sh=ss.getSheetByName('written_set_stage_v1');
   if(!sh)throw new Error('FAMILY_SCHEDULER_WRITTEN_STAGE_MISSING');
   var t=h3FsTable_(sh);
@@ -99,6 +124,7 @@ function h3FsPrepareWritten_(ss) {
       );
     }
   });
+  h3WrittenNewfmtValidatePlannedSlots_(slots);
 
   var request={
     schema:H3_FS_W_AUTHORING_REQUEST_SCHEMA_,

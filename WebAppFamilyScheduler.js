@@ -93,6 +93,23 @@ var H3_MONITOR_SEMANTIC_AUTHORING_SCHEMA_ =
 var H3_MONITOR_SEMANTIC_AUTHORING_SOURCE_ID_ =
   'SEMANTIC_AUTHORING_QUEUE';
 
+var H3_MONITOR_RS13_RS14_SCHEMA_ =
+  'H3_MONITOR_RS13_RS14_GATE_SOURCE_V1';
+var H3_MONITOR_RS13_RS14_SOURCE_ID_ =
+  'RS13_RS14_GATE';
+var H3_MONITOR_RS13_RS14_REPORT_CONTRACT_ =
+  'H3-RS13G-GATE-REPORTER-20260922-V1';
+var H3_MONITOR_RS13_RS14_K1_CONTRACT_ =
+  'H3-RS13K1-K1-SECONDARY-AUTHORITY-20260922-V1';
+var H3_MONITOR_RS13_RS14_THRESHOLDS_ = {
+  distinct_events:6,
+  concepts:2,
+  source_families:2,
+  require_noncorrect:1,
+  unsafe_rows:0,
+  scheduler_applied_true:0
+};
+
 
 function h3FsAuthoringRecoveryPolicy_() {
   return {
@@ -4271,6 +4288,11 @@ function h3MonitoringObserverSourceSpecs_(ss) {
         ss,'3級',Date.now()
       );
     }
+  },{
+    source_id:H3_MONITOR_RS13_RS14_SOURCE_ID_,
+    reader:function(){
+      return h3MonitoringRs13Rs14Source_(ss);
+    }
   }];
 }
 
@@ -4431,3 +4453,263 @@ function h3MonitoringSemanticAuthoringSource_(ss,level,nowMs) {
   }
 }
 // S4-R4-C SEMANTIC AUTHORING QUEUE OBSERVER END
+
+
+// S4-R4-D RS13/RS14 GATE OBSERVER START
+function h3MonitoringRs13Rs14Event_(type,detail) {
+  type=String(type||'RS13_RS14_ACTION_REQUIRED');
+  return {
+    source_id:H3_MONITOR_RS13_RS14_SOURCE_ID_,
+    event_type:type,
+    event_key:'RS13_RS14:'+type,
+    detail:String(detail||'')
+  };
+}
+
+function h3MonitoringRs13Rs14ValidateReport_(report) {
+  if(
+    !report ||
+    String(report.schema||'')!=='H3_RS13G_GATE_REPORT_V1' ||
+    String(report.contract_id||'')!==
+      H3_MONITOR_RS13_RS14_REPORT_CONTRACT_ ||
+    report.read_only!==true ||
+    Number(report.writes_performed)!==0
+  ){
+    throw new Error('MONITOR_RS13_RS14_REPORT_CONTRACT_INVALID');
+  }
+
+  var rs13=report.rs13||{};
+  var rs14p=report.rs14p||{};
+  var gate=rs14p.activation_gate||{};
+  var progress=rs14p.progress||{};
+  var metrics=gate.metrics||{};
+  var thresholds=H3_MONITOR_RS13_RS14_THRESHOLDS_;
+  var validStates=[
+    'AWAIT_REAL_DATA',
+    'RECONCILIATION_REQUIRED',
+    'SAFETY_REVIEW_REQUIRED',
+    'EXPLICIT_REVIEW_READY'
+  ];
+
+  if(
+    validStates.indexOf(String(rs13.state||''))<0 ||
+    rs13.close_automatic!==false ||
+    rs14p.live_activation_automatic!==false ||
+    typeof gate.gate_pass!=='boolean' ||
+    !report.reconciliation ||
+    typeof report.reconciliation.exact!=='boolean'
+  ){
+    throw new Error('MONITOR_RS13_RS14_SAFETY_CONTRACT_INVALID');
+  }
+
+  if(
+    !progress.distinct_events ||
+    Number(progress.distinct_events.required)!==
+      thresholds.distinct_events ||
+    !progress.concepts ||
+    Number(progress.concepts.required)!==thresholds.concepts ||
+    !progress.source_families ||
+    Number(progress.source_families.required)!==
+      thresholds.source_families ||
+    !progress.unsafe_rows ||
+    Number(progress.unsafe_rows.required)!==thresholds.unsafe_rows ||
+    !progress.scheduler_applied_true ||
+    Number(progress.scheduler_applied_true.required)!==
+      thresholds.scheduler_applied_true ||
+    !progress.require_noncorrect
+  ){
+    throw new Error('MONITOR_RS13_RS14_THRESHOLD_DRIFT');
+  }
+
+  if(
+    Number(metrics.distinct_event_count||0)<0 ||
+    Number(metrics.concept_count||0)<0 ||
+    Number(metrics.source_family_count||0)<0 ||
+    Number(metrics.noncorrect_count||0)<0 ||
+    Number(metrics.unsafe_rows||0)<0 ||
+    Number(metrics.scheduler_applied_true||0)<0
+  ){
+    throw new Error('MONITOR_RS13_RS14_METRICS_INVALID');
+  }
+
+  return report;
+}
+
+function h3MonitoringRs13Rs14K1AuthorityHealth_(ss) {
+  if(
+    typeof h3Rs13k1DescribeContract_!=='function' ||
+    typeof h3Rs13k1ReadValues_!=='function' ||
+    typeof h3Rs13k1RequireExactHeader_!=='function' ||
+    typeof H3_RS13K1_AUTHORITY_SHEET_==='undefined' ||
+    typeof H3_RS13K1_AUTHORITY_HEADERS_==='undefined'
+  ){
+    throw new Error('MONITOR_RS13_RS14_K1_DEPENDENCY_MISSING');
+  }
+
+  var contract=h3Rs13k1DescribeContract_();
+  if(
+    !contract ||
+    String(contract.contract_id||'')!==
+      H3_MONITOR_RS13_RS14_K1_CONTRACT_ ||
+    contract.skill_level_concept_inference!==false ||
+    contract.historical_backfill!==false ||
+    contract.state_transfer!==false
+  ){
+    throw new Error('MONITOR_RS13_RS14_K1_CONTRACT_INVALID');
+  }
+
+  var values=h3Rs13k1ReadValues_(
+    ss,
+    H3_RS13K1_AUTHORITY_SHEET_,
+    H3_RS13K1_AUTHORITY_HEADERS_,
+    'MONITOR_RS13K1_AUTHORITY'
+  );
+  var table=h3Rs13k1RequireExactHeader_(
+    values,
+    H3_RS13K1_AUTHORITY_HEADERS_,
+    'MONITOR_RS13K1_AUTHORITY'
+  );
+  return {
+    contract_id:String(contract.contract_id||''),
+    sheet:String(H3_RS13K1_AUTHORITY_SHEET_||''),
+    row_count:table.rows.filter(function(row){
+      return row.some(function(value){return String(value||'')!=='';});
+    }).length,
+    skill_level_concept_inference:false,
+    historical_backfill:false,
+    state_transfer:false
+  };
+}
+
+function h3MonitoringRs13Rs14FromReport_(report,k1Health) {
+  report=h3MonitoringRs13Rs14ValidateReport_(report);
+  k1Health=k1Health||{
+    contract_id:H3_MONITOR_RS13_RS14_K1_CONTRACT_,
+    sheet:'listening_k1_secondary_authority_v1',
+    row_count:0,
+    skill_level_concept_inference:false,
+    historical_backfill:false,
+    state_transfer:false
+  };
+
+  if(
+    String(k1Health.contract_id||'')!==
+      H3_MONITOR_RS13_RS14_K1_CONTRACT_ ||
+    k1Health.skill_level_concept_inference!==false ||
+    k1Health.historical_backfill!==false ||
+    k1Health.state_transfer!==false
+  ){
+    throw new Error('MONITOR_RS13_RS14_K1_HEALTH_INVALID');
+  }
+
+  var events=[];
+  var reconciliation=report.reconciliation||{};
+  var rs13=report.rs13||{};
+  var rs14p=report.rs14p||{};
+  var gate=rs14p.activation_gate||{};
+  var metrics=gate.metrics||{};
+  var genuineSecondaryCount=
+    Number(reconciliation.expected_observation_rows||0);
+
+  if(genuineSecondaryCount>0){
+    events.push(h3MonitoringRs13Rs14Event_(
+      'RS13_FIRST_GENUINE_EVIDENCE',
+      'genuine_secondary_rows='+String(genuineSecondaryCount)
+    ));
+  }
+  if(reconciliation.exact!==true){
+    events.push(h3MonitoringRs13Rs14Event_(
+      'RS13_RECONCILIATION_BAD',
+      [
+        'missing='+String(
+          (reconciliation.missing_observation_ids||[]).length
+        ),
+        'conflict='+String(
+          (reconciliation.conflict_observation_ids||[]).length
+        ),
+        'orphan='+String(
+          (reconciliation.orphan_observation_ids||[]).length
+        )
+      ].join(';')
+    ));
+  }
+  if(
+    Number(metrics.unsafe_rows||0)!==0 ||
+    Number(metrics.scheduler_applied_true||0)!==0
+  ){
+    events.push(h3MonitoringRs13Rs14Event_(
+      'RS13_SAFETY_BAD',
+      [
+        'unsafe_rows='+String(Number(metrics.unsafe_rows||0)),
+        'scheduler_applied_true='+
+          String(Number(metrics.scheduler_applied_true||0))
+      ].join(';')
+    ));
+  }
+  if(String(rs13.state||'')==='EXPLICIT_REVIEW_READY'){
+    events.push(h3MonitoringRs13Rs14Event_(
+      'RS13_EXPLICIT_REVIEW_READY',
+      'manual_review_required'
+    ));
+  }
+  if(gate.gate_pass===true){
+    events.push(h3MonitoringRs13Rs14Event_(
+      'RS14P_GATE_PASS',
+      'MANUAL_ACTIVATION_REQUIRED'
+    ));
+  }
+
+  return {
+    status:events.length ? 'WARNING' : 'OK',
+    data:{
+      schema:H3_MONITOR_RS13_RS14_SCHEMA_,
+      monitor_contract:'S4-R4-D',
+      frozen_report_contract:
+        H3_MONITOR_RS13_RS14_REPORT_CONTRACT_,
+      frozen_thresholds:H3_MONITOR_RS13_RS14_THRESHOLDS_,
+      report:report,
+      k1_authority:k1Health,
+      observer_write_performed:false,
+      reconciliation_write_performed:false,
+      historical_backfill_performed:false,
+      rs13_close_performed:false,
+      rs14_activation_performed:false,
+      thresholds_changed:false
+    },
+    action_required_events:events
+  };
+}
+
+function h3MonitoringRs13Rs14Source_(ss) {
+  try {
+    if(typeof h3Rs13gGateReport_!=='function'){
+      throw new Error('MONITOR_RS13_RS14_REPORTER_DEPENDENCY_MISSING');
+    }
+    var k1Health=h3MonitoringRs13Rs14K1AuthorityHealth_(ss);
+    var report=h3Rs13gGateReport_(ss);
+    return h3MonitoringRs13Rs14FromReport_(report,k1Health);
+  } catch(err) {
+    var error=h3MonitoringObserverErrorText_(err);
+    return {
+      status:'ERROR',
+      data:{
+        schema:H3_MONITOR_RS13_RS14_SCHEMA_,
+        monitor_contract:'S4-R4-D',
+        error:error,
+        observer_write_performed:false,
+        reconciliation_write_performed:false,
+        historical_backfill_performed:false,
+        rs13_close_performed:false,
+        rs14_activation_performed:false,
+        thresholds_changed:false
+      },
+      action_required_events:[
+        h3MonitoringRs13Rs14Event_(
+          'RS13_RS14_AUTHORITY_UNREADABLE',
+          error
+        )
+      ]
+    };
+  }
+}
+// S4-R4-D RS13/RS14 GATE OBSERVER END

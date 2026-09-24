@@ -25,17 +25,21 @@ Normal direction is GitHub -> local -> Apps Script.
 
 Before local synchronization, require a clean worktree. Use `git fetch` and `git pull --ff-only`; stop on divergence. Do not use `git reset --hard`, `git clean -fd`, or `clasp pull` as routine synchronization tools.
 
-`.github/workflows/apps-script-auto-sync.yml` may synchronize an audited `main` commit to Apps Script HEAD when Apps Script-impacting files change. It must verify the canonical `.clasp.json` target before `clasp push`. `CLASPRC_JSON` exists only as a GitHub Actions secret and must never be printed or committed.
+Every credentialed clasp operation in GitHub Actions must be bound to the exact current `main` commit and to a successful Repository audit `push` run for that same SHA before `CLASPRC_JSON` is materialized. A manual workflow dispatch must resolve to the exact current `main` SHA and independently verify a successful same-SHA Repository audit before credential use; a branch SHA, moving `main` ref, or merely related main-line commit is insufficient.
 
-This workflow changes neither versioned `/exec` deployments nor Script Properties, Sheets, Drive assets, Azure configuration, or learner state. Deployment promotion is a separate, explicitly authorized operation. Reverse synchronization with `clasp pull` is recovery-only and must return through a reviewed branch and pull request.
+`.github/workflows/apps-script-auto-sync.yml` may synchronize an audited exact-`main` commit to Apps Script HEAD when Apps Script-impacting files change. It must verify the canonical `.clasp.json` target before `clasp push`. After a push, it must perform an authenticated source-attestation readback and fail closed unless the Apps Script HEAD file set and normalized source content match that exact audited GitHub commit. A change to the synchronization workflow itself may run the same readback without pushing, so the credential and attestation boundary can be verified without mutating Apps Script HEAD. `CLASPRC_JSON` exists only as a GitHub Actions secret and must never be printed or committed.
+
+For source attestation only, `clasp pull` is permitted in an isolated temporary directory that contains the verified canonical `.clasp.json`. The pulled files are comparison evidence only: never pull into the tracked worktree, never treat the readback as a replacement source, never commit pulled output, and always discard the temporary directory after comparison. This exception does not authorize reverse synchronization. Recovery-oriented reverse synchronization remains separately authorized work and must return through a reviewed branch and pull request.
+
+This workflow changes neither versioned `/exec` deployments nor Script Properties, Sheets, Drive assets, Azure configuration, or learner state. Deployment promotion is a separate, explicitly authorized operation.
 
 ### Authorized read-only Apps Script live smoke
 
 For an explicitly authorized read-only smoke of a function already present in Apps Script HEAD, the verified path is:
 
 ```text
-GitHub main
--> Repository audit PASS
+GitHub exact current main SHA
+-> Repository audit push PASS for the same exact SHA
 -> existing allowlisted GitHub Actions workflow
 -> existing CLASPRC_JSON
 -> verify exact .clasp.json scriptId

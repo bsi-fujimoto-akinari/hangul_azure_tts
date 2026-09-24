@@ -1242,6 +1242,156 @@ jobs:
           console.log('P04 Written gate deterministic fixture PASS');
           NODE
 
+      - name: P05 Reading lifecycle contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          prod = Path("WebAppReadingProduction.js").read_text(encoding="utf-8")
+          projection = Path(
+              "WebAppReadingSchedulerProjection.js"
+          ).read_text(encoding="utf-8")
+          prep = Path(
+              "WebAppFamilySchedulerPreparation.js"
+          ).read_text(encoding="utf-8")
+          ops = Path("OPERATIONS.md").read_text(encoding="utf-8")
+
+          required_projection = [
+              "function h3ReadingProjectSchedulerAfterCommit_(",
+              "function h3ReadingAttachSchedulerSync_(",
+              "function h3FsReadingProjectionRecoveryGate_(ss)",
+              "H3-RS05-LIVE-READING-PROJECTION-20260925-V1",
+              "READING_RT_OPPORTUNITY_ALREADY_CONSUMED:",
+              "READING_RT_EVIDENCE_EVENT_CONFLICT:",
+              "POSTCOMMIT_PROJECTION:",
+          ]
+          for token in required_projection:
+              if token not in projection:
+                  raise SystemExit(
+                      f"missing P05 Reading projection token: {token}"
+                  )
+
+          required_prod = [
+              "existing.action ===\n        'RETURN_COMMITTED'",
+              "h3ReadingAttachSchedulerSync_(",
+              "var syncedResult =",
+              "txnStatus !==\n            'COMMITTED'",
+          ]
+          for token in required_prod:
+              if token not in prod:
+                  raise SystemExit(
+                      f"missing P05 Reading submit token: {token}"
+                  )
+
+          required_prep = [
+              "function h3FsCanonicalReadingPassageText_(value)",
+              "line.replace(/ +$/, '')",
+              "passage_ko:h3FsCanonicalReadingPassageText_(",
+              "passage_ja:h3FsCanonicalReadingPassageText_(",
+              "h3FsReadingProjectionRecoveryGate_(ss);",
+          ]
+          for token in required_prep:
+              if token not in prep:
+                  raise SystemExit(
+                      f"missing P05 Reading preparation token: {token}"
+                  )
+
+          if "commit remains disabled until Review/HOME integration" in ops:
+              raise SystemExit("OPERATIONS still claims Reading commit is disabled.")
+          if "controlled Reading commit gate is enabled" not in ops:
+              raise SystemExit("OPERATIONS Reading commit-gate status missing.")
+
+          print("P05 Reading lifecycle static contract PASS")
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          vm.runInThisContext(
+            fs.readFileSync(
+              'WebAppFamilySchedulerPreparation.js',
+              'utf8'
+            )
+          );
+          vm.runInThisContext(
+            fs.readFileSync(
+              'WebAppReadingSchedulerProjection.js',
+              'utf8'
+            )
+          );
+
+          function assert(ok,msg) {
+            if (!ok) throw new Error(msg);
+          }
+
+          const canonical =
+            h3FsCanonicalReadingPassageText_(
+              'alpha  \nbeta\\t \ngamma　 \n delta'
+            );
+          assert(
+            canonical ===
+              'alpha\nbeta\\t\ngamma　\n delta',
+            'Reading passage canonicalization changed non-ASCII/non-trailing text'
+          );
+
+          global.h3ReadingCanonicalJson_ = value =>
+            JSON.stringify(value);
+
+          const row =
+            h3ReadingSchedulerQueueRow_(
+              [
+                {
+                  EVENT_ID:'R|txn1|1',
+                  FAMILY_CLOCK_INDEX:1,
+                  ANSWERED_AT:'2026-09-21T10:00:00+09:00',
+                  SECTION_KEY:'H3-P8',
+                  RESULT:'×',
+                  SET_ID:'R1',
+                  SURFACE_KEY:'s1'
+                },
+                {
+                  EVENT_ID:'R|txn2|1',
+                  FAMILY_CLOCK_INDEX:2,
+                  ANSWERED_AT:'2026-09-22T10:00:00+09:00',
+                  SECTION_KEY:'H3-P9',
+                  RESULT:'○',
+                  SET_ID:'R2',
+                  SURFACE_KEY:'s2'
+                }
+              ],
+              {level:'3級',skill_id:'H3-P8-SK001'},
+              '2026-09-22T10:00:00+09:00'
+            );
+
+          assert(row[4] === '○','latest Reading result mismatch');
+          assert(row[5] === '×','latest noncorrect Reading result mismatch');
+          assert(row[7] === 1,'Reading strict origin clock mismatch');
+          assert(row[8] === '' && row[9] === '','correct-once due window must clear');
+          assert(row[10] === 1 && row[11] === 'CORRECT_ONCE',
+            'Reading spaced-correct projection mismatch');
+
+          const projection = fs.readFileSync(
+            'WebAppReadingSchedulerProjection.js','utf8'
+          );
+          if (
+            !projection.includes(
+              'targetClock > currentClock+1'
+            ) ||
+            !projection.includes(
+              'if (currentClock < targetClock)'
+            )
+          ) {
+            throw new Error(
+              'Reading projection recovery/idempotency clock guards missing'
+            );
+          }
+
+          console.log(
+            'P05 Reading lifecycle deterministic fixture PASS'
+          );
+          NODE
+
       - name: W/R/T preparation contract
         run: |
           python - <<'PY'

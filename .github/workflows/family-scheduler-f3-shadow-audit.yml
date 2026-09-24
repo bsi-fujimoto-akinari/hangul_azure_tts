@@ -2430,6 +2430,410 @@ jobs:
           console.log('S4-R4-E HOME monitor fixture PASS');
           NODE
 
+      - name: S4-R4-F deduplicated action-required email contract
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          server = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+          index = Path("Index.html").read_text(encoding="utf-8")
+          manifest = json.loads(Path("appsscript.json").read_text(encoding="utf-8"))
+
+          required = [
+              "H3_MONITOR_NOTIFICATION_V1",
+              "H3_MONITOR_EMAIL_CONFIG_V1",
+              "H3_MONITOR_EMAIL_TO",
+              "monitor_notification_v1",
+              "function h3MonitoringEmailConfigStatus()",
+              "function h3MonitoringNotificationPlan_(",
+              "function h3MonitoringNotificationProcess_(",
+              "function h3MonitoringNotificationHomeState_(",
+              "function h3MonitoringNotificationCurrent()",
+              "function h3MonitoringObserverEmailRun()",
+              "MailApp.getRemainingDailyQuota()",
+              "MailApp.sendEmail(",
+              "PropertiesService.getScriptProperties()",
+              "LockService.getScriptLock()",
+              "MONITOR_EMAIL_PRIOR_CLAIM_UNRESOLVED",
+              "RETRY_EXHAUSTED",
+              "production_trigger_created:false",
+              "semantic_authoring_performed:false",
+              "rs13_close_performed:false",
+              "rs14_activation_performed:false",
+              "// S4-R4-F DEDUPLICATED ACTION-REQUIRED EMAIL START",
+              "// S4-R4-F DEDUPLICATED ACTION-REQUIRED EMAIL END",
+          ]
+          for token in required:
+              if token not in server:
+                  raise SystemExit(f"missing S4-R4-F token: {token}")
+
+          start = server.index(
+              "// S4-R4-F DEDUPLICATED ACTION-REQUIRED EMAIL START"
+          )
+          end = server.index(
+              "// S4-R4-F DEDUPLICATED ACTION-REQUIRED EMAIL END",
+              start,
+          )
+          section = server[start:end]
+          forbidden = [
+              "GmailApp.",
+              "ScriptApp.newTrigger",
+              "h3FsIssuePreparedFamily_(",
+              "h3FamilySchedulerObserveAfterCommit_(",
+              "h3WrittenSubmit_(",
+              "h3ReadingSubmit_(",
+              "h3TranslationV2Submit_(",
+              "'family_scheduler_state_v1'",
+              "'authoring_queue_v1'",
+              "'skill_queue_v1'",
+              "'review_home_index_v1'",
+              "h3Rs13k1Author",
+              "RS14_ACTIVE",
+          ]
+          for token in forbidden:
+              if token in section:
+                  raise SystemExit(
+                      f"S4-R4-F crossed protected boundary: {token}"
+                  )
+
+          scopes = manifest.get("oauthScopes") or []
+          if "https://www.googleapis.com/auth/script.send_mail" not in scopes:
+              raise SystemExit("S4-R4-F MailApp scope missing")
+
+          if "'Email'" not in index:
+              raise SystemExit("S4-R4-F HOME Email card missing")
+          for token in [
+              ".h3MonitoringObserverEmailRun()",
+              "MailApp.",
+              "GmailApp.",
+          ]:
+              if token in index:
+                  raise SystemExit(
+                      f"S4-R4-F HOME owns forbidden send action: {token}"
+                  )
+
+          print("S4-R4-F static contract PASS")
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+
+          global.hash_ = value =>
+            crypto.createHash('sha256').update(String(value)).digest('hex');
+          global.SpreadsheetApp = {flush:()=>{}};
+
+          let configuredRecipient = 'owner@example.com';
+          global.PropertiesService = {
+            getScriptProperties:()=>({
+              getProperty:key =>
+                key==='H3_MONITOR_EMAIL_TO'
+                  ? configuredRecipient
+                  : null
+            })
+          };
+
+          let sent = [];
+          let sendCalls = 0;
+          let failSend = false;
+          global.MailApp = {
+            getRemainingDailyQuota:()=>100,
+            sendEmail:(to,subject,body)=>{
+              sendCalls++;
+              if (failSend) {
+                throw new Error('fixture send failure');
+              }
+              sent.push({to,subject,body});
+            }
+          };
+
+          global.LockService = {
+            getScriptLock:()=>({
+              tryLock:()=>true,
+              releaseLock:()=>{}
+            })
+          };
+
+          vm.runInThisContext(
+            fs.readFileSync('WebAppFamilyScheduler.js','utf8')
+          );
+
+          function assert(ok,msg) {
+            if (!ok) throw new Error(msg);
+          }
+
+          class FakeDataRange {
+            constructor(sheet){this.sheet=sheet;}
+            getValues(){return this.sheet.values.map(row=>row.slice());}
+          }
+          class FakeRange {
+            constructor(sheet,row,col,numRows,numCols){
+              this.sheet=sheet;
+              this.row=row;
+              this.col=col;
+              this.numRows=numRows;
+              this.numCols=numCols;
+            }
+            setValues(values){
+              for(let rr=0;rr<this.numRows;rr++){
+                const ri=this.row-1+rr;
+                while(this.sheet.values.length<=ri){
+                  this.sheet.values.push([]);
+                }
+                const row=this.sheet.values[ri];
+                for(let cc=0;cc<this.numCols;cc++){
+                  row[this.col-1+cc]=values[rr][cc];
+                }
+              }
+              return this;
+            }
+          }
+          class FakeSheet {
+            constructor(name){this.name=name;this.values=[];}
+            getDataRange(){return new FakeDataRange(this);}
+            getRange(row,col,numRows,numCols){
+              return new FakeRange(this,row,col,numRows,numCols);
+            }
+          }
+          class FakeSpreadsheet {
+            constructor(){this.sheet=null;this.accessed=[];}
+            getSheetByName(name){
+              this.accessed.push('get:'+name);
+              if(name!==H3_MONITOR_NOTIFICATION_SHEET_){
+                throw new Error('protected sheet accessed:'+name);
+              }
+              return this.sheet;
+            }
+            insertSheet(name){
+              this.accessed.push('insert:'+name);
+              if(name!==H3_MONITOR_NOTIFICATION_SHEET_){
+                throw new Error('protected sheet created:'+name);
+              }
+              if(this.sheet)throw new Error('duplicate insert');
+              this.sheet=new FakeSheet(name);
+              return this.sheet;
+            }
+          }
+
+          const fake = new FakeSpreadsheet();
+          const t0 = Date.parse('2026-09-24T15:00:00Z');
+          function snapshot(events,at=t0) {
+            return h3MonitoringObserverSnapshot_(
+              '3級',
+              [{
+                source_id:'TEST_SOURCE',
+                reader:()=>({
+                  status:events.length ? 'WARNING' : 'OK',
+                  data:{fixture:true},
+                  action_required_events:events
+                })
+              }],
+              at
+            );
+          }
+          const A = {
+            event_type:'SEMANTIC_OPEN',
+            event_key:'TEST:OPEN',
+            detail:'OPEN=1'
+          };
+          const B = {
+            event_type:'RS14P_GATE_PASS',
+            event_key:'TEST:GATE',
+            detail:'MANUAL_ACTIVATION_REQUIRED'
+          };
+          const C = {
+            event_type:'CONFIG_TEST',
+            event_key:'TEST:CONFIG',
+            detail:'fixture'
+          };
+          const D = {
+            event_type:'SEND_FAIL_TEST',
+            event_key:'TEST:SEND_FAIL',
+            detail:'fixture'
+          };
+
+          let result =
+            h3MonitoringNotificationProcess_(fake,snapshot([A]),t0);
+          assert(
+            result.status==='SENT' &&
+            sent.length===1 &&
+            sendCalls===1,
+            'F first event must send exactly once'
+          );
+          let states=h3MonitoringNotificationReadStates_(fake);
+          assert(
+            states.length===1 &&
+            states[0].status==='SENT' &&
+            states[0].generation===1 &&
+            states[0].attempt_count===1,
+            'F first generation state mismatch'
+          );
+
+          result=h3MonitoringNotificationProcess_(
+            fake,snapshot([A],t0+60000),t0+60000
+          );
+          assert(
+            result.status==='NO_EMAIL' &&
+            sent.length===1 &&
+            sendCalls===1,
+            'F unresolved event duplicated email'
+          );
+
+          result=h3MonitoringNotificationProcess_(
+            fake,snapshot([],t0+120000),t0+120000
+          );
+          states=h3MonitoringNotificationReadStates_(fake);
+          assert(
+            result.status==='NO_EMAIL' &&
+            states[0].active===false &&
+            states[0].status==='RESOLVED' &&
+            sent.length===1,
+            'F resolution state mismatch'
+          );
+
+          result=h3MonitoringNotificationProcess_(
+            fake,snapshot([A],t0+180000),t0+180000
+          );
+          states=h3MonitoringNotificationReadStates_(fake);
+          assert(
+            result.status==='SENT' &&
+            sent.length===2 &&
+            states[0].generation===2 &&
+            states[0].status==='SENT',
+            'F recurrence generation did not notify'
+          );
+
+          h3MonitoringNotificationProcess_(
+            fake,snapshot([],t0+240000),t0+240000
+          );
+          const beforeBatchCalls=sendCalls;
+          result=h3MonitoringNotificationProcess_(
+            fake,snapshot([A,B],t0+300000),t0+300000
+          );
+          assert(
+            result.status==='SENT' &&
+            result.candidate_count===2 &&
+            sendCalls===beforeBatchCalls+1 &&
+            sent[sent.length-1].subject.includes('2 action-required events'),
+            'F multi-event batch must use one email'
+          );
+
+          h3MonitoringNotificationProcess_(
+            fake,snapshot([],t0+360000),t0+360000
+          );
+          configuredRecipient='';
+          const beforeConfigCalls=sendCalls;
+          result=h3MonitoringNotificationProcess_(
+            fake,snapshot([C],t0+420000),t0+420000
+          );
+          assert(
+            result.status==='CONFIG_ERROR' &&
+            sendCalls===beforeConfigCalls,
+            'F invalid config must fail closed before send'
+          );
+          const configStatus=h3MonitoringEmailConfigStatus_();
+          assert(
+            configStatus.status==='ERROR' &&
+            !JSON.stringify(configStatus).includes('owner@example.com'),
+            'F config status leaked recipient or failed open'
+          );
+          let home=h3MonitoringNotificationHomeState_(fake);
+          assert(
+            home.status==='ERROR' &&
+            home.config_status==='ERROR' &&
+            home.error_count>=1,
+            'F config failure not visible on HOME state'
+          );
+
+          configuredRecipient='owner@example.com';
+          result=h3MonitoringNotificationProcess_(
+            fake,snapshot([C],t0+480000),t0+480000
+          );
+          assert(
+            result.status==='SENT' &&
+            sendCalls===beforeConfigCalls+1,
+            'F corrected config did not resume notification'
+          );
+
+          h3MonitoringNotificationProcess_(
+            fake,snapshot([],t0+540000),t0+540000
+          );
+          failSend=true;
+          const beforeFailures=sendCalls;
+          result=h3MonitoringNotificationProcess_(
+            fake,snapshot([D],t0+600000),t0+600000
+          );
+          assert(result.status==='SEND_ERROR','F retry 1 status mismatch');
+          result=h3MonitoringNotificationProcess_(
+            fake,snapshot([D],t0+660000),t0+660000
+          );
+          assert(result.status==='SEND_ERROR','F retry 2 status mismatch');
+          result=h3MonitoringNotificationProcess_(
+            fake,snapshot([D],t0+720000),t0+720000
+          );
+          assert(
+            result.status==='RETRY_EXHAUSTED',
+            'F retry 3 must exhaust'
+          );
+          result=h3MonitoringNotificationProcess_(
+            fake,snapshot([D],t0+780000),t0+780000
+          );
+          assert(
+            result.status==='NO_EMAIL' &&
+            sendCalls===beforeFailures+3,
+            'F retry exhaustion did not stop automatic resend'
+          );
+          home=h3MonitoringNotificationHomeState_(fake);
+          assert(
+            home.status==='ERROR' &&
+            home.error_count>=1,
+            'F send failure not visible on HOME state'
+          );
+
+          const claimed={
+            identity:'TEST_SOURCE|TEST:AMB',
+            source_id:'TEST_SOURCE',
+            event_type:'AMB_TEST',
+            event_key:'TEST:AMB',
+            active:true,
+            generation:1,
+            status:'CLAIMED',
+            attempt_count:1,
+            first_seen_at:'2026-09-24T15:00:00.000Z',
+            last_seen_at:'2026-09-24T15:00:00.000Z',
+            last_attempt_at:'2026-09-24T15:00:00.000Z',
+            last_sent_at:'',
+            last_error:'',
+            detail_hash:'x'
+          };
+          const ambiguous=h3MonitoringNotificationPlan_(
+            [claimed],
+            [{
+              source_id:'TEST_SOURCE',
+              event_type:'AMB_TEST',
+              event_key:'TEST:AMB',
+              detail:'fixture'
+            }],
+            '2026-09-24T16:00:00.000Z'
+          );
+          assert(
+            ambiguous.states[0].status==='AMBIGUOUS' &&
+            ambiguous.candidate_identities.length===0,
+            'F ambiguous prior claim must not auto-resend'
+          );
+
+          assert(
+            fake.accessed.every(x=>
+              x.endsWith(H3_MONITOR_NOTIFICATION_SHEET_)
+            ),
+            'F touched a protected sheet'
+          );
+
+          console.log('S4-R4-F deduplicated email fixture PASS');
+          NODE
+
       - name: Deterministic ranking fixture
         run: |
           node <<'NODE'

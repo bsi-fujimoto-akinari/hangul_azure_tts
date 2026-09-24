@@ -526,5 +526,681 @@
         );
       }());
     </script>
+    <script>
+      (function () {
+        'use strict';
+
+        var home =
+          document.getElementById(
+            'home'
+          );
+        if (!home) {
+          return;
+        }
+
+        function monitorEl_(
+          tag,
+          className,
+          text
+        ) {
+          var node =
+            document.createElement(
+              tag
+            );
+          if (className) {
+            node.className =
+              className;
+          }
+          if (
+            text !== undefined &&
+            text !== null
+          ) {
+            node.textContent =
+              String(text);
+          }
+          return node;
+        }
+
+        function monitorMetric_(
+          label,
+          value
+        ) {
+          var row =
+            monitorEl_(
+              'div',
+              'monitor-home-metric'
+            );
+          row.appendChild(
+            monitorEl_(
+              'span',
+              'monitor-home-metric-label',
+              label
+            )
+          );
+          row.appendChild(
+            monitorEl_(
+              'strong',
+              'monitor-home-metric-value',
+              value
+            )
+          );
+          return row;
+        }
+
+        function monitorProgress_(
+          label,
+          value
+        ) {
+          value = value || {};
+          return monitorMetric_(
+            label,
+            String(
+              Number(value.current || 0)
+            ) +
+            '/' +
+            String(
+              Number(value.required || 0)
+            )
+          );
+        }
+
+        function monitorTime_(
+          iso
+        ) {
+          var value =
+            String(iso || '');
+          if (!value) {
+            return '—';
+          }
+          var date =
+            new Date(value);
+          if (
+            isNaN(date.getTime())
+          ) {
+            return value;
+          }
+          return date.toLocaleString(
+            'ja-JP',
+            {
+              month: 'numeric',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            }
+          );
+        }
+
+        function monitorPanel_() {
+          return home.querySelector(
+            '.monitoring-home-panel'
+          );
+        }
+
+        function placeMonitorPanel_(
+          panel
+        ) {
+          var review =
+            home.querySelector(
+              '.review-library'
+            );
+          if (!review || !panel) {
+            return false;
+          }
+
+          var launcher =
+            home.querySelector(
+              '.family-scheduler-launcher'
+            );
+          if (
+            launcher &&
+            launcher.nextElementSibling !==
+              panel
+          ) {
+            launcher.insertAdjacentElement(
+              'afterend',
+              panel
+            );
+          } else if (
+            !launcher &&
+            panel.nextElementSibling !==
+              review
+          ) {
+            home.insertBefore(
+              panel,
+              review
+            );
+          }
+          return true;
+        }
+
+        function monitorCard_(
+          title,
+          status
+        ) {
+          var card =
+            monitorEl_(
+              'article',
+              'monitor-home-source'
+            );
+          var head =
+            monitorEl_(
+              'div',
+              'monitor-home-source-head'
+            );
+          head.appendChild(
+            monitorEl_(
+              'h4',
+              '',
+              title
+            )
+          );
+          var badge =
+            monitorEl_(
+              'span',
+              'monitor-home-source-status',
+              status || '—'
+            );
+          badge.dataset.status =
+            String(status || '');
+          head.appendChild(
+            badge
+          );
+          card.appendChild(
+            head
+          );
+          return card;
+        }
+
+        function clearMonitorPanel_(
+          panel
+        ) {
+          while (
+            panel.firstChild
+          ) {
+            panel.removeChild(
+              panel.firstChild
+            );
+          }
+        }
+
+        function renderMonitor_(
+          model
+        ) {
+          var panel =
+            monitorPanel_();
+          if (!panel) {
+            return;
+          }
+          clearMonitorPanel_(
+            panel
+          );
+
+          if (
+            !model ||
+            model.schema !==
+              'H3_MONITOR_HOME_READ_MODEL_V1' ||
+            model.read_only !== true ||
+            model.write_performed !== false
+          ) {
+            throw new Error(
+              'MONITOR_HOME_MODEL_INVALID'
+            );
+          }
+
+          var head =
+            monitorEl_(
+              'div',
+              'monitor-home-head'
+            );
+          var titleWrap =
+            monitorEl_(
+              'div',
+              'monitor-home-title'
+            );
+          titleWrap.appendChild(
+            monitorEl_(
+              'h3',
+              '',
+              'Monitor'
+            )
+          );
+          titleWrap.appendChild(
+            monitorEl_(
+              'span',
+              'monitor-home-time',
+              monitorTime_(
+                model.last_checked_at
+              )
+            )
+          );
+          head.appendChild(
+            titleWrap
+          );
+          var overall =
+            monitorEl_(
+              'span',
+              'monitor-home-overall',
+              model.status || '—'
+            );
+          overall.dataset.status =
+            String(
+              model.status || ''
+            );
+          head.appendChild(
+            overall
+          );
+          panel.appendChild(
+            head
+          );
+
+          var grid =
+            monitorEl_(
+              'div',
+              'monitor-home-grid'
+            );
+
+          var observer =
+            monitorCard_(
+              'Observer',
+              model.status
+            );
+          var health =
+            model.observer_health || {};
+          observer.appendChild(
+            monitorMetric_(
+              'Sources',
+              String(
+                Number(
+                  health.ok_count || 0
+                )
+              ) +
+              '/' +
+              String(
+                Number(
+                  health.source_count || 0
+                )
+              )
+            )
+          );
+          observer.appendChild(
+            monitorMetric_(
+              'Warning / Error',
+              String(
+                Number(
+                  health.warning_count || 0
+                )
+              ) +
+              ' / ' +
+              String(
+                Number(
+                  health.error_count || 0
+                )
+              )
+            )
+          );
+          observer.appendChild(
+            monitorMetric_(
+              'Action required',
+              Number(
+                health.action_required_count || 0
+              )
+            )
+          );
+          grid.appendChild(
+            observer
+          );
+
+          var semantic =
+            model.semantic_authoring || {};
+          var semanticCard =
+            monitorCard_(
+              'Semantic Authoring',
+              semantic.status
+            );
+          semanticCard.appendChild(
+            monitorMetric_(
+              'Queue',
+              Number(
+                semantic.queue_total_rows || 0
+              )
+            )
+          );
+          semanticCard.appendChild(
+            monitorMetric_(
+              'Open / Retry',
+              String(
+                Number(
+                  semantic.open_count || 0
+                )
+              ) +
+              ' / ' +
+              String(
+                Number(
+                  semantic.retry_due_count || 0
+                )
+              )
+            )
+          );
+          semanticCard.appendChild(
+            monitorMetric_(
+              'Stale / Blocked',
+              String(
+                Number(
+                  semantic.stale_claimed_count || 0
+                )
+              ) +
+              ' / ' +
+              String(
+                Number(
+                  semantic.failed_blocked_count || 0
+                )
+              )
+            )
+          );
+          var findings =
+            Number(
+              semantic.duplicate_idempotency_count || 0
+            ) +
+            Number(
+              semantic.retry_exhausted_not_blocked_count || 0
+            ) +
+            Number(
+              semantic.timestamp_finding_count || 0
+            ) +
+            Number(
+              semantic.missing_job_finding_count || 0
+            );
+          semanticCard.appendChild(
+            monitorMetric_(
+              'Findings',
+              findings
+            )
+          );
+          grid.appendChild(
+            semanticCard
+          );
+
+          var gate =
+            model.rs13_rs14 || {};
+          var rs13 =
+            monitorCard_(
+              'RS13',
+              gate.rs13_state || gate.status
+            );
+          rs13.appendChild(
+            monitorMetric_(
+              'Evidence',
+              Number(
+                gate.genuine_secondary_rows || 0
+              )
+            )
+          );
+          rs13.appendChild(
+            monitorMetric_(
+              'Reconciliation',
+              gate.reconciliation_exact
+                ? 'PASS'
+                : 'CHECK'
+            )
+          );
+          rs13.appendChild(
+            monitorMetric_(
+              'K1 authority',
+              Number(
+                gate.k1_authority_rows || 0
+              )
+            )
+          );
+          grid.appendChild(
+            rs13
+          );
+
+          var rs14 =
+            monitorCard_(
+              'RS14',
+              gate.rs14p_gate_pass
+                ? 'PASS'
+                : 'PENDING'
+            );
+          var progress =
+            gate.progress || {};
+          rs14.appendChild(
+            monitorProgress_(
+              'Events',
+              progress.distinct_events
+            )
+          );
+          rs14.appendChild(
+            monitorProgress_(
+              'Concepts',
+              progress.concepts
+            )
+          );
+          rs14.appendChild(
+            monitorProgress_(
+              'Families',
+              progress.source_families
+            )
+          );
+          rs14.appendChild(
+            monitorProgress_(
+              '× / △',
+              progress.noncorrect
+            )
+          );
+          rs14.appendChild(
+            monitorMetric_(
+              'Unsafe / Applied',
+              String(
+                Number(
+                  progress.unsafe_rows &&
+                  progress.unsafe_rows.current ||
+                  0
+                )
+              ) +
+              ' / ' +
+              String(
+                Number(
+                  progress.scheduler_applied_true &&
+                  progress.scheduler_applied_true.current ||
+                  0
+                )
+              )
+            )
+          );
+          grid.appendChild(
+            rs14
+          );
+
+          panel.appendChild(
+            grid
+          );
+
+          var events =
+            monitorEl_(
+              'div',
+              'monitor-home-events'
+            );
+          events.appendChild(
+            monitorEl_(
+              'h4',
+              '',
+              'Events'
+            )
+          );
+          var rows =
+            Array.isArray(
+              model.recent_events
+            )
+              ? model.recent_events
+              : [];
+          if (!rows.length) {
+            events.appendChild(
+              monitorEl_(
+                'p',
+                'monitor-home-empty',
+                'Action required: none'
+              )
+            );
+          } else {
+            var list =
+              monitorEl_(
+                'ul',
+                'monitor-home-event-list'
+              );
+            rows.forEach(
+              function (event) {
+                var item =
+                  monitorEl_(
+                    'li',
+                    'monitor-home-event'
+                  );
+                item.appendChild(
+                  monitorEl_(
+                    'strong',
+                    '',
+                    event.event_type || 'EVENT'
+                  )
+                );
+                if (
+                  String(
+                    event.detail || ''
+                  )
+                ) {
+                  item.appendChild(
+                    monitorEl_(
+                      'span',
+                      '',
+                      event.detail
+                    )
+                  );
+                }
+                list.appendChild(
+                  item
+                );
+              }
+            );
+            events.appendChild(
+              list
+            );
+          }
+          panel.appendChild(
+            events
+          );
+        }
+
+        function renderMonitorError_() {
+          var panel =
+            monitorPanel_();
+          if (!panel) {
+            return;
+          }
+          clearMonitorPanel_(
+            panel
+          );
+          var head =
+            monitorEl_(
+              'div',
+              'monitor-home-head'
+            );
+          head.appendChild(
+            monitorEl_(
+              'h3',
+              '',
+              'Monitor'
+            )
+          );
+          var badge =
+            monitorEl_(
+              'span',
+              'monitor-home-overall',
+              'ERROR'
+            );
+          badge.dataset.status =
+            'ERROR';
+          head.appendChild(
+            badge
+          );
+          panel.appendChild(
+            head
+          );
+          panel.appendChild(
+            monitorEl_(
+              'p',
+              'monitor-home-empty',
+              '監視状態を取得できません。'
+            )
+          );
+        }
+
+        function injectMonitoringHome() {
+          var review =
+            home.querySelector(
+              '.review-library'
+            );
+          if (!review) {
+            return;
+          }
+
+          var panel =
+            monitorPanel_();
+          if (!panel) {
+            panel =
+              monitorEl_(
+                'section',
+                'home-card monitoring-home-panel'
+              );
+            panel.setAttribute(
+              'aria-label',
+              '監視状態'
+            );
+            panel.setAttribute(
+              'aria-live',
+              'polite'
+            );
+          }
+          placeMonitorPanel_(
+            panel
+          );
+
+          if (
+            panel.dataset.monitorLoaded ===
+              'true'
+          ) {
+            return;
+          }
+          panel.dataset.monitorLoaded =
+            'true';
+
+          google.script.run
+            .withSuccessHandler(
+              function (model) {
+                try {
+                  renderMonitor_(
+                    model
+                  );
+                } catch (err) {
+                  renderMonitorError_();
+                }
+              }
+            )
+            .withFailureHandler(
+              renderMonitorError_
+            )
+            .h3MonitoringHomeReadModel();
+        }
+
+        injectMonitoringHome();
+
+        new MutationObserver(
+          injectMonitoringHome
+        ).observe(
+          home,
+          {
+            childList: true
+          }
+        );
+      }());
+    </script>
   </body>
 </html>

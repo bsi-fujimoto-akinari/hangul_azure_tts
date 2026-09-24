@@ -858,3 +858,278 @@ function h3FsPrepareTranslation_(ss) {
     skill_ids:selection.obligations.map(function(x){return x.skill_id;})
   };
 }
+
+
+/**
+ * S3 PREP final read-only normalization.
+ * No preparation materialization, issue, submit, semantic authoring, or
+ * learner/runtime state mutation is permitted in this surface.
+ */
+var H3_FS_PREP_FINAL_SCHEMA_ =
+  'H3_FAMILY_SCHEDULER_PREP_FINAL_V1';
+var H3_FS_PREP_FINAL_CONTRACT_ID_ =
+  'H3-FAMILY-SCHEDULER-PREP-FINAL-20260924-V1';
+
+function h3FsPrepFinalClassify_(readinessState,eligible,prepStatus) {
+  var r=String(readinessState||''),p=String(prepStatus||'');
+  if(eligible!==true)return {
+    state:'BLOCKED',gate_state:'BLOCKED',
+    deterministic_preparation_available:false,
+    semantic_authoring_required:false
+  };
+  if(r==='READY')return {
+    state:'READY',gate_state:'ELIGIBLE',
+    deterministic_preparation_available:false,
+    semantic_authoring_required:false
+  };
+  if(r!=='PREPARE_REQUIRED'){
+    throw new Error(
+      'FAMILY_SCHEDULER_PREP_FINAL_READINESS_INVALID:'+(r||'UNKNOWN')
+    );
+  }
+  if(p==='AUTHORING_REQUIRED')return {
+    state:'AUTHORING_REQUIRED',gate_state:'ELIGIBLE',
+    deterministic_preparation_available:false,
+    semantic_authoring_required:true
+  };
+  if(p==='READY_TO_PREPARE'||p==='PREPARE_REQUIRED')return {
+    state:'PREPARE_REQUIRED',gate_state:'ELIGIBLE',
+    deterministic_preparation_available:true,
+    semantic_authoring_required:false
+  };
+  throw new Error(
+    'FAMILY_SCHEDULER_PREP_FINAL_PREPARATION_INVALID:'+(p||'UNKNOWN')
+  );
+}
+
+function h3FsPrepFinalListeningIdentity_(ss,prep) {
+  var ls=h3FsKv_(ss,'listening_state_v1');
+  var next=Number(ls.NEXT_LISTENING_SET_NO||0);
+  var k1=h3FsLatestReadyK1_(ss);
+  var ps=h3FsReadyListeningPrestage_(ss,next);
+  var out={
+    kind:'LISTENING_COMPONENTS',
+    next_listening_set_no:next,
+    k1:null,
+    k2_k5:null
+  };
+  if(k1){
+    var kt=h3FsTable_(ss.getSheetByName('listening_k1_ready_v1'));
+    h3FsRequire_(kt,[
+      'K1_READY_ID','IMAGE_SHA256','QA_PROFILE','AUDIT_RESULT'
+    ],'listening_k1_ready_v1');
+    var kr=kt.rows.filter(function(row){
+      return String(row[kt.map.K1_READY_ID]||'')===String(k1.id||'');
+    });
+    if(kr.length!==1){
+      throw new Error('FAMILY_SCHEDULER_PREP_FINAL_K1_IDENTITY_COUNT:'+kr.length);
+    }
+    out.k1={
+      k1_ready_id:String(k1.id||''),
+      image_sha256:String(kr[0][kt.map.IMAGE_SHA256]||''),
+      qa_profile:String(kr[0][kt.map.QA_PROFILE]||''),
+      audit_result:String(kr[0][kt.map.AUDIT_RESULT]||'')
+    };
+  }
+  if(ps){
+    var pt=h3FsTable_(ss.getSheetByName(H3_BACKEND_PRESTAGE_TAB));
+    h3FsRequire_(pt,[
+      'PRESTAGE_ID','TARGET_LISTENING_SET_NO','POLICY_ID',
+      'PRIMARY_POLICY_ID','SCHEDULER_SNAPSHOT_SHA256',
+      'SOURCE_PROVENANCE_JSON','PRESTAGE_SHA256'
+    ],H3_BACKEND_PRESTAGE_TAB);
+    var pr=pt.rows.filter(function(row){
+      return String(row[pt.map.PRESTAGE_ID]||'')===String(ps.id||'');
+    });
+    if(pr.length!==1){
+      throw new Error(
+        'FAMILY_SCHEDULER_PREP_FINAL_PRESTAGE_IDENTITY_COUNT:'+pr.length
+      );
+    }
+    var x=pr[0];
+    out.k2_k5={
+      prestage_id:String(ps.id||''),
+      target_listening_set_no:Number(x[pt.map.TARGET_LISTENING_SET_NO]||0),
+      policy_id:String(x[pt.map.POLICY_ID]||''),
+      primary_policy_id:String(x[pt.map.PRIMARY_POLICY_ID]||''),
+      scheduler_snapshot_sha256:String(
+        x[pt.map.SCHEDULER_SNAPSHOT_SHA256]||''
+      ),
+      source_provenance_json:String(x[pt.map.SOURCE_PROVENANCE_JSON]||''),
+      prestage_sha256:String(x[pt.map.PRESTAGE_SHA256]||'')
+    };
+  }
+  return out;
+}
+
+function h3FsPrepFinalTranslationBindings_(ss,prep) {
+  var sel=h3FsTranslationSelection_(ss),used=h3FsTranslationUsed_(ss),out=[];
+  for(var i=0;i<sel.obligations.length;i++){
+    var ob=sel.obligations[i];
+    var item=h3FsTranslationSourceForObligation_(ss,ob,used);
+    if(!item){
+      throw new Error(
+        'FAMILY_SCHEDULER_PREP_FINAL_TRANSLATION_SOURCE_MISSING:'+
+        ob.skill_id+':'+ob.direction
+      );
+    }
+    out.push({
+      item_id:String(item.item_id||''),
+      source_kind:String(item.source_kind||''),
+      source_reference:String(item.source_reference||''),
+      source_item_sha256:String(item.source_item_sha256||''),
+      surface_key:String(item.surface_key||'')
+    });
+    used.item_ids.push(item.item_id);
+    used.item_map[item.item_id]=true;
+    used.surface_keys.push(item.surface_key);
+  }
+  var ids=(prep&&prep.source_item_ids||[]).map(String);
+  var actual=out.map(function(x){return x.item_id;});
+  if(
+    ids.length!==actual.length||
+    ids.some(function(id,i){return id!==actual[i];})
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_PREP_FINAL_TRANSLATION_IDENTITY_DRIFT'
+    );
+  }
+  return out;
+}
+
+function h3FsPrepFinalSourceIdentity_(ss,family,prep) {
+  if(family==='L')return h3FsPrepFinalListeningIdentity_(ss,prep);
+
+  if(family==='W'){
+    var w=h3FsFindPreparedWritten_(ss);
+    var req=prep&&prep.authoring_request?prep.authoring_request:null;
+    return {
+      kind:'WRITTEN_STAGE',
+      stage_id:w?String(w.stage_id||''):String((prep&&prep.stage_id)||''),
+      approved_source:w
+        ?String(w.row[w.map.APPROVED_SOURCE]||'')
+        :(req?String(req.approved_source||''):''),
+      policy_id:w
+        ?String(w.row[w.map.POLICY_ID]||'')
+        :(req?String(req.policy_id||''):''),
+      source_snapshot_id:w
+        ?String(w.row[w.map.SOURCE_SNAPSHOT_ID]||'')
+        :(req?String(req.source_snapshot_id||''):'')
+    };
+  }
+
+  if(family==='R'){
+    var r=h3FsFindPreparedReading_(ss);
+    if(r)return {
+      kind:'READING_LOCKED_SOURCE',
+      set_id:String(r.stage.set_id||''),
+      section_key:String(r.stage.section_key||''),
+      source_binding_sha256:String(r.stage.source_binding_sha256||'')
+    };
+    if(prep&&String(prep.status||'')==='PREPARE_REQUIRED'){
+      var gt=h3FsTable_(ss.getSheetByName(H3_FS_OFFICIAL_GROUP_SHEET_));
+      h3FsRequire_(gt,[
+        'SECTION_KEY','SITE_GROUP_ID','PASSAGE_SOURCE_SITE_ITEM_ID',
+        'SOURCE_BATCH_ID','CONTENT_STATUS'
+      ],H3_FS_OFFICIAL_GROUP_SHEET_);
+      var g=gt.rows.filter(function(row){
+        return (
+          String(row[gt.map.SECTION_KEY]||'')===String(prep.section_key||'')&&
+          String(row[gt.map.SITE_GROUP_ID]||'')===
+            String(prep.source_group_id||'')
+        );
+      });
+      if(g.length!==1){
+        throw new Error(
+          'FAMILY_SCHEDULER_PREP_FINAL_READING_SOURCE_COUNT:'+g.length
+        );
+      }
+      return {
+        kind:'OFFICIAL_READING_GROUP',
+        skill_id:String(prep.skill_id||''),
+        section_key:String(prep.section_key||''),
+        source_group_id:String(prep.source_group_id||''),
+        passage_source_site_item_id:String(
+          g[0][gt.map.PASSAGE_SOURCE_SITE_ITEM_ID]||''
+        ),
+        source_batch_id:String(g[0][gt.map.SOURCE_BATCH_ID]||''),
+        content_status:String(g[0][gt.map.CONTENT_STATUS]||'')
+      };
+    }
+    return {
+      kind:'READING_AUTHORING_TARGET',
+      skill_id:String((prep&&prep.skill_id)||''),
+      authoring_target:String((prep&&prep.authoring_target)||'')
+    };
+  }
+
+  if(family==='T'){
+    var t=h3FsFindPreparedTranslation_(ss);
+    if(t)return {
+      kind:'TRANSLATION_LOCKED_SOURCE',
+      set_id:String(t.stage.set_id||''),
+      profile:String(t.stage.profile||''),
+      source_binding_sha256:String(t.stage.source_binding_sha256||'')
+    };
+    if(prep&&String(prep.status||'')==='PREPARE_REQUIRED')return {
+      kind:'TRANSLATION_SOURCE_SET',
+      profile:String(prep.profile||''),
+      skill_ids:prep.skill_ids||[],
+      source_bindings:h3FsPrepFinalTranslationBindings_(ss,prep)
+    };
+    return {
+      kind:'TRANSLATION_AUTHORING_TARGET',
+      skill_id:String((prep&&prep.skill_id)||''),
+      translation_direction:String((prep&&prep.translation_direction)||''),
+      authoring_target:String((prep&&prep.authoring_target)||'')
+    };
+  }
+  throw new Error('FAMILY_SCHEDULER_PREP_FINAL_FAMILY_INVALID:'+family);
+}
+
+function h3FsPrepFinalPreviewCore_(ss,level) {
+  var readiness=h3FsReadiness_(ss),families={};
+  H3_FS_FAMILIES_.forEach(function(family){
+    var current=readiness[family];
+    if(!current){
+      throw new Error(
+        'FAMILY_SCHEDULER_PREP_FINAL_READINESS_MISSING:'+family
+      );
+    }
+    var prep=null;
+    if(current.eligible===true&&String(current.state||'')!=='READY'){
+      prep=h3FsAuthoringPreparationPreview_(ss,family);
+    }
+    var c=h3FsPrepFinalClassify_(
+      current.state,current.eligible===true,prep?prep.status:''
+    );
+    families[family]={
+      family:family,
+      state:c.state,
+      gate_state:c.gate_state,
+      eligible:current.eligible===true,
+      readiness_state:String(current.state||''),
+      preparation_status:prep?String(prep.status||''):'',
+      readiness_reason:String(current.reason||''),
+      deterministic_preparation_available:
+        c.deterministic_preparation_available,
+      semantic_authoring_required:c.semantic_authoring_required,
+      source_identity:c.state==='BLOCKED'
+        ?{kind:'BLOCKED_GATE'}
+        :h3FsPrepFinalSourceIdentity_(ss,family,prep)
+    };
+  });
+  return {
+    schema:H3_FS_PREP_FINAL_SCHEMA_,
+    contract_id:H3_FS_PREP_FINAL_CONTRACT_ID_,
+    mode:'READ_ONLY_PREVIEW',
+    level:String(level),
+    families:families,
+    write_performed:false
+  };
+}
+
+function h3FamilySchedulerPrepFinalPreview() {
+  var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
+  return h3FsPrepFinalPreviewCore_(ss,'3級');
+}

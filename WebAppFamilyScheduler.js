@@ -2294,8 +2294,10 @@ function h3MonitoringObserverWriteSnapshot_(ss,snapshot) {
       rowNumber,1,1,H3_MONITOR_OBSERVER_HEADERS_.length
     ).setValues([rowValues]);
   } else {
-    q.sheet.appendRow(rowValues);
     rowNumber=q.table.rows.length+2;
+    q.sheet.getRange(
+      rowNumber,1,1,H3_MONITOR_OBSERVER_HEADERS_.length
+    ).setValues([rowValues]);
   }
   SpreadsheetApp.flush();
 

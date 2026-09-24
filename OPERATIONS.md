@@ -386,3 +386,40 @@ The P8 group 245 stage is permitted to reach `PREISSUE_READY` only with exact st
 
 `WebAppReadingProduction.js` owns the staged Reading render/transaction path. Render requires `ISSUED`; commit remains disabled until Review/HOME integration and explicit issue gating are complete. No 5W Answer Sync, 5W source ratio, or 5W scheduler state is reused.
 
+
+## S3-PREP-FINAL
+
+Contract: `H3-FAMILY-SCHEDULER-PREP-FINAL-20260924-V1`
+
+S3 normalizes the existing Family Scheduler preparation surfaces into one
+READ_ONLY contract. `BLOCKED` is an orthogonal runtime gate; the three
+semantic preparation states are `READY`, `PREPARE_REQUIRED`, and
+`AUTHORING_REQUIRED`.
+
+| Family | READY | PREPARE_REQUIRED | AUTHORING_REQUIRED | Source identity / provenance |
+| --- | --- | --- | --- | --- |
+| L | Next 5L payload is AUDIO_BOUND and unissued. | K1 READY and matching K2-K5 prestage READY exist; final payload is not materialized. | K1 READY or matching K2-K5 prestage is absent. | K1_READY_ID, IMAGE_SHA256, QA_PROFILE/AUDIT_RESULT; PRESTAGE_ID, policy IDs, scheduler snapshot SHA, SOURCE_PROVENANCE_JSON, PRESTAGE_SHA256. |
+| W | Canonical stage is fully authored READY_TO_PATCH, unbound and unissued. | No separate W deterministic semantic-preparation state is currently defined. | Canonical stage exists but required semantic question/answer material is absent. | STAGE_ID, APPROVED_SOURCE, POLICY_ID, SOURCE_SNAPSHOT_ID. |
+| R | An unissued PREISSUE_READY stage exists and validates. | A due Reading obligation has a valid official source group. | No due source exists, or no valid official group can satisfy the due obligation. | Ready SET_ID/SOURCE_BINDING_SHA256; otherwise skill, section, group, passage source item, source batch, content status. |
+| T | An unissued LOCKED Translation V2 stage exists and validates. | Due obligations have valid unused OFFICIAL/AUTHORED_RETEST surfaces. | Required direction pool or required retest surface is missing. | Ready SET_ID/SOURCE_BINDING_SHA256; otherwise profile, skill IDs, item IDs, source kind/reference, source SHA, surface key. |
+
+Public READ_ONLY preview:
+`h3FamilySchedulerPrepFinalPreview()`
+(`H3_FAMILY_SCHEDULER_PREP_FINAL_V1`).
+
+The S3 surface must not call Reading/Translation materializers, listening
+payload preparation, semantic authoring queue upsert/ensure, issue routes,
+submit routes, or post-commit scheduler mutation. It reports
+`write_performed:false`.
+
+Existing READY material remains authoritative and must not be regenerated.
+AUTHORED_RETEST Translation surfaces retain
+`NO_OFFICIAL_PROVENANCE_CLAIM`; S3 must not promote them to official source.
+S3 must not change learner history, score, Review, 5W/5L/R/T pointers or
+counters, Family Scheduler clock, skill_queue/retest state, or existing
+ISSUED/COMMITTED rows.
+
+Fresh S3-start acceptance baseline on 2026-09-24:
+L=PREPARE_REQUIRED, W=READY, R=PREPARE_REQUIRED, T=PREPARE_REQUIRED.
+This baseline is for READ_ONLY verification only and does not authorize
+materialization, issue, submit, or semantic generation.

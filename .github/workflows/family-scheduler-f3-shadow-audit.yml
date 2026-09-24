@@ -1055,3 +1055,223 @@ jobs:
 
           console.log('F3/F4 deterministic ranking PASS');
           NODE
+
+
+      - name: S3 PREP final contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          prep = Path(
+              "WebAppFamilySchedulerPreparation.js"
+          ).read_text(encoding="utf-8")
+          ops = Path("OPERATIONS.md").read_text(encoding="utf-8")
+
+          required = [
+              "H3_FAMILY_SCHEDULER_PREP_FINAL_V1",
+              "H3-FAMILY-SCHEDULER-PREP-FINAL-20260924-V1",
+              "function h3FsPrepFinalClassify_(",
+              "function h3FsPrepFinalListeningIdentity_(",
+              "function h3FsPrepFinalTranslationBindings_(",
+              "function h3FsPrepFinalSourceIdentity_(",
+              "function h3FsPrepFinalPreviewCore_(",
+              "function h3FamilySchedulerPrepFinalPreview()",
+              "state:'READY'",
+              "state:'PREPARE_REQUIRED'",
+              "state:'AUTHORING_REQUIRED'",
+              "state:'BLOCKED'",
+              "write_performed:false",
+          ]
+          for token in required:
+              if token not in prep:
+                  raise SystemExit(
+                      f"missing S3 PREP final token: {token}"
+                  )
+
+          start = prep.index(
+              "var H3_FS_PREP_FINAL_SCHEMA_"
+          )
+          s3 = prep[start:]
+          forbidden = [
+              "appendRow(",
+              ".setValue(",
+              ".setValues(",
+              "deleteRow(",
+              "deleteRows(",
+              "h3FsPrepareReading_(",
+              "h3FsPrepareTranslation_(",
+              "prepareListeningBackendSet(",
+              "h3FsAuthoringUpsert_(",
+              "h3FamilySchedulerAuthoringReconciliationEnsure(",
+              "h3FsIssuePreparedFamily_(",
+              "h3FsIssueWritten_(",
+              "h3FsIssueReading_(",
+              "h3FsIssueTranslation_(",
+              "h3FsIssueListening_(",
+              "h3WrittenSubmit_(",
+              "h3ReadingSubmit_(",
+              "h3TranslationV2Submit_(",
+              "h3FamilySchedulerObserveAfterCommit_(",
+          ]
+          for token in forbidden:
+              if token in s3:
+                  raise SystemExit(
+                      "S3 PREP final surface must remain read-only: "
+                      + token
+                  )
+
+          for token in [
+              "S3-PREP-FINAL",
+              "| L |",
+              "| W |",
+              "| R |",
+              "| T |",
+              "READY",
+              "PREPARE_REQUIRED",
+              "AUTHORING_REQUIRED",
+              "BLOCKED",
+              "NO_OFFICIAL_PROVENANCE_CLAIM",
+          ]:
+              if token not in ops:
+                  raise SystemExit(
+                      f"S3 OPERATIONS contract missing: {token}"
+                  )
+
+          print("S3 PREP final static contract PASS")
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          vm.runInThisContext(
+            fs.readFileSync(
+              'WebAppFamilySchedulerPreparation.js',
+              'utf8'
+            )
+          );
+          global.H3_FS_FAMILIES_ = ['L','W','R','T'];
+
+          function assert(ok,msg) {
+            if (!ok) throw new Error(msg);
+          }
+          function assertMap(result,expected) {
+            for (const family of H3_FS_FAMILIES_) {
+              assert(
+                result.families[family].state===expected[family],
+                family+': expected '+expected[family]+
+                  ', got '+result.families[family].state
+              );
+            }
+            assert(
+              result.write_performed===false,
+              'preview must report write_performed=false'
+            );
+          }
+
+          for (const family of H3_FS_FAMILIES_) {
+            assert(
+              h3FsPrepFinalClassify_(
+                'READY',true,''
+              ).state==='READY',
+              family+': READY classifier failed'
+            );
+            assert(
+              h3FsPrepFinalClassify_(
+                'PREPARE_REQUIRED',true,'PREPARE_REQUIRED'
+              ).state==='PREPARE_REQUIRED',
+              family+': PREPARE_REQUIRED classifier failed'
+            );
+            assert(
+              h3FsPrepFinalClassify_(
+                'PREPARE_REQUIRED',true,'AUTHORING_REQUIRED'
+              ).state==='AUTHORING_REQUIRED',
+              family+': AUTHORING_REQUIRED classifier failed'
+            );
+          }
+
+          h3FsPrepFinalSourceIdentity_=(_,family)=>({
+            kind:'FIXTURE_SOURCE',family
+          });
+          h3FsReadiness_=()=>({
+            L:{state:'PREPARE_REQUIRED',eligible:true,reason:''},
+            W:{state:'READY',eligible:true,reason:''},
+            R:{state:'PREPARE_REQUIRED',eligible:true,reason:''},
+            T:{state:'PREPARE_REQUIRED',eligible:true,reason:''}
+          });
+          h3FsAuthoringPreparationPreview_=(_,family)=>({
+            L:{status:'READY_TO_PREPARE',family:'L'},
+            R:{status:'PREPARE_REQUIRED',family:'R'},
+            T:{status:'PREPARE_REQUIRED',family:'T'}
+          })[family];
+          assertMap(
+            h3FsPrepFinalPreviewCore_({},'3級'),
+            {
+              L:'PREPARE_REQUIRED',
+              W:'READY',
+              R:'PREPARE_REQUIRED',
+              T:'PREPARE_REQUIRED'
+            }
+          );
+
+          h3FsReadiness_=()=>Object.fromEntries(
+            H3_FS_FAMILIES_.map(f=>[
+              f,{state:'PREPARE_REQUIRED',eligible:true,reason:''}
+            ])
+          );
+          h3FsAuthoringPreparationPreview_=(_,family)=>({
+            status:'AUTHORING_REQUIRED',
+            family,
+            authoring_target:'FIXTURE:'+family
+          });
+          assertMap(
+            h3FsPrepFinalPreviewCore_({},'3級'),
+            {
+              L:'AUTHORING_REQUIRED',
+              W:'AUTHORING_REQUIRED',
+              R:'AUTHORING_REQUIRED',
+              T:'AUTHORING_REQUIRED'
+            }
+          );
+
+          let prepCalls=0;
+          h3FsReadiness_=()=>Object.fromEntries(
+            H3_FS_FAMILIES_.map(f=>[
+              f,{state:'READY',eligible:true,reason:''}
+            ])
+          );
+          h3FsAuthoringPreparationPreview_=()=>{
+            prepCalls++;
+            throw new Error(
+              'READY must not request preparation preview'
+            );
+          };
+          assertMap(
+            h3FsPrepFinalPreviewCore_({},'3級'),
+            {L:'READY',W:'READY',R:'READY',T:'READY'}
+          );
+          assert(prepCalls===0,'READY path called prep preview');
+
+          h3FsReadiness_=()=>({
+            L:{
+              state:'BLOCKED',eligible:false,
+              reason:'LISTENING_RUNTIME_GATE'
+            },
+            W:{state:'READY',eligible:true,reason:''},
+            R:{state:'READY',eligible:true,reason:''},
+            T:{state:'READY',eligible:true,reason:''}
+          });
+          const blocked=h3FsPrepFinalPreviewCore_({},'3級');
+          assert(
+            blocked.families.L.state==='BLOCKED',
+            'BLOCKED classifier failed'
+          );
+          assert(
+            blocked.families.L.source_identity.kind==='BLOCKED_GATE',
+            'BLOCKED path resolved source identity'
+          );
+
+          console.log(
+            'S3 PREP final truth-table fixture PASS'
+          );
+          NODE

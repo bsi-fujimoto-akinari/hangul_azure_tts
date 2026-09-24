@@ -1057,6 +1057,173 @@ jobs:
           NODE
 
 
+      - name: S2 Mode B family launcher contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          server = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+          style = Path("Stylesheet.html").read_text(encoding="utf-8")
+          index = Path("Index.html").read_text(encoding="utf-8")
+
+          for token in [
+              "H3_FAMILY_SCHEDULER_FAMILY_LAUNCH_PREVIEW_V1",
+              "H3_FAMILY_SCHEDULER_FAMILY_LAUNCH_RESULT_V1",
+              "MODE_B_FAMILY_SPECIFIC_LAUNCH_ONLY_IF_ELIGIBLE",
+              "function h3FsFamilyLaunchPreviewCore_(ss)",
+              "function h3FamilySchedulerFamilyLaunchPreview()",
+              "function h3FsHomeFamilyLocked_(family)",
+              "function h3FamilySchedulerHomeFamily(family)",
+              "'FAMILY_SPECIFIC_LAUNCH'",
+          ]:
+              if token not in server:
+                  raise SystemExit(f"missing S2 server token: {token}")
+
+          preview_start = server.index(
+              "function h3FsFamilyLaunchPreviewCore_(ss)"
+          )
+          preview_end = server.index(
+              "function h3FamilySchedulerFamilyLaunchPreview()",
+              preview_start,
+          )
+          preview = server[preview_start:preview_end]
+          for token in [
+              "appendRow(", ".setValue(", ".setValues(",
+              "h3FsAppend_(", "h3FsPrepareWritten_(",
+              "h3FsPrepareReading_(", "h3FsPrepareTranslation_(",
+              "prepareListeningBackendSet(",
+              "h3FsIssuePreparedFamily_(",
+          ]:
+              if token in preview:
+                  raise SystemExit(
+                      f"S2 preview write boundary violated: {token}"
+                  )
+
+          locked_start = server.index(
+              "function h3FsHomeFamilyLocked_(family)"
+          )
+          locked_end = server.index(
+              "function h3FamilySchedulerHomeFamily(family)",
+              locked_start,
+          )
+          locked = server[locked_start:locked_end]
+          if "h3FsIssuePreparedFamily_(" not in locked:
+              raise SystemExit("S2 must reuse canonical family issue")
+          for token in [
+              "h3FsAppendIssueApplied_(",
+              "scheduler_applied=true",
+              "h3WrittenSubmit_(",
+              "h3ReadingSubmit_(",
+              "h3TranslationSubmit_(",
+              "h3TranslationV2Submit_(",
+          ]:
+              if token in locked:
+                  raise SystemExit(
+                      f"S2 manual route boundary violated: {token}"
+                  )
+
+          client_start = style.index(
+              "H3_FAMILY_SCHEDULER_FAMILY_LAUNCH_PREVIEW_V1"
+          )
+          client = style[client_start:]
+          for token in [
+              ".h3FamilySchedulerFamilyLaunchPreview()",
+              ".h3FamilySchedulerHomeFamily(",
+              "button.addEventListener(",
+              "OPEN_CURRENT",
+              "OPEN_ISSUED",
+              "h3-family-scheduler-open-current",
+          ]:
+              if token not in client:
+                  raise SystemExit(f"missing S2 client token: {token}")
+          for token in [
+              "h3FamilySchedulerHomeNext(",
+              "submitListeningWebAnswers",
+              "h3WrittenSubmit_(",
+              "h3ReadingSubmit_(",
+              "h3TranslationV2Submit_(",
+          ]:
+              if token in client:
+                  raise SystemExit(
+                      f"S2 client owns forbidden route: {token}"
+                  )
+
+          if "button.addEventListener(" in index:
+              raise SystemExit(
+                  "NEXT template must remain free of manual-family handlers"
+              )
+
+          print("S2 Mode B static contract PASS")
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          vm.runInThisContext(
+            fs.readFileSync(
+              'WebAppFamilyScheduler.js',
+              'utf8'
+            )
+          );
+
+          function assert(ok,msg) {
+            if (!ok) throw new Error(msg);
+          }
+
+          h3FsEvaluate_=()=>({
+            schema:H3_FS_OUTPUT_SCHEMA_,
+            mode:'SHADOW',
+            global_set_clock:27,
+            next_action:'RECOMMEND_FAMILY',
+            recommended_family:'L',
+            primary_reason:'P3_BALANCE',
+            result_status:'PASS'
+          });
+          h3ReviewCurrentLearning_=()=>null;
+          h3FsReadiness_=()=>({
+            L:{state:'PREPARE_REQUIRED',eligible:true,reason:''},
+            W:{state:'READY',eligible:true,reason:''},
+            R:{state:'PREPARE_REQUIRED',eligible:true,reason:''},
+            T:{state:'BLOCKED',eligible:false,reason:'RT_GATE'}
+          });
+          h3FsAuthoringPreparationPreview_=(_,family)=>
+            family==='L'
+              ? {status:'READY_TO_PREPARE',family:'L'}
+              : {
+                  status:'AUTHORING_REQUIRED',
+                  family:'R',
+                  authoring_target:'FIXTURE:R'
+                };
+
+          const out=h3FsFamilyLaunchPreviewCore_({});
+          assert(
+            out.scheduler_applied===false &&
+            out.recommended_family==='L',
+            'S2 preview changed scheduler recommendation'
+          );
+          assert(
+            out.families.L.client_action==='LAUNCH' &&
+            out.families.L.requires_prepare===true,
+            'L deterministic preparation not launchable'
+          );
+          assert(
+            out.families.W.client_action==='LAUNCH' &&
+            out.families.W.requires_prepare===false,
+            'W READY not launchable'
+          );
+          assert(
+            out.families.R.client_action==='AUTHORING_REQUIRED' &&
+            out.families.R.result_status==='BLOCKED',
+            'R authoring gate bypassed'
+          );
+          assert(
+            out.families.T.client_action==='BLOCKED',
+            'T blocked gate bypassed'
+          );
+
+          console.log('S2 Mode B fixture PASS');
+          NODE
+
       - name: S3 PREP final contract
         run: |
           python - <<'PY'

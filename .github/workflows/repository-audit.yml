@@ -149,6 +149,74 @@ jobs:
               sys.exit(1)
           PY
 
+      - name: Verify credentialed Apps Script smoke boundary
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          sync_path = Path('.github/workflows/apps-script-auto-sync.yml')
+          ops_path = Path('OPERATIONS.md')
+          sync = sync_path.read_text(encoding='utf-8')
+          ops = ops_path.read_text(encoding='utf-8')
+
+          required_sync = [
+              'intended_smoke_sha:',
+              'Detect read-only smoke preflight request',
+              'Validate one-revision read-only smoke boundary',
+              '${{ github.run_attempt }}',
+              'steps.source_attestation.outputs.attested',
+              'steps.smoke_boundary.outputs.ready',
+          ]
+          missing_sync = [token for token in required_sync if token not in sync]
+          if missing_sync:
+              raise SystemExit(
+                  'Apps Script smoke boundary contract missing from auto-sync: '
+                  + ', '.join(missing_sync)
+              )
+
+          required_ops = [
+              'manual workflow_dispatch with intended_smoke_sha=',
+              'run_attempt=1',
+              'authenticated source_attestation',
+              "if: steps.smoke_boundary.outputs.ready == 'true'",
+          ]
+          missing_ops = [token for token in required_ops if token not in ops]
+          if missing_ops:
+              raise SystemExit(
+                  'Apps Script smoke boundary documentation missing: '
+                  + ', '.join(missing_ops)
+              )
+
+          run_function_refs = []
+          for path in sorted(Path('.github/workflows').glob('*.yml')):
+              contents = path.read_text(encoding='utf-8')
+              for match in re.finditer(r'(?m)^[^#\n]*\bclasp\b[^\n]*\brun-function\b', contents):
+                  run_function_refs.append((path, match.start(), contents))
+
+          for path, pos, contents in run_function_refs:
+              if path != sync_path:
+                  raise SystemExit(
+                      f'Credentialed clasp run-function is only allowed in {sync_path}: {path}'
+                  )
+              boundary_pos = contents.find('Validate one-revision read-only smoke boundary')
+              if boundary_pos < 0 or pos <= boundary_pos:
+                  raise SystemExit(
+                      'clasp run-function must occur after the permanent smoke boundary.'
+                  )
+              prefix = contents[max(boundary_pos, pos - 1200):pos]
+              if "if: steps.smoke_boundary.outputs.ready == 'true'" not in prefix:
+                  raise SystemExit(
+                      'clasp run-function must be gated by smoke_boundary ready=true.'
+                  )
+
+          print(
+              'Credentialed Apps Script smoke boundary contract: PASS; '
+              f'run-function refs={len(run_function_refs)}'
+          )
+          PY
+
       - name: Reject credential files and likely embedded secrets
         shell: bash
         run: |

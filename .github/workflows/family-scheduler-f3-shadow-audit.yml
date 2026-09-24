@@ -3350,3 +3350,136 @@ jobs:
             'S3 PREP final truth-table fixture PASS'
           );
           NODE
+
+  s4_r4_f_config_smoke:
+    name: S4-R4-F recipient config smoke
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify exact Apps Script target
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          expected = '1p_e1jKICTZXHpCrQ7rwU9HilloZdkFBpHry_lCq5YgXpaiU4FNEQlDa-'
+          actual = json.loads(
+              Path('.clasp.json').read_text(encoding='utf-8')
+          ).get('scriptId')
+          if actual != expected:
+              raise SystemExit('Apps Script target mismatch')
+          PY
+
+      - name: Check clasp credential availability
+        id: auth
+        shell: bash
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then
+            echo "::error::CLASPRC_JSON is not configured."
+            exit 1
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Materialize clasp credentials
+        shell: bash
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          value = os.environ.get('CLASPRC_JSON', '')
+          if not value.strip():
+              raise SystemExit('CLASPRC_JSON is empty')
+          path = Path.home() / '.clasprc.json'
+          path.write_text(value, encoding='utf-8')
+          path.chmod(0o600)
+          PY
+
+      - name: Verify recipient config without revealing recipient
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/s4-r4-f-config-smoke.json"
+          npx -y @google/clasp@3.4.0 \
+            run-function h3MonitoringEmailConfigStatus --json > "$out"
+          python3 - "$out" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          raw = Path(sys.argv[1]).read_text(encoding='utf-8').strip()
+
+          def parse_json(text):
+              try:
+                  return json.loads(text)
+              except Exception:
+                  for line in reversed(text.splitlines()):
+                      line=line.strip()
+                      if not line:
+                          continue
+                      try:
+                          return json.loads(line)
+                      except Exception:
+                          pass
+                  raise SystemExit(
+                      'Apps Script smoke did not return parseable JSON'
+                  )
+
+          root=parse_json(raw)
+
+          def find_config(value):
+              if isinstance(value, str):
+                  text=value.strip()
+                  if text.startswith(('{','[')):
+                      try:
+                          return find_config(json.loads(text))
+                      except Exception:
+                          return None
+              if isinstance(value, dict):
+                  if value.get('schema') == 'H3_MONITOR_EMAIL_CONFIG_V1':
+                      return value
+                  for child in value.values():
+                      found=find_config(child)
+                      if found is not None:
+                          return found
+              if isinstance(value, list):
+                  for child in value:
+                      found=find_config(child)
+                      if found is not None:
+                          return found
+              return None
+
+          cfg=find_config(root)
+          if cfg is None:
+              raise SystemExit('recipient config schema missing')
+          expected={
+              'status':'READY',
+              'configured':True,
+              'valid':True,
+              'recipient_count':1,
+              'write_performed':False,
+          }
+          for key,value in expected.items():
+              if cfg.get(key) != value:
+                  raise SystemExit(
+                      'recipient config validation failed: '+key
+                  )
+          forbidden={'recipient','email','address','to'}
+          if any(str(k).lower() in forbidden for k in cfg):
+              raise SystemExit('recipient value field must not be returned')
+          print(
+              'S4-R4-F recipient config smoke PASS: '
+              'configured=true valid=true recipient_count=1 '
+              'write_performed=false'
+          )
+          PY

@@ -167,3 +167,84 @@ jobs:
             echo '- manifest overwrite mode: audited CI only (clasp push --force)'
             echo '- versioned /exec deployment: not changed by this workflow'
           } >> "$GITHUB_STEP_SUMMARY"
+
+
+  s4_r3_live_smoke_once:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout audited main source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 1
+
+      - name: Check existing clasp credential availability
+        shell: bash
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          test -n "$CLASPRC_JSON" || { echo "::error::CLASPRC_JSON is empty"; exit 1; }
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Materialize existing clasp credentials
+        shell: bash
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          value=os.environ.get("CLASPRC_JSON","")
+          if not value.strip():
+              raise SystemExit("CLASPRC_JSON is empty")
+          p=Path.home()/".clasprc.json"
+          p.write_text(value,encoding="utf-8")
+          p.chmod(0o600)
+          PY
+
+      - name: Verify exact Apps Script target
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          expected="1p_e1jKICTZXHpCrQ7rwU9HilloZdkFBpHry_lCq5YgXpaiU4FNEQlDa-"
+          actual=json.loads(Path(".clasp.json").read_text(encoding="utf-8")).get("scriptId")
+          if actual != expected:
+              raise SystemExit(f"Apps Script target mismatch: {actual!r}")
+          PY
+
+      - name: Run read-only S4-R3 health preview with existing auth
+        shell: bash
+        run: |
+          set -o pipefail
+          npx -y @google/clasp@3.4.0 run-function h3FamilySchedulerAuthoringHealthPreview --json > smoke.json
+          cat smoke.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data=json.loads(Path("smoke.json").read_text(encoding="utf-8"))
+          if data.get("error"):
+              raise SystemExit("Apps Script execution returned error: "+json.dumps(data["error"],ensure_ascii=False))
+          result=data.get("response")
+          if not isinstance(result,dict):
+              raise SystemExit("Apps Script execution returned no object response")
+          if result.get("schema")!="H3_FAMILY_SCHEDULER_AUTHORING_OBSERVABILITY_V1":
+              raise SystemExit("Unexpected schema: "+repr(result.get("schema")))
+          if result.get("mode")!="READ_ONLY_HEALTH":
+              raise SystemExit("Unexpected mode: "+repr(result.get("mode")))
+          if result.get("write_performed") is not False:
+              raise SystemExit("write_performed is not false")
+          print("S4_R3_LIVE_SMOKE_PASS")
+          print(json.dumps(result,ensure_ascii=False,sort_keys=True))
+          PY

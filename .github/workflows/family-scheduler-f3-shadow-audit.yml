@@ -312,7 +312,7 @@ jobs:
                   raise SystemExit(f"issue routing bridge must not execute issue/submit writes: {token}")
 
           preview_start = fs.index("function h3FamilySchedulerIssueRoutePreview()")
-          preview_end = fs.index("function h3FamilySchedulerHomeNext()", preview_start)
+          preview_end = fs.index("function h3FsHomeNextLocked_()", preview_start)
           preview = fs[preview_start:preview_end]
           for token in [
               "appendRow",
@@ -441,6 +441,14 @@ jobs:
           index = Path("Index.html").read_text(encoding="utf-8")
 
           required = [
+              "function h3FsLatestReadyK1_(ss)",
+              "function h3FsReadyListeningPrestage_(ss,nextSetNo)",
+              "function h3FsAllocateListeningSetId_(ss)",
+              "function h3FsBuildListeningPrepare_(ss)",
+              "function h3FsHomeNextLocked_()",
+              "prepareListeningBackendSet(",
+              "preparation_performed=true",
+              "FAMILY_SCHEDULER_LISTENING_PREPARE_READBACK_FAIL",
               "function h3FsFindPreparedWritten_(ss)",
               "function h3FsFindPreparedReading_(ss)",
               "function h3FsFindPreparedTranslation_(ss)",
@@ -472,8 +480,23 @@ jobs:
           if "'OPEN_ISSUED'" not in index:
               raise SystemExit("HOME NEXT client must open newly issued set.")
 
-          if "route.readiness_state ===\n                    'READY'" not in index:
-              raise SystemExit("NEXT must stay disabled while preparation is still required.")
+          if "'PREPARE_REQUIRED'" not in index:
+              raise SystemExit("NEXT must expose the deterministic preparation path.")
+
+          if "route.client_action !==\n                'AUTHORING_REQUIRED'" not in index:
+              raise SystemExit("NEXT must disable after semantic authoring is required.")
+
+          home_start = fs.index("function h3FsHomeNextLocked_()")
+          home_end = fs.index("function h3FamilySchedulerHomeNext()", home_start)
+          home_locked = fs[home_start:home_end]
+          if "prepareListeningBackendSet(" in home_locked:
+              raise SystemExit("Listening preparation must not run while the outer scheduler lock is held.")
+
+          public_start = fs.index("function h3FamilySchedulerHomeNext()")
+          public_end = fs.index("function h3FamilySchedulerShadowTick()", public_start)
+          public_rpc = fs[public_start:public_end]
+          if "prepareListeningBackendSet(" not in public_rpc:
+              raise SystemExit("HOME NEXT must bridge PREPARE_REQUIRED to the listening backend.")
 
           # Existing SHADOW evaluator itself must remain read-only.
           eval_start = fs.index("function h3FsEvaluate_(ss,level)")

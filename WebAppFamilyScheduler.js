@@ -1398,6 +1398,183 @@ function h3FamilySchedulerF4Status() {
   };
 }
 
+
+function h3FsLatestReadyK1_(ss) {
+  var sh=ss.getSheetByName('listening_k1_ready_v1');
+  if(!sh)return null;
+  var t=h3FsTable_(sh);
+  h3FsRequire_(t,[
+    'K1_READY_ID','CREATED_AT','STATUS',
+    'BOUND_LISTENING_SET_ID','CONSUMED_AT'
+  ],'listening_k1_ready_v1');
+
+  var candidates=[];
+  t.rows.forEach(function(r,i){
+    if(
+      String(r[t.map.STATUS]||'')==='READY' &&
+      !String(r[t.map.BOUND_LISTENING_SET_ID]||'') &&
+      !String(r[t.map.CONSUMED_AT]||'')
+    ){
+      candidates.push({
+        rowNumber:i+2,
+        createdAt:String(r[t.map.CREATED_AT]||''),
+        id:String(r[t.map.K1_READY_ID]||'')
+      });
+    }
+  });
+  if(!candidates.length)return null;
+
+  candidates.sort(function(a,b){
+    var at=Date.parse(a.createdAt),bt=Date.parse(b.createdAt);
+    if(!Number.isFinite(at)||!Number.isFinite(bt)){
+      throw new Error('FAMILY_SCHEDULER_K1_READY_TIMESTAMP_INVALID');
+    }
+    if(at!==bt)return bt-at;
+    return String(b.id).localeCompare(String(a.id));
+  });
+
+  if(
+    candidates.length>1 &&
+    candidates[0].createdAt===candidates[1].createdAt &&
+    candidates[0].id===candidates[1].id
+  ){
+    throw new Error('FAMILY_SCHEDULER_K1_READY_AMBIGUOUS');
+  }
+
+  var record=k1ReadyRecordFromRow_(
+    sh,
+    candidates[0].rowNumber
+  );
+  validateK1ReadyPayload_(record);
+  return record;
+}
+
+function h3FsReadyListeningPrestage_(ss,nextSetNo) {
+  var sh=ss.getSheetByName(H3_BACKEND_PRESTAGE_TAB);
+  if(!sh)return null;
+  var t=h3FsTable_(sh);
+  h3FsRequire_(t,H3_BACKEND_PRESTAGE_HEADERS,H3_BACKEND_PRESTAGE_TAB);
+
+  var found=[];
+  t.rows.forEach(function(r,i){
+    if(
+      String(r[t.map.STATUS]||'')==='READY' &&
+      Number(r[t.map.TARGET_LISTENING_SET_NO]||0)===Number(nextSetNo) &&
+      !String(r[t.map.BOUND_LISTENING_SET_ID]||'') &&
+      !String(r[t.map.CONSUMED_AT]||'')
+    ){
+      found.push({
+        row:r,
+        rowNumber:i+2,
+        id:String(r[t.map.PRESTAGE_ID]||'')
+      });
+    }
+  });
+  if(found.length>1){
+    throw new Error('FAMILY_SCHEDULER_LISTENING_PRESTAGE_AMBIGUOUS');
+  }
+  return found.length?found[0]:null;
+}
+
+function h3FsAllocateListeningSetId_(ss) {
+  var date=Utilities.formatDate(
+    new Date(),
+    'Asia/Tokyo',
+    'yyyyMMdd'
+  );
+  var prefix='H3-'+date+'-L';
+  var used={},max=0;
+
+  function collect(sheetName,columnName) {
+    var sh=ss.getSheetByName(sheetName);
+    if(!sh)return;
+    var t=h3FsTable_(sh);
+    if(t.map[columnName]===undefined)return;
+    t.rows.forEach(function(r){
+      var id=String(r[t.map[columnName]]||'');
+      if(!id)return;
+      used[id]=true;
+      if(id.indexOf(prefix)!==0)return;
+      var tail=id.slice(prefix.length);
+      var digits=
+        tail.length>=2 &&
+        tail.length<=3 &&
+        tail.split('').every(function(ch){
+          return ch>='0' && ch<='9';
+        });
+      if(digits){
+        max=Math.max(max,Number(tail));
+      }
+    });
+  }
+
+  collect('listening_set_payload_v1','LISTENING_SET_ID');
+  collect('listening_log_v1','PARENT_SET_ID');
+  collect('listening_k1_ready_v1','BOUND_LISTENING_SET_ID');
+
+  // LISTENING_SET_NO remains the learner-family clock.
+  // The ID suffix is date-local uniqueness only and is not
+  // derived from NEXT_LISTENING_SET_NO / LISTENING_ISSUE_NO.
+  for(var n=max+1;n<1000;n++){
+    var id=prefix+String(n).padStart(2,'0');
+    if(!used[id])return id;
+  }
+  throw new Error(
+    'FAMILY_SCHEDULER_LISTENING_SET_ID_EXHAUSTED'
+  );
+}
+
+function h3FsBuildListeningPrepare_(ss) {
+  var ls=h3FsKv_(ss,'listening_state_v1');
+  var next=Number(ls.NEXT_LISTENING_SET_NO||0);
+  if(!Number.isInteger(next)||next<1){
+    throw new Error(
+      'FAMILY_SCHEDULER_LISTENING_NEXT_SET_NO_INVALID'
+    );
+  }
+
+  var k1=h3FsLatestReadyK1_(ss);
+  if(!k1){
+    return {
+      status:'AUTHORING_REQUIRED',
+      authoring_target:'K1_READY',
+      family:'L'
+    };
+  }
+
+  var prestage=h3FsReadyListeningPrestage_(ss,next);
+  if(!prestage){
+    return {
+      status:'AUTHORING_REQUIRED',
+      authoring_target:'K2_K5_PRESTAGE',
+      family:'L',
+      k1_ready_id:k1.id
+    };
+  }
+
+  return {
+    status:'READY_TO_PREPARE',
+    authoring_target:'',
+    family:'L',
+    prestage_id:prestage.id,
+    request:{
+      schema:H3_BACKEND_PREPARE_SCHEMA,
+      set_id:h3FsAllocateListeningSetId_(ss),
+      k1_ready_id:k1.id
+    }
+  };
+}
+
+function h3FsAuthoringTarget_(family) {
+  if(family==='W')return 'WRITTEN_STAGE_AUTHORING';
+  if(family==='R')return 'READING_SOURCE_AUTHORING';
+  if(family==='T')return 'TRANSLATION_SOURCE_AUTHORING';
+  if(family==='L')return 'K1_READY';
+  throw new Error(
+    'FAMILY_SCHEDULER_AUTHORING_FAMILY_INVALID:'+family
+  );
+}
+
 function h3FsRenderRequest_(provider,surface,setId) {
   return {
     schema:'H3_WEB_RENDER_REQUEST_V1',
@@ -2108,13 +2285,17 @@ function h3FamilySchedulerIssueRoutePreview() {
   return h3FsIssueRoute_(resolved,readiness,current);
 }
 
-function h3FamilySchedulerHomeNext() {
+function h3FsHomeNextLocked_() {
   var lock=LockService.getScriptLock();
   lock.waitLock(30000);
   try {
     var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
     var evaluation=h3FsEvaluate_(ss,'3級');
-    var existing=h3FsEvaluationAtClock_(ss,'3級',evaluation.global_set_clock);
+    var existing=h3FsEvaluationAtClock_(
+      ss,
+      '3級',
+      evaluation.global_set_clock
+    );
     if(!existing){
       h3FsAppend_(ss,'3級',evaluation);
     }
@@ -2122,12 +2303,19 @@ function h3FamilySchedulerHomeNext() {
     var resolved=h3FsResolveLive_(evaluation);
     var current=h3ReviewCurrentLearning_(ss);
     var readiness=h3FsReadiness_(ss);
-    var route=h3FsIssueRoute_(resolved,readiness,current);
+    var route=h3FsIssueRoute_(
+      resolved,
+      readiness,
+      current
+    );
 
     var out={
       schema:'H3_FAMILY_SCHEDULER_HOME_NEXT_V1',
       scheduler_applied:false,
       issue_performed:false,
+      preparation_performed:false,
+      preparation_status:'',
+      prepared_set_id:'',
       route_kind:String(route.route_kind||''),
       family:String(route.family||'NONE'),
       provider_kind:String(route.provider_kind||''),
@@ -2138,6 +2326,8 @@ function h3FamilySchedulerHomeNext() {
       requires_prepare:route.requires_prepare===true,
       result_status:String(route.result_status||''),
       client_action:'NONE',
+      authoring_target:'',
+      prepare_request:null,
       render_request:null,
       issue_event_id:'',
       issue_log_status:''
@@ -2149,7 +2339,9 @@ function h3FamilySchedulerHomeNext() {
     }
 
     if(route.result_status!=='READY'){
-      throw new Error('FAMILY_SCHEDULER_HOME_NEXT_ROUTE_NOT_READY');
+      throw new Error(
+        'FAMILY_SCHEDULER_HOME_NEXT_ROUTE_NOT_READY'
+      );
     }
 
     if(route.route_kind==='CURRENT_SET'){
@@ -2164,17 +2356,41 @@ function h3FamilySchedulerHomeNext() {
 
     if(route.route_kind==='FAMILY'){
       if(route.requires_prepare){
-        out.client_action='PREPARE_REQUIRED';
+        if(route.family==='L'){
+          var prep=h3FsBuildListeningPrepare_(ss);
+          if(prep.status==='READY_TO_PREPARE'){
+            out.client_action='PREPARE_LISTENING';
+            out.prepare_request=prep.request;
+            out.prepared_set_id=prep.request.set_id;
+            out.preparation_status='READY_TO_PREPARE';
+            return out;
+          }
+          out.client_action='AUTHORING_REQUIRED';
+          out.authoring_target=prep.authoring_target;
+          out.preparation_status='AUTHORING_REQUIRED';
+          return out;
+        }
+
+        out.client_action='AUTHORING_REQUIRED';
+        out.authoring_target=
+          h3FsAuthoringTarget_(route.family);
+        out.preparation_status='AUTHORING_REQUIRED';
         return out;
       }
 
-      var issued=h3FsIssuePreparedFamily_(ss,route.family);
-      var currentAfter=h3ReviewCurrentLearning_(ss);
+      var issued=h3FsIssuePreparedFamily_(
+        ss,
+        route.family
+      );
+      var currentAfter=
+        h3ReviewCurrentLearning_(ss);
       if(
         !currentAfter ||
         String(currentAfter.set_id||'')!==String(issued.set_id||'')
       ){
-        throw new Error('FAMILY_SCHEDULER_ISSUE_CURRENT_READBACK_MISMATCH');
+        throw new Error(
+          'FAMILY_SCHEDULER_ISSUE_CURRENT_READBACK_MISMATCH'
+        );
       }
 
       out.scheduler_applied=true;
@@ -2187,7 +2403,11 @@ function h3FamilySchedulerHomeNext() {
       out.client_action='OPEN_ISSUED';
       out.render_request=issued.render_request;
       try {
-        out.issue_event_id=h3FsAppendIssueApplied_(ss,evaluation,issued);
+        out.issue_event_id=h3FsAppendIssueApplied_(
+          ss,
+          evaluation,
+          issued
+        );
         out.issue_log_status='RECORDED';
       } catch(_logErr) {
         out.issue_event_id='';
@@ -2196,10 +2416,66 @@ function h3FamilySchedulerHomeNext() {
       return out;
     }
 
-    throw new Error('FAMILY_SCHEDULER_HOME_NEXT_ROUTE_KIND_INVALID');
+    throw new Error(
+      'FAMILY_SCHEDULER_HOME_NEXT_ROUTE_KIND_INVALID'
+    );
   } finally {
     lock.releaseLock();
   }
+}
+
+function h3FamilySchedulerHomeNext() {
+  var first=h3FsHomeNextLocked_();
+
+  if(first.client_action!=='PREPARE_LISTENING'){
+    return first;
+  }
+
+  var request=first.prepare_request;
+  if(
+    !request ||
+    request.schema!==H3_BACKEND_PREPARE_SCHEMA ||
+    !request.set_id ||
+    !request.k1_ready_id
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_LISTENING_PREPARE_REQUEST_INVALID'
+    );
+  }
+
+  // This call owns its own source/finalization locks and runs
+  // targeted audio between them; no outer scheduler lock is held.
+  var prepared=prepareListeningBackendSet(
+    request
+  );
+  if(
+    !prepared ||
+    prepared.schema!==H3_BACKEND_RESULT_SCHEMA ||
+    prepared.status!=='PREISSUE_READY' ||
+    prepared.preissue!=='PASS' ||
+    prepared.issue_performed!==false ||
+    String(prepared.set_id||'')!==String(request.set_id)
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_LISTENING_PREPARE_READBACK_FAIL'
+    );
+  }
+
+  var second=h3FsHomeNextLocked_();
+  second.preparation_performed=true;
+  second.preparation_status='PREISSUE_READY';
+  second.prepared_set_id=String(prepared.set_id||'');
+
+  if(
+    second.client_action!=='OPEN_ISSUED' &&
+    second.client_action!=='OPEN_CURRENT'
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_POST_PREPARE_ROUTE_INVALID'
+    );
+  }
+
+  return second;
 }
 
 function h3FamilySchedulerShadowTick() {

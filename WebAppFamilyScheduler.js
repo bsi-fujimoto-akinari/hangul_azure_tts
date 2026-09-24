@@ -4,6 +4,12 @@ var H3_FS_STATE_SCHEMA_ = 'H3_FAMILY_SCHEDULER_STATE_V1';
 var H3_FS_OUTPUT_SCHEMA_ = 'H3_FAMILY_SCHEDULER_V1';
 var H3_FS_LIVE_RESOLVER_SCHEMA_ = 'H3_FAMILY_SCHEDULER_LIVE_RESOLVER_V1';
 var H3_FS_ISSUE_ROUTE_SCHEMA_ = 'H3_FAMILY_SCHEDULER_ISSUE_ROUTE_V1';
+var H3_FS_FAMILY_LAUNCH_PREVIEW_SCHEMA_ =
+  'H3_FAMILY_SCHEDULER_FAMILY_LAUNCH_PREVIEW_V1';
+var H3_FS_FAMILY_LAUNCH_RESULT_SCHEMA_ =
+  'H3_FAMILY_SCHEDULER_FAMILY_LAUNCH_RESULT_V1';
+var H3_FS_S2_BUTTON_MODE_ =
+  'MODE_B_FAMILY_SPECIFIC_LAUNCH_ONLY_IF_ELIGIBLE';
 var H3_FS_ISSUE_ROUTE_BINDINGS_ = {
   L: {
     provider_kind:'LISTENING',
@@ -2865,6 +2871,547 @@ function h3FamilySchedulerIssueRoutePreview() {
   var current=h3ReviewCurrentLearning_(ss);
   var readiness=h3FsReadiness_(ss);
   return h3FsIssueRoute_(resolved,readiness,current);
+}
+
+function h3FsFamilyLaunchPreviewCore_(ss) {
+  var evaluation=h3FsEvaluate_(ss,'3級');
+  var current=h3ReviewCurrentLearning_(ss);
+  var readiness=h3FsReadiness_(ss);
+  var out={
+    schema:H3_FS_FAMILY_LAUNCH_PREVIEW_SCHEMA_,
+    button_mode:H3_FS_S2_BUTTON_MODE_,
+    scheduler_applied:false,
+    global_set_clock:Number(evaluation.global_set_clock),
+    recommended_family:String(evaluation.recommended_family||''),
+    families:{}
+  };
+
+  if(!isFinite(out.global_set_clock)||out.global_set_clock<0){
+    throw new Error('FAMILY_LAUNCH_PREVIEW_CLOCK_INVALID');
+  }
+
+  H3_FS_FAMILIES_.forEach(function(family){
+    var binding=H3_FS_ISSUE_ROUTE_BINDINGS_[family];
+    var ready=readiness&&readiness[family];
+    var item={
+      family:family,
+      provider_kind:binding.provider_kind,
+      surface_family:binding.surface_family,
+      route_target:binding.route_target,
+      current_set_id:'',
+      readiness_state:ready?String(ready.state||''):'',
+      preparation_state:'',
+      requires_prepare:false,
+      result_status:'BLOCKED',
+      client_action:'BLOCKED',
+      authoring_target:'',
+      reason:''
+    };
+
+    if(current){
+      if(String(evaluation.next_action||'')!=='RESUME_CURRENT'){
+        throw new Error('FAMILY_LAUNCH_PREVIEW_CURRENT_EVALUATION_MISMATCH');
+      }
+      var currentFamily=h3FsFamily_(current.surface_family);
+      if(currentFamily===family){
+        if(
+          String(current.provider_kind||'')!==binding.provider_kind ||
+          String(current.surface_family||'')!==binding.surface_family ||
+          !String(current.set_id||'')
+        ){
+          throw new Error('FAMILY_LAUNCH_PREVIEW_CURRENT_BINDING_INVALID');
+        }
+        item.current_set_id=String(current.set_id);
+        item.readiness_state='CURRENT_SET';
+        item.result_status='READY';
+        item.client_action='OPEN_CURRENT';
+      } else {
+        item.reason='CURRENT_OTHER_FAMILY';
+      }
+      out.families[family]=item;
+      return;
+    }
+
+    if(
+      String(evaluation.result_status||'')==='BLOCKED' ||
+      String(evaluation.next_action||'')==='BLOCKED'
+    ){
+      item.reason='SCHEDULER_GLOBAL_BLOCK';
+      out.families[family]=item;
+      return;
+    }
+
+    if(String(evaluation.next_action||'')!=='RECOMMEND_FAMILY'){
+      throw new Error('FAMILY_LAUNCH_PREVIEW_EVALUATION_INVALID');
+    }
+
+    if(
+      !ready ||
+      ready.eligible!==true ||
+      ['READY','PREPARE_REQUIRED'].indexOf(
+        String(ready.state||'')
+      )<0
+    ){
+      item.reason=String(
+        ready&&ready.reason||
+        'FAMILY_NOT_ELIGIBLE'
+      );
+      out.families[family]=item;
+      return;
+    }
+
+    if(String(ready.state)==='READY'){
+      item.result_status='READY';
+      item.client_action='LAUNCH';
+      out.families[family]=item;
+      return;
+    }
+
+    var prep=h3FsAuthoringPreparationPreview_(
+      ss,
+      family
+    );
+    var prepStatus=String(
+      prep&&prep.status||''
+    );
+    item.preparation_state=prepStatus;
+    item.authoring_target=String(
+      prep&&prep.authoring_target||''
+    );
+
+    if(prepStatus==='AUTHORING_REQUIRED'){
+      item.client_action='AUTHORING_REQUIRED';
+      item.reason='AUTHORING_REQUIRED';
+      out.families[family]=item;
+      return;
+    }
+
+    if(
+      ['READY_TO_PREPARE','PREPARE_REQUIRED']
+        .indexOf(prepStatus)>=0
+    ){
+      item.requires_prepare=true;
+      item.result_status='READY';
+      item.client_action='LAUNCH';
+      out.families[family]=item;
+      return;
+    }
+
+    item.reason='PREPARATION_STATE_INVALID';
+    out.families[family]=item;
+  });
+
+  return out;
+}
+
+function h3FamilySchedulerFamilyLaunchPreview() {
+  var ss=SpreadsheetApp.openById(
+    H3_WEB_RUNTIME_SPREADSHEET_ID
+  );
+  return h3FsFamilyLaunchPreviewCore_(ss);
+}
+
+function h3FsManualFamilyResolved_(
+  evaluation,
+  family
+) {
+  if(
+    !evaluation ||
+    String(evaluation.schema||'')!==H3_FS_OUTPUT_SCHEMA_ ||
+    String(evaluation.result_status||'')!=='PASS' ||
+    String(evaluation.next_action||'')!=='RECOMMEND_FAMILY' ||
+    H3_FS_FAMILIES_.indexOf(family)<0
+  ){
+    throw new Error(
+      'FAMILY_LAUNCH_RESOLVER_INPUT_INVALID'
+    );
+  }
+  return {
+    schema:H3_FS_LIVE_RESOLVER_SCHEMA_,
+    mode:'LIVE_RESOLVER',
+    scheduler_applied:false,
+    global_set_clock:Number(
+      evaluation.global_set_clock
+    ),
+    source_next_action:
+      'FAMILY_SPECIFIC_LAUNCH',
+    primary_reason:'S2_MODE_B',
+    route_kind:'FAMILY',
+    family:family,
+    current_set_id:'',
+    result_status:'READY'
+  };
+}
+
+function h3FsHomeFamilyBase_(
+  evaluation,
+  family
+) {
+  var binding=
+    H3_FS_ISSUE_ROUTE_BINDINGS_[family];
+  return {
+    schema:H3_FS_FAMILY_LAUNCH_RESULT_SCHEMA_,
+    button_mode:H3_FS_S2_BUTTON_MODE_,
+    selection_source:
+      'FAMILY_SPECIFIC_LAUNCH',
+    scheduler_applied:false,
+    issue_performed:false,
+    preparation_performed:false,
+    preparation_status:'',
+    prepared_set_id:'',
+    global_set_clock:Number(
+      evaluation.global_set_clock
+    ),
+    recommended_family:String(
+      evaluation.recommended_family||''
+    ),
+    route_kind:'FAMILY',
+    family:family,
+    provider_kind:
+      binding?binding.provider_kind:'',
+    surface_family:
+      binding?binding.surface_family:'',
+    route_target:
+      binding?binding.route_target:'',
+    current_set_id:'',
+    readiness_state:'',
+    requires_prepare:false,
+    result_status:'BLOCKED',
+    client_action:'BLOCKED',
+    authoring_target:'',
+    prepare_request:null,
+    render_request:null,
+    reason:''
+  };
+}
+
+function h3FsHomeFamilyLocked_(family) {
+  family=String(family||'');
+  if(H3_FS_FAMILIES_.indexOf(family)<0){
+    throw new Error(
+      'FAMILY_LAUNCH_FAMILY_INVALID'
+    );
+  }
+
+  var lock=LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var ss=SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+    var evaluation=h3FsEvaluate_(
+      ss,
+      '3級'
+    );
+    var out=h3FsHomeFamilyBase_(
+      evaluation,
+      family
+    );
+    var current=h3ReviewCurrentLearning_(ss);
+
+    if(current){
+      if(
+        String(evaluation.next_action||'')!==
+          'RESUME_CURRENT'
+      ){
+        throw new Error(
+          'FAMILY_LAUNCH_CURRENT_EVALUATION_MISMATCH'
+        );
+      }
+      var currentFamily=
+        h3FsFamily_(current.surface_family);
+      if(currentFamily!==family){
+        out.reason='CURRENT_OTHER_FAMILY';
+        return out;
+      }
+      var binding=
+        H3_FS_ISSUE_ROUTE_BINDINGS_[family];
+      if(
+        String(current.provider_kind||'')!==
+          binding.provider_kind ||
+        String(current.surface_family||'')!==
+          binding.surface_family ||
+        !String(current.set_id||'')
+      ){
+        throw new Error(
+          'FAMILY_LAUNCH_CURRENT_BINDING_INVALID'
+        );
+      }
+      out.route_kind='CURRENT_SET';
+      out.current_set_id=String(
+        current.set_id
+      );
+      out.readiness_state='CURRENT_SET';
+      out.requires_prepare=false;
+      out.result_status='READY';
+      out.client_action='OPEN_CURRENT';
+      out.render_request=
+        h3FsRenderRequest_(
+          binding.provider_kind,
+          binding.surface_family,
+          current.set_id
+        );
+      return out;
+    }
+
+    if(
+      String(evaluation.result_status||'')===
+        'BLOCKED' ||
+      String(evaluation.next_action||'')===
+        'BLOCKED'
+    ){
+      out.reason='SCHEDULER_GLOBAL_BLOCK';
+      return out;
+    }
+
+    if(
+      String(evaluation.next_action||'')!==
+        'RECOMMEND_FAMILY'
+    ){
+      throw new Error(
+        'FAMILY_LAUNCH_EVALUATION_INVALID'
+      );
+    }
+
+    var existing=h3FsEvaluationAtClock_(
+      ss,
+      '3級',
+      evaluation.global_set_clock
+    );
+    if(!existing){
+      h3FsAppend_(
+        ss,
+        '3級',
+        evaluation
+      );
+    }
+
+    var readiness=h3FsReadiness_(ss);
+    var ready=readiness&&readiness[family];
+    if(
+      !ready ||
+      ready.eligible!==true ||
+      ['READY','PREPARE_REQUIRED'].indexOf(
+        String(ready.state||'')
+      )<0
+    ){
+      out.readiness_state=String(
+        ready&&ready.state||'BLOCKED'
+      );
+      out.reason=String(
+        ready&&ready.reason||
+        'FAMILY_NOT_ELIGIBLE'
+      );
+      return out;
+    }
+
+    var route=h3FsIssueRoute_(
+      h3FsManualFamilyResolved_(
+        evaluation,
+        family
+      ),
+      readiness,
+      null
+    );
+    out.route_kind=route.route_kind;
+    out.readiness_state=
+      route.readiness_state;
+    out.requires_prepare=
+      route.requires_prepare===true;
+    out.result_status='READY';
+
+    if(route.requires_prepare){
+      if(family==='L'){
+        var prep=h3FsBuildListeningPrepare_(ss);
+        if(prep.status==='READY_TO_PREPARE'){
+          out.client_action='PREPARE_LISTENING';
+          out.prepare_request=prep.request;
+          out.prepared_set_id=
+            prep.request.set_id;
+          out.preparation_status=
+            'READY_TO_PREPARE';
+          return out;
+        }
+        out.client_action='AUTHORING_REQUIRED';
+        out.authoring_target=
+          prep.authoring_target;
+        out.preparation_status=
+          'AUTHORING_REQUIRED';
+        out.result_status='BLOCKED';
+        out.reason='AUTHORING_REQUIRED';
+        return out;
+      }
+
+      if(family==='W'){
+        var wPrep=h3FsPrepareWritten_(ss);
+        if(
+          wPrep.status===
+            'AUTHORING_REQUIRED'
+        ){
+          out.client_action=
+            'AUTHORING_REQUIRED';
+          out.authoring_target=
+            wPrep.authoring_target;
+          out.preparation_status=
+            wPrep.status;
+          out.prepared_set_id=
+            wPrep.stage_id;
+          out.prepare_request=
+            wPrep.authoring_request;
+          out.result_status='BLOCKED';
+          out.reason='AUTHORING_REQUIRED';
+          return out;
+        }
+        if(wPrep.status!=='READY'){
+          throw new Error(
+            'FAMILY_LAUNCH_WRITTEN_PREPARE_STATUS_INVALID'
+          );
+        }
+        out.preparation_status='READY';
+        out.prepared_set_id=
+          wPrep.stage_id;
+        out.requires_prepare=false;
+      } else if(
+        family==='R' ||
+        family==='T'
+      ){
+        var rtPrep=
+          family==='R'
+            ? h3FsPrepareReading_(ss)
+            : h3FsPrepareTranslation_(ss);
+        if(
+          rtPrep.status===
+            'AUTHORING_REQUIRED'
+        ){
+          out.client_action=
+            'AUTHORING_REQUIRED';
+          out.authoring_target=
+            rtPrep.authoring_target;
+          out.preparation_status=
+            'AUTHORING_REQUIRED';
+          out.result_status='BLOCKED';
+          out.reason='AUTHORING_REQUIRED';
+          return out;
+        }
+        if(!rtPrep.set_id){
+          throw new Error(
+            'FAMILY_LAUNCH_RT_PREPARE_SET_ID_MISSING'
+          );
+        }
+        out.preparation_performed=true;
+        out.preparation_status=
+          rtPrep.status;
+        out.prepared_set_id=
+          rtPrep.set_id;
+        out.requires_prepare=false;
+      } else {
+        throw new Error(
+          'FAMILY_LAUNCH_PREPARE_FAMILY_INVALID'
+        );
+      }
+    }
+
+    var issued=h3FsIssuePreparedFamily_(
+      ss,
+      family
+    );
+    var currentAfter=
+      h3ReviewCurrentLearning_(ss);
+    if(
+      !currentAfter ||
+      String(currentAfter.set_id||'')!==
+        String(issued.set_id||'')
+    ){
+      throw new Error(
+        'FAMILY_LAUNCH_ISSUE_CURRENT_READBACK_MISMATCH'
+      );
+    }
+
+    out.issue_performed=true;
+    out.current_set_id=issued.set_id;
+    out.provider_kind=
+      issued.provider_kind;
+    out.surface_family=
+      issued.surface_family;
+    out.readiness_state='ISSUED';
+    out.requires_prepare=false;
+    out.result_status='READY';
+    out.client_action='OPEN_ISSUED';
+    out.render_request=
+      issued.render_request;
+    return out;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function h3FamilySchedulerHomeFamily(family) {
+  var selected=String(family||'');
+  var first=
+    h3FsHomeFamilyLocked_(selected);
+
+  if(
+    first.client_action!==
+      'PREPARE_LISTENING'
+  ){
+    return first;
+  }
+
+  var request=first.prepare_request;
+  if(
+    !request ||
+    request.schema!==
+      H3_BACKEND_PREPARE_SCHEMA ||
+    !request.set_id ||
+    !request.k1_ready_id
+  ){
+    throw new Error(
+      'FAMILY_LAUNCH_LISTENING_PREPARE_REQUEST_INVALID'
+    );
+  }
+
+  var prepared=
+    prepareListeningBackendSet(
+      request
+    );
+  if(
+    !prepared ||
+    prepared.schema!==
+      H3_BACKEND_RESULT_SCHEMA ||
+    prepared.status!==
+      'PREISSUE_READY' ||
+    prepared.preissue!=='PASS' ||
+    prepared.issue_performed!==false ||
+    String(prepared.set_id||'')!==
+      String(request.set_id)
+  ){
+    throw new Error(
+      'FAMILY_LAUNCH_LISTENING_PREPARE_READBACK_FAIL'
+    );
+  }
+
+  var second=
+    h3FsHomeFamilyLocked_(
+      selected
+    );
+  second.preparation_performed=true;
+  second.preparation_status=
+    'PREISSUE_READY';
+  second.prepared_set_id=
+    String(prepared.set_id||'');
+
+  if(
+    second.client_action!==
+      'OPEN_ISSUED' &&
+    second.client_action!==
+      'OPEN_CURRENT'
+  ){
+    throw new Error(
+      'FAMILY_LAUNCH_POST_PREPARE_ROUTE_INVALID'
+    );
+  }
+
+  return second;
 }
 
 function h3FsHomeNextLocked_() {

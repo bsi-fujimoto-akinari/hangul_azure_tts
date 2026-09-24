@@ -4750,7 +4750,9 @@ function h3MonitoringHomeProgress_(raw,required) {
   return {
     current:current,
     required:expected,
-    satisfied:raw.satisfied===true || current>=expected
+    satisfied:typeof raw.satisfied==='boolean'
+      ? raw.satisfied
+      : current>=expected
   };
 }
 

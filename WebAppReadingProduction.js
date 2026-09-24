@@ -725,9 +725,32 @@ function h3ReadingSubmit_(
       existing.action ===
         'RETURN_COMMITTED'
     ) {
-      return h3ReadingProdStoredResult_(
+      var stored =
+        h3ReadingProdStoredResult_(
+          context,
+          existing.record
+        );
+      var storedGrade =
+        h3ReadingGrade_(
+          context.locked,
+          normalized.answers
+        );
+
+      return h3ReadingAttachSchedulerSync_(
+        stored,
+        spreadsheet,
         context,
-        existing.record
+        storedGrade,
+        stored.txn_id,
+        String(
+          existing.record.row[
+            context.txnTable.map
+              .COMMITTED_AT
+          ] ||
+          h3ReadingProdNowTokyo_()
+        ),
+        context.txnTable.sheet,
+        existing.record.rowNumber
       );
     }
 
@@ -910,8 +933,20 @@ function h3ReadingSubmit_(
       );
     }
 
+    var syncedResult =
+      h3ReadingAttachSchedulerSync_(
+        result,
+        spreadsheet,
+        context,
+        grade,
+        txnId,
+        now,
+        journal,
+        txnRow
+      );
+
     return h3MultiSkillAttachCapture_(
-      result,
+      syncedResult,
       function () {
         return h3MultiSkillReadingCapture_(
           spreadsheet,
@@ -928,15 +963,35 @@ function h3ReadingSubmit_(
       txnRow
     ) {
       try {
-        h3ReadingProdMarkRecovery_(
-          journal,
-          txnRow,
+        var txnStatus =
           String(
-            err &&
-            err.message ||
-            err
-          )
-        );
+            journal
+              .getRange(
+                txnRow,
+                context &&
+                  context.txnTable
+                  ? context.txnTable.map.STATUS +
+                    1
+                  : 10
+              )
+              .getDisplayValue() ||
+            ''
+          );
+
+        if (
+          txnStatus !==
+            'COMMITTED'
+        ) {
+          h3ReadingProdMarkRecovery_(
+            journal,
+            txnRow,
+            String(
+              err &&
+              err.message ||
+              err
+            )
+          );
+        }
       } catch (_recoveryErr) {
       }
     }

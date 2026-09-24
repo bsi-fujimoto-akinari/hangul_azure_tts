@@ -312,7 +312,7 @@ jobs:
                   raise SystemExit(f"issue routing bridge must not execute issue/submit writes: {token}")
 
           preview_start = fs.index("function h3FamilySchedulerIssueRoutePreview()")
-          preview_end = fs.index("function h3FamilySchedulerHomeNext()", preview_start)
+          preview_end = fs.index("function h3FsHomeNextLocked_()", preview_start)
           preview = fs[preview_start:preview_end]
           for token in [
               "appendRow",

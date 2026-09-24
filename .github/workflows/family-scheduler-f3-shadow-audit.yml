@@ -942,6 +942,190 @@ jobs:
           console.log('Semantic authoring reconciliation fixture PASS');
           NODE
 
+      - name: Semantic authoring observability static contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          fs = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+          required = [
+              "H3_FAMILY_SCHEDULER_AUTHORING_OBSERVABILITY_V1",
+              "function h3FsAuthoringTimestampMs_(value)",
+              "function h3FsAuthoringHealthFromTable_(table,nowMs)",
+              "function h3FsAuthoringHealthCore_(ss,level,nowMs)",
+              "function h3FamilySchedulerAuthoringHealthPreview()",
+              "queue_count_by_status",
+              "oldest_OPEN_age_minutes",
+              "oldest_CLAIMED_age_minutes",
+              "stale_CLAIMED_count",
+              "FAILED_RETRYABLE_due_count",
+              "FAILED_BLOCKED_count",
+              "completed_recent_count",
+              "superseded_count",
+              "duplicate_idempotency_violation_count",
+              "missing_job_reconciliation_findings",
+              "alert_states",
+          ]
+          for token in required:
+              if token not in fs:
+                  raise SystemExit(f"missing S4-R3 observability token: {token}")
+
+          start = fs.index("function h3FsAuthoringTimestampMs_(value)")
+          end = fs.index(
+              "function h3FsSemanticAuthoringBridge_(ss,level,evaluation)",
+              start,
+          )
+          block = fs[start:end]
+          for token in [
+              "appendRow(", ".setValue(", ".setValues(",
+              "SpreadsheetApp.flush(",
+              "h3FsAuthoringUpsert_(",
+              "h3FamilySchedulerAuthoringReconciliationEnsure(",
+              "h3FsIssuePreparedFamily_(",
+              "h3FamilySchedulerHomeNext(",
+              "h3WrittenSubmit_(",
+              "h3ReadingSubmit_(",
+              "h3TranslationV2Submit_(",
+          ]:
+              if token in block:
+                  raise SystemExit(
+                      f"S4-R3 observability must remain read-only: {token}"
+                  )
+
+          print("Semantic authoring observability static contract PASS")
+          PY
+
+      - name: Semantic authoring observability fixture
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          vm.runInThisContext(fs.readFileSync('WebAppFamilyScheduler.js','utf8'));
+
+          const headers = H3_FS_AUTHORING_QUEUE_HEADERS_.slice();
+          const map = {};
+          headers.forEach((h,i)=>map[h]=i);
+          function row(values) {
+            return headers.map(h =>
+              Object.prototype.hasOwnProperty.call(values,h)
+                ? values[h] : ''
+            );
+          }
+          const now = Date.parse('2026-09-24T12:00:00Z');
+          const table = {
+            headers,
+            map,
+            rows: [
+              row({
+                JOB_ID:'OPEN1',STATUS:'OPEN',
+                CREATED_AT:'2026-09-24T10:00:00Z',
+                IDEMPOTENCY_KEY:'k-open'
+              }),
+              row({
+                JOB_ID:'CLAIM1',STATUS:'CLAIMED',
+                CLAIMED_AT:'2026-09-24T09:59:00Z',
+                IDEMPOTENCY_KEY:'k-claim'
+              }),
+              row({
+                JOB_ID:'RETRY-DUE',STATUS:'FAILED_RETRYABLE',
+                UPDATED_AT:'2026-09-24T10:59:00Z',
+                ATTEMPT_COUNT:2,IDEMPOTENCY_KEY:'k-retry-due'
+              }),
+              row({
+                JOB_ID:'RETRY-WAIT',STATUS:'FAILED_RETRYABLE',
+                UPDATED_AT:'2026-09-24T11:59:00Z',
+                ATTEMPT_COUNT:2,IDEMPOTENCY_KEY:'k-retry-wait'
+              }),
+              row({
+                JOB_ID:'RETRY-EXHAUSTED',STATUS:'FAILED_RETRYABLE',
+                UPDATED_AT:'2026-09-24T10:00:00Z',
+                ATTEMPT_COUNT:3,IDEMPOTENCY_KEY:'k-retry-exhausted'
+              }),
+              row({
+                JOB_ID:'BLOCKED1',STATUS:'FAILED_BLOCKED',
+                IDEMPOTENCY_KEY:'k-blocked'
+              }),
+              row({
+                JOB_ID:'DONE-RECENT',STATUS:'COMPLETED',
+                COMPLETED_AT:'2026-09-24T11:00:00Z',
+                IDEMPOTENCY_KEY:'k-dup'
+              }),
+              row({
+                JOB_ID:'DONE-OLD',STATUS:'COMPLETED',
+                COMPLETED_AT:'2026-09-23T10:00:00Z',
+                IDEMPOTENCY_KEY:'k-old'
+              }),
+              row({
+                JOB_ID:'SUPER1',STATUS:'SUPERSEDED',
+                IDEMPOTENCY_KEY:'k-dup'
+              }),
+            ],
+          };
+
+          const metrics = h3FsAuthoringHealthFromTable_(table,now);
+          const expected = {
+            queue_total_rows:9,
+            oldest_OPEN_age_minutes:120,
+            oldest_CLAIMED_age_minutes:121,
+            stale_CLAIMED_count:1,
+            FAILED_RETRYABLE_due_count:1,
+            FAILED_BLOCKED_count:1,
+            completed_recent_count:1,
+            superseded_count:1,
+            duplicate_idempotency_violation_count:1,
+            retry_exhausted_not_blocked_count:1,
+            timestamp_finding_count:0,
+          };
+          for (const [key,value] of Object.entries(expected)) {
+            if (metrics[key] !== value) {
+              throw new Error(
+                'S4-R3 metric mismatch '+key+': '+
+                JSON.stringify({got:metrics[key],expected:value})
+              );
+            }
+          }
+          if (
+            metrics.queue_count_by_status.FAILED_RETRYABLE !== 3 ||
+            metrics.queue_count_by_status.COMPLETED !== 2
+          ) {
+            throw new Error('S4-R3 status counts mismatch');
+          }
+          if (
+            metrics.duplicate_idempotency_keys.join(',') !== 'k-dup'
+          ) {
+            throw new Error('S4-R3 duplicate key mismatch');
+          }
+
+          h3FsAuthoringQueue_=()=>({table});
+          h3FsAuthoringReconciliationPreviewCore_=()=>({
+            public_result:{
+              action:'ENSURE_OPEN',
+              reason:'MISSING_AUTHORING_JOB',
+              recommended_family:'R',
+              target_id:'SK-R',
+              target_kind:'READING_SOURCE',
+              idempotency_key:'missing-key'
+            }
+          });
+          const health=h3FsAuthoringHealthCore_({},'3級',now);
+          if (
+            health.schema !==
+              'H3_FAMILY_SCHEDULER_AUTHORING_OBSERVABILITY_V1' ||
+            health.mode !== 'READ_ONLY_HEALTH' ||
+            health.write_performed !== false
+          ) {
+            throw new Error('S4-R3 health envelope mismatch');
+          }
+          if (
+            health.missing_job_reconciliation_finding_count !== 1 ||
+            health.alert_states.missing_authoring_job !== true ||
+            health.reconciliation_status !== 'PASS'
+          ) {
+            throw new Error('S4-R3 reconciliation health mismatch');
+          }
+          console.log('Semantic authoring observability fixture PASS');
+          NODE
+
       - name: Deterministic ranking fixture
         run: |
           node <<'NODE'

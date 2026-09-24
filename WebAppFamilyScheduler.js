@@ -2018,400 +2018,6 @@ function h3FamilySchedulerAuthoringHealthPreview() {
 }
 
 
-// S4-R4-B COMMON MONITORING OBSERVER FOUNDATION START
-function h3MonitoringObserverErrorText_(err) {
-  var s=String(err&&err.message ? err.message : err || 'UNKNOWN_ERROR');
-  return s.length>500 ? s.slice(0,500) : s;
-}
-
-function h3MonitoringObserverNormalizeEvent_(sourceId,event,index) {
-  event=event&&Object.prototype.toString.call(event)==='[object Object]'
-    ? event : {detail:String(event||'')};
-  var type=String(event.event_type||'ACTION_REQUIRED');
-  var key=String(
-    event.event_key||[
-      String(sourceId),type,String(index)
-    ].join(':')
-  );
-  return {
-    source_id:String(sourceId),
-    event_type:type,
-    event_key:key,
-    detail:String(event.detail||'')
-  };
-}
-
-function h3MonitoringObserverReadSource_(spec) {
-  var sourceId=String(spec&&spec.source_id||'');
-  if(!sourceId)throw new Error('MONITOR_OBSERVER_SOURCE_ID_REQUIRED');
-  if(!spec||typeof spec.reader!=='function'){
-    throw new Error('MONITOR_OBSERVER_SOURCE_READER_REQUIRED:'+sourceId);
-  }
-
-  try {
-    var raw=spec.reader();
-    if(!raw||Object.prototype.toString.call(raw)!=='[object Object]'){
-      throw new Error('MONITOR_OBSERVER_SOURCE_RESULT_INVALID:'+sourceId);
-    }
-    var status=String(raw.status||'OK');
-    if(['OK','WARNING','ERROR'].indexOf(status)<0){
-      throw new Error(
-        'MONITOR_OBSERVER_SOURCE_STATUS_INVALID:'+sourceId+':'+status
-      );
-    }
-    var events=Array.isArray(raw.action_required_events)
-      ? raw.action_required_events.map(function(event,index){
-          return h3MonitoringObserverNormalizeEvent_(
-            sourceId,event,index
-          );
-        })
-      : [];
-    var errorText=String(raw.error||'');
-    if(status==='ERROR'&&!events.length){
-      events.push(h3MonitoringObserverNormalizeEvent_(
-        sourceId,
-        {
-          event_type:'SOURCE_STATUS_ERROR',
-          event_key:sourceId+':SOURCE_STATUS_ERROR',
-          detail:errorText
-        },
-        0
-      ));
-    }
-    return {
-      source_id:sourceId,
-      status:status,
-      error:errorText,
-      action_required_events:events,
-      data:raw.data===undefined ? null : raw.data
-    };
-  } catch(err) {
-    var error=h3MonitoringObserverErrorText_(err);
-    return {
-      source_id:sourceId,
-      status:'ERROR',
-      error:error,
-      action_required_events:[
-        h3MonitoringObserverNormalizeEvent_(
-          sourceId,
-          {
-            event_type:'SOURCE_READ_ERROR',
-            event_key:sourceId+':SOURCE_READ_ERROR',
-            detail:error
-          },
-          0
-        )
-      ],
-      data:null
-    };
-  }
-}
-
-function h3MonitoringObserverSnapshotHash_(snapshot) {
-  return h3FsSha_({
-    schema:String(snapshot.schema||''),
-    level:String(snapshot.level||''),
-    last_checked_at:String(snapshot.last_checked_at||''),
-    status:String(snapshot.status||''),
-    health:snapshot.health||{},
-    sources:snapshot.sources||[],
-    action_required_events:snapshot.action_required_events||[]
-  });
-}
-
-function h3MonitoringObserverBuildSnapshot_(level,sourceSpecs,nowMs) {
-  level=String(level||'');
-  if(!level)throw new Error('MONITOR_OBSERVER_LEVEL_REQUIRED');
-  if(!Array.isArray(sourceSpecs)){
-    throw new Error('MONITOR_OBSERVER_SOURCE_SPECS_REQUIRED');
-  }
-  if(!isFinite(Number(nowMs))){
-    throw new Error('MONITOR_OBSERVER_TIME_INVALID');
-  }
-
-  var specs=sourceSpecs.slice().sort(function(a,b){
-    var x=String(a&&a.source_id||'');
-    var y=String(b&&b.source_id||'');
-    return x<y?-1:x>y?1:0;
-  });
-  var seen={};
-  specs.forEach(function(spec){
-    var id=String(spec&&spec.source_id||'');
-    if(!id)throw new Error('MONITOR_OBSERVER_SOURCE_ID_REQUIRED');
-    if(seen[id])throw new Error('MONITOR_OBSERVER_DUPLICATE_SOURCE:'+id);
-    seen[id]=true;
-  });
-
-  var sources=specs.map(h3MonitoringObserverReadSource_);
-  var events=[];
-  var errorCount=0,warningCount=0;
-  sources.forEach(function(source){
-    if(source.status==='ERROR')errorCount++;
-    if(source.status==='WARNING')warningCount++;
-    (source.action_required_events||[]).forEach(function(event){
-      events.push(event);
-    });
-  });
-  events.sort(function(a,b){
-    var ak=String(a.event_key||''),bk=String(b.event_key||'');
-    if(ak!==bk)return ak<bk?-1:1;
-    var as=String(a.source_id||''),bs=String(b.source_id||'');
-    return as<bs?-1:as>bs?1:0;
-  });
-
-  var status=
-    errorCount>0 ? 'ERROR' :
-    events.length>0 ? 'ACTION_REQUIRED' :
-    warningCount>0 ? 'DEGRADED' :
-    'HEALTHY';
-  var snapshot={
-    schema:H3_MONITOR_OBSERVER_SNAPSHOT_SCHEMA_,
-    level:level,
-    last_checked_at:new Date(Number(nowMs)).toISOString(),
-    status:status,
-    health:{
-      source_count:sources.length,
-      ok_count:sources.filter(function(x){return x.status==='OK';}).length,
-      warning_count:warningCount,
-      error_count:errorCount,
-      action_required_count:events.length
-    },
-    sources:sources,
-    action_required_events:events,
-    write_performed:false
-  };
-  snapshot.snapshot_sha256=h3MonitoringObserverSnapshotHash_(snapshot);
-  return snapshot;
-}
-
-function h3MonitoringObserverFatalSnapshot_(level,nowMs,err) {
-  var error=h3MonitoringObserverErrorText_(err);
-  var snapshot={
-    schema:H3_MONITOR_OBSERVER_SNAPSHOT_SCHEMA_,
-    level:String(level||''),
-    last_checked_at:new Date(Number(nowMs)).toISOString(),
-    status:'ERROR',
-    health:{
-      source_count:1,
-      ok_count:0,
-      warning_count:0,
-      error_count:1,
-      action_required_count:1
-    },
-    sources:[{
-      source_id:'OBSERVER_CONFIG',
-      status:'ERROR',
-      error:error,
-      action_required_events:[{
-        source_id:'OBSERVER_CONFIG',
-        event_type:'OBSERVER_CONFIG_ERROR',
-        event_key:'OBSERVER_CONFIG:ERROR',
-        detail:error
-      }],
-      data:null
-    }],
-    action_required_events:[{
-      source_id:'OBSERVER_CONFIG',
-      event_type:'OBSERVER_CONFIG_ERROR',
-      event_key:'OBSERVER_CONFIG:ERROR',
-      detail:error
-    }],
-    write_performed:false
-  };
-  snapshot.snapshot_sha256=h3MonitoringObserverSnapshotHash_(snapshot);
-  return snapshot;
-}
-
-function h3MonitoringObserverSnapshot_(level,sourceSpecs,nowMs) {
-  try {
-    return h3MonitoringObserverBuildSnapshot_(level,sourceSpecs,nowMs);
-  } catch(err) {
-    return h3MonitoringObserverFatalSnapshot_(level,nowMs,err);
-  }
-}
-
-function h3MonitoringObserverTelemetrySheet_(ss) {
-  var sh=ss.getSheetByName(H3_MONITOR_OBSERVER_SHEET_);
-  if(!sh){
-    sh=ss.insertSheet(H3_MONITOR_OBSERVER_SHEET_);
-    sh.getRange(
-      1,1,1,H3_MONITOR_OBSERVER_HEADERS_.length
-    ).setValues([H3_MONITOR_OBSERVER_HEADERS_]);
-  }
-  var t=h3FsTable_(sh);
-  h3FsRequire_(
-    t,H3_MONITOR_OBSERVER_HEADERS_,H3_MONITOR_OBSERVER_SHEET_
-  );
-  if(
-    t.headers.length!==H3_MONITOR_OBSERVER_HEADERS_.length ||
-    t.headers.some(function(h,i){
-      return h!==H3_MONITOR_OBSERVER_HEADERS_[i];
-    })
-  ){
-    throw new Error('MONITOR_OBSERVER_HEADER_MISMATCH');
-  }
-  return {sheet:sh,table:t};
-}
-
-function h3MonitoringObserverWriteSnapshot_(ss,snapshot) {
-  if(
-    !snapshot ||
-    String(snapshot.schema||'')!==H3_MONITOR_OBSERVER_SNAPSHOT_SCHEMA_
-  ){
-    throw new Error('MONITOR_OBSERVER_SNAPSHOT_SCHEMA_MISMATCH');
-  }
-  var expectedHash=h3MonitoringObserverSnapshotHash_(snapshot);
-  if(String(snapshot.snapshot_sha256||'')!==expectedHash){
-    throw new Error('MONITOR_OBSERVER_SNAPSHOT_HASH_MISMATCH');
-  }
-
-  var q=h3MonitoringObserverTelemetrySheet_(ss);
-  var m=q.table.map,matches=[];
-  q.table.rows.forEach(function(row,index){
-    if(String(row[m.LEVEL]||'')===String(snapshot.level||'')){
-      matches.push(index+2);
-    }
-  });
-  if(matches.length>1){
-    throw new Error('MONITOR_OBSERVER_DUPLICATE_LEVEL');
-  }
-
-  var rowValues=[
-    String(snapshot.level||''),
-    H3_MONITOR_OBSERVER_SCHEMA_,
-    String(snapshot.last_checked_at||''),
-    String(snapshot.status||''),
-    Number(snapshot.health&&snapshot.health.source_count||0),
-    Number(snapshot.health&&snapshot.health.error_count||0),
-    Number(snapshot.health&&snapshot.health.action_required_count||0),
-    String(snapshot.snapshot_sha256||''),
-    h3FsCanonical_(snapshot)
-  ];
-  var rowNumber;
-  if(matches.length===1){
-    rowNumber=matches[0];
-    q.sheet.getRange(
-      rowNumber,1,1,H3_MONITOR_OBSERVER_HEADERS_.length
-    ).setValues([rowValues]);
-  } else {
-    rowNumber=q.table.rows.length+2;
-    q.sheet.getRange(
-      rowNumber,1,1,H3_MONITOR_OBSERVER_HEADERS_.length
-    ).setValues([rowValues]);
-  }
-  SpreadsheetApp.flush();
-
-  var verify=h3MonitoringObserverTelemetrySheet_(ss);
-  var vm=verify.table.map,found=[];
-  verify.table.rows.forEach(function(row,index){
-    if(String(row[vm.LEVEL]||'')===String(snapshot.level||'')){
-      found.push({row:row,row_number:index+2});
-    }
-  });
-  if(found.length!==1){
-    throw new Error('MONITOR_OBSERVER_READBACK_COUNT:'+found.length);
-  }
-  var vr=found[0].row;
-  if(
-    String(vr[vm.SCHEMA_VERSION]||'')!==H3_MONITOR_OBSERVER_SCHEMA_ ||
-    String(vr[vm.SNAPSHOT_SHA256]||'')!==String(snapshot.snapshot_sha256) ||
-    String(vr[vm.SNAPSHOT_JSON]||'')!==h3FsCanonical_(snapshot)
-  ){
-    throw new Error('MONITOR_OBSERVER_READBACK_MISMATCH');
-  }
-
-  return {
-    schema:H3_MONITOR_OBSERVER_SCHEMA_,
-    status:'RECORDED',
-    level:String(snapshot.level||''),
-    last_checked_at:String(snapshot.last_checked_at||''),
-    observer_status:String(snapshot.status||''),
-    snapshot_sha256:String(snapshot.snapshot_sha256||''),
-    telemetry_row_number:found[0].row_number,
-    write_performed:true
-  };
-}
-
-function h3MonitoringObserverStoredSnapshot_(ss,level) {
-  var sh=ss.getSheetByName(H3_MONITOR_OBSERVER_SHEET_);
-  if(!sh)return null;
-  var t=h3FsTable_(sh);
-  h3FsRequire_(
-    t,H3_MONITOR_OBSERVER_HEADERS_,H3_MONITOR_OBSERVER_SHEET_
-  );
-  var m=t.map,matches=[];
-  t.rows.forEach(function(row){
-    if(String(row[m.LEVEL]||'')===String(level||''))matches.push(row);
-  });
-  if(matches.length>1){
-    throw new Error('MONITOR_OBSERVER_DUPLICATE_LEVEL');
-  }
-  if(!matches.length)return null;
-  var r=matches[0];
-  var snapshot=h3FsJson_(r[m.SNAPSHOT_JSON],null);
-  var expectedHash=snapshot
-    ? h3MonitoringObserverSnapshotHash_(snapshot)
-    : '';
-  if(
-    !snapshot ||
-    String(snapshot.schema||'')!==H3_MONITOR_OBSERVER_SNAPSHOT_SCHEMA_ ||
-    String(r[m.SCHEMA_VERSION]||'')!==H3_MONITOR_OBSERVER_SCHEMA_ ||
-    String(snapshot.snapshot_sha256||'')!==expectedHash ||
-    String(r[m.SNAPSHOT_SHA256]||'')!==expectedHash
-  ){
-    throw new Error('MONITOR_OBSERVER_STORED_SNAPSHOT_INVALID');
-  }
-  return snapshot;
-}
-
-function h3MonitoringObserverSourceSpecs_(ss) {
-  return [{
-    source_id:'RUNTIME_AUTHORITY',
-    reader:function(){
-      var actual=String(ss.getId ? ss.getId() : '');
-      var expected=String(H3_WEB_RUNTIME_SPREADSHEET_ID||'');
-      if(!actual||actual!==expected){
-        throw new Error('MONITOR_OBSERVER_RUNTIME_AUTHORITY_MISMATCH');
-      }
-      return {
-        status:'OK',
-        data:{
-          authority:'RUNTIME_SPREADSHEET',
-          spreadsheet_id:actual
-        },
-        action_required_events:[]
-      };
-    }
-  }];
-}
-
-function h3MonitoringObserverPreview() {
-  var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
-  return h3MonitoringObserverSnapshot_(
-    '3級',h3MonitoringObserverSourceSpecs_(ss),Date.now()
-  );
-}
-
-function h3MonitoringObserverRun() {
-  var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
-  var snapshot=h3MonitoringObserverSnapshot_(
-    '3級',h3MonitoringObserverSourceSpecs_(ss),Date.now()
-  );
-  return h3MonitoringObserverWriteSnapshot_(ss,snapshot);
-}
-
-function h3MonitoringObserverCurrent() {
-  var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
-  var snapshot=h3MonitoringObserverStoredSnapshot_(ss,'3級');
-  return {
-    schema:H3_MONITOR_OBSERVER_SCHEMA_,
-    status:snapshot ? 'READY' : 'EMPTY',
-    snapshot:snapshot,
-    write_performed:false
-  };
-}
-// S4-R4-B COMMON MONITORING OBSERVER FOUNDATION END
-
 function h3FsSemanticAuthoringBridge_(ss,level,evaluation) {
   if(
     !evaluation ||
@@ -4287,3 +3893,397 @@ function h3FamilySchedulerShadowTick() {
     lock.releaseLock();
   }
 }
+
+// S4-R4-B COMMON MONITORING OBSERVER FOUNDATION START
+function h3MonitoringObserverErrorText_(err) {
+  var s=String(err&&err.message ? err.message : err || 'UNKNOWN_ERROR');
+  return s.length>500 ? s.slice(0,500) : s;
+}
+
+function h3MonitoringObserverNormalizeEvent_(sourceId,event,index) {
+  event=event&&Object.prototype.toString.call(event)==='[object Object]'
+    ? event : {detail:String(event||'')};
+  var type=String(event.event_type||'ACTION_REQUIRED');
+  var key=String(
+    event.event_key||[
+      String(sourceId),type,String(index)
+    ].join(':')
+  );
+  return {
+    source_id:String(sourceId),
+    event_type:type,
+    event_key:key,
+    detail:String(event.detail||'')
+  };
+}
+
+function h3MonitoringObserverReadSource_(spec) {
+  var sourceId=String(spec&&spec.source_id||'');
+  if(!sourceId)throw new Error('MONITOR_OBSERVER_SOURCE_ID_REQUIRED');
+  if(!spec||typeof spec.reader!=='function'){
+    throw new Error('MONITOR_OBSERVER_SOURCE_READER_REQUIRED:'+sourceId);
+  }
+
+  try {
+    var raw=spec.reader();
+    if(!raw||Object.prototype.toString.call(raw)!=='[object Object]'){
+      throw new Error('MONITOR_OBSERVER_SOURCE_RESULT_INVALID:'+sourceId);
+    }
+    var status=String(raw.status||'OK');
+    if(['OK','WARNING','ERROR'].indexOf(status)<0){
+      throw new Error(
+        'MONITOR_OBSERVER_SOURCE_STATUS_INVALID:'+sourceId+':'+status
+      );
+    }
+    var events=Array.isArray(raw.action_required_events)
+      ? raw.action_required_events.map(function(event,index){
+          return h3MonitoringObserverNormalizeEvent_(
+            sourceId,event,index
+          );
+        })
+      : [];
+    var errorText=String(raw.error||'');
+    if(status==='ERROR'&&!events.length){
+      events.push(h3MonitoringObserverNormalizeEvent_(
+        sourceId,
+        {
+          event_type:'SOURCE_STATUS_ERROR',
+          event_key:sourceId+':SOURCE_STATUS_ERROR',
+          detail:errorText
+        },
+        0
+      ));
+    }
+    return {
+      source_id:sourceId,
+      status:status,
+      error:errorText,
+      action_required_events:events,
+      data:raw.data===undefined ? null : raw.data
+    };
+  } catch(err) {
+    var error=h3MonitoringObserverErrorText_(err);
+    return {
+      source_id:sourceId,
+      status:'ERROR',
+      error:error,
+      action_required_events:[
+        h3MonitoringObserverNormalizeEvent_(
+          sourceId,
+          {
+            event_type:'SOURCE_READ_ERROR',
+            event_key:sourceId+':SOURCE_READ_ERROR',
+            detail:error
+          },
+          0
+        )
+      ],
+      data:null
+    };
+  }
+}
+
+function h3MonitoringObserverSnapshotHash_(snapshot) {
+  return h3FsSha_({
+    schema:String(snapshot.schema||''),
+    level:String(snapshot.level||''),
+    last_checked_at:String(snapshot.last_checked_at||''),
+    status:String(snapshot.status||''),
+    health:snapshot.health||{},
+    sources:snapshot.sources||[],
+    action_required_events:snapshot.action_required_events||[]
+  });
+}
+
+function h3MonitoringObserverBuildSnapshot_(level,sourceSpecs,nowMs) {
+  level=String(level||'');
+  if(!level)throw new Error('MONITOR_OBSERVER_LEVEL_REQUIRED');
+  if(!Array.isArray(sourceSpecs)){
+    throw new Error('MONITOR_OBSERVER_SOURCE_SPECS_REQUIRED');
+  }
+  if(!isFinite(Number(nowMs))){
+    throw new Error('MONITOR_OBSERVER_TIME_INVALID');
+  }
+
+  var specs=sourceSpecs.slice().sort(function(a,b){
+    var x=String(a&&a.source_id||'');
+    var y=String(b&&b.source_id||'');
+    return x<y?-1:x>y?1:0;
+  });
+  var seen={};
+  specs.forEach(function(spec){
+    var id=String(spec&&spec.source_id||'');
+    if(!id)throw new Error('MONITOR_OBSERVER_SOURCE_ID_REQUIRED');
+    if(seen[id])throw new Error('MONITOR_OBSERVER_DUPLICATE_SOURCE:'+id);
+    seen[id]=true;
+  });
+
+  var sources=specs.map(h3MonitoringObserverReadSource_);
+  var events=[];
+  var errorCount=0,warningCount=0;
+  sources.forEach(function(source){
+    if(source.status==='ERROR')errorCount++;
+    if(source.status==='WARNING')warningCount++;
+    (source.action_required_events||[]).forEach(function(event){
+      events.push(event);
+    });
+  });
+  events.sort(function(a,b){
+    var ak=String(a.event_key||''),bk=String(b.event_key||'');
+    if(ak!==bk)return ak<bk?-1:1;
+    var as=String(a.source_id||''),bs=String(b.source_id||'');
+    return as<bs?-1:as>bs?1:0;
+  });
+
+  var status=
+    errorCount>0 ? 'ERROR' :
+    events.length>0 ? 'ACTION_REQUIRED' :
+    warningCount>0 ? 'DEGRADED' :
+    'HEALTHY';
+  var snapshot={
+    schema:H3_MONITOR_OBSERVER_SNAPSHOT_SCHEMA_,
+    level:level,
+    last_checked_at:new Date(Number(nowMs)).toISOString(),
+    status:status,
+    health:{
+      source_count:sources.length,
+      ok_count:sources.filter(function(x){return x.status==='OK';}).length,
+      warning_count:warningCount,
+      error_count:errorCount,
+      action_required_count:events.length
+    },
+    sources:sources,
+    action_required_events:events,
+    write_performed:false
+  };
+  snapshot.snapshot_sha256=h3MonitoringObserverSnapshotHash_(snapshot);
+  return snapshot;
+}
+
+function h3MonitoringObserverFatalSnapshot_(level,nowMs,err) {
+  var error=h3MonitoringObserverErrorText_(err);
+  var snapshot={
+    schema:H3_MONITOR_OBSERVER_SNAPSHOT_SCHEMA_,
+    level:String(level||''),
+    last_checked_at:new Date(Number(nowMs)).toISOString(),
+    status:'ERROR',
+    health:{
+      source_count:1,
+      ok_count:0,
+      warning_count:0,
+      error_count:1,
+      action_required_count:1
+    },
+    sources:[{
+      source_id:'OBSERVER_CONFIG',
+      status:'ERROR',
+      error:error,
+      action_required_events:[{
+        source_id:'OBSERVER_CONFIG',
+        event_type:'OBSERVER_CONFIG_ERROR',
+        event_key:'OBSERVER_CONFIG:ERROR',
+        detail:error
+      }],
+      data:null
+    }],
+    action_required_events:[{
+      source_id:'OBSERVER_CONFIG',
+      event_type:'OBSERVER_CONFIG_ERROR',
+      event_key:'OBSERVER_CONFIG:ERROR',
+      detail:error
+    }],
+    write_performed:false
+  };
+  snapshot.snapshot_sha256=h3MonitoringObserverSnapshotHash_(snapshot);
+  return snapshot;
+}
+
+function h3MonitoringObserverSnapshot_(level,sourceSpecs,nowMs) {
+  try {
+    return h3MonitoringObserverBuildSnapshot_(level,sourceSpecs,nowMs);
+  } catch(err) {
+    return h3MonitoringObserverFatalSnapshot_(level,nowMs,err);
+  }
+}
+
+function h3MonitoringObserverTelemetrySheet_(ss) {
+  var sh=ss.getSheetByName(H3_MONITOR_OBSERVER_SHEET_);
+  if(!sh){
+    sh=ss.insertSheet(H3_MONITOR_OBSERVER_SHEET_);
+    sh.getRange(
+      1,1,1,H3_MONITOR_OBSERVER_HEADERS_.length
+    ).setValues([H3_MONITOR_OBSERVER_HEADERS_]);
+  }
+  var t=h3FsTable_(sh);
+  h3FsRequire_(
+    t,H3_MONITOR_OBSERVER_HEADERS_,H3_MONITOR_OBSERVER_SHEET_
+  );
+  if(
+    t.headers.length!==H3_MONITOR_OBSERVER_HEADERS_.length ||
+    t.headers.some(function(h,i){
+      return h!==H3_MONITOR_OBSERVER_HEADERS_[i];
+    })
+  ){
+    throw new Error('MONITOR_OBSERVER_HEADER_MISMATCH');
+  }
+  return {sheet:sh,table:t};
+}
+
+function h3MonitoringObserverWriteSnapshot_(ss,snapshot) {
+  if(
+    !snapshot ||
+    String(snapshot.schema||'')!==H3_MONITOR_OBSERVER_SNAPSHOT_SCHEMA_
+  ){
+    throw new Error('MONITOR_OBSERVER_SNAPSHOT_SCHEMA_MISMATCH');
+  }
+  var expectedHash=h3MonitoringObserverSnapshotHash_(snapshot);
+  if(String(snapshot.snapshot_sha256||'')!==expectedHash){
+    throw new Error('MONITOR_OBSERVER_SNAPSHOT_HASH_MISMATCH');
+  }
+
+  var q=h3MonitoringObserverTelemetrySheet_(ss);
+  var m=q.table.map,matches=[];
+  q.table.rows.forEach(function(row,index){
+    if(String(row[m.LEVEL]||'')===String(snapshot.level||'')){
+      matches.push(index+2);
+    }
+  });
+  if(matches.length>1){
+    throw new Error('MONITOR_OBSERVER_DUPLICATE_LEVEL');
+  }
+
+  var rowValues=[
+    String(snapshot.level||''),
+    H3_MONITOR_OBSERVER_SCHEMA_,
+    String(snapshot.last_checked_at||''),
+    String(snapshot.status||''),
+    Number(snapshot.health&&snapshot.health.source_count||0),
+    Number(snapshot.health&&snapshot.health.error_count||0),
+    Number(snapshot.health&&snapshot.health.action_required_count||0),
+    String(snapshot.snapshot_sha256||''),
+    h3FsCanonical_(snapshot)
+  ];
+  var rowNumber;
+  if(matches.length===1){
+    rowNumber=matches[0];
+    q.sheet.getRange(
+      rowNumber,1,1,H3_MONITOR_OBSERVER_HEADERS_.length
+    ).setValues([rowValues]);
+  } else {
+    rowNumber=q.table.rows.length+2;
+    q.sheet.getRange(
+      rowNumber,1,1,H3_MONITOR_OBSERVER_HEADERS_.length
+    ).setValues([rowValues]);
+  }
+  SpreadsheetApp.flush();
+
+  var verify=h3MonitoringObserverTelemetrySheet_(ss);
+  var vm=verify.table.map,found=[];
+  verify.table.rows.forEach(function(row,index){
+    if(String(row[vm.LEVEL]||'')===String(snapshot.level||'')){
+      found.push({row:row,row_number:index+2});
+    }
+  });
+  if(found.length!==1){
+    throw new Error('MONITOR_OBSERVER_READBACK_COUNT:'+found.length);
+  }
+  var vr=found[0].row;
+  if(
+    String(vr[vm.SCHEMA_VERSION]||'')!==H3_MONITOR_OBSERVER_SCHEMA_ ||
+    String(vr[vm.SNAPSHOT_SHA256]||'')!==String(snapshot.snapshot_sha256) ||
+    String(vr[vm.SNAPSHOT_JSON]||'')!==h3FsCanonical_(snapshot)
+  ){
+    throw new Error('MONITOR_OBSERVER_READBACK_MISMATCH');
+  }
+
+  return {
+    schema:H3_MONITOR_OBSERVER_SCHEMA_,
+    status:'RECORDED',
+    level:String(snapshot.level||''),
+    last_checked_at:String(snapshot.last_checked_at||''),
+    observer_status:String(snapshot.status||''),
+    snapshot_sha256:String(snapshot.snapshot_sha256||''),
+    telemetry_row_number:found[0].row_number,
+    write_performed:true
+  };
+}
+
+function h3MonitoringObserverStoredSnapshot_(ss,level) {
+  var sh=ss.getSheetByName(H3_MONITOR_OBSERVER_SHEET_);
+  if(!sh)return null;
+  var t=h3FsTable_(sh);
+  h3FsRequire_(
+    t,H3_MONITOR_OBSERVER_HEADERS_,H3_MONITOR_OBSERVER_SHEET_
+  );
+  var m=t.map,matches=[];
+  t.rows.forEach(function(row){
+    if(String(row[m.LEVEL]||'')===String(level||''))matches.push(row);
+  });
+  if(matches.length>1){
+    throw new Error('MONITOR_OBSERVER_DUPLICATE_LEVEL');
+  }
+  if(!matches.length)return null;
+  var r=matches[0];
+  var snapshot=h3FsJson_(r[m.SNAPSHOT_JSON],null);
+  var expectedHash=snapshot
+    ? h3MonitoringObserverSnapshotHash_(snapshot)
+    : '';
+  if(
+    !snapshot ||
+    String(snapshot.schema||'')!==H3_MONITOR_OBSERVER_SNAPSHOT_SCHEMA_ ||
+    String(r[m.SCHEMA_VERSION]||'')!==H3_MONITOR_OBSERVER_SCHEMA_ ||
+    String(snapshot.snapshot_sha256||'')!==expectedHash ||
+    String(r[m.SNAPSHOT_SHA256]||'')!==expectedHash
+  ){
+    throw new Error('MONITOR_OBSERVER_STORED_SNAPSHOT_INVALID');
+  }
+  return snapshot;
+}
+
+function h3MonitoringObserverSourceSpecs_(ss) {
+  return [{
+    source_id:'RUNTIME_AUTHORITY',
+    reader:function(){
+      var actual=String(ss.getId ? ss.getId() : '');
+      var expected=String(H3_WEB_RUNTIME_SPREADSHEET_ID||'');
+      if(!actual||actual!==expected){
+        throw new Error('MONITOR_OBSERVER_RUNTIME_AUTHORITY_MISMATCH');
+      }
+      return {
+        status:'OK',
+        data:{
+          authority:'RUNTIME_SPREADSHEET',
+          spreadsheet_id:actual
+        },
+        action_required_events:[]
+      };
+    }
+  }];
+}
+
+function h3MonitoringObserverPreview() {
+  var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
+  return h3MonitoringObserverSnapshot_(
+    '3級',h3MonitoringObserverSourceSpecs_(ss),Date.now()
+  );
+}
+
+function h3MonitoringObserverRun() {
+  var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
+  var snapshot=h3MonitoringObserverSnapshot_(
+    '3級',h3MonitoringObserverSourceSpecs_(ss),Date.now()
+  );
+  return h3MonitoringObserverWriteSnapshot_(ss,snapshot);
+}
+
+function h3MonitoringObserverCurrent() {
+  var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
+  var snapshot=h3MonitoringObserverStoredSnapshot_(ss,'3級');
+  return {
+    schema:H3_MONITOR_OBSERVER_SCHEMA_,
+    status:snapshot ? 'READY' : 'EMPTY',
+    snapshot:snapshot,
+    write_performed:false
+  };
+}
+// S4-R4-B COMMON MONITORING OBSERVER FOUNDATION END

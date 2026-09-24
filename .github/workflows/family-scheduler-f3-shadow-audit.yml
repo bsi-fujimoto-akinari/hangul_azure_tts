@@ -612,7 +612,7 @@ jobs:
           print("HOME NEXT activation contract PASS")
           PY
 
-      - name: R/T preparation contract
+      - name: W/R/T preparation contract
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -621,6 +621,10 @@ jobs:
           prep = Path("WebAppFamilySchedulerPreparation.js").read_text(encoding="utf-8")
 
           required_prep = [
+              "H3-FAMILY-SCHEDULER-W-PREP-20260924-V1",
+              "H3_FAMILY_SCHEDULER_WRITTEN_AUTHORING_REQUEST_V1",
+              "function h3FsPrepareWritten_(ss)",
+              "WRITTEN_STAGE_AUTHORING:",
               "H3-FAMILY-SCHEDULER-RT-PREP-20260924-V1",
               "function h3FsRtDueObligations_(ss,family,direction)",
               "function h3FsPrepareReading_(ss)",
@@ -640,6 +644,8 @@ jobs:
                   raise SystemExit(f"missing R/T preparation token: {token}")
 
           required_home = [
+              "h3FsPrepareWritten_(ss)",
+              "out.prepare_request=wPrep.authoring_request",
               "h3FsPrepareReading_(ss)",
               "h3FsPrepareTranslation_(ss)",
               "FAMILY_SCHEDULER_RT_PREPARE_SET_ID_MISSING",
@@ -648,6 +654,13 @@ jobs:
           for token in required_home:
               if token not in fs:
                   raise SystemExit(f"missing HOME R/T bridge token: {token}")
+
+          w_start = prep.index("function h3FsPrepareWritten_(ss)")
+          w_end = prep.index("function h3FamilySchedulerWrittenAuthoringRequestPreview()", w_start)
+          w_body = prep[w_start:w_end]
+          for token in ["appendRow(", ".setValue(", ".setValues(", "deleteRow", "deleteRows"]:
+              if token in w_body:
+                  raise SystemExit(f"W preparation must remain read-only: {token}")
 
           forbidden = [
               "h3ReadingSubmit_(",
@@ -663,7 +676,7 @@ jobs:
           if prep.count("appendRow(") != 2:
               raise SystemExit("R/T preparation must have exactly two stage append surfaces.")
 
-          print("R/T preparation static contract PASS")
+          print("W/R/T preparation static contract PASS")
           PY
 
       - name: Deterministic ranking fixture

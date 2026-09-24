@@ -2371,7 +2371,26 @@ function h3FsHomeNextLocked_() {
           return out;
         }
 
-        if(route.family==='R'||route.family==='T'){
+        if(route.family==='W'){
+          var wPrep=h3FsPrepareWritten_(ss);
+          if(wPrep.status==='AUTHORING_REQUIRED'){
+            out.client_action='AUTHORING_REQUIRED';
+            out.authoring_target=wPrep.authoring_target;
+            out.preparation_status=wPrep.status;
+            out.prepared_set_id=wPrep.stage_id;
+            out.prepare_request=wPrep.authoring_request;
+            return out;
+          }
+          if(wPrep.status!=='READY'){
+            throw new Error(
+              'FAMILY_SCHEDULER_WRITTEN_PREPARE_STATUS_INVALID'
+            );
+          }
+          out.preparation_status='READY';
+          out.prepared_set_id=wPrep.stage_id;
+          out.requires_prepare=false;
+          route.requires_prepare=false;
+        } else if(route.family==='R'||route.family==='T'){
           var rtPrep=
             route.family==='R'
               ? h3FsPrepareReading_(ss)

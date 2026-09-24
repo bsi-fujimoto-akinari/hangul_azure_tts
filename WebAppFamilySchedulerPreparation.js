@@ -11,6 +11,139 @@ var H3_FS_RT_PREP_CONTRACT_ID_ =
 
 var H3_FS_RT_PREP_SYNC_REVISION_ = '20260924-R1';
 
+var H3_FS_W_PREP_CONTRACT_ID_ =
+  'H3-FAMILY-SCHEDULER-W-PREP-20260924-V1';
+var H3_FS_W_AUTHORING_REQUEST_SCHEMA_ =
+  'H3_FAMILY_SCHEDULER_WRITTEN_AUTHORING_REQUEST_V1';
+
+function h3FsWrittenCanonicalStageId_(ss) {
+  var gs=h3FsKv_(ss,'generation_state_v1');
+  var stageId=String(
+    gs.WRITTEN_NEXT_STAGE_ID||
+    gs.WRITTEN_NEXT_STAGE_CANONICAL_ID||
+    ''
+  );
+  if(stageId)return stageId;
+
+  var block=Number(gs.NEXT_BLOCK_NO||0);
+  var offset=Number(gs.NEXT_SET_OFFSET||0);
+  if(
+    !Number.isInteger(block)||block<1||
+    !Number.isInteger(offset)||offset<1
+  ){
+    throw new Error('FAMILY_SCHEDULER_WRITTEN_POINTER_INVALID');
+  }
+  return 'STD-B'+String(block).padStart(3,'0')+'-S'+String(offset);
+}
+
+function h3FsPrepareWritten_(ss) {
+  var prepared=h3FsFindPreparedWritten_(ss);
+  if(prepared){
+    return {
+      status:'READY',
+      family:'W',
+      stage_id:prepared.stage_id,
+      authoring_target:'',
+      authoring_request:null
+    };
+  }
+
+  var stageId=h3FsWrittenCanonicalStageId_(ss);
+  var sh=ss.getSheetByName('written_set_stage_v1');
+  if(!sh)throw new Error('FAMILY_SCHEDULER_WRITTEN_STAGE_MISSING');
+  var t=h3FsTable_(sh);
+  h3FsRequire_(t,H3_WRITTEN_STAGE_HEADERS,'written_set_stage_v1');
+
+  var found=[];
+  t.rows.forEach(function(r,i){
+    if(String(r[t.map.STAGE_ID]||'')===stageId){
+      found.push({row:r,rowNumber:i+2});
+    }
+  });
+  if(found.length!==1){
+    throw new Error(
+      'FAMILY_SCHEDULER_WRITTEN_STAGE_COUNT:'+found.length
+    );
+  }
+
+  var r=found[0].row,m=t.map;
+  if(
+    String(r[m.STATUS]||'')!=='READY_TO_PATCH'||
+    String(r[m.ACTUAL_SET_ID]||'')||
+    String(r[m.ISSUED_AT]||'')
+  ){
+    throw new Error('FAMILY_SCHEDULER_WRITTEN_STAGE_NOT_PATCHABLE');
+  }
+  if(
+    String(r[m.QUESTIONS_LOG_TEMPLATE]||'')||
+    String(r[m.ANSWER_KEY_JSON]||'')
+  ){
+    throw new Error('FAMILY_SCHEDULER_WRITTEN_PARTIAL_AUTHORING');
+  }
+
+  var meta=h3FsJson_(r[m.QUESTION_META_JSON],null);
+  var slots=meta&&Array.isArray(meta.planned_slots)
+    ? meta.planned_slots
+    : [];
+  if(slots.length!==5){
+    throw new Error('FAMILY_SCHEDULER_WRITTEN_SLOT_PLAN_INVALID');
+  }
+  slots.forEach(function(slot,index){
+    if(
+      Number(slot.q)!==index+1||
+      !String(slot.section||'')||
+      !String(slot.bucket||'')
+    ){
+      throw new Error(
+        'FAMILY_SCHEDULER_WRITTEN_SLOT_INVALID:'+(index+1)
+      );
+    }
+  });
+
+  var request={
+    schema:H3_FS_W_AUTHORING_REQUEST_SCHEMA_,
+    contract_id:H3_FS_W_PREP_CONTRACT_ID_,
+    family:'W',
+    stage_id:stageId,
+    block_no:Number(r[m.BLOCK_NO]||0),
+    set_offset:Number(r[m.SET_OFFSET]||0),
+    planned_slots:slots,
+    slot_patch:h3FsJson_(r[m.SLOT_PATCH_JSON]||'',null),
+    approved_source:String(r[m.APPROVED_SOURCE]||''),
+    policy_id:String(r[m.POLICY_ID]||''),
+    source_snapshot_id:String(r[m.SOURCE_SNAPSHOT_ID]||''),
+    boundary:{
+      semantic_authoring_required:true,
+      issue_performed:false,
+      pointer_advanced:false,
+      learner_state_mutated:false
+    }
+  };
+  if(
+    !request.block_no||
+    !request.set_offset||
+    !request.approved_source||
+    !request.policy_id||
+    !request.source_snapshot_id
+  ){
+    throw new Error('FAMILY_SCHEDULER_WRITTEN_AUTHORING_CONTEXT_INCOMPLETE');
+  }
+  request.request_sha256=h3FsSha_(request);
+
+  return {
+    status:'AUTHORING_REQUIRED',
+    family:'W',
+    stage_id:stageId,
+    authoring_target:'WRITTEN_STAGE_AUTHORING:'+stageId,
+    authoring_request:request
+  };
+}
+
+function h3FamilySchedulerWrittenAuthoringRequestPreview() {
+  var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
+  return h3FsPrepareWritten_(ss);
+}
+
 var H3_FS_OFFICIAL_ITEMS_SHEET_ = 'official_items';
 var H3_FS_OFFICIAL_ANSWER_SHEET_ = 'official_answer_detail_v1';
 var H3_FS_OFFICIAL_SKILL_SHEET_ = 'official_item_skill_map_v2';

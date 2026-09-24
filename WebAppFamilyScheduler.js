@@ -1178,6 +1178,119 @@ function h3FsIssueAppliedForSet_(ss,level,setId) {
   return found.length?found[0]:null;
 }
 
+function h3FsObserveCommitted_(ss,level,family,setId,selectionSource) {
+  if(H3_FS_FAMILIES_.indexOf(family)<0){
+    throw new Error('FAMILY_SCHEDULER_FAMILY_INVALID:'+family);
+  }
+
+  var history=h3FsHistory_(ss,level);
+  var commit=h3FsHistoryRecord_(history,family,setId);
+
+  if(commit.global_clock<=H3_FS_F4_START_CLOCK_){
+    return {
+      schema:'H3_FAMILY_SCHEDULER_F4_OBSERVATION_V1',
+      status:'PRE_F4_COMMIT_IGNORED',
+      mode:'SHADOW',
+      scheduler_applied:false,
+      global_set_clock:commit.global_clock,
+      set_id:commit.set_id
+    };
+  }
+
+  var stateBefore=h3FsState_(ss,level);
+  var stateClockBefore=Number(stateBefore.GLOBAL.GLOBAL_SET_CLOCK||0);
+  var priorClock=commit.global_clock-1;
+  var prior=h3FsEvaluationAtClock_(ss,level,priorClock);
+  if(!prior){
+    throw new Error('FAMILY_SCHEDULER_PRIOR_EVALUATION_MISSING:'+priorClock);
+  }
+
+  var sync=h3FsSyncCommittedHistory_(ss,level,family,setId);
+
+  var observed=h3FsCommitObservedByKey_(ss,level,commit.commit_key);
+  var observedResult;
+  if(!observed){
+    var appliedIssue=h3FsIssueAppliedForSet_(ss,level,setId);
+    observedResult=h3FsAppendCommitObserved_(
+      ss,
+      level,
+      prior,
+      commit,
+      family,
+      appliedIssue?'FAMILY_SCHEDULER':selectionSource,
+      !!appliedIssue
+    );
+  } else {
+    observedResult={
+      status:'ALREADY_RECORDED',
+      recommended_family:String(observed.RECOMMENDED_FAMILY||''),
+      actual_family:String(observed.ACTUAL_FAMILY||''),
+      override_of_recommendation:observed.OVERRIDE_OF_RECOMMENDATION
+    };
+  }
+
+  if(stateClockBefore>commit.global_clock){
+    return {
+      schema:'H3_FAMILY_SCHEDULER_F4_OBSERVATION_V1',
+      status:'ALREADY_OBSERVED',
+      mode:'SHADOW',
+      scheduler_applied:false,
+      sync_status:sync.status,
+      observed_commit:observedResult,
+      global_set_clock:stateClockBefore,
+      next_evaluation:null
+    };
+  }
+
+  var next=h3FsEvaluationAtClock_(ss,level,commit.global_clock);
+  var nextResult,nextEvaluation;
+  if(!next){
+    var e=h3FsEvaluate_(ss,level);
+    nextEvaluation=e;
+    if(Number(e.global_set_clock)!==Number(commit.global_clock)){
+      throw new Error('FAMILY_SCHEDULER_POSTCOMMIT_EVAL_CLOCK_MISMATCH');
+    }
+    var logged=h3FsAppend_(ss,level,e);
+    nextResult={
+      recommended_family:e.recommended_family,
+      primary_reason:e.primary_reason,
+      decision_id:logged.decision_id,
+      event_id:logged.event_id
+    };
+  } else {
+    var replay=h3FsEvaluate_(ss,level);
+    nextEvaluation=replay;
+    if(
+      String(next.RECOMMENDED_FAMILY||'')!==String(replay.recommended_family||'') ||
+      String(next.PRIMARY_REASON||'')!==String(replay.primary_reason||'') ||
+      String(next.CANDIDATE_ORDER_JSON||'')!==JSON.stringify(replay.candidate_order)
+    ){
+      throw new Error('FAMILY_SCHEDULER_DETERMINISM_REPLAY_MISMATCH:'+commit.global_clock);
+    }
+    nextResult={
+      recommended_family:String(next.RECOMMENDED_FAMILY||''),
+      primary_reason:String(next.PRIMARY_REASON||''),
+      decision_id:String(next.DECISION_ID||''),
+      event_id:String(next.EVENT_ID||'')
+    };
+  }
+
+  var authoringBridge=
+    h3FsSemanticAuthoringBridge_(ss,level,nextEvaluation);
+
+  return {
+    schema:'H3_FAMILY_SCHEDULER_F4_OBSERVATION_V1',
+    status:'PASS',
+    mode:'SHADOW',
+    scheduler_applied:false,
+    sync_status:sync.status,
+    observed_commit:observedResult,
+    global_set_clock:commit.global_clock,
+    next_evaluation:nextResult,
+    authoring_bridge:authoringBridge
+  };
+}
+
 function h3FsAuthoringQueue_(ss) {
   var sh=ss.getSheetByName(H3_FS_AUTHORING_QUEUE_SHEET_);
   if(!sh)throw new Error('FAMILY_SCHEDULER_AUTHORING_QUEUE_MISSING');
@@ -1430,119 +1543,6 @@ function h3FsSemanticAuthoringBridge_(ss,level,evaluation) {
     };
   }
   return h3FsAuthoringUpsert_(ss,level,evaluation,prep);
-}
-
-function h3FsObserveCommitted_(ss,level,family,setId,selectionSource) {
-  if(H3_FS_FAMILIES_.indexOf(family)<0){
-    throw new Error('FAMILY_SCHEDULER_FAMILY_INVALID:'+family);
-  }
-
-  var history=h3FsHistory_(ss,level);
-  var commit=h3FsHistoryRecord_(history,family,setId);
-
-  if(commit.global_clock<=H3_FS_F4_START_CLOCK_){
-    return {
-      schema:'H3_FAMILY_SCHEDULER_F4_OBSERVATION_V1',
-      status:'PRE_F4_COMMIT_IGNORED',
-      mode:'SHADOW',
-      scheduler_applied:false,
-      global_set_clock:commit.global_clock,
-      set_id:commit.set_id
-    };
-  }
-
-  var stateBefore=h3FsState_(ss,level);
-  var stateClockBefore=Number(stateBefore.GLOBAL.GLOBAL_SET_CLOCK||0);
-  var priorClock=commit.global_clock-1;
-  var prior=h3FsEvaluationAtClock_(ss,level,priorClock);
-  if(!prior){
-    throw new Error('FAMILY_SCHEDULER_PRIOR_EVALUATION_MISSING:'+priorClock);
-  }
-
-  var sync=h3FsSyncCommittedHistory_(ss,level,family,setId);
-
-  var observed=h3FsCommitObservedByKey_(ss,level,commit.commit_key);
-  var observedResult;
-  if(!observed){
-    var appliedIssue=h3FsIssueAppliedForSet_(ss,level,setId);
-    observedResult=h3FsAppendCommitObserved_(
-      ss,
-      level,
-      prior,
-      commit,
-      family,
-      appliedIssue?'FAMILY_SCHEDULER':selectionSource,
-      !!appliedIssue
-    );
-  } else {
-    observedResult={
-      status:'ALREADY_RECORDED',
-      recommended_family:String(observed.RECOMMENDED_FAMILY||''),
-      actual_family:String(observed.ACTUAL_FAMILY||''),
-      override_of_recommendation:observed.OVERRIDE_OF_RECOMMENDATION
-    };
-  }
-
-  if(stateClockBefore>commit.global_clock){
-    return {
-      schema:'H3_FAMILY_SCHEDULER_F4_OBSERVATION_V1',
-      status:'ALREADY_OBSERVED',
-      mode:'SHADOW',
-      scheduler_applied:false,
-      sync_status:sync.status,
-      observed_commit:observedResult,
-      global_set_clock:stateClockBefore,
-      next_evaluation:null
-    };
-  }
-
-  var next=h3FsEvaluationAtClock_(ss,level,commit.global_clock);
-  var nextResult,nextEvaluation;
-  if(!next){
-    var e=h3FsEvaluate_(ss,level);
-    nextEvaluation=e;
-    if(Number(e.global_set_clock)!==Number(commit.global_clock)){
-      throw new Error('FAMILY_SCHEDULER_POSTCOMMIT_EVAL_CLOCK_MISMATCH');
-    }
-    var logged=h3FsAppend_(ss,level,e);
-    nextResult={
-      recommended_family:e.recommended_family,
-      primary_reason:e.primary_reason,
-      decision_id:logged.decision_id,
-      event_id:logged.event_id
-    };
-  } else {
-    var replay=h3FsEvaluate_(ss,level);
-    nextEvaluation=replay;
-    if(
-      String(next.RECOMMENDED_FAMILY||'')!==String(replay.recommended_family||'') ||
-      String(next.PRIMARY_REASON||'')!==String(replay.primary_reason||'') ||
-      String(next.CANDIDATE_ORDER_JSON||'')!==JSON.stringify(replay.candidate_order)
-    ){
-      throw new Error('FAMILY_SCHEDULER_DETERMINISM_REPLAY_MISMATCH:'+commit.global_clock);
-    }
-    nextResult={
-      recommended_family:String(next.RECOMMENDED_FAMILY||''),
-      primary_reason:String(next.PRIMARY_REASON||''),
-      decision_id:String(next.DECISION_ID||''),
-      event_id:String(next.EVENT_ID||'')
-    };
-  }
-
-  var authoringBridge=
-    h3FsSemanticAuthoringBridge_(ss,level,nextEvaluation);
-
-  return {
-    schema:'H3_FAMILY_SCHEDULER_F4_OBSERVATION_V1',
-    status:'PASS',
-    mode:'SHADOW',
-    scheduler_applied:false,
-    sync_status:sync.status,
-    observed_commit:observedResult,
-    global_set_clock:commit.global_clock,
-    next_evaluation:nextResult,
-    authoring_bridge:authoringBridge
-  };
 }
 
 function h3FamilySchedulerObserveAfterCommit_(

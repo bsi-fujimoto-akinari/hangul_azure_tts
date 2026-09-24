@@ -2089,6 +2089,339 @@ jobs:
           console.log('S4-R4-D RS13/RS14 gate observer fixture PASS');
           NODE
 
+      - name: S4-R4-E HOME monitor contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          server = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+          index = Path("Index.html").read_text(encoding="utf-8")
+          style = Path("Stylesheet.html").read_text(encoding="utf-8")
+
+          required_server = [
+              "H3_MONITOR_HOME_READ_MODEL_V1",
+              "function h3MonitoringHomeReadModelFromSnapshot_(snapshot)",
+              "function h3MonitoringHomeReadModel()",
+              "S4-R4-E HOME MONITOR READ MODEL START",
+              "S4-R4-E HOME MONITOR READ MODEL END",
+              "read_only:true",
+              "write_performed:false",
+          ]
+          for token in required_server:
+              if token not in server:
+                  raise SystemExit(
+                      f"missing S4-R4-E server token: {token}"
+                  )
+
+          start = server.index(
+              "// S4-R4-E HOME MONITOR READ MODEL START"
+          )
+          end = server.index(
+              "// S4-R4-E HOME MONITOR READ MODEL END",
+              start,
+          )
+          section = server[start:end]
+          forbidden_server = [
+              "appendRow(",
+              ".setValue(",
+              ".setValues(",
+              "insertSheet(",
+              "deleteRow(",
+              "deleteRows(",
+              "h3MonitoringObserverRun(",
+              "h3MonitoringObserverWriteSnapshot_(",
+              "h3FsIssuePreparedFamily_(",
+              "h3FamilySchedulerObserveAfterCommit_(",
+              "h3WrittenSubmit_(",
+              "h3ReadingSubmit_(",
+              "h3TranslationV2Submit_(",
+              "MailApp.",
+              "GmailApp.",
+              "ScriptApp.newTrigger",
+              "PropertiesService.",
+          ]
+          for token in forbidden_server:
+              if token in section:
+                  raise SystemExit(
+                      f"S4-R4-E read-model boundary violated: {token}"
+                  )
+
+          required_index = [
+              "monitoring-home-panel",
+              "H3_MONITOR_HOME_READ_MODEL_V1",
+              ".h3MonitoringHomeReadModel()",
+              "Semantic Authoring",
+              "RS13",
+              "RS14",
+              "Events",
+          ]
+          for token in required_index:
+              if token not in index:
+                  raise SystemExit(
+                      f"missing S4-R4-E HOME token: {token}"
+                  )
+          for token in [
+              "h3MonitoringObserverRun(",
+              "h3MonitoringObserverWriteSnapshot_(",
+              "MailApp.",
+              "GmailApp.",
+          ]:
+              if token in index:
+                  raise SystemExit(
+                      f"S4-R4-E HOME owns forbidden action: {token}"
+                  )
+
+          required_style = [
+              ".monitoring-home-panel",
+              ".monitor-home-grid",
+              ".monitor-home-source",
+              ".monitor-home-event-list",
+          ]
+          for token in required_style:
+              if token not in style:
+                  raise SystemExit(
+                      f"missing S4-R4-E style token: {token}"
+                  )
+
+          print("S4-R4-E HOME monitor static contract PASS")
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+
+          global.hash_ = value =>
+            crypto.createHash('sha256').update(String(value)).digest('hex');
+          global.H3_WEB_RUNTIME_SPREADSHEET_ID = 'fixture-runtime';
+          global.SpreadsheetApp = {
+            openById:id=>({getId:()=>id}),
+            flush:()=>{}
+          };
+
+          vm.runInThisContext(
+            fs.readFileSync('WebAppFamilyScheduler.js','utf8')
+          );
+
+          function assert(ok,msg) {
+            if (!ok) throw new Error(msg);
+          }
+
+          const semanticHealth = {
+            schema:H3_FS_AUTHORING_OBSERVABILITY_SCHEMA_,
+            mode:'READ_ONLY_HEALTH',
+            level:'3級',
+            generated_at:'2026-09-24T13:30:00.000Z',
+            recovery_policy:h3FsAuthoringRecoveryPolicy_(),
+            queue_total_rows:0,
+            queue_count_by_status:{},
+            stale_CLAIMED_count:0,
+            FAILED_RETRYABLE_due_count:0,
+            FAILED_BLOCKED_count:0,
+            duplicate_idempotency_violation_count:0,
+            retry_exhausted_not_blocked_count:0,
+            timestamp_finding_count:0,
+            missing_job_reconciliation_finding_count:0,
+            reconciliation_status:'PASS',
+            reconciliation_error:'',
+            alert_states:{},
+            write_performed:false
+          };
+
+          const report = {
+            schema:'H3_RS13G_GATE_REPORT_V1',
+            contract_id:'H3-RS13G-GATE-REPORTER-20260922-V1',
+            read_only:true,
+            writes_performed:0,
+            evidence:{committed_rows:0},
+            reconciliation:{
+              expected_observation_rows:0,
+              actual_observation_rows:0,
+              exact_match_rows:0,
+              missing_observation_ids:[],
+              conflict_observation_ids:[],
+              orphan_observation_ids:[],
+              exact:true
+            },
+            rs13:{
+              state:'AWAIT_REAL_DATA',
+              explicit_review_ready:false,
+              close_automatic:false
+            },
+            rs14p:{
+              activation_gate:{
+                schema:'H3_RS14P_ACTIVATION_GATE_V1',
+                contract_id:'H3-RS14P-LIMITED-LIVE-PREFLIGHT-20260922-V1',
+                gate_pass:false,
+                metrics:{
+                  observed_rows:0,
+                  distinct_event_count:0,
+                  concept_count:0,
+                  source_family_count:0,
+                  noncorrect_count:0,
+                  unsafe_rows:0,
+                  scheduler_applied_true:0
+                },
+                reasons:[
+                  'INSUFFICIENT_DISTINCT_EVENTS',
+                  'INSUFFICIENT_CONCEPTS',
+                  'INSUFFICIENT_SOURCE_FAMILIES',
+                  'NO_X_OR_TRIANGLE'
+                ]
+              },
+              progress:{
+                distinct_events:{current:0,required:6,remaining:6},
+                concepts:{current:0,required:2,remaining:2},
+                source_families:{current:0,required:2,remaining:2},
+                require_noncorrect:{current:0,satisfied:false},
+                unsafe_rows:{current:0,required:0,satisfied:true},
+                scheduler_applied_true:{current:0,required:0,satisfied:true}
+              },
+              live_activation_automatic:false
+            }
+          };
+
+          function snapshot(events=[]) {
+            const value = {
+              schema:H3_MONITOR_OBSERVER_SNAPSHOT_SCHEMA_,
+              level:'3級',
+              last_checked_at:'2026-09-24T13:30:00.000Z',
+              status:events.length ? 'ACTION_REQUIRED' : 'HEALTHY',
+              health:{
+                source_count:3,
+                ok_count:3,
+                warning_count:0,
+                error_count:0,
+                action_required_count:events.length
+              },
+              sources:[
+                {
+                  source_id:'RUNTIME_AUTHORITY',
+                  status:'OK',
+                  error:'',
+                  action_required_events:[],
+                  data:{
+                    authority:'RUNTIME_SPREADSHEET',
+                    spreadsheet_id:'fixture-runtime'
+                  }
+                },
+                {
+                  source_id:H3_MONITOR_SEMANTIC_AUTHORING_SOURCE_ID_,
+                  status:'OK',
+                  error:'',
+                  action_required_events:events,
+                  data:{
+                    schema:H3_MONITOR_SEMANTIC_AUTHORING_SCHEMA_,
+                    monitor_contract:'S4-R4-C',
+                    health:semanticHealth,
+                    semantic_write_performed:false
+                  }
+                },
+                {
+                  source_id:H3_MONITOR_RS13_RS14_SOURCE_ID_,
+                  status:'OK',
+                  error:'',
+                  action_required_events:[],
+                  data:{
+                    schema:H3_MONITOR_RS13_RS14_SCHEMA_,
+                    monitor_contract:'S4-R4-D',
+                    report:report,
+                    k1_authority:{
+                      contract_id:
+                        'H3-RS13K1-K1-SECONDARY-AUTHORITY-20260922-V1',
+                      row_count:0,
+                      skill_level_concept_inference:false,
+                      historical_backfill:false,
+                      state_transfer:false
+                    },
+                    observer_write_performed:false
+                  }
+                }
+              ],
+              action_required_events:events,
+              write_performed:false
+            };
+            value.snapshot_sha256 =
+              h3MonitoringObserverSnapshotHash_(value);
+            return value;
+          }
+
+          const model =
+            h3MonitoringHomeReadModelFromSnapshot_(snapshot());
+          assert(
+            model.schema==='H3_MONITOR_HOME_READ_MODEL_V1',
+            'E schema mismatch'
+          );
+          assert(
+            model.status==='HEALTHY' &&
+            model.read_only===true &&
+            model.write_performed===false,
+            'E read-only status mismatch'
+          );
+          assert(
+            model.semantic_authoring.queue_total_rows===0 &&
+            model.semantic_authoring.failed_blocked_count===0,
+            'E semantic card mismatch'
+          );
+          assert(
+            model.rs13_rs14.rs13_state==='AWAIT_REAL_DATA' &&
+            model.rs13_rs14.reconciliation_exact===true &&
+            model.rs13_rs14.rs14p_gate_pass===false,
+            'E RS13/RS14 state mismatch'
+          );
+          assert(
+            model.rs13_rs14.progress.distinct_events.required===6 &&
+            model.rs13_rs14.progress.concepts.required===2 &&
+            model.rs13_rs14.progress.source_families.required===2 &&
+            model.rs13_rs14.progress.noncorrect.required===1 &&
+            model.rs13_rs14.progress.unsafe_rows.satisfied===true &&
+            model.rs13_rs14.progress.scheduler_applied_true.satisfied===true,
+            'E frozen threshold projection mismatch'
+          );
+          assert(
+            model.recent_events.length===0,
+            'E healthy event list mismatch'
+          );
+
+          const event = {
+            source_id:H3_MONITOR_SEMANTIC_AUTHORING_SOURCE_ID_,
+            event_type:'SEMANTIC_OPEN',
+            event_key:'SEMANTIC_AUTHORING:SEMANTIC_OPEN',
+            detail:'OPEN=1'
+          };
+          const eventModel =
+            h3MonitoringHomeReadModelFromSnapshot_(snapshot([event]));
+          assert(
+            eventModel.recent_events.length===1 &&
+            eventModel.recent_events[0].event_type==='SEMANTIC_OPEN',
+            'E event projection mismatch'
+          );
+
+          const bad = snapshot();
+          bad.write_performed=true;
+          let blocked=false;
+          try {
+            h3MonitoringHomeReadModelFromSnapshot_(bad);
+          } catch(err) {
+            blocked=String(err.message||err).includes(
+              'MONITOR_HOME_SNAPSHOT_INVALID'
+            );
+          }
+          assert(blocked,'E mutable snapshot did not fail closed');
+
+          const endpointSnapshot=snapshot();
+          h3MonitoringObserverSourceSpecs_=()=>[];
+          h3MonitoringObserverSnapshot_=()=>endpointSnapshot;
+          const endpoint=h3MonitoringHomeReadModel();
+          assert(
+            endpoint.schema==='H3_MONITOR_HOME_READ_MODEL_V1' &&
+            endpoint.write_performed===false,
+            'E endpoint mismatch'
+          );
+
+          console.log('S4-R4-E HOME monitor fixture PASS');
+          NODE
+
       - name: Deterministic ranking fixture
         run: |
           node <<'NODE'

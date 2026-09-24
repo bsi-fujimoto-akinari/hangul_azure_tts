@@ -2873,6 +2873,241 @@ function h3FamilySchedulerIssueRoutePreview() {
   return h3FsIssueRoute_(resolved,readiness,current);
 }
 
+function h3FsHomeNextLocked_() {
+  var lock=LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
+    var evaluation=h3FsEvaluate_(ss,'3級');
+    var existing=h3FsEvaluationAtClock_(
+      ss,
+      '3級',
+      evaluation.global_set_clock
+    );
+    if(!existing){
+      h3FsAppend_(ss,'3級',evaluation);
+    }
+
+    var resolved=h3FsResolveLive_(evaluation);
+    var current=h3ReviewCurrentLearning_(ss);
+    var readiness=h3FsReadiness_(ss);
+    var route=h3FsIssueRoute_(
+      resolved,
+      readiness,
+      current
+    );
+
+    var out={
+      schema:'H3_FAMILY_SCHEDULER_HOME_NEXT_V1',
+      scheduler_applied:false,
+      issue_performed:false,
+      preparation_performed:false,
+      preparation_status:'',
+      prepared_set_id:'',
+      route_kind:String(route.route_kind||''),
+      family:String(route.family||'NONE'),
+      provider_kind:String(route.provider_kind||''),
+      surface_family:String(route.surface_family||''),
+      route_target:String(route.route_target||''),
+      current_set_id:String(route.current_set_id||''),
+      readiness_state:String(route.readiness_state||''),
+      requires_prepare:route.requires_prepare===true,
+      result_status:String(route.result_status||''),
+      client_action:'NONE',
+      authoring_target:'',
+      prepare_request:null,
+      render_request:null,
+      issue_event_id:'',
+      issue_log_status:''
+    };
+
+    if(route.result_status==='BLOCKED'){
+      out.client_action='BLOCKED';
+      return out;
+    }
+
+    if(route.result_status!=='READY'){
+      throw new Error(
+        'FAMILY_SCHEDULER_HOME_NEXT_ROUTE_NOT_READY'
+      );
+    }
+
+    if(route.route_kind==='CURRENT_SET'){
+      out.client_action='OPEN_CURRENT';
+      out.render_request=h3FsRenderRequest_(
+        route.provider_kind,
+        route.surface_family,
+        route.current_set_id
+      );
+      return out;
+    }
+
+    if(route.route_kind==='FAMILY'){
+      if(route.requires_prepare){
+        if(route.family==='L'){
+          var prep=h3FsBuildListeningPrepare_(ss);
+          if(prep.status==='READY_TO_PREPARE'){
+            out.client_action='PREPARE_LISTENING';
+            out.prepare_request=prep.request;
+            out.prepared_set_id=prep.request.set_id;
+            out.preparation_status='READY_TO_PREPARE';
+            return out;
+          }
+          out.client_action='AUTHORING_REQUIRED';
+          out.authoring_target=prep.authoring_target;
+          out.preparation_status='AUTHORING_REQUIRED';
+          return out;
+        }
+
+        if(route.family==='W'){
+          var wPrep=h3FsPrepareWritten_(ss);
+          if(wPrep.status==='AUTHORING_REQUIRED'){
+            out.client_action='AUTHORING_REQUIRED';
+            out.authoring_target=wPrep.authoring_target;
+            out.preparation_status=wPrep.status;
+            out.prepared_set_id=wPrep.stage_id;
+            out.prepare_request=wPrep.authoring_request;
+            return out;
+          }
+          if(wPrep.status!=='READY'){
+            throw new Error(
+              'FAMILY_SCHEDULER_WRITTEN_PREPARE_STATUS_INVALID'
+            );
+          }
+          out.preparation_status='READY';
+          out.prepared_set_id=wPrep.stage_id;
+          out.requires_prepare=false;
+          route.requires_prepare=false;
+        } else if(route.family==='R'||route.family==='T'){
+          var rtPrep=
+            route.family==='R'
+              ? h3FsPrepareReading_(ss)
+              : h3FsPrepareTranslation_(ss);
+          if(rtPrep.status==='AUTHORING_REQUIRED'){
+            out.client_action='AUTHORING_REQUIRED';
+            out.authoring_target=rtPrep.authoring_target;
+            out.preparation_status='AUTHORING_REQUIRED';
+            return out;
+          }
+          if(!rtPrep.set_id){
+            throw new Error(
+              'FAMILY_SCHEDULER_RT_PREPARE_SET_ID_MISSING'
+            );
+          }
+          out.preparation_performed=true;
+          out.preparation_status=rtPrep.status;
+          out.prepared_set_id=rtPrep.set_id;
+          out.requires_prepare=false;
+          route.requires_prepare=false;
+        } else {
+          out.client_action='AUTHORING_REQUIRED';
+          out.authoring_target=
+            h3FsAuthoringTarget_(route.family);
+          out.preparation_status='AUTHORING_REQUIRED';
+          return out;
+        }
+      }
+
+      var issued=h3FsIssuePreparedFamily_(
+        ss,
+        route.family
+      );
+      var currentAfter=
+        h3ReviewCurrentLearning_(ss);
+      if(
+        !currentAfter ||
+        String(currentAfter.set_id||'')!==String(issued.set_id||'')
+      ){
+        throw new Error(
+          'FAMILY_SCHEDULER_ISSUE_CURRENT_READBACK_MISMATCH'
+        );
+      }
+
+      out.scheduler_applied=true;
+      out.issue_performed=true;
+      out.current_set_id=issued.set_id;
+      out.provider_kind=issued.provider_kind;
+      out.surface_family=issued.surface_family;
+      out.readiness_state='ISSUED';
+      out.requires_prepare=false;
+      out.client_action='OPEN_ISSUED';
+      out.render_request=issued.render_request;
+      try {
+        out.issue_event_id=h3FsAppendIssueApplied_(
+          ss,
+          evaluation,
+          issued
+        );
+        out.issue_log_status='RECORDED';
+      } catch(_logErr) {
+        out.issue_event_id='';
+        out.issue_log_status='RECOVERY_REQUIRED';
+      }
+      return out;
+    }
+
+    throw new Error(
+      'FAMILY_SCHEDULER_HOME_NEXT_ROUTE_KIND_INVALID'
+    );
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function h3FamilySchedulerHomeNext() {
+  var first=h3FsHomeNextLocked_();
+
+  if(first.client_action!=='PREPARE_LISTENING'){
+    return first;
+  }
+
+  var request=first.prepare_request;
+  if(
+    !request ||
+    request.schema!==H3_BACKEND_PREPARE_SCHEMA ||
+    !request.set_id ||
+    !request.k1_ready_id
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_LISTENING_PREPARE_REQUEST_INVALID'
+    );
+  }
+
+  // This call owns its own source/finalization locks and runs
+  // targeted audio between them; no outer scheduler lock is held.
+  var prepared=prepareListeningBackendSet(
+    request
+  );
+  if(
+    !prepared ||
+    prepared.schema!==H3_BACKEND_RESULT_SCHEMA ||
+    prepared.status!=='PREISSUE_READY' ||
+    prepared.preissue!=='PASS' ||
+    prepared.issue_performed!==false ||
+    String(prepared.set_id||'')!==String(request.set_id)
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_LISTENING_PREPARE_READBACK_FAIL'
+    );
+  }
+
+  var second=h3FsHomeNextLocked_();
+  second.preparation_performed=true;
+  second.preparation_status='PREISSUE_READY';
+  second.prepared_set_id=String(prepared.set_id||'');
+
+  if(
+    second.client_action!=='OPEN_ISSUED' &&
+    second.client_action!=='OPEN_CURRENT'
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_POST_PREPARE_ROUTE_INVALID'
+    );
+  }
+
+  return second;
+}
+
 function h3FsFamilyLaunchPreviewCore_(ss) {
   var evaluation=h3FsEvaluate_(ss,'3級');
   var current=h3ReviewCurrentLearning_(ss);
@@ -3414,240 +3649,6 @@ function h3FamilySchedulerHomeFamily(family) {
   return second;
 }
 
-function h3FsHomeNextLocked_() {
-  var lock=LockService.getScriptLock();
-  lock.waitLock(30000);
-  try {
-    var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
-    var evaluation=h3FsEvaluate_(ss,'3級');
-    var existing=h3FsEvaluationAtClock_(
-      ss,
-      '3級',
-      evaluation.global_set_clock
-    );
-    if(!existing){
-      h3FsAppend_(ss,'3級',evaluation);
-    }
-
-    var resolved=h3FsResolveLive_(evaluation);
-    var current=h3ReviewCurrentLearning_(ss);
-    var readiness=h3FsReadiness_(ss);
-    var route=h3FsIssueRoute_(
-      resolved,
-      readiness,
-      current
-    );
-
-    var out={
-      schema:'H3_FAMILY_SCHEDULER_HOME_NEXT_V1',
-      scheduler_applied:false,
-      issue_performed:false,
-      preparation_performed:false,
-      preparation_status:'',
-      prepared_set_id:'',
-      route_kind:String(route.route_kind||''),
-      family:String(route.family||'NONE'),
-      provider_kind:String(route.provider_kind||''),
-      surface_family:String(route.surface_family||''),
-      route_target:String(route.route_target||''),
-      current_set_id:String(route.current_set_id||''),
-      readiness_state:String(route.readiness_state||''),
-      requires_prepare:route.requires_prepare===true,
-      result_status:String(route.result_status||''),
-      client_action:'NONE',
-      authoring_target:'',
-      prepare_request:null,
-      render_request:null,
-      issue_event_id:'',
-      issue_log_status:''
-    };
-
-    if(route.result_status==='BLOCKED'){
-      out.client_action='BLOCKED';
-      return out;
-    }
-
-    if(route.result_status!=='READY'){
-      throw new Error(
-        'FAMILY_SCHEDULER_HOME_NEXT_ROUTE_NOT_READY'
-      );
-    }
-
-    if(route.route_kind==='CURRENT_SET'){
-      out.client_action='OPEN_CURRENT';
-      out.render_request=h3FsRenderRequest_(
-        route.provider_kind,
-        route.surface_family,
-        route.current_set_id
-      );
-      return out;
-    }
-
-    if(route.route_kind==='FAMILY'){
-      if(route.requires_prepare){
-        if(route.family==='L'){
-          var prep=h3FsBuildListeningPrepare_(ss);
-          if(prep.status==='READY_TO_PREPARE'){
-            out.client_action='PREPARE_LISTENING';
-            out.prepare_request=prep.request;
-            out.prepared_set_id=prep.request.set_id;
-            out.preparation_status='READY_TO_PREPARE';
-            return out;
-          }
-          out.client_action='AUTHORING_REQUIRED';
-          out.authoring_target=prep.authoring_target;
-          out.preparation_status='AUTHORING_REQUIRED';
-          return out;
-        }
-
-        if(route.family==='W'){
-          var wPrep=h3FsPrepareWritten_(ss);
-          if(wPrep.status==='AUTHORING_REQUIRED'){
-            out.client_action='AUTHORING_REQUIRED';
-            out.authoring_target=wPrep.authoring_target;
-            out.preparation_status=wPrep.status;
-            out.prepared_set_id=wPrep.stage_id;
-            out.prepare_request=wPrep.authoring_request;
-            return out;
-          }
-          if(wPrep.status!=='READY'){
-            throw new Error(
-              'FAMILY_SCHEDULER_WRITTEN_PREPARE_STATUS_INVALID'
-            );
-          }
-          out.preparation_status='READY';
-          out.prepared_set_id=wPrep.stage_id;
-          out.requires_prepare=false;
-          route.requires_prepare=false;
-        } else if(route.family==='R'||route.family==='T'){
-          var rtPrep=
-            route.family==='R'
-              ? h3FsPrepareReading_(ss)
-              : h3FsPrepareTranslation_(ss);
-          if(rtPrep.status==='AUTHORING_REQUIRED'){
-            out.client_action='AUTHORING_REQUIRED';
-            out.authoring_target=rtPrep.authoring_target;
-            out.preparation_status='AUTHORING_REQUIRED';
-            return out;
-          }
-          if(!rtPrep.set_id){
-            throw new Error(
-              'FAMILY_SCHEDULER_RT_PREPARE_SET_ID_MISSING'
-            );
-          }
-          out.preparation_performed=true;
-          out.preparation_status=rtPrep.status;
-          out.prepared_set_id=rtPrep.set_id;
-          out.requires_prepare=false;
-          route.requires_prepare=false;
-        } else {
-          out.client_action='AUTHORING_REQUIRED';
-          out.authoring_target=
-            h3FsAuthoringTarget_(route.family);
-          out.preparation_status='AUTHORING_REQUIRED';
-          return out;
-        }
-      }
-
-      var issued=h3FsIssuePreparedFamily_(
-        ss,
-        route.family
-      );
-      var currentAfter=
-        h3ReviewCurrentLearning_(ss);
-      if(
-        !currentAfter ||
-        String(currentAfter.set_id||'')!==String(issued.set_id||'')
-      ){
-        throw new Error(
-          'FAMILY_SCHEDULER_ISSUE_CURRENT_READBACK_MISMATCH'
-        );
-      }
-
-      out.scheduler_applied=true;
-      out.issue_performed=true;
-      out.current_set_id=issued.set_id;
-      out.provider_kind=issued.provider_kind;
-      out.surface_family=issued.surface_family;
-      out.readiness_state='ISSUED';
-      out.requires_prepare=false;
-      out.client_action='OPEN_ISSUED';
-      out.render_request=issued.render_request;
-      try {
-        out.issue_event_id=h3FsAppendIssueApplied_(
-          ss,
-          evaluation,
-          issued
-        );
-        out.issue_log_status='RECORDED';
-      } catch(_logErr) {
-        out.issue_event_id='';
-        out.issue_log_status='RECOVERY_REQUIRED';
-      }
-      return out;
-    }
-
-    throw new Error(
-      'FAMILY_SCHEDULER_HOME_NEXT_ROUTE_KIND_INVALID'
-    );
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-function h3FamilySchedulerHomeNext() {
-  var first=h3FsHomeNextLocked_();
-
-  if(first.client_action!=='PREPARE_LISTENING'){
-    return first;
-  }
-
-  var request=first.prepare_request;
-  if(
-    !request ||
-    request.schema!==H3_BACKEND_PREPARE_SCHEMA ||
-    !request.set_id ||
-    !request.k1_ready_id
-  ){
-    throw new Error(
-      'FAMILY_SCHEDULER_LISTENING_PREPARE_REQUEST_INVALID'
-    );
-  }
-
-  // This call owns its own source/finalization locks and runs
-  // targeted audio between them; no outer scheduler lock is held.
-  var prepared=prepareListeningBackendSet(
-    request
-  );
-  if(
-    !prepared ||
-    prepared.schema!==H3_BACKEND_RESULT_SCHEMA ||
-    prepared.status!=='PREISSUE_READY' ||
-    prepared.preissue!=='PASS' ||
-    prepared.issue_performed!==false ||
-    String(prepared.set_id||'')!==String(request.set_id)
-  ){
-    throw new Error(
-      'FAMILY_SCHEDULER_LISTENING_PREPARE_READBACK_FAIL'
-    );
-  }
-
-  var second=h3FsHomeNextLocked_();
-  second.preparation_performed=true;
-  second.preparation_status='PREISSUE_READY';
-  second.prepared_set_id=String(prepared.set_id||'');
-
-  if(
-    second.client_action!=='OPEN_ISSUED' &&
-    second.client_action!=='OPEN_CURRENT'
-  ){
-    throw new Error(
-      'FAMILY_SCHEDULER_POST_PREPARE_ROUTE_INVALID'
-    );
-  }
-
-  return second;
-}
 
 function h3FamilySchedulerShadowTick() {
   var lock=LockService.getScriptLock(); lock.waitLock(30000);

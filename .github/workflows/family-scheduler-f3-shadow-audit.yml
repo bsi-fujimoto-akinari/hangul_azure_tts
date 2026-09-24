@@ -1040,6 +1040,27 @@ jobs:
             fs.readFileSync('WebAppWrittenNewfmt.js','utf8')
           );
 
+          // Isolate the Written runtime validator from the source-contract
+          // module; the fixture only needs one canonical 3級 D5 definition.
+          global.H3_NEWFMT_SOURCE_CONTRACT_ID_ =
+            'H3-2026-NEWFMT-SOURCE-20260921-V1';
+          global.h3NewfmtCanUseCurrentH3Ratio_ = () => true;
+          global.h3NewfmtDefinitionForSlot_ = (level,section) => {
+            if(level!=='3級' || section!=='筆5／共通') {
+              throw new Error('fixture NEWFMT slot mismatch');
+            }
+            return {
+              format_id:'H3_D5_COMMON2',
+              level:'3級',
+              item_count:2,
+              points_each:1,
+              total_points:2,
+              answer_type:'MULTIPLE_CHOICE',
+              prompt_semantics:'ONE_EXPRESSION_FITS_BOTH_BLANKS',
+              source_status:'SOURCE_BOUND'
+            };
+          };
+
           function assert(ok,msg) {
             if (!ok) throw new Error(msg);
           }

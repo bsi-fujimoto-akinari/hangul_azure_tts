@@ -40,21 +40,25 @@ For an explicitly authorized read-only smoke of a function already present in Ap
 ```text
 GitHub exact current main SHA
 -> Repository audit push PASS for the same exact SHA
+-> manual workflow_dispatch with intended_smoke_sha=<that exact immutable SHA>
+-> run_attempt=1
 -> existing allowlisted GitHub Actions workflow
 -> existing CLASPRC_JSON
 -> verify exact .clasp.json scriptId
--> clasp run-function <function> --json
+-> authenticated source_attestation of Apps Script HEAD against that exact SHA in the same job
+-> smoke_boundary ready=true
+-> immediately clasp run-function <function> --json in that same job
 -> validate returned read-only contract
 -> fresh protected-runtime readback
 -> remove any temporary CI job
 -> cleanup PR + main audit PASS
 ```
 
-Use the existing clasp credential unchanged unless a separate authentication change is explicitly required. Materialize it only inside the GitHub Actions job as `~/.clasprc.json` with restrictive permissions; never print or commit it. For a HEAD smoke, `clasp run-function` is used in its default development mode; do not add `--nondev` unless a versioned API-executable run is the explicit target.
+Use the existing clasp credential unchanged unless a separate authentication change is explicitly required. Materialize it only inside the GitHub Actions job as `~/.clasprc.json` with restrictive permissions; never print or commit it. For a HEAD smoke, `clasp run-function` is used in its default development mode; do not add `--nondev` unless a versioned API-executable run is the explicit target. A temporary credentialed smoke is manual-dispatch only: it must supply an immutable full `intended_smoke_sha`, must run only on `github.run_attempt == 1`, and must not be attached to the automatic `workflow_run` path. An audit rerun or unrelated merge therefore cannot execute the temporary smoke.
 
 Before creating or tracking any new `.github/workflows/*.yml` file, inspect the repository-audit tracked-file allowlist and existing workflow capabilities. Prefer an existing allowlisted workflow when it can perform the bounded operation. A one-off new workflow file must not be introduced merely as a shortcut; adding a new tracked workflow is itself a repository-policy change and requires intentional allowlist review.
 
-When a direct workflow-dispatch action is unavailable but the authorized smoke still needs GitHub-hosted credentials, a temporary bounded job may be added to an existing allowlisted workflow, provided the PR diff is limited to that purpose. The job must verify the exact Apps Script target before execution, call only the explicitly authorized read-only function, validate the expected schema/mode and an explicit no-write result when the function contract provides one, and must not promote a versioned deployment or change OAuth credentials, manifest scopes, Script Properties, learner state, queue state, scheduler state, counters, or pointers.
+A temporary bounded smoke step may be added only to `.github/workflows/apps-script-auto-sync.yml` and only immediately after its permanent `smoke_boundary` step. It must use `if: steps.smoke_boundary.outputs.ready == 'true'`; the boundary itself requires manual dispatch, the exact intended audited SHA, first run attempt, exact Apps Script target verification, and a successful source attestation. The `clasp run-function` call must follow that attestation/boundary in the same job with no push, sync, deployment, or other mutable Apps Script step between them. If the attestation or boundary is absent, skipped, stale, or failed, the smoke must not run. The step may call only the explicitly authorized read-only function, must validate the expected schema/mode and an explicit no-write result when the function contract provides one, and must not promote a versioned deployment or change OAuth credentials, manifest scopes, Script Properties, learner state, queue state, scheduler state, counters, or pointers.
 
 After the smoke, remove the temporary job through a follow-up PR. Require fresh main-audit success after cleanup. If the smoke reads protected runtime data, compare fresh post-run state with the pre-run baseline and fail closed on any unexpected mutation.
 

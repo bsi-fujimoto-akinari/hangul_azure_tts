@@ -5,6 +5,11 @@ on:
     workflows: ["Repository audit"]
     types: [completed]
   workflow_dispatch:
+    inputs:
+      intended_smoke_sha:
+        description: "Exact audited main SHA authorized for an optional temporary read-only Apps Script smoke preflight"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -122,12 +127,28 @@ jobs:
           PY
           fi
 
+      - name: Detect read-only smoke preflight request
+        id: smoke_request
+        shell: bash
+        env:
+          INTENDED_SMOKE_SHA: ${{ github.event.inputs.intended_smoke_sha || '' }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "$INTENDED_SMOKE_SHA" ]; then
+            echo "requested=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "requested=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Detect Apps Script-impacting change
         id: impact
         shell: bash
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
+            if [ "${{ steps.smoke_request.outputs.requested }}" = "true" ]; then
+              echo "changed=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+            fi
             exit 0
           fi
 
@@ -154,7 +175,7 @@ jobs:
           fi
 
       - name: Check clasp credential availability
-        if: steps.impact.outputs.changed == 'true' || steps.policy_change.outputs.changed == 'true'
+        if: steps.impact.outputs.changed == 'true' || steps.policy_change.outputs.changed == 'true' || steps.smoke_request.outputs.requested == 'true'
         id: auth
         shell: bash
         env:
@@ -168,13 +189,13 @@ jobs:
           fi
 
       - name: Setup Node
-        if: (steps.impact.outputs.changed == 'true' || steps.policy_change.outputs.changed == 'true') && steps.auth.outputs.ready == 'true'
+        if: (steps.impact.outputs.changed == 'true' || steps.policy_change.outputs.changed == 'true' || steps.smoke_request.outputs.requested == 'true') && steps.auth.outputs.ready == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
       - name: Materialize clasp credentials
-        if: (steps.impact.outputs.changed == 'true' || steps.policy_change.outputs.changed == 'true') && steps.auth.outputs.ready == 'true'
+        if: (steps.impact.outputs.changed == 'true' || steps.policy_change.outputs.changed == 'true' || steps.smoke_request.outputs.requested == 'true') && steps.auth.outputs.ready == 'true'
         shell: bash
         env:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
@@ -194,7 +215,7 @@ jobs:
 
 
       - name: Verify exact Apps Script target
-        if: (steps.impact.outputs.changed == 'true' || steps.policy_change.outputs.changed == 'true') && steps.auth.outputs.ready == 'true'
+        if: (steps.impact.outputs.changed == 'true' || steps.policy_change.outputs.changed == 'true' || steps.smoke_request.outputs.requested == 'true') && steps.auth.outputs.ready == 'true'
         shell: bash
         run: |
           python3 - <<'PY'
@@ -209,7 +230,7 @@ jobs:
           PY
 
       - name: Show Apps Script file status
-        if: (steps.impact.outputs.changed == 'true' || steps.policy_change.outputs.changed == 'true') && steps.auth.outputs.ready == 'true'
+        if: (steps.impact.outputs.changed == 'true' || steps.policy_change.outputs.changed == 'true' || steps.smoke_request.outputs.requested == 'true') && steps.auth.outputs.ready == 'true'
         shell: bash
         run: npx -y @google/clasp@3.4.0 show-file-status --json
 
@@ -231,7 +252,7 @@ jobs:
 
       - name: Attest Apps Script HEAD source against exact audited main
         id: source_attestation
-        if: (steps.impact.outputs.changed == 'true' || steps.policy_change.outputs.changed == 'true') && steps.auth.outputs.ready == 'true'
+        if: (steps.impact.outputs.changed == 'true' || steps.policy_change.outputs.changed == 'true' || steps.smoke_request.outputs.requested == 'true') && steps.auth.outputs.ready == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -334,6 +355,48 @@ jobs:
           )
           PY
 
+      - name: Validate one-revision read-only smoke boundary
+        id: smoke_boundary
+        if: steps.smoke_request.outputs.requested == 'true' && steps.auth.outputs.ready == 'true'
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          INTENDED_SMOKE_SHA: ${{ github.event.inputs.intended_smoke_sha || '' }}
+          SOURCE_ATTESTED: ${{ steps.source_attestation.outputs.attested || '' }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "::error::Temporary credentialed smoke is manual-dispatch only."
+            exit 1
+          fi
+          if [ "${{ github.run_attempt }}" != "1" ]; then
+            echo "::error::Temporary credentialed smoke is one-attempt only; workflow reruns are not authorized."
+            exit 1
+          fi
+          python3 - "$INTENDED_SMOKE_SHA" <<'PY'
+          import re
+          import sys
+
+          if re.fullmatch(r'[0-9a-f]{40}', sys.argv[1]) is None:
+              raise SystemExit(
+                  'intended_smoke_sha must be one immutable 40-character commit SHA.'
+              )
+          PY
+          if [ "$INTENDED_SMOKE_SHA" != "$SOURCE_SHA" ]; then
+            echo "::error::Temporary credentialed smoke is restricted to the explicitly intended audited SHA."
+            exit 1
+          fi
+          if [ "$SOURCE_ATTESTED" != "true" ]; then
+            echo "::error::Development-mode smoke requires a successful immediate Apps Script source attestation."
+            exit 1
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      # Any temporary clasp run-function step must be inserted immediately after
+      # smoke_boundary and gated by:
+      #   if: steps.smoke_boundary.outputs.ready == 'true'
+      # Repository audit rejects run-function usage that does not use this boundary.
+
       - name: Read deployment inventory
         if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
         shell: bash
@@ -358,4 +421,3 @@ jobs:
             echo '- manifest overwrite mode: audited CI only (clasp push --force)'
             echo '- versioned /exec deployment: not changed by this workflow'
           } >> "$GITHUB_STEP_SUMMARY"
-

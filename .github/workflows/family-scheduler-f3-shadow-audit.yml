@@ -789,6 +789,159 @@ jobs:
           print("Semantic authoring queue contract PASS")
           PY
 
+      - name: Semantic authoring reconciliation static contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          fs = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+          required = [
+              "H3_FAMILY_SCHEDULER_AUTHORING_RECONCILIATION_V1",
+              "function h3FsAuthoringJobSpec_(ss,level,evaluation,prep)",
+              "function h3FsAuthoringPreparationPreview_(ss,family)",
+              "function h3FsAuthoringQueueMatch_(q,level,spec)",
+              "function h3FsAuthoringReconciliationDecision_(",
+              "function h3FsAuthoringReconciliationPreviewCore_(ss,level)",
+              "function h3FamilySchedulerAuthoringReconciliationPreview()",
+              "function h3FamilySchedulerAuthoringReconciliationEnsure()",
+              "MISSING_AUTHORING_JOB",
+              "EXISTING_NO_DUPLICATE",
+              "BLOCKED_HISTORY",
+          ]
+          for token in required:
+              if token not in fs:
+                  raise SystemExit(f"missing reconciliation token: {token}")
+
+          preview_start = fs.index(
+              "function h3FsAuthoringReconciliationPreviewCore_(ss,level)"
+          )
+          preview_end = fs.index(
+              "function h3FamilySchedulerAuthoringReconciliationPreview()",
+              preview_start,
+          )
+          preview = fs[preview_start:preview_end]
+          for token in [
+              "appendRow(", ".setValue(", ".setValues(",
+              "h3FsAuthoringUpsert_(", "h3FsIssuePreparedFamily_(",
+              "h3FamilySchedulerHomeNext(", "Submit_(",
+          ]:
+              if token in preview:
+                  raise SystemExit(
+                      f"reconciliation preview must remain read-only: {token}"
+                  )
+
+          prep_start = fs.index(
+              "function h3FsAuthoringPreparationPreview_(ss,family)"
+          )
+          prep_end = fs.index(
+              "function h3FsAuthoringQueueMatch_(q,level,spec)", prep_start
+          )
+          prep = fs[prep_start:prep_end]
+          for token in [
+              "appendRow(", ".setValue(", ".setValues(",
+              "h3FsPrepareReading_(", "h3FsPrepareTranslation_(",
+              "h3FsIssuePreparedFamily_(", "Submit_(",
+          ]:
+              if token in prep:
+                  raise SystemExit(
+                      f"reconciliation preparation preview must be non-materializing: {token}"
+                  )
+
+          ensure_start = fs.index(
+              "function h3FamilySchedulerAuthoringReconciliationEnsure()"
+          )
+          ensure_end = fs.index(
+              "function h3FsSemanticAuthoringBridge_", ensure_start
+          )
+          ensure = fs[ensure_start:ensure_end]
+          if ensure.count("h3FsAuthoringUpsert_(") != 1:
+              raise SystemExit("reconciliation ensure must have one queue upsert path")
+          for token in [
+              "h3FsIssuePreparedFamily_(", "h3FsIssueWritten_(",
+              "h3FsIssueReading_(", "h3FsIssueTranslation_(",
+              "h3FsIssueListening_(", "h3FamilySchedulerHomeNext(",
+              "h3WrittenSubmit_(", "h3ReadingSubmit_(",
+              "h3TranslationV2Submit_(",
+          ]:
+              if token in ensure:
+                  raise SystemExit(
+                      f"reconciliation ensure must not issue/submit: {token}"
+                  )
+
+          print("Semantic authoring reconciliation static contract PASS")
+          PY
+
+      - name: Semantic authoring reconciliation fixture
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          vm.runInThisContext(fs.readFileSync('WebAppFamilyScheduler.js','utf8'));
+
+          function expect(got, action, reason) {
+            if (got.action !== action || got.reason !== reason) {
+              throw new Error(JSON.stringify({got, action, reason}));
+            }
+          }
+          expect(
+            h3FsAuthoringReconciliationDecision_('READY','', ''),
+            'NO_ACTION','READY'
+          );
+          expect(
+            h3FsAuthoringReconciliationDecision_(
+              'PREPARE_REQUIRED','PREPARE_REQUIRED',''
+            ),
+            'NO_ACTION','DETERMINISTIC_PREPARATION_AVAILABLE'
+          );
+          expect(
+            h3FsAuthoringReconciliationDecision_(
+              'PREPARE_REQUIRED','AUTHORING_REQUIRED',''
+            ),
+            'ENSURE_OPEN','MISSING_AUTHORING_JOB'
+          );
+          for (const status of ['OPEN','CLAIMED','FAILED_RETRYABLE']) {
+            const got=h3FsAuthoringReconciliationDecision_(
+              'PREPARE_REQUIRED','AUTHORING_REQUIRED',status
+            );
+            if (got.action !== 'EXISTING_NO_DUPLICATE') {
+              throw new Error('active job duplicated: '+status);
+            }
+          }
+          for (const status of ['COMPLETED','SUPERSEDED','FAILED_BLOCKED']) {
+            const got=h3FsAuthoringReconciliationDecision_(
+              'PREPARE_REQUIRED','AUTHORING_REQUIRED',status
+            );
+            if (got.action !== 'BLOCKED_HISTORY') {
+              throw new Error('historical job reopened: '+status);
+            }
+          }
+
+          h3FsEvaluate_=()=>({
+            next_action:'RECOMMEND_FAMILY',recommended_family:'W',
+            global_set_clock:27,primary_reason:'FIXTURE',
+            family_metrics:{W:{readiness_state:'PREPARE_REQUIRED'}}
+          });
+          h3FsReadiness_=()=>({W:{state:'PREPARE_REQUIRED',eligible:true}});
+          h3FsAuthoringPreparationPreview_=()=>({
+            status:'AUTHORING_REQUIRED',family:'W',stage_id:'STD-FIXTURE',
+            authoring_target:'WRITTEN_STAGE_AUTHORING:STD-FIXTURE'
+          });
+          h3FsAuthoringJobSpec_=()=>({
+            family:'W',identity:{target_id:'STD-FIXTURE',target_kind:'WRITTEN_STAGE'},
+            snapshot_sha256:'abc',idempotency_key:'key'
+          });
+          h3FsAuthoringQueue_=()=>({table:{rows:[],map:{}}});
+          h3FsAuthoringQueueMatch_=()=>({exact:null,history:[]});
+          const core=h3FsAuthoringReconciliationPreviewCore_({},'3級');
+          if (core.public_result.action !== 'ENSURE_OPEN') {
+            throw new Error('missing-job preview fixture failed');
+          }
+          if (core.public_result.write_performed !== false) {
+            throw new Error('preview performed write');
+          }
+          console.log('Semantic authoring reconciliation fixture PASS');
+          NODE
+
       - name: Deterministic ranking fixture
         run: |
           node <<'NODE'

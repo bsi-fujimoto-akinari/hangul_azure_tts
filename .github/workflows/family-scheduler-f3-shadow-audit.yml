@@ -2850,6 +2850,406 @@ jobs:
           console.log('S4-R4-F deduplicated email fixture PASS');
           NODE
 
+
+      - name: S4-R4-G shadow equivalence and safety validation
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          server = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+
+          c_start = server.index(
+              "// S4-R4-C SEMANTIC AUTHORING QUEUE OBSERVER START"
+          )
+          c_end = server.index(
+              "// S4-R4-C SEMANTIC AUTHORING QUEUE OBSERVER END",
+              c_start,
+          )
+          c = server[c_start:c_end]
+          c_events = set(re.findall(
+              r"h3MonitoringSemanticAuthoringEvent_\(\s*'([A-Z0-9_]+)'",
+              c,
+              flags=re.S,
+          ))
+          expected_c = {
+              "SEMANTIC_OPEN",
+              "SEMANTIC_RETRY_DUE",
+              "SEMANTIC_STALE_CLAIMED",
+              "SEMANTIC_FAILED_BLOCKED",
+              "SEMANTIC_AUTHORITY_SCHEMA_UNREADABLE",
+          }
+          if c_events != expected_c:
+              raise SystemExit(
+                  "S4-R4-G semantic event matrix drift: "
+                  + repr(sorted(c_events))
+              )
+
+          d_start = server.index(
+              "// S4-R4-D RS13/RS14 GATE OBSERVER START"
+          )
+          d_end = server.index(
+              "// S4-R4-D RS13/RS14 GATE OBSERVER END",
+              d_start,
+          )
+          d = server[d_start:d_end]
+          d_events = set(re.findall(
+              r"h3MonitoringRs13Rs14Event_\(\s*'([A-Z0-9_]+)'",
+              d,
+              flags=re.S,
+          ))
+          expected_d = {
+              "RS13_FIRST_GENUINE_EVIDENCE",
+              "RS13_RECONCILIATION_BAD",
+              "RS13_SAFETY_BAD",
+              "RS13_EXPLICIT_REVIEW_READY",
+              "RS14P_GATE_PASS",
+              "RS13_RS14_AUTHORITY_UNREADABLE",
+          }
+          if d_events != expected_d:
+              raise SystemExit(
+                  "S4-R4-G RS13/RS14 event matrix drift: "
+                  + repr(sorted(d_events))
+              )
+
+          p_start = server.index("function h3MonitoringObserverPreview()")
+          p_end = server.index("\nfunction ", p_start + 1)
+          preview = server[p_start:p_end]
+          for token in [
+              "h3MonitoringObserverWriteSnapshot_(",
+              "h3MonitoringNotificationProcess_(",
+              "MailApp.",
+              "GmailApp.",
+              "ScriptApp.newTrigger",
+          ]:
+              if token in preview:
+                  raise SystemExit(
+                      "S4-R4-G live observer preview is not read-only: "
+                      + token
+                  )
+
+          n_start = server.index(
+              "function h3MonitoringNotificationCurrent()"
+          )
+          n_end = server.index("\nfunction ", n_start + 1)
+          current = server[n_start:n_end]
+          for token in [
+              "h3MonitoringNotificationWriteStates_(",
+              "h3MonitoringNotificationProcess_(",
+              "MailApp.",
+              "GmailApp.",
+              "ScriptApp.newTrigger",
+          ]:
+              if token in current:
+                  raise SystemExit(
+                      "S4-R4-G notification current is not read-only: "
+                      + token
+                  )
+
+          print("S4-R4-G exact frozen event-matrix/static boundary PASS")
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+
+          global.hash_ = value =>
+            crypto.createHash('sha256').update(String(value)).digest('hex');
+          global.SpreadsheetApp = {flush:()=>{}};
+
+          let mailSendCalls = 0;
+          global.MailApp = {
+            getRemainingDailyQuota:()=>100,
+            sendEmail:()=>{
+              mailSendCalls++;
+              throw new Error('S4-R4-G live mail send forbidden');
+            }
+          };
+
+          vm.runInThisContext(
+            fs.readFileSync('WebAppFamilyScheduler.js','utf8')
+          );
+
+          function assert(ok,msg) {
+            if (!ok) throw new Error(msg);
+          }
+
+          const policy = h3FsAuthoringRecoveryPolicy_();
+          const baseHealth = () => ({
+            schema:'H3_FAMILY_SCHEDULER_AUTHORING_OBSERVABILITY_V1',
+            mode:'READ_ONLY_HEALTH',
+            level:'3級',
+            generated_at:'2026-09-25T00:00:00.000Z',
+            recovery_policy:{...policy},
+            queue_total_rows:0,
+            queue_count_by_status:{},
+            oldest_OPEN_age_minutes:null,
+            oldest_CLAIMED_age_minutes:null,
+            stale_CLAIMED_count:0,
+            FAILED_RETRYABLE_due_count:0,
+            FAILED_BLOCKED_count:0,
+            completed_recent_window_hours:24,
+            completed_recent_count:0,
+            superseded_count:0,
+            duplicate_idempotency_violation_count:0,
+            duplicate_idempotency_keys:[],
+            retry_exhausted_not_blocked_count:0,
+            timestamp_finding_count:0,
+            missing_job_reconciliation_finding_count:0,
+            missing_job_reconciliation_findings:[],
+            reconciliation_status:'PASS',
+            reconciliation_error:'',
+            reconciliation:null,
+            alert_states:{
+              stale_claimed:false,
+              retry_due:false,
+              failed_blocked:false,
+              duplicate_idempotency:false,
+              retry_exhausted_not_blocked:false,
+              timestamp_finding:false,
+              missing_authoring_job:false,
+              reconciliation_error:false
+            },
+            write_performed:false
+          });
+
+          const baseReport = () => ({
+            schema:'H3_RS13G_GATE_REPORT_V1',
+            contract_id:'H3-RS13G-GATE-REPORTER-20260922-V1',
+            read_only:true,
+            writes_performed:0,
+            evidence:{
+              committed_rows:0,
+              distinct_event_count:0,
+              source_family_count:0,
+              concept_count:0,
+              contributory_rows:0,
+              incidental_rows:0,
+              correct_rows:0,
+              triangle_rows:0,
+              wrong_rows:0
+            },
+            reconciliation:{
+              expected_observation_rows:0,
+              actual_observation_rows:0,
+              exact_match_rows:0,
+              missing_observation_ids:[],
+              conflict_observation_ids:[],
+              orphan_observation_ids:[],
+              exact:true
+            },
+            rs13:{
+              state:'AWAIT_REAL_DATA',
+              explicit_review_ready:false,
+              close_automatic:false
+            },
+            rs14p:{
+              activation_gate:{
+                schema:'H3_RS14P_ACTIVATION_GATE_V1',
+                contract_id:'H3-RS14P-LIMITED-LIVE-PREFLIGHT-20260922-V1',
+                gate_pass:false,
+                metrics:{
+                  observed_rows:0,
+                  distinct_event_count:0,
+                  concept_count:0,
+                  source_family_count:0,
+                  noncorrect_count:0,
+                  unsafe_rows:0,
+                  scheduler_applied_true:0
+                },
+                reasons:[
+                  'INSUFFICIENT_DISTINCT_EVENTS',
+                  'INSUFFICIENT_CONCEPTS',
+                  'INSUFFICIENT_SOURCE_FAMILIES',
+                  'NO_X_OR_TRIANGLE'
+                ]
+              },
+              progress:{
+                distinct_events:{current:0,required:6,remaining:6},
+                concepts:{current:0,required:2,remaining:2},
+                source_families:{current:0,required:2,remaining:2},
+                require_noncorrect:{current:0,satisfied:false},
+                unsafe_rows:{current:0,required:0,satisfied:true},
+                scheduler_applied_true:{
+                  current:0,required:0,satisfied:true
+                }
+              },
+              live_activation_automatic:false
+            },
+            next_advisory:'RS13_AWAIT_FIRST_REAL_SECONDARY_EVIDENCE'
+          });
+
+          const k1Health = {
+            contract_id:'H3-RS13K1-K1-SECONDARY-AUTHORITY-20260922-V1',
+            sheet:'listening_k1_secondary_authority_v1',
+            row_count:0,
+            skill_level_concept_inference:false,
+            historical_backfill:false,
+            state_transfer:false
+          };
+
+          const semantic =
+            h3MonitoringSemanticAuthoringFromHealth_(baseHealth());
+          const gate =
+            h3MonitoringRs13Rs14FromReport_(baseReport(),k1Health);
+          assert(
+            semantic.status==='OK' &&
+            semantic.action_required_events.length===0,
+            'G semantic healthy/no-op mismatch'
+          );
+          assert(
+            gate.status==='OK' &&
+            gate.action_required_events.length===0,
+            'G RS13/RS14 healthy/no-op mismatch'
+          );
+
+          const A = {
+            source_id:'SEMANTIC_AUTHORING_QUEUE',
+            event_type:'SEMANTIC_OPEN',
+            event_key:'SEMANTIC_AUTHORING:SEMANTIC_OPEN',
+            detail:'OPEN=1'
+          };
+          const B = {
+            source_id:'RS13_RS14_GATE',
+            event_type:'RS14P_GATE_PASS',
+            event_key:'RS13_RS14:RS14P_GATE_PASS',
+            detail:'MANUAL_ACTIVATION_REQUIRED'
+          };
+          const t0='2026-09-25T00:00:00.000Z';
+
+          let plan=h3MonitoringNotificationPlan_([], [A], t0);
+          assert(
+            plan.candidate_identities.length===1 &&
+            plan.states[0].generation===1 &&
+            plan.states[0].status==='PENDING',
+            'G first generation plan mismatch'
+          );
+          h3MonitoringNotificationClaim_(plan,t0);
+          h3MonitoringNotificationMarkSendResult_(plan,true,t0,'');
+          assert(
+            plan.states[0].status==='SENT' &&
+            plan.states[0].attempt_count===1,
+            'G synthetic successful-send state mismatch'
+          );
+
+          plan=h3MonitoringNotificationPlan_(
+            plan.states,[A],'2026-09-25T00:01:00.000Z'
+          );
+          assert(
+            plan.candidate_identities.length===0,
+            'G unresolved event duplicated notification'
+          );
+
+          plan=h3MonitoringNotificationPlan_(
+            plan.states,[],'2026-09-25T00:02:00.000Z'
+          );
+          assert(
+            plan.states[0].status==='RESOLVED' &&
+            plan.states[0].active===false,
+            'G resolution state mismatch'
+          );
+
+          plan=h3MonitoringNotificationPlan_(
+            plan.states,[A],'2026-09-25T00:03:00.000Z'
+          );
+          assert(
+            plan.candidate_identities.length===1 &&
+            plan.states[0].generation===2,
+            'G recurrence generation mismatch'
+          );
+
+          const batch=h3MonitoringNotificationPlan_(
+            [],[A,B],'2026-09-25T00:04:00.000Z'
+          );
+          const msg=h3MonitoringNotificationMessage_(
+            batch,{last_checked_at:'2026-09-25T00:04:00.000Z'}
+          );
+          assert(
+            batch.candidate_identities.length===2 &&
+            msg.events.length===2 &&
+            msg.subject.includes('2 action-required events'),
+            'G batching mismatch'
+          );
+
+          const F = {
+            source_id:'SEMANTIC_AUTHORING_QUEUE',
+            event_type:'SEMANTIC_FAILED_BLOCKED',
+            event_key:'SEMANTIC_AUTHORING:SEMANTIC_FAILED_BLOCKED',
+            detail:'FAILED_BLOCKED=1'
+          };
+          let fail=h3MonitoringNotificationPlan_(
+            [],[F],'2026-09-25T00:05:00.000Z'
+          );
+          for(let attempt=1;attempt<=3;attempt++){
+            h3MonitoringNotificationClaim_(
+              fail,'2026-09-25T00:0'+(5+attempt)+':00.000Z'
+            );
+            h3MonitoringNotificationMarkSendResult_(
+              fail,false,'','fixture failure'
+            );
+            if(attempt<3){
+              assert(
+                fail.states[0].status==='SEND_ERROR',
+                'G bounded retry state mismatch '+attempt
+              );
+              fail=h3MonitoringNotificationPlan_(
+                fail.states,[F],
+                '2026-09-25T00:0'+(6+attempt)+':30.000Z'
+              );
+              assert(
+                fail.candidate_identities.length===1,
+                'G retry candidate missing '+attempt
+              );
+            }
+          }
+          assert(
+            fail.states[0].status==='RETRY_EXHAUSTED',
+            'G third failure must exhaust'
+          );
+          fail=h3MonitoringNotificationPlan_(
+            fail.states,[F],'2026-09-25T00:10:00.000Z'
+          );
+          assert(
+            fail.candidate_identities.length===0,
+            'G exhausted event must not auto-retry'
+          );
+
+          const claimed={
+            identity:'SEMANTIC_AUTHORING_QUEUE|SEMANTIC_AUTHORING:SEMANTIC_OPEN',
+            source_id:'SEMANTIC_AUTHORING_QUEUE',
+            event_type:'SEMANTIC_OPEN',
+            event_key:'SEMANTIC_AUTHORING:SEMANTIC_OPEN',
+            active:true,
+            generation:1,
+            status:'CLAIMED',
+            attempt_count:1,
+            first_seen_at:t0,
+            last_seen_at:t0,
+            last_attempt_at:t0,
+            last_sent_at:'',
+            last_error:'',
+            detail_hash:'fixture'
+          };
+          const ambiguous=h3MonitoringNotificationPlan_(
+            [claimed],[A],'2026-09-25T00:11:00.000Z'
+          );
+          assert(
+            ambiguous.states[0].status==='AMBIGUOUS' &&
+            ambiguous.candidate_identities.length===0,
+            'G unresolved CLAIMED did not fail closed'
+          );
+
+          assert(
+            mailSendCalls===0,
+            'G deterministic validation called MailApp.sendEmail'
+          );
+
+          console.log(
+            'S4-R4-G shadow equivalence/dedupe/failure fixture PASS; real_mail=0'
+          );
+          NODE
+
       - name: Deterministic ranking fixture
         run: |
           node <<'NODE'
@@ -3350,3 +3750,182 @@ jobs:
             'S3 PREP final truth-table fixture PASS'
           );
           NODE
+
+  s4_r4_g_live_readonly_smoke:
+    name: S4-R4-G live READ_ONLY smoke
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify exact Apps Script target
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          expected = '1p_e1jKICTZXHpCrQ7rwU9HilloZdkFBpHry_lCq5YgXpaiU4FNEQlDa-'
+          actual = json.loads(
+              Path('.clasp.json').read_text(encoding='utf-8')
+          ).get('scriptId')
+          if actual != expected:
+              raise SystemExit('Apps Script target mismatch')
+          PY
+
+      - name: Check clasp credential availability
+        shell: bash
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          if [ -z "$CLASPRC_JSON" ]; then
+            echo "::error::CLASPRC_JSON is not configured."
+            exit 1
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Materialize clasp credentials
+        shell: bash
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          value = os.environ.get('CLASPRC_JSON', '')
+          if not value.strip():
+              raise SystemExit('CLASPRC_JSON is empty')
+          path = Path.home() / '.clasprc.json'
+          path.write_text(value, encoding='utf-8')
+          path.chmod(0o600)
+          PY
+
+      - name: Validate live observer and notification state READ_ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          observer="$RUNNER_TEMP/s4-r4-g-observer.json"
+          notification="$RUNNER_TEMP/s4-r4-g-notification.json"
+
+          npx -y @google/clasp@3.4.0 run-function h3MonitoringObserverPreview --json > "$observer"
+          npx -y @google/clasp@3.4.0 run-function h3MonitoringNotificationCurrent --json > "$notification"
+
+          python3 - "$observer" "$notification" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          def parse_json(path):
+              raw=Path(path).read_text(encoding='utf-8').strip()
+              try:
+                  return json.loads(raw)
+              except Exception:
+                  for line in reversed(raw.splitlines()):
+                      line=line.strip()
+                      if not line:
+                          continue
+                      try:
+                          return json.loads(line)
+                      except Exception:
+                          pass
+              raise SystemExit('Apps Script smoke did not return parseable JSON')
+
+          def find_schema(value, schema):
+              if isinstance(value, str):
+                  text=value.strip()
+                  if text.startswith(('{','[')):
+                      try:
+                          return find_schema(json.loads(text),schema)
+                      except Exception:
+                          return None
+              if isinstance(value, dict):
+                  if value.get('schema') == schema:
+                      return value
+                  for child in value.values():
+                      found=find_schema(child,schema)
+                      if found is not None:
+                          return found
+              if isinstance(value, list):
+                  for child in value:
+                      found=find_schema(child,schema)
+                      if found is not None:
+                          return found
+              return None
+
+          observer=find_schema(
+              parse_json(sys.argv[1]),
+              'H3_MONITOR_OBSERVER_SNAPSHOT_V1'
+          )
+          if observer is None:
+              raise SystemExit('observer snapshot schema missing')
+          if observer.get('write_performed') is not False:
+              raise SystemExit('observer preview reported a write')
+          health=observer.get('health') or {}
+          if health.get('source_count') != 3:
+              raise SystemExit('observer source count mismatch')
+          if health.get('error_count') != 0:
+              raise SystemExit('observer live authority error')
+          source_ids=sorted(
+              str(x.get('source_id',''))
+              for x in (observer.get('sources') or [])
+          )
+          expected_sources=sorted([
+              'RUNTIME_AUTHORITY',
+              'SEMANTIC_AUTHORING_QUEUE',
+              'RS13_RS14_GATE',
+          ])
+          if source_ids != expected_sources:
+              raise SystemExit('observer source identity mismatch')
+          allowed={
+              'SEMANTIC_OPEN',
+              'SEMANTIC_RETRY_DUE',
+              'SEMANTIC_STALE_CLAIMED',
+              'SEMANTIC_FAILED_BLOCKED',
+              'SEMANTIC_AUTHORITY_SCHEMA_UNREADABLE',
+              'RS13_FIRST_GENUINE_EVIDENCE',
+              'RS13_RECONCILIATION_BAD',
+              'RS13_SAFETY_BAD',
+              'RS13_EXPLICIT_REVIEW_READY',
+              'RS14P_GATE_PASS',
+              'RS13_RS14_AUTHORITY_UNREADABLE',
+          }
+          events=observer.get('action_required_events') or []
+          event_types=[str(x.get('event_type','')) for x in events]
+          unknown=sorted(set(event_types)-allowed)
+          if unknown:
+              raise SystemExit(
+                  'observer emitted event outside frozen matrix: '
+                  + ','.join(unknown)
+              )
+
+          notification=find_schema(
+              parse_json(sys.argv[2]),
+              'H3_MONITOR_NOTIFICATION_V1'
+          )
+          if notification is None:
+              raise SystemExit('notification state schema missing')
+          if notification.get('write_performed') is not False:
+              raise SystemExit('notification current reported a write')
+          if notification.get('read_only') is not True:
+              raise SystemExit('notification current is not READ_ONLY')
+          if notification.get('config_status') != 'READY':
+              raise SystemExit('notification recipient config not READY')
+
+          print(
+              'S4-R4-G live READ_ONLY smoke PASS: '
+              'observer_status='+str(observer.get('status'))+
+              ' action_required_count='+str(
+                  health.get('action_required_count')
+              )+
+              ' notification_status='+str(notification.get('status'))+
+              ' active_notification_count='+str(
+                  notification.get('active_count')
+              )+
+              ' real_mail=0 write_performed=false'
+          )
+          PY
+

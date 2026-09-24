@@ -511,6 +511,146 @@ jobs:
           print("Family Scheduler live issue contract PASS")
           PY
 
+      - name: P02 issue transaction integrity contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          fs = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+
+          required = [
+              "function h3FsPersistedEvaluation_(row)",
+              "function h3FsAssertEvaluationReplay_(persisted,fresh)",
+              "function h3FsAssertIssueEvaluationBinding_(persisted,evaluation)",
+              "function h3FsIssueIntentAtClock_(ss,level,clock)",
+              "function h3FsEnsureIssueIntent_(ss,evaluation,family)",
+              "function h3FsValidateIssueApplied_(",
+              "function h3FsRecordIssueApplied_(",
+              "function h3FsRecoverPendingIssueApplied_(",
+              "FAMILY_SCHEDULER_ISSUE_LOG_RECOVERY_REQUIRED",
+              "FAMILY_SCHEDULER_ISSUE_EVALUATION_BINDING_MISMATCH",
+              "FAMILY_SCHEDULER_DETERMINISM_REPLAY_MISMATCH",
+          ]
+          for token in required:
+              if token not in fs:
+                  raise SystemExit(f"missing P02 integrity token: {token}")
+
+          home_start = fs.index("function h3FsHomeNextLocked_()")
+          home_end = fs.index("function h3FamilySchedulerHomeNext()", home_start)
+          home = fs[home_start:home_end]
+
+          order = [
+              "h3FsEnsureIssueIntent_(",
+              "h3FsIssuePreparedFamily_(",
+              "h3FsRecordIssueApplied_(",
+              "out.client_action='OPEN_ISSUED'",
+          ]
+          positions = [home.index(token) for token in order]
+          if positions != sorted(positions):
+              raise SystemExit("P02 issue transaction ordering is invalid.")
+
+          if "out.issue_log_status='RECOVERY_REQUIRED'" in home:
+              raise SystemExit("HOME NEXT must not open an issued set after unresolved issue-log failure.")
+
+          append_start = fs.index("function h3FsAppendIssueApplied_(")
+          append_end = fs.index("function h3FsRecordIssueApplied_(", append_start)
+          append = fs[append_start:append_end]
+          if "canonical.family_metrics" not in append:
+              raise SystemExit("ISSUE_APPLIED must serialize persisted canonical metrics.")
+          if "JSON.stringify(\n      evaluation.family_metrics" in append:
+              raise SystemExit("ISSUE_APPLIED must not serialize recomputed evaluation metrics.")
+
+          recovery_start = fs.index("function h3FsRecordIssueApplied_(")
+          recovery_end = fs.index("function h3FsRecoverPendingIssueApplied_(", recovery_start)
+          recovery = fs[recovery_start:recovery_end]
+          if recovery.count("h3FsIssueAppliedForSet_(") < 2:
+              raise SystemExit("P02 recovery must verify issue-log readback around retry.")
+          if recovery.count("h3FsAppendIssueApplied_(") < 2:
+              raise SystemExit("P02 recovery must perform one bounded append retry.")
+
+          print("P02 issue transaction integrity static contract PASS")
+          PY
+
+      - name: P02 persisted evaluation deterministic fixture
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          vm.runInThisContext(fs.readFileSync('WebAppFamilyScheduler.js','utf8'));
+
+          const persisted = {
+            EVENT_ID:'H3FS-E-test',
+            DECISION_ID:'H3FS-D-test',
+            EVENT_KIND:'EVALUATION',
+            LEVEL:'3級',
+            MODE:'SHADOW',
+            GLOBAL_SET_CLOCK:27,
+            SNAPSHOT_SHA256:'snapshot-test',
+            NEXT_ACTION:'RECOMMEND_FAMILY',
+            RECOMMENDED_FAMILY:'L',
+            PRIMARY_REASON:'P2_STARVATION',
+            CANDIDATE_ORDER_JSON:'["L","W","R","T"]',
+            FAMILY_METRICS_JSON:JSON.stringify({
+              L:{family:'L',readiness_state:'PREPARE_REQUIRED',eligible:true},
+              W:{family:'W',readiness_state:'PREPARE_REQUIRED',eligible:true}
+            }),
+            CURRENT_SET_ID:'',
+            RESULT_STATUS:'PASS'
+          };
+
+          const fresh = {
+            schema:H3_FS_OUTPUT_SCHEMA_,
+            mode:'SHADOW',
+            global_set_clock:27,
+            next_action:'RECOMMEND_FAMILY',
+            recommended_family:'L',
+            primary_reason:'P2_STARVATION',
+            candidate_order:['L','W','R','T'],
+            family_metrics:{
+              L:{family:'L',readiness_state:'READY',eligible:true},
+              W:{family:'W',readiness_state:'PREPARE_REQUIRED',eligible:true}
+            },
+            current_set_id:'',
+            result_status:'PASS'
+          };
+
+          // Readiness may change after deterministic preparation at the same clock.
+          // Selection identity must stay stable, and issue provenance must use the
+          // persisted snapshot rather than these recomputed metrics.
+          h3FsAssertEvaluationReplay_(persisted, fresh);
+
+          const canonical = h3FsPersistedEvaluation_(persisted);
+          h3FsAssertIssueEvaluationBinding_(persisted, canonical);
+
+          let threw = false;
+          try {
+            h3FsAssertEvaluationReplay_(
+              persisted,
+              {...fresh, recommended_family:'W'}
+            );
+          } catch (err) {
+            threw = String(err.message).includes(
+              'FAMILY_SCHEDULER_DETERMINISM_REPLAY_MISMATCH'
+            );
+          }
+          if (!threw) throw new Error('P02 replay mismatch must fail closed');
+
+          threw = false;
+          try {
+            h3FsAssertIssueEvaluationBinding_(
+              persisted,
+              {...canonical, family_metrics:fresh.family_metrics}
+            );
+          } catch (err) {
+            threw = String(err.message).includes(
+              'FAMILY_SCHEDULER_ISSUE_EVALUATION_BINDING_MISMATCH'
+            );
+          }
+          if (!threw) throw new Error('P02 issue binding must reject recomputed metrics');
+
+          console.log('P02 persisted evaluation deterministic fixture PASS');
+          NODE
+
       - name: HOME NEXT activation contract
         run: |
           python - <<'PY'

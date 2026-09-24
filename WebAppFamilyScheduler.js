@@ -2371,11 +2371,34 @@ function h3FsHomeNextLocked_() {
           return out;
         }
 
-        out.client_action='AUTHORING_REQUIRED';
-        out.authoring_target=
-          h3FsAuthoringTarget_(route.family);
-        out.preparation_status='AUTHORING_REQUIRED';
-        return out;
+        if(route.family==='R'||route.family==='T'){
+          var rtPrep=
+            route.family==='R'
+              ? h3FsPrepareReading_(ss)
+              : h3FsPrepareTranslation_(ss);
+          if(rtPrep.status==='AUTHORING_REQUIRED'){
+            out.client_action='AUTHORING_REQUIRED';
+            out.authoring_target=rtPrep.authoring_target;
+            out.preparation_status='AUTHORING_REQUIRED';
+            return out;
+          }
+          if(!rtPrep.set_id){
+            throw new Error(
+              'FAMILY_SCHEDULER_RT_PREPARE_SET_ID_MISSING'
+            );
+          }
+          out.preparation_performed=true;
+          out.preparation_status=rtPrep.status;
+          out.prepared_set_id=rtPrep.set_id;
+          out.requires_prepare=false;
+          route.requires_prepare=false;
+        } else {
+          out.client_action='AUTHORING_REQUIRED';
+          out.authoring_target=
+            h3FsAuthoringTarget_(route.family);
+          out.preparation_status='AUTHORING_REQUIRED';
+          return out;
+        }
       }
 
       var issued=h3FsIssuePreparedFamily_(

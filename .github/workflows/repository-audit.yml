@@ -72,6 +72,7 @@ jobs:
               'WebAppK1SecondaryAuthority.js',
               'WebAppRs13GateReporter.js',
               'WebAppFamilyScheduler.js',
+    'WebAppFamilySchedulerPreparation.js',
               'WebAppPreissue.js',
               'WebAppReceipt.js',
               'WebAppReviewCore.js',

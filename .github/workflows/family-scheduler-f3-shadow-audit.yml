@@ -16,7 +16,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Syntax check
-        run: node --check WebAppFamilyScheduler.js
+        run: |
+          node --check WebAppFamilyScheduler.js
+          node --check WebAppFamilySchedulerPreparation.js
 
       - name: Contract audit
         run: |
@@ -608,6 +610,60 @@ jobs:
                   raise SystemExit(f"HOME NEXT must never submit learner answers: {token}")
 
           print("HOME NEXT activation contract PASS")
+          PY
+
+      - name: R/T preparation contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          fs = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+          prep = Path("WebAppFamilySchedulerPreparation.js").read_text(encoding="utf-8")
+
+          required_prep = [
+              "H3-FAMILY-SCHEDULER-RT-PREP-20260924-V1",
+              "function h3FsRtDueObligations_(ss,family,direction)",
+              "function h3FsPrepareReading_(ss)",
+              "function h3FsPrepareTranslation_(ss)",
+              "function h3FsBuildReadingSource_(ss,selected)",
+              "h3ReadingBuildSectionMaterializationPlan_(",
+              "function h3FsAuthoredSurfaceSha_(x)",
+              "function h3FsTranslationSourceForObligation_(ss,obligation,used)",
+              "h3TranslationV2ValidateRetestSurface_(",
+              "h3TranslationV2LockBundle_(",
+              "h3TranslationV2BuildStage_(",
+              "TRANSLATION_RETEST_SURFACE:",
+              "READING_RETEST_SOURCE:",
+          ]
+          for token in required_prep:
+              if token not in prep:
+                  raise SystemExit(f"missing R/T preparation token: {token}")
+
+          required_home = [
+              "h3FsPrepareReading_(ss)",
+              "h3FsPrepareTranslation_(ss)",
+              "FAMILY_SCHEDULER_RT_PREPARE_SET_ID_MISSING",
+              "out.preparation_performed=true",
+          ]
+          for token in required_home:
+              if token not in fs:
+                  raise SystemExit(f"missing HOME R/T bridge token: {token}")
+
+          forbidden = [
+              "h3ReadingSubmit_(",
+              "h3TranslationV2Submit_(",
+              "h3WrittenSubmit_(",
+              "consumeK1ReadyAfterIssue_(",
+              "h3FamilySchedulerObserveAfterCommit_(",
+          ]
+          for token in forbidden:
+              if token in prep:
+                  raise SystemExit(f"R/T preparation must stay preissue-only: {token}")
+
+          if prep.count("appendRow(") != 2:
+              raise SystemExit("R/T preparation must have exactly two stage append surfaces.")
+
+          print("R/T preparation static contract PASS")
           PY
 
       - name: Deterministic ranking fixture

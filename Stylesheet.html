@@ -914,12 +914,52 @@
     gap: 12px;
   }
 
+  .monitor-home-details {
+    display: grid;
+    gap: 12px;
+  }
+
+  .monitor-home-details[hidden] {
+    display: none !important;
+  }
+
   .monitor-home-head,
   .monitor-home-source-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
+  }
+
+  .monitor-home-toggle {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .monitor-home-head-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  .monitor-home-chevron {
+    display: inline-block;
+    color: #737373;
+    font-size: 14px;
+    line-height: 1;
+    transition: transform .12s ease;
+  }
+
+  .monitor-home-toggle[aria-expanded="true"]
+    .monitor-home-chevron {
+    transform: rotate(180deg);
   }
 
   .monitor-home-title {
@@ -929,10 +969,16 @@
     min-width: 0;
   }
 
-  .monitor-home-title h3,
+  .monitor-home-heading,
   .monitor-home-events h4,
   .monitor-home-source-head h4 {
     margin: 0;
+  }
+
+  .monitor-home-heading {
+    font-size: 20px;
+    font-weight: 800;
+    line-height: 1.15;
   }
 
   .monitor-home-time {
@@ -952,6 +998,13 @@
     font-size: 11px;
     font-weight: 800;
     line-height: 1;
+  }
+
+  .monitor-home-source-status {
+    max-width: 70%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .monitor-home-overall[data-status="ERROR"],
@@ -1051,6 +1104,23 @@
     min-width: 0;
     overflow-wrap: anywhere;
     color: #666;
+  }
+
+  body.mobile-device .monitor-home-grid {
+    grid-template-columns:
+      minmax(0, 1fr);
+  }
+
+  body.mobile-device .monitor-home-title {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  body.mobile-device .monitor-home-event {
+    grid-template-columns:
+      minmax(0, 1fr);
+    gap: 2px;
   }
 
   @media (max-width: 619px) {

@@ -3250,6 +3250,304 @@ jobs:
           );
           NODE
 
+
+      - name: S4-R4-H production trigger lifecycle contract
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          server = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+          manifest = json.loads(
+              Path("appsscript.json").read_text(encoding="utf-8")
+          )
+          ops = Path("OPERATIONS.md").read_text(encoding="utf-8")
+
+          required = [
+              "H3_MONITOR_PRODUCTION_TRIGGER_V1",
+              "H3_MONITOR_PRODUCTION_PREFLIGHT_V1",
+              "H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_ = 1",
+              "H3_MONITOR_PRODUCTION_TRIGGER_HANDLER_ =",
+              "'h3MonitoringObserverEmailRun'",
+              "function h3MonitoringProductionTriggerStatus()",
+              "function h3MonitoringProductionPreflight()",
+              "function h3MonitoringProductionTriggerEnsure()",
+              "function h3MonitoringProductionTriggerRemove()",
+              "ScriptApp.requireScopes(",
+              "ScriptApp.getProjectTriggers()",
+              ".newTrigger(H3_MONITOR_PRODUCTION_TRIGGER_HANDLER_)",
+              ".timeBased()",
+              ".everyHours(H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_)",
+              "ScriptApp.deleteTrigger(",
+              "MONITOR_PRODUCTION_TRIGGER_READBACK_MISMATCH",
+              "MONITOR_PRODUCTION_TRIGGER_REMOVE_FAIL_CLOSED",
+              "// S4-R4-H PRODUCTION MONITOR CUTOVER START",
+              "// S4-R4-H PRODUCTION MONITOR CUTOVER END",
+          ]
+          for token in required:
+              if token not in server:
+                  raise SystemExit(
+                      f"missing S4-R4-H production trigger token: {token}"
+                  )
+
+          start = server.index(
+              "// S4-R4-H PRODUCTION MONITOR CUTOVER START"
+          )
+          end = server.index(
+              "// S4-R4-H PRODUCTION MONITOR CUTOVER END",
+              start,
+          )
+          section = server[start:end]
+          forbidden = [
+              "MailApp.sendEmail(",
+              "GmailApp.",
+              "h3FsAuthoringUpsert_(",
+              "h3FsIssuePreparedFamily_(",
+              "h3FamilySchedulerObserveAfterCommit_(",
+              "h3WrittenSubmit_(",
+              "h3ReadingSubmit_(",
+              "h3TranslationV2Submit_(",
+              "h3Rs13k1Author",
+              "RS14_ACTIVE",
+          ]
+          for token in forbidden:
+              if token in section:
+                  raise SystemExit(
+                      f"S4-R4-H crossed protected boundary: {token}"
+                  )
+
+          scopes = manifest.get("oauthScopes") or []
+          required_scopes = {
+              "https://www.googleapis.com/auth/drive",
+              "https://www.googleapis.com/auth/script.external_request",
+              "https://www.googleapis.com/auth/spreadsheets",
+              "https://www.googleapis.com/auth/script.send_mail",
+              "https://www.googleapis.com/auth/script.scriptapp",
+          }
+          missing = sorted(required_scopes - set(scopes))
+          if missing:
+              raise SystemExit(
+                  "S4-R4-H required OAuth scope missing: "
+                  + ",".join(missing)
+              )
+
+          for token in [
+              "## S4-R4-H production monitoring cutover",
+              "h3MonitoringProductionTriggerEnsure()",
+              "h3MonitoringProductionTriggerRemove()",
+              "everyHours(1)",
+              "legacy ChatGPT Work monitoring tasks remain paused",
+          ]:
+              if token not in ops:
+                  raise SystemExit(
+                      f"S4-R4-H OPERATIONS contract missing: {token}"
+                  )
+
+          print("S4-R4-H production trigger static contract PASS")
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const props = new Map([
+            ['H3_MONITOR_EMAIL_TO','owner@example.com']
+          ]);
+          global.PropertiesService = {
+            getScriptProperties:()=>({
+              getProperty:key => props.has(key) ? props.get(key) : null,
+              setProperty:(key,value)=>{
+                props.set(String(key),String(value));
+              },
+              deleteProperty:key=>{
+                props.delete(String(key));
+              }
+            })
+          };
+
+          let triggers=[];
+          let nextId=1;
+          const makeTrigger=(handler,id)=>({
+            getHandlerFunction:()=>handler,
+            getUniqueId:()=>id,
+            getEventType:()=>ScriptApp.EventType.CLOCK,
+            getTriggerSource:()=>ScriptApp.TriggerSource.CLOCK
+          });
+          let requireScopeCalls=0;
+          global.ScriptApp = {
+            AuthMode:{FULL:'FULL'},
+            EventType:{CLOCK:'CLOCK'},
+            TriggerSource:{CLOCK:'CLOCK'},
+            requireScopes:(mode,scopes)=>{
+              requireScopeCalls++;
+              if(mode!=='FULL') throw new Error('unexpected auth mode');
+              if(!scopes.includes(
+                'https://www.googleapis.com/auth/script.scriptapp'
+              )){
+                throw new Error('script.scriptapp scope missing');
+              }
+            },
+            getProjectTriggers:()=>triggers.slice(),
+            newTrigger:handler=>({
+              timeBased:()=>({
+                everyHours:hours=>({
+                  create:()=>{
+                    if(hours!==1) throw new Error('cadence drift');
+                    const t=makeTrigger(
+                      handler,'TRIG-'+String(nextId++)
+                    );
+                    triggers.push(t);
+                    return t;
+                  }
+                })
+              })
+            }),
+            deleteTrigger:trigger=>{
+              triggers=triggers.filter(x=>x!==trigger);
+            }
+          };
+
+          global.LockService = {
+            getScriptLock:()=>({
+              tryLock:()=>true,
+              releaseLock:()=>{}
+            })
+          };
+          global.MailApp = {
+            sendEmail:()=>{
+              throw new Error('H lifecycle must not send mail');
+            }
+          };
+
+          vm.runInThisContext(
+            fs.readFileSync('WebAppFamilyScheduler.js','utf8')
+          );
+
+          function assert(ok,msg) {
+            if (!ok) throw new Error(msg);
+          }
+
+          h3MonitoringObserverPreview=()=>({
+            schema:'H3_MONITOR_OBSERVER_SNAPSHOT_V1',
+            level:'3級',
+            last_checked_at:'2026-09-25T00:00:00.000Z',
+            status:'HEALTHY',
+            health:{
+              source_count:3,
+              ok_count:3,
+              warning_count:0,
+              error_count:0,
+              action_required_count:0
+            },
+            sources:[],
+            action_required_events:[],
+            write_performed:false,
+            snapshot_sha256:'fixture'
+          });
+
+          let status=h3MonitoringProductionTriggerStatus();
+          assert(
+            status.status==='ABSENT' &&
+            status.matching_trigger_count===0 &&
+            status.write_performed===false,
+            'H initial trigger state must be ABSENT'
+          );
+
+          let preflight=h3MonitoringProductionPreflight();
+          assert(
+            preflight.status==='READY' &&
+            preflight.email_config_status==='READY' &&
+            preflight.observer_status==='HEALTHY' &&
+            preflight.action_required_count===0 &&
+            preflight.trigger_status==='ABSENT',
+            'H initial preflight mismatch'
+          );
+
+          let ensured=h3MonitoringProductionTriggerEnsure();
+          assert(
+            ensured.status==='READY' &&
+            ensured.created===true &&
+            ensured.write_performed===true &&
+            triggers.length===1,
+            'H first ensure did not create exactly one trigger'
+          );
+          status=h3MonitoringProductionTriggerStatus();
+          assert(
+            status.status==='READY' &&
+            status.matching_trigger_count===1 &&
+            status.event_type==='CLOCK' &&
+            status.trigger_source==='CLOCK' &&
+            status.configured_cadence_hours===1 &&
+            status.metadata_present===true &&
+            status.metadata_match===true,
+            'H READY trigger readback mismatch'
+          );
+
+          ensured=h3MonitoringProductionTriggerEnsure();
+          assert(
+            ensured.status==='READY' &&
+            ensured.created===false &&
+            ensured.write_performed===false &&
+            triggers.length===1,
+            'H repeated ensure created a duplicate'
+          );
+
+          triggers.push(
+            makeTrigger(
+              H3_MONITOR_PRODUCTION_TRIGGER_HANDLER_,
+              'MANUAL-DUPLICATE'
+            )
+          );
+          status=h3MonitoringProductionTriggerStatus();
+          assert(
+            status.status==='ERROR' &&
+            status.duplicate_trigger===true &&
+            status.matching_trigger_count===2,
+            'H duplicate trigger must fail closed'
+          );
+          let duplicateBlocked=false;
+          try {
+            h3MonitoringProductionTriggerEnsure();
+          } catch(err) {
+            duplicateBlocked=String(err.message||err).includes(
+              'MONITOR_PRODUCTION_PREFLIGHT_NOT_READY'
+            );
+          }
+          assert(
+            duplicateBlocked && triggers.length===2,
+            'H duplicate trigger ensure did not fail closed'
+          );
+
+          triggers=triggers.filter(
+            x=>x.getUniqueId()!=='MANUAL-DUPLICATE'
+          );
+          status=h3MonitoringProductionTriggerStatus();
+          assert(status.status==='READY','H fixture recovery mismatch');
+
+          const removed=h3MonitoringProductionTriggerRemove();
+          assert(
+            removed.status==='ABSENT' &&
+            removed.removed===true &&
+            removed.write_performed===true &&
+            triggers.length===0,
+            'H recovery removal mismatch'
+          );
+          status=h3MonitoringProductionTriggerStatus();
+          assert(
+            status.status==='ABSENT' &&
+            status.metadata_present===false,
+            'H metadata survived exact removal'
+          );
+          assert(
+            requireScopeCalls>=5,
+            'H public trigger lifecycle did not require scopes'
+          );
+
+          console.log(
+            'S4-R4-H production trigger lifecycle fixture PASS'
+          );
+          NODE
+
       - name: Deterministic ranking fixture
         run: |
           node <<'NODE'

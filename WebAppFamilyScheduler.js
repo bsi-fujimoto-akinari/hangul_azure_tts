@@ -111,6 +111,10 @@ var H3_MONITOR_RS13_RS14_THRESHOLDS_ = {
 };
 
 
+
+var H3_MONITOR_HOME_READ_MODEL_SCHEMA_ =
+  'H3_MONITOR_HOME_READ_MODEL_V1';
+var H3_MONITOR_HOME_EVENT_LIMIT_ = 6;
 function h3FsAuthoringRecoveryPolicy_() {
   return {
     policy_id:H3_FS_AUTHORING_RECOVERY_POLICY_ID_,
@@ -4713,3 +4717,188 @@ function h3MonitoringRs13Rs14Source_(ss) {
   }
 }
 // S4-R4-D RS13/RS14 GATE OBSERVER END
+
+// S4-R4-E HOME MONITOR READ MODEL START
+function h3MonitoringHomeSource_(snapshot,sourceId) {
+  var matches=(snapshot.sources||[]).filter(function(source){
+    return String(source&&source.source_id||'')===String(sourceId||'');
+  });
+  if(matches.length!==1){
+    throw new Error(
+      'MONITOR_HOME_SOURCE_COUNT:'+String(sourceId)+':'+matches.length
+    );
+  }
+  return matches[0];
+}
+
+function h3MonitoringHomeProgress_(raw,required) {
+  raw=raw||{};
+  var current=Number(raw.current||0);
+  var expected=Number(
+    raw.required===undefined || raw.required===null
+      ? required
+      : raw.required
+  );
+  if(
+    !isFinite(current) ||
+    current<0 ||
+    !isFinite(expected) ||
+    expected<0
+  ){
+    throw new Error('MONITOR_HOME_PROGRESS_INVALID');
+  }
+  return {
+    current:current,
+    required:expected,
+    satisfied:raw.satisfied===true || current>=expected
+  };
+}
+
+function h3MonitoringHomeReadModelFromSnapshot_(snapshot) {
+  if(
+    !snapshot ||
+    String(snapshot.schema||'')!==H3_MONITOR_OBSERVER_SNAPSHOT_SCHEMA_ ||
+    snapshot.write_performed!==false
+  ){
+    throw new Error('MONITOR_HOME_SNAPSHOT_INVALID');
+  }
+  if(
+    String(snapshot.snapshot_sha256||'')!==
+      h3MonitoringObserverSnapshotHash_(snapshot)
+  ){
+    throw new Error('MONITOR_HOME_SNAPSHOT_HASH_MISMATCH');
+  }
+
+  var semantic=h3MonitoringHomeSource_(
+    snapshot,H3_MONITOR_SEMANTIC_AUTHORING_SOURCE_ID_
+  );
+  var gate=h3MonitoringHomeSource_(
+    snapshot,H3_MONITOR_RS13_RS14_SOURCE_ID_
+  );
+  var runtime=h3MonitoringHomeSource_(
+    snapshot,'RUNTIME_AUTHORITY'
+  );
+
+  var semanticData=semantic.data||{};
+  var semanticHealth=semanticData.health||{};
+  var queueCounts=semanticHealth.queue_count_by_status||{};
+  var gateData=gate.data||{};
+  var report=gateData.report||{};
+  var reconciliation=report.reconciliation||{};
+  var rs13=report.rs13||{};
+  var rs14p=report.rs14p||{};
+  var activation=rs14p.activation_gate||{};
+  var progress=rs14p.progress||{};
+  var k1=gateData.k1_authority||{};
+  var thresholds=H3_MONITOR_RS13_RS14_THRESHOLDS_;
+
+  var recent=(snapshot.action_required_events||[])
+    .slice(0,H3_MONITOR_HOME_EVENT_LIMIT_)
+    .map(function(event){
+      return {
+        source_id:String(event&&event.source_id||''),
+        event_type:String(event&&event.event_type||''),
+        detail:String(event&&event.detail||'')
+      };
+    });
+
+  return {
+    schema:H3_MONITOR_HOME_READ_MODEL_SCHEMA_,
+    level:String(snapshot.level||''),
+    status:String(snapshot.status||''),
+    last_checked_at:String(snapshot.last_checked_at||''),
+    observer_health:{
+      source_count:Number(snapshot.health&&snapshot.health.source_count||0),
+      ok_count:Number(snapshot.health&&snapshot.health.ok_count||0),
+      warning_count:Number(snapshot.health&&snapshot.health.warning_count||0),
+      error_count:Number(snapshot.health&&snapshot.health.error_count||0),
+      action_required_count:Number(
+        snapshot.health&&snapshot.health.action_required_count||0
+      )
+    },
+    runtime_authority:{
+      status:String(runtime.status||''),
+      spreadsheet_id:String(
+        runtime.data&&runtime.data.spreadsheet_id||''
+      )
+    },
+    semantic_authoring:{
+      status:String(semantic.status||''),
+      queue_total_rows:Number(semanticHealth.queue_total_rows||0),
+      open_count:Number(queueCounts.OPEN||0),
+      claimed_count:Number(queueCounts.CLAIMED||0),
+      retry_due_count:Number(
+        semanticHealth.FAILED_RETRYABLE_due_count||0
+      ),
+      stale_claimed_count:Number(
+        semanticHealth.stale_CLAIMED_count||0
+      ),
+      failed_blocked_count:Number(
+        semanticHealth.FAILED_BLOCKED_count||0
+      ),
+      duplicate_idempotency_count:Number(
+        semanticHealth.duplicate_idempotency_violation_count||0
+      ),
+      retry_exhausted_not_blocked_count:Number(
+        semanticHealth.retry_exhausted_not_blocked_count||0
+      ),
+      timestamp_finding_count:Number(
+        semanticHealth.timestamp_finding_count||0
+      ),
+      missing_job_finding_count:Number(
+        semanticHealth.missing_job_reconciliation_finding_count||0
+      ),
+      reconciliation_status:String(
+        semanticHealth.reconciliation_status||''
+      )
+    },
+    rs13_rs14:{
+      status:String(gate.status||''),
+      rs13_state:String(rs13.state||''),
+      genuine_secondary_rows:Number(
+        reconciliation.expected_observation_rows||0
+      ),
+      reconciliation_exact:reconciliation.exact===true,
+      k1_authority_rows:Number(k1.row_count||0),
+      rs14p_gate_pass:activation.gate_pass===true,
+      progress:{
+        distinct_events:h3MonitoringHomeProgress_(
+          progress.distinct_events,thresholds.distinct_events
+        ),
+        concepts:h3MonitoringHomeProgress_(
+          progress.concepts,thresholds.concepts
+        ),
+        source_families:h3MonitoringHomeProgress_(
+          progress.source_families,thresholds.source_families
+        ),
+        noncorrect:h3MonitoringHomeProgress_(
+          progress.require_noncorrect,thresholds.require_noncorrect
+        ),
+        unsafe_rows:h3MonitoringHomeProgress_(
+          progress.unsafe_rows,thresholds.unsafe_rows
+        ),
+        scheduler_applied_true:h3MonitoringHomeProgress_(
+          progress.scheduler_applied_true,
+          thresholds.scheduler_applied_true
+        )
+      }
+    },
+    recent_events:recent,
+    recent_events_truncated:
+      (snapshot.action_required_events||[]).length>recent.length,
+    read_only:true,
+    write_performed:false
+  };
+}
+
+function h3MonitoringHomeReadModel() {
+  var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
+  var snapshot=h3MonitoringObserverSnapshot_(
+    '3級',
+    h3MonitoringObserverSourceSpecs_(ss),
+    Date.now()
+  );
+  return h3MonitoringHomeReadModelFromSnapshot_(snapshot);
+}
+// S4-R4-E HOME MONITOR READ MODEL END
+

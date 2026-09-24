@@ -55,6 +55,11 @@ var H3_FS_AUTHORING_CONTRACT_ID_ =
   'H3-SEMANTIC-AUTHORING-QUEUE-20260924-V1';
 var H3_FS_AUTHORING_REQUEST_SCHEMA_ =
   'H3_FAMILY_SCHEDULER_AUTHORING_JOB_REQUEST_V1';
+var H3_FS_AUTHORING_RECOVERY_POLICY_ID_ =
+  'H3-SEMANTIC-AUTHORING-RECOVERY-20260924-V1';
+var H3_FS_AUTHORING_CLAIM_STALE_MINUTES_ = 120;
+var H3_FS_AUTHORING_RETRY_BACKOFF_MINUTES_ = 60;
+var H3_FS_AUTHORING_MAX_ATTEMPTS_ = 3;
 var H3_FS_AUTHORING_QUEUE_HEADERS_ = [
   'JOB_ID','CREATED_AT','UPDATED_AT','LEVEL','FAMILY','TARGET_ID',
   'TARGET_KIND','AUTHORING_TARGET','STATUS','PRIORITY','SNAPSHOT_SHA256',
@@ -62,6 +67,15 @@ var H3_FS_AUTHORING_QUEUE_HEADERS_ = [
   'AUTHORING_REQUEST_JSON','RESULT_REF','RESULT_SHA256','ERROR',
   'ATTEMPT_COUNT','CLAIMED_AT','COMPLETED_AT'
 ];
+
+function h3FsAuthoringRecoveryPolicy_() {
+  return {
+    policy_id:H3_FS_AUTHORING_RECOVERY_POLICY_ID_,
+    claim_stale_minutes:H3_FS_AUTHORING_CLAIM_STALE_MINUTES_,
+    retry_backoff_minutes:H3_FS_AUTHORING_RETRY_BACKOFF_MINUTES_,
+    max_attempts:H3_FS_AUTHORING_MAX_ATTEMPTS_
+  };
+}
 
 function h3FsTable_(sheet) {
   if (!sheet) return {headers:[],map:{},rows:[]};
@@ -1376,7 +1390,8 @@ function h3FsAuthoringUpsert_(ss,level,evaluation,prep) {
     use_current_authority:true,
     no_official_provenance_invention:true,
     no_issue:true,
-    no_learner_history_score_pointer_counter_write:true
+    no_learner_history_score_pointer_counter_write:true,
+    recovery_policy:h3FsAuthoringRecoveryPolicy_()
   };
   var authoringRequest={
     schema:H3_FS_AUTHORING_REQUEST_SCHEMA_,
@@ -1392,7 +1407,8 @@ function h3FsAuthoringUpsert_(ss,level,evaluation,prep) {
       semantic_authoring_required:true,
       deterministic_preparation_owned_by_apps_script:true,
       issue_performed:false,
-      learner_state_mutated:false
+      learner_state_mutated:false,
+      recovery_policy:h3FsAuthoringRecoveryPolicy_()
     }
   };
   var snapshot=h3FsSha_({

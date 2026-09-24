@@ -231,6 +231,8 @@
           familyGroup.className =
             'family-scheduler-family-group';
 
+          var familyButtons = {};
+
           [
             'L',
             'W',
@@ -254,6 +256,8 @@
               );
               button.dataset.family =
                 label;
+              familyButtons[label] =
+                button;
               familyGroup.appendChild(
                 button
               );

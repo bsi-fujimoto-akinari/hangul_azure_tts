@@ -1394,6 +1394,274 @@ jobs:
           console.log('Common monitoring observer foundation fixture PASS');
           NODE
 
+      - name: S4-R4-C semantic authoring queue observer static contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          fs = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+          required = [
+              "H3_MONITOR_SEMANTIC_AUTHORING_SOURCE_V1",
+              "SEMANTIC_AUTHORING_QUEUE",
+              "function h3MonitoringSemanticAuthoringPolicyValid_(health)",
+              "function h3MonitoringSemanticAuthoringFromHealth_(health)",
+              "function h3MonitoringSemanticAuthoringSource_(ss,level,nowMs)",
+              "SEMANTIC_OPEN",
+              "SEMANTIC_RETRY_DUE",
+              "SEMANTIC_STALE_CLAIMED",
+              "SEMANTIC_FAILED_BLOCKED",
+              "SEMANTIC_AUTHORITY_SCHEMA_UNREADABLE",
+              "semantic_write_performed:false",
+          ]
+          for token in required:
+              if token not in fs:
+                  raise SystemExit(
+                      f"missing S4-R4-C semantic observer token: {token}"
+                  )
+
+          source_specs_start = fs.index(
+              "function h3MonitoringObserverSourceSpecs_(ss)"
+          )
+          source_specs_end = fs.index(
+              "function h3MonitoringObserverPreview()",
+              source_specs_start,
+          )
+          source_specs = fs[source_specs_start:source_specs_end]
+          if "H3_MONITOR_SEMANTIC_AUTHORING_SOURCE_ID_" not in source_specs:
+              raise SystemExit(
+                  "S4-R4-C semantic source is not wired into common observer"
+              )
+          if "h3MonitoringSemanticAuthoringSource_(" not in source_specs:
+              raise SystemExit(
+                  "S4-R4-C semantic reader is not wired into common observer"
+              )
+
+          start = fs.index(
+              "// S4-R4-C SEMANTIC AUTHORING QUEUE OBSERVER START"
+          )
+          end = fs.index(
+              "// S4-R4-C SEMANTIC AUTHORING QUEUE OBSERVER END",
+              start,
+          )
+          observer = fs[start:end]
+          forbidden = [
+              "appendRow(",
+              ".setValue(",
+              ".setValues(",
+              "insertSheet(",
+              "h3FsAuthoringUpsert_(",
+              "h3FsSemanticAuthoringBridge_(",
+              "h3FsIssuePreparedFamily_(",
+              "h3FamilySchedulerObserveAfterCommit_(",
+              "h3WrittenSubmit_(",
+              "h3ReadingSubmit_(",
+              "h3TranslationV2Submit_(",
+              "MailApp.",
+              "GmailApp.",
+              "ScriptApp.newTrigger",
+              "PropertiesService.",
+          ]
+          for token in forbidden:
+              if token in observer:
+                  raise SystemExit(
+                      f"S4-R4-C observer crossed protected boundary: {token}"
+                  )
+
+          print("S4-R4-C semantic authoring queue observer static contract PASS")
+          PY
+
+      - name: S4-R4-C semantic authoring queue observer fixture
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+
+          global.hash_ = value =>
+            crypto.createHash('sha256').update(String(value)).digest('hex');
+          global.SpreadsheetApp = {flush:()=>{}};
+          global.H3_WEB_RUNTIME_SPREADSHEET_ID = 'fixture-runtime';
+
+          vm.runInThisContext(
+            fs.readFileSync('WebAppFamilyScheduler.js','utf8')
+          );
+
+          const policy = h3FsAuthoringRecoveryPolicy_();
+          const baseHealth = () => ({
+            schema:'H3_FAMILY_SCHEDULER_AUTHORING_OBSERVABILITY_V1',
+            mode:'READ_ONLY_HEALTH',
+            level:'3級',
+            generated_at:'2026-09-24T12:00:00.000Z',
+            recovery_policy:{...policy},
+            queue_total_rows:0,
+            queue_count_by_status:{},
+            oldest_OPEN_age_minutes:null,
+            oldest_CLAIMED_age_minutes:null,
+            stale_CLAIMED_count:0,
+            FAILED_RETRYABLE_due_count:0,
+            FAILED_BLOCKED_count:0,
+            completed_recent_window_hours:24,
+            completed_recent_count:0,
+            superseded_count:0,
+            duplicate_idempotency_violation_count:0,
+            duplicate_idempotency_keys:[],
+            retry_exhausted_not_blocked_count:0,
+            timestamp_finding_count:0,
+            missing_job_reconciliation_finding_count:0,
+            missing_job_reconciliation_findings:[],
+            reconciliation_status:'PASS',
+            reconciliation_error:'',
+            reconciliation:null,
+            alert_states:{
+              stale_claimed:false,
+              retry_due:false,
+              failed_blocked:false,
+              duplicate_idempotency:false,
+              retry_exhausted_not_blocked:false,
+              timestamp_finding:false,
+              missing_authoring_job:false,
+              reconciliation_error:false
+            },
+            write_performed:false
+          });
+
+          const healthy =
+            h3MonitoringSemanticAuthoringFromHealth_(baseHealth());
+          if (
+            healthy.status !== 'OK' ||
+            healthy.action_required_events.length !== 0 ||
+            healthy.data.semantic_write_performed !== false
+          ) {
+            throw new Error('S4-R4-C healthy mapping mismatch');
+          }
+
+          const immediateRetry = baseHealth();
+          immediateRetry.queue_total_rows = 2;
+          immediateRetry.queue_count_by_status = {
+            FAILED_RETRYABLE:1,CLAIMED:1
+          };
+          immediateRetry.oldest_CLAIMED_age_minutes = 30;
+          const wait =
+            h3MonitoringSemanticAuthoringFromHealth_(immediateRetry);
+          if (
+            wait.action_required_events.length !== 0 ||
+            wait.status !== 'OK'
+          ) {
+            throw new Error(
+              'S4-R4-C backoff/non-stale state must remain HOME-only'
+            );
+          }
+
+          const action = baseHealth();
+          action.queue_total_rows = 4;
+          action.queue_count_by_status = {
+            OPEN:1,FAILED_RETRYABLE:1,CLAIMED:1,FAILED_BLOCKED:1
+          };
+          action.FAILED_RETRYABLE_due_count = 1;
+          action.stale_CLAIMED_count = 1;
+          action.FAILED_BLOCKED_count = 1;
+          action.alert_states.retry_due = true;
+          action.alert_states.stale_claimed = true;
+          action.alert_states.failed_blocked = true;
+          const actionResult =
+            h3MonitoringSemanticAuthoringFromHealth_(action);
+          const actionTypes = actionResult.action_required_events
+            .map(x=>x.event_type).sort();
+          if (
+            actionResult.status !== 'WARNING' ||
+            actionTypes.join(',') !== [
+              'SEMANTIC_FAILED_BLOCKED',
+              'SEMANTIC_OPEN',
+              'SEMANTIC_RETRY_DUE',
+              'SEMANTIC_STALE_CLAIMED'
+            ].sort().join(',')
+          ) {
+            throw new Error('S4-R4-C action-required mapping mismatch');
+          }
+
+          const homeOnly = baseHealth();
+          homeOnly.alert_states.duplicate_idempotency = true;
+          homeOnly.alert_states.missing_authoring_job = true;
+          const homeOnlyResult =
+            h3MonitoringSemanticAuthoringFromHealth_(homeOnly);
+          if (
+            homeOnlyResult.status !== 'WARNING' ||
+            homeOnlyResult.action_required_events.length !== 0
+          ) {
+            throw new Error('S4-R4-C HOME-only finding mapping mismatch');
+          }
+
+          const authority = baseHealth();
+          authority.reconciliation_status = 'ERROR';
+          authority.reconciliation_error = 'fixture authority unreadable';
+          authority.alert_states.reconciliation_error = true;
+          const authorityResult =
+            h3MonitoringSemanticAuthoringFromHealth_(authority);
+          if (
+            authorityResult.status !== 'ERROR' ||
+            authorityResult.action_required_events.length !== 1 ||
+            authorityResult.action_required_events[0].event_type !==
+              'SEMANTIC_AUTHORITY_SCHEMA_UNREADABLE'
+          ) {
+            throw new Error('S4-R4-C authority error mapping mismatch');
+          }
+
+          const wrongPolicy = baseHealth();
+          wrongPolicy.recovery_policy.retry_backoff_minutes = 59;
+          let policyFailed = false;
+          try {
+            h3MonitoringSemanticAuthoringFromHealth_(wrongPolicy);
+          } catch(err) {
+            policyFailed = String(err.message||err).includes(
+              'MONITOR_SEMANTIC_AUTHORING_HEALTH_CONTRACT_INVALID'
+            );
+          }
+          if (!policyFailed) {
+            throw new Error('S4-R4-C recovery-policy drift did not fail closed');
+          }
+
+          const originalHealth = h3FsAuthoringHealthCore_;
+          h3FsAuthoringHealthCore_ = () => {
+            throw new Error('fixture queue schema unreadable');
+          };
+          const sourceError =
+            h3MonitoringSemanticAuthoringSource_({},'3級',Date.now());
+          if (
+            sourceError.status !== 'ERROR' ||
+            sourceError.data.semantic_write_performed !== false ||
+            sourceError.action_required_events[0].event_type !==
+              'SEMANTIC_AUTHORITY_SCHEMA_UNREADABLE'
+          ) {
+            throw new Error('S4-R4-C source failure did not fail closed');
+          }
+
+          h3FsAuthoringHealthCore_ = () => baseHealth();
+          const fakeSs = {
+            getId:()=>H3_WEB_RUNTIME_SPREADSHEET_ID
+          };
+          const snapshot = h3MonitoringObserverSnapshot_(
+            '3級',
+            h3MonitoringObserverSourceSpecs_(fakeSs),
+            Date.parse('2026-09-24T12:00:00Z')
+          );
+          if (
+            snapshot.status !== 'HEALTHY' ||
+            snapshot.write_performed !== false ||
+            snapshot.sources.map(x=>x.source_id).join(',') !==
+              'RUNTIME_AUTHORITY,SEMANTIC_AUTHORING_QUEUE' ||
+            snapshot.sources.find(
+              x=>x.source_id==='SEMANTIC_AUTHORING_QUEUE'
+            ).data.semantic_write_performed !== false
+          ) {
+            throw new Error('S4-R4-C common observer integration mismatch');
+          }
+          h3FsAuthoringHealthCore_ = originalHealth;
+
+          console.log(
+            'S4-R4-C semantic authoring queue observer fixture PASS'
+          );
+          NODE
+
       - name: Deterministic ranking fixture
         run: |
           node <<'NODE'

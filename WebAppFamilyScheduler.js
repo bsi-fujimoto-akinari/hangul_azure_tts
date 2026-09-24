@@ -88,6 +88,12 @@ var H3_MONITOR_OBSERVER_HEADERS_ = [
   'ERROR_COUNT','ACTION_REQUIRED_COUNT','SNAPSHOT_SHA256','SNAPSHOT_JSON'
 ];
 
+var H3_MONITOR_SEMANTIC_AUTHORING_SCHEMA_ =
+  'H3_MONITOR_SEMANTIC_AUTHORING_SOURCE_V1';
+var H3_MONITOR_SEMANTIC_AUTHORING_SOURCE_ID_ =
+  'SEMANTIC_AUTHORING_QUEUE';
+
+
 function h3FsAuthoringRecoveryPolicy_() {
   return {
     policy_id:H3_FS_AUTHORING_RECOVERY_POLICY_ID_,
@@ -4258,6 +4264,13 @@ function h3MonitoringObserverSourceSpecs_(ss) {
         action_required_events:[]
       };
     }
+  },{
+    source_id:H3_MONITOR_SEMANTIC_AUTHORING_SOURCE_ID_,
+    reader:function(){
+      return h3MonitoringSemanticAuthoringSource_(
+        ss,'3級',Date.now()
+      );
+    }
   }];
 }
 
@@ -4287,3 +4300,134 @@ function h3MonitoringObserverCurrent() {
   };
 }
 // S4-R4-B COMMON MONITORING OBSERVER FOUNDATION END
+
+
+// S4-R4-C SEMANTIC AUTHORING QUEUE OBSERVER START
+function h3MonitoringSemanticAuthoringPolicyValid_(health) {
+  if(
+    !health ||
+    String(health.schema||'')!==H3_FS_AUTHORING_OBSERVABILITY_SCHEMA_ ||
+    String(health.mode||'')!=='READ_ONLY_HEALTH' ||
+    health.write_performed!==false
+  ){
+    return false;
+  }
+
+  var actual=health.recovery_policy||{};
+  var expected=h3FsAuthoringRecoveryPolicy_();
+  return (
+    String(actual.policy_id||'')===String(expected.policy_id||'') &&
+    Number(actual.claim_stale_minutes)===
+      Number(expected.claim_stale_minutes) &&
+    Number(actual.retry_backoff_minutes)===
+      Number(expected.retry_backoff_minutes) &&
+    Number(actual.max_attempts)===Number(expected.max_attempts)
+  );
+}
+
+function h3MonitoringSemanticAuthoringEvent_(type,detail) {
+  type=String(type||'SEMANTIC_ACTION_REQUIRED');
+  return {
+    source_id:H3_MONITOR_SEMANTIC_AUTHORING_SOURCE_ID_,
+    event_type:type,
+    event_key:'SEMANTIC_AUTHORING:'+type,
+    detail:String(detail||'')
+  };
+}
+
+function h3MonitoringSemanticAuthoringFromHealth_(health) {
+  if(!h3MonitoringSemanticAuthoringPolicyValid_(health)){
+    throw new Error('MONITOR_SEMANTIC_AUTHORING_HEALTH_CONTRACT_INVALID');
+  }
+
+  var counts=health.queue_count_by_status||{};
+  var openCount=Number(counts.OPEN||0);
+  var retryDue=Number(health.FAILED_RETRYABLE_due_count||0);
+  var staleClaimed=Number(health.stale_CLAIMED_count||0);
+  var failedBlocked=Number(health.FAILED_BLOCKED_count||0);
+  var alerts=health.alert_states||{};
+  var events=[];
+
+  if(openCount>0){
+    events.push(h3MonitoringSemanticAuthoringEvent_(
+      'SEMANTIC_OPEN',
+      'OPEN='+String(openCount)
+    ));
+  }
+  if(retryDue>0){
+    events.push(h3MonitoringSemanticAuthoringEvent_(
+      'SEMANTIC_RETRY_DUE',
+      'FAILED_RETRYABLE_due='+String(retryDue)
+    ));
+  }
+  if(staleClaimed>0){
+    events.push(h3MonitoringSemanticAuthoringEvent_(
+      'SEMANTIC_STALE_CLAIMED',
+      'stale_CLAIMED='+String(staleClaimed)
+    ));
+  }
+  if(failedBlocked>0){
+    events.push(h3MonitoringSemanticAuthoringEvent_(
+      'SEMANTIC_FAILED_BLOCKED',
+      'FAILED_BLOCKED='+String(failedBlocked)
+    ));
+  }
+
+  var authorityFailure=
+    String(health.reconciliation_status||'')==='ERROR' ||
+    alerts.reconciliation_error===true;
+  if(authorityFailure){
+    events.push(h3MonitoringSemanticAuthoringEvent_(
+      'SEMANTIC_AUTHORITY_SCHEMA_UNREADABLE',
+      String(health.reconciliation_error||'RECONCILIATION_ERROR')
+    ));
+  }
+
+  var homeOnlyFinding=(
+    alerts.duplicate_idempotency===true ||
+    alerts.retry_exhausted_not_blocked===true ||
+    alerts.timestamp_finding===true ||
+    alerts.missing_authoring_job===true
+  );
+
+  return {
+    status:authorityFailure
+      ? 'ERROR'
+      : (events.length>0 || homeOnlyFinding ? 'WARNING' : 'OK'),
+    data:{
+      schema:H3_MONITOR_SEMANTIC_AUTHORING_SCHEMA_,
+      monitor_contract:'S4-R4-C',
+      health:health,
+      semantic_write_performed:false
+    },
+    action_required_events:events
+  };
+}
+
+function h3MonitoringSemanticAuthoringSource_(ss,level,nowMs) {
+  try {
+    var health=h3FsAuthoringHealthCore_(
+      ss,String(level||'3級'),Number(nowMs)
+    );
+    return h3MonitoringSemanticAuthoringFromHealth_(health);
+  } catch(err) {
+    var error=h3MonitoringObserverErrorText_(err);
+    return {
+      status:'ERROR',
+      data:{
+        schema:H3_MONITOR_SEMANTIC_AUTHORING_SCHEMA_,
+        monitor_contract:'S4-R4-C',
+        health:null,
+        error:error,
+        semantic_write_performed:false
+      },
+      action_required_events:[
+        h3MonitoringSemanticAuthoringEvent_(
+          'SEMANTIC_AUTHORITY_SCHEMA_UNREADABLE',
+          error
+        )
+      ]
+    };
+  }
+}
+// S4-R4-C SEMANTIC AUTHORING QUEUE OBSERVER END

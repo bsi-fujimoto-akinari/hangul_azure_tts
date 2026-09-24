@@ -869,6 +869,91 @@ function h3FsEvaluationAtClock_(ss,level,clock) {
   return found.length?found[0]:null;
 }
 
+
+function h3FsPersistedEvaluation_(row) {
+  if(!row){
+    throw new Error('FAMILY_SCHEDULER_PERSISTED_EVALUATION_MISSING');
+  }
+  var clock=Number(row.GLOBAL_SET_CLOCK);
+  if(!isFinite(clock)||clock<0){
+    throw new Error('FAMILY_SCHEDULER_PERSISTED_EVALUATION_CLOCK_INVALID');
+  }
+  return {
+    schema:H3_FS_OUTPUT_SCHEMA_,
+    mode:'SHADOW',
+    global_set_clock:clock,
+    next_action:String(row.NEXT_ACTION||''),
+    recommended_family:String(row.RECOMMENDED_FAMILY||''),
+    primary_reason:String(row.PRIMARY_REASON||''),
+    candidate_order:h3FsJson_(
+      row.CANDIDATE_ORDER_JSON||'[]',
+      []
+    ),
+    family_metrics:h3FsJson_(
+      row.FAMILY_METRICS_JSON||'{}',
+      {}
+    ),
+    current_set_id:String(row.CURRENT_SET_ID||''),
+    result_status:String(row.RESULT_STATUS||''),
+    event_id:String(row.EVENT_ID||''),
+    decision_id:String(row.DECISION_ID||''),
+    snapshot_sha256:String(row.SNAPSHOT_SHA256||'')
+  };
+}
+
+function h3FsAssertEvaluationReplay_(persisted,fresh) {
+  if(!persisted||!fresh){
+    throw new Error('FAMILY_SCHEDULER_EVALUATION_REPLAY_INPUT_MISSING');
+  }
+  var clock=Number(fresh.global_set_clock);
+  if(
+    Number(persisted.GLOBAL_SET_CLOCK)!==clock ||
+    String(persisted.NEXT_ACTION||'')!==String(fresh.next_action||'') ||
+    String(persisted.RECOMMENDED_FAMILY||'')!==
+      String(fresh.recommended_family||'') ||
+    String(persisted.PRIMARY_REASON||'')!==
+      String(fresh.primary_reason||'') ||
+    String(persisted.CANDIDATE_ORDER_JSON||'')!==
+      JSON.stringify(fresh.candidate_order) ||
+    String(persisted.CURRENT_SET_ID||'')!==
+      String(fresh.current_set_id||'') ||
+    String(persisted.RESULT_STATUS||'')!==
+      String(fresh.result_status||'')
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_DETERMINISM_REPLAY_MISMATCH:'+clock
+    );
+  }
+  return true;
+}
+
+function h3FsAssertIssueEvaluationBinding_(persisted,evaluation) {
+  var canonical=h3FsPersistedEvaluation_(persisted);
+  if(
+    Number(canonical.global_set_clock)!==
+      Number(evaluation.global_set_clock) ||
+    canonical.next_action!==String(evaluation.next_action||'') ||
+    canonical.recommended_family!==
+      String(evaluation.recommended_family||'') ||
+    canonical.primary_reason!==
+      String(evaluation.primary_reason||'') ||
+    h3FsCanonical_(canonical.candidate_order)!==
+      h3FsCanonical_(evaluation.candidate_order||[]) ||
+    h3FsCanonical_(canonical.family_metrics)!==
+      h3FsCanonical_(evaluation.family_metrics||{}) ||
+    canonical.current_set_id!==
+      String(evaluation.current_set_id||'') ||
+    canonical.result_status!==
+      String(evaluation.result_status||'')
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_ISSUE_EVALUATION_BINDING_MISMATCH:'+
+      canonical.global_set_clock
+    );
+  }
+  return canonical;
+}
+
 function h3FsCommitObservedByKey_(ss,level,commitKey) {
   var a=h3FsLogRows_(ss,level),found=[];
   a.forEach(function(x){
@@ -3022,6 +3107,142 @@ function h3FsIssuePreparedFamily_(ss,family) {
   );
 }
 
+function h3FsIssueIntentAtClock_(ss,level,clock) {
+  var rows=h3FsLogRows_(ss,level),found=[];
+  rows.forEach(function(x){
+    if(
+      String(x.EVENT_KIND||'')==='ISSUE_INTENT' &&
+      String(x.MODE||'')==='LIMITED_LIVE' &&
+      Number(x.GLOBAL_SET_CLOCK)===Number(clock) &&
+      String(x.RESULT_STATUS||'')==='PENDING'
+    )found.push(x);
+  });
+  if(found.length>1){
+    throw new Error(
+      'FAMILY_SCHEDULER_DUPLICATE_ISSUE_INTENT:'+clock
+    );
+  }
+  return found.length?found[0]:null;
+}
+
+function h3FsEnsureIssueIntent_(ss,evaluation,family) {
+  var persisted=h3FsEvaluationAtClock_(
+    ss,
+    '3級',
+    evaluation.global_set_clock
+  );
+  var canonical=h3FsAssertIssueEvaluationBinding_(
+    persisted,
+    evaluation
+  );
+  if(H3_FS_FAMILIES_.indexOf(String(family||''))<0){
+    throw new Error('FAMILY_SCHEDULER_ISSUE_INTENT_FAMILY_INVALID');
+  }
+
+  var existing=h3FsIssueIntentAtClock_(
+    ss,
+    '3級',
+    canonical.global_set_clock
+  );
+  if(existing){
+    if(
+      String(existing.DECISION_ID||'')!==canonical.decision_id ||
+      String(existing.SNAPSHOT_SHA256||'')!==canonical.snapshot_sha256 ||
+      String(existing.ACTUAL_FAMILY||'')!==String(family)
+    ){
+      throw new Error(
+        'FAMILY_SCHEDULER_ISSUE_INTENT_BINDING_MISMATCH:'+
+        canonical.global_set_clock
+      );
+    }
+    return String(existing.EVENT_ID||'');
+  }
+
+  var sh=ss.getSheetByName(H3_FS_LOG_SHEET_);
+  if(!sh){
+    throw new Error('FAMILY_SCHEDULER_LOG_SHEET_MISSING');
+  }
+  var eventId='H3FS-P-'+Utilities.getUuid();
+  sh.appendRow([
+    eventId,
+    canonical.decision_id,
+    'ISSUE_INTENT',
+    new Date().toISOString(),
+    '3級',
+    'LIMITED_LIVE',
+    canonical.global_set_clock,
+    canonical.snapshot_sha256,
+    canonical.next_action,
+    canonical.recommended_family,
+    canonical.primary_reason,
+    JSON.stringify(canonical.candidate_order),
+    JSON.stringify(canonical.family_metrics),
+    '',
+    String(family),
+    'FAMILY_SCHEDULER',
+    false,
+    false,
+    '',
+    '',
+    'PENDING',
+    'Durable scheduler issue intent; ISSUE_APPLIED must be recorded before learner open.'
+  ]);
+  SpreadsheetApp.flush();
+
+  var readback=h3FsIssueIntentAtClock_(
+    ss,
+    '3級',
+    canonical.global_set_clock
+  );
+  if(
+    !readback ||
+    String(readback.EVENT_ID||'')!==eventId ||
+    String(readback.DECISION_ID||'')!==canonical.decision_id ||
+    String(readback.SNAPSHOT_SHA256||'')!==canonical.snapshot_sha256 ||
+    String(readback.ACTUAL_FAMILY||'')!==String(family)
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_ISSUE_INTENT_READBACK_FAIL:'+
+      canonical.global_set_clock
+    );
+  }
+  return eventId;
+}
+
+function h3FsValidateIssueApplied_(
+  row,
+  persisted,
+  issued
+) {
+  var canonical=h3FsPersistedEvaluation_(persisted);
+  if(
+    !row ||
+    String(row.DECISION_ID||'')!==canonical.decision_id ||
+    String(row.SNAPSHOT_SHA256||'')!==canonical.snapshot_sha256 ||
+    Number(row.GLOBAL_SET_CLOCK)!==canonical.global_set_clock ||
+    String(row.NEXT_ACTION||'')!==canonical.next_action ||
+    String(row.RECOMMENDED_FAMILY||'')!==canonical.recommended_family ||
+    String(row.PRIMARY_REASON||'')!==canonical.primary_reason ||
+    h3FsCanonical_(
+      h3FsJson_(row.CANDIDATE_ORDER_JSON||'[]',[])
+    )!==h3FsCanonical_(canonical.candidate_order) ||
+    h3FsCanonical_(
+      h3FsJson_(row.FAMILY_METRICS_JSON||'{}',{})
+    )!==h3FsCanonical_(canonical.family_metrics) ||
+    String(row.CURRENT_SET_ID||'')!==String(issued.set_id||'') ||
+    String(row.ACTUAL_FAMILY||'')!==String(issued.family||'') ||
+    String(row.SELECTION_SOURCE||'')!=='FAMILY_SCHEDULER' ||
+    String(row.SCHEDULER_APPLIED).toUpperCase()!=='TRUE' ||
+    String(row.RESULT_STATUS||'')!=='ISSUED'
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_ISSUE_APPLIED_BINDING_MISMATCH:'+
+      String(issued.set_id||'')
+    );
+  }
+  return row;
+}
+
 function h3FsAppendIssueApplied_(
   ss,
   evaluation,
@@ -3043,23 +3264,29 @@ function h3FsAppendIssueApplied_(
     H3_FS_LOG_SHEET_
   );
 
-  var prior=h3FsEvaluationAtClock_(
+  var persisted=h3FsEvaluationAtClock_(
     ss,
     '3級',
     evaluation.global_set_clock
   );
-  var decisionId=
-    prior
-      ? String(
-          prior.DECISION_ID||''
-        )
-      : '';
-  var snapshotSha=
-    prior
-      ? String(
-          prior.SNAPSHOT_SHA256||''
-        )
-      : '';
+  var canonical=h3FsAssertIssueEvaluationBinding_(
+    persisted,
+    evaluation
+  );
+
+  var existing=h3FsIssueAppliedForSet_(
+    ss,
+    '3級',
+    issued.set_id
+  );
+  if(existing){
+    h3FsValidateIssueApplied_(
+      existing,
+      persisted,
+      issued
+    );
+    return String(existing.EVENT_ID||'');
+  }
 
   var eventId=
     'H3FS-I-'+
@@ -3067,21 +3294,21 @@ function h3FsAppendIssueApplied_(
 
   sh.appendRow([
     eventId,
-    decisionId,
+    canonical.decision_id,
     'ISSUE_APPLIED',
     new Date().toISOString(),
     '3級',
     'LIMITED_LIVE',
-    evaluation.global_set_clock,
-    snapshotSha,
-    evaluation.next_action,
-    evaluation.recommended_family,
-    evaluation.primary_reason,
+    canonical.global_set_clock,
+    canonical.snapshot_sha256,
+    canonical.next_action,
+    canonical.recommended_family,
+    canonical.primary_reason,
     JSON.stringify(
-      evaluation.candidate_order
+      canonical.candidate_order
     ),
     JSON.stringify(
-      evaluation.family_metrics
+      canonical.family_metrics
     ),
     issued.set_id,
     issued.family,
@@ -3094,7 +3321,151 @@ function h3FsAppendIssueApplied_(
     'Provisional LIVE issue; family selected by Family Scheduler.'
   ]);
   SpreadsheetApp.flush();
-  return eventId;
+
+  var readback=h3FsIssueAppliedForSet_(
+    ss,
+    '3級',
+    issued.set_id
+  );
+  if(!readback){
+    throw new Error(
+      'FAMILY_SCHEDULER_ISSUE_APPLIED_READBACK_MISSING:'+
+      issued.set_id
+    );
+  }
+  h3FsValidateIssueApplied_(
+    readback,
+    persisted,
+    issued
+  );
+  return String(readback.EVENT_ID||'');
+}
+
+function h3FsRecordIssueApplied_(
+  ss,
+  evaluation,
+  issued
+) {
+  var firstError=null;
+  try {
+    return {
+      event_id:h3FsAppendIssueApplied_(
+        ss,
+        evaluation,
+        issued
+      ),
+      status:'RECORDED'
+    };
+  } catch(err) {
+    firstError=err;
+  }
+
+  var persisted=h3FsEvaluationAtClock_(
+    ss,
+    '3級',
+    evaluation.global_set_clock
+  );
+  var existing=h3FsIssueAppliedForSet_(
+    ss,
+    '3級',
+    issued.set_id
+  );
+  if(existing){
+    h3FsValidateIssueApplied_(
+      existing,
+      persisted,
+      issued
+    );
+    return {
+      event_id:String(existing.EVENT_ID||''),
+      status:'RECOVERED_READBACK'
+    };
+  }
+
+  try {
+    return {
+      event_id:h3FsAppendIssueApplied_(
+        ss,
+        evaluation,
+        issued
+      ),
+      status:'RECOVERED_RETRY'
+    };
+  } catch(secondError) {
+    existing=h3FsIssueAppliedForSet_(
+      ss,
+      '3級',
+      issued.set_id
+    );
+    if(existing){
+      h3FsValidateIssueApplied_(
+        existing,
+        persisted,
+        issued
+      );
+      return {
+        event_id:String(existing.EVENT_ID||''),
+        status:'RECOVERED_READBACK'
+      };
+    }
+    throw new Error(
+      'FAMILY_SCHEDULER_ISSUE_LOG_RECOVERY_REQUIRED:'+
+      String(issued.set_id||'')+':'+
+      String(
+        secondError&&secondError.message
+          ? secondError.message
+          : firstError
+      )
+    );
+  }
+}
+
+function h3FsRecoverPendingIssueApplied_(
+  ss,
+  persisted,
+  current
+) {
+  if(!persisted||!current||!current.set_id){
+    return null;
+  }
+  var intent=h3FsIssueIntentAtClock_(
+    ss,
+    '3級',
+    Number(persisted.GLOBAL_SET_CLOCK)
+  );
+  if(!intent){
+    return null;
+  }
+
+  var family=h3FsFamily_(
+    current.surface_family
+  );
+  if(
+    H3_FS_FAMILIES_.indexOf(family)<0 ||
+    String(intent.DECISION_ID||'')!==
+      String(persisted.DECISION_ID||'') ||
+    String(intent.SNAPSHOT_SHA256||'')!==
+      String(persisted.SNAPSHOT_SHA256||'') ||
+    String(intent.ACTUAL_FAMILY||'')!==family
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_PENDING_ISSUE_RECOVERY_BINDING_MISMATCH:'+
+      String(current.set_id||'')
+    );
+  }
+
+  var evaluation=h3FsPersistedEvaluation_(
+    persisted
+  );
+  var issued={
+    set_id:String(current.set_id),
+    family:family
+  };
+  return h3FsRecordIssueApplied_(
+    ss,
+    evaluation,
+    issued
+  );
 }
 
 function h3FamilySchedulerShadowPreview() {
@@ -3126,18 +3497,51 @@ function h3FsHomeNextLocked_() {
   lock.waitLock(30000);
   try {
     var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
-    var evaluation=h3FsEvaluate_(ss,'3級');
+    var freshEvaluation=h3FsEvaluate_(ss,'3級');
+    var current=h3ReviewCurrentLearning_(ss);
     var existing=h3FsEvaluationAtClock_(
       ss,
       '3級',
-      evaluation.global_set_clock
+      freshEvaluation.global_set_clock
     );
-    if(!existing){
-      h3FsAppend_(ss,'3級',evaluation);
+    var evaluation=freshEvaluation;
+
+    if(current){
+      if(String(freshEvaluation.next_action||'')!=='RESUME_CURRENT'){
+        throw new Error(
+          'FAMILY_SCHEDULER_HOME_NEXT_CURRENT_EVALUATION_MISMATCH'
+        );
+      }
+    } else {
+      if(existing){
+        h3FsAssertEvaluationReplay_(
+          existing,
+          freshEvaluation
+        );
+      } else {
+        h3FsAppend_(
+          ss,
+          '3級',
+          freshEvaluation
+        );
+        existing=h3FsEvaluationAtClock_(
+          ss,
+          '3級',
+          freshEvaluation.global_set_clock
+        );
+        if(!existing){
+          throw new Error(
+            'FAMILY_SCHEDULER_EVALUATION_READBACK_MISSING:'+
+            freshEvaluation.global_set_clock
+          );
+        }
+      }
+      evaluation=h3FsPersistedEvaluation_(
+        existing
+      );
     }
 
     var resolved=h3FsResolveLive_(evaluation);
-    var current=h3ReviewCurrentLearning_(ss);
     var readiness=h3FsReadiness_(ss);
     var route=h3FsIssueRoute_(
       resolved,
@@ -3181,6 +3585,15 @@ function h3FsHomeNextLocked_() {
     }
 
     if(route.route_kind==='CURRENT_SET'){
+      var recovered=h3FsRecoverPendingIssueApplied_(
+        ss,
+        existing,
+        current
+      );
+      if(recovered){
+        out.issue_event_id=recovered.event_id;
+        out.issue_log_status=recovered.status;
+      }
       out.client_action='OPEN_CURRENT';
       out.render_request=h3FsRenderRequest_(
         route.provider_kind,
@@ -3256,6 +3669,12 @@ function h3FsHomeNextLocked_() {
         }
       }
 
+      h3FsEnsureIssueIntent_(
+        ss,
+        evaluation,
+        route.family
+      );
+
       var issued=h3FsIssuePreparedFamily_(
         ss,
         route.family
@@ -3271,6 +3690,12 @@ function h3FsHomeNextLocked_() {
         );
       }
 
+      var issueLog=h3FsRecordIssueApplied_(
+        ss,
+        evaluation,
+        issued
+      );
+
       out.scheduler_applied=true;
       out.issue_performed=true;
       out.current_set_id=issued.set_id;
@@ -3280,17 +3705,8 @@ function h3FsHomeNextLocked_() {
       out.requires_prepare=false;
       out.client_action='OPEN_ISSUED';
       out.render_request=issued.render_request;
-      try {
-        out.issue_event_id=h3FsAppendIssueApplied_(
-          ss,
-          evaluation,
-          issued
-        );
-        out.issue_log_status='RECORDED';
-      } catch(_logErr) {
-        out.issue_event_id='';
-        out.issue_log_status='RECOVERY_REQUIRED';
-      }
+      out.issue_event_id=issueLog.event_id;
+      out.issue_log_status=issueLog.status;
       return out;
     }
 

@@ -2420,6 +2420,22 @@ jobs:
           const endpointSnapshot=snapshot();
           h3MonitoringObserverSourceSpecs_=()=>[];
           h3MonitoringObserverSnapshot_=()=>endpointSnapshot;
+          h3MonitoringNotificationHomeState_=()=>({
+            schema:'H3_MONITOR_NOTIFICATION_V1',
+            status:'READY',
+            config_status:'READY',
+            active_count:0,
+            sent_current_count:0,
+            pending_count:0,
+            error_count:0,
+            ambiguous_count:0,
+            last_attempt_at:'',
+            last_sent_at:'',
+            last_error:'',
+            max_attempts:3,
+            read_only:true,
+            write_performed:false
+          });
           const endpoint=h3MonitoringHomeReadModel();
           assert(
             endpoint.schema==='H3_MONITOR_HOME_READ_MODEL_V1' &&

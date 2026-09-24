@@ -1126,6 +1126,274 @@ jobs:
           console.log('Semantic authoring observability fixture PASS');
           NODE
 
+      - name: Common monitoring observer foundation static contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          fs = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+          required = [
+              "H3_MONITOR_OBSERVER_V1",
+              "H3_MONITOR_OBSERVER_SNAPSHOT_V1",
+              "monitor_observer_v1",
+              "function h3MonitoringObserverReadSource_(spec)",
+              "function h3MonitoringObserverBuildSnapshot_(level,sourceSpecs,nowMs)",
+              "function h3MonitoringObserverSnapshot_(level,sourceSpecs,nowMs)",
+              "function h3MonitoringObserverWriteSnapshot_(ss,snapshot)",
+              "function h3MonitoringObserverStoredSnapshot_(ss,level)",
+              "function h3MonitoringObserverSourceSpecs_(ss)",
+              "function h3MonitoringObserverPreview()",
+              "function h3MonitoringObserverRun()",
+              "function h3MonitoringObserverCurrent()",
+              "write_performed:false",
+              "write_performed:true",
+          ]
+          for token in required:
+              if token not in fs:
+                  raise SystemExit(
+                      f"missing S4-R4-B observer foundation token: {token}"
+                  )
+
+          start = fs.index(
+              "// S4-R4-B COMMON MONITORING OBSERVER FOUNDATION START"
+          )
+          end = fs.index(
+              "// S4-R4-B COMMON MONITORING OBSERVER FOUNDATION END",
+              start,
+          )
+          observer = fs[start:end]
+          forbidden = [
+              "h3FsAuthoringUpsert_(",
+              "h3FsIssuePreparedFamily_(",
+              "h3FamilySchedulerObserveAfterCommit_(",
+              "h3WrittenSubmit_(",
+              "h3ReadingSubmit_(",
+              "h3TranslationV2Submit_(",
+              "MailApp.",
+              "GmailApp.",
+              "ScriptApp.newTrigger",
+              "PropertiesService.",
+              "'family_scheduler_state_v1'",
+              "'authoring_queue_v1'",
+              "'skill_queue_v1'",
+          ]
+          for token in forbidden:
+              if token in observer:
+                  raise SystemExit(
+                      f"S4-R4-B observer crossed protected boundary: {token}"
+                  )
+
+          if "getSheetByName(H3_MONITOR_OBSERVER_SHEET_)" not in observer:
+              raise SystemExit("S4-R4-B telemetry read is not sheet-scoped")
+          if "insertSheet(H3_MONITOR_OBSERVER_SHEET_)" not in observer:
+              raise SystemExit("S4-R4-B telemetry creation is not sheet-scoped")
+
+          print("Common monitoring observer foundation static contract PASS")
+          PY
+
+      - name: Common monitoring observer foundation fixture
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+
+          global.hash_ = value =>
+            crypto.createHash('sha256').update(String(value)).digest('hex');
+          global.SpreadsheetApp = {flush:()=>{}};
+
+          vm.runInThisContext(
+            fs.readFileSync('WebAppFamilyScheduler.js','utf8')
+          );
+
+          const now = Date.parse('2026-09-24T12:00:00Z');
+          const snapshot = h3MonitoringObserverSnapshot_(
+            '3級',
+            [
+              {
+                source_id:'B',
+                reader:()=>({
+                  status:'OK',
+                  data:{value:2},
+                  action_required_events:[]
+                })
+              },
+              {
+                source_id:'A',
+                reader:()=>({
+                  status:'WARNING',
+                  data:{value:1},
+                  action_required_events:[{
+                    event_type:'ACTION_TEST',
+                    event_key:'A:ACTION_TEST',
+                    detail:'fixture'
+                  }]
+                })
+              }
+            ],
+            now
+          );
+          if (
+            snapshot.schema !== 'H3_MONITOR_OBSERVER_SNAPSHOT_V1' ||
+            snapshot.status !== 'ACTION_REQUIRED' ||
+            snapshot.health.source_count !== 2 ||
+            snapshot.health.warning_count !== 1 ||
+            snapshot.health.error_count !== 0 ||
+            snapshot.health.action_required_count !== 1 ||
+            snapshot.sources.map(x=>x.source_id).join(',') !== 'A,B' ||
+            snapshot.write_performed !== false
+          ) {
+            throw new Error(
+              'S4-R4-B deterministic snapshot fixture mismatch'
+            );
+          }
+
+          const sourceError = h3MonitoringObserverSnapshot_(
+            '3級',
+            [{
+              source_id:'BROKEN',
+              reader:()=>{throw new Error('fixture read failure');}
+            }],
+            now
+          );
+          if (
+            sourceError.status !== 'ERROR' ||
+            sourceError.health.error_count !== 1 ||
+            sourceError.action_required_events[0].event_type !==
+              'SOURCE_READ_ERROR'
+          ) {
+            throw new Error('S4-R4-B source error did not fail closed');
+          }
+
+          const duplicate = h3MonitoringObserverSnapshot_(
+            '3級',
+            [
+              {source_id:'DUP',reader:()=>({status:'OK',data:{}})},
+              {source_id:'DUP',reader:()=>({status:'OK',data:{}})}
+            ],
+            now
+          );
+          if (
+            duplicate.status !== 'ERROR' ||
+            duplicate.sources[0].source_id !== 'OBSERVER_CONFIG' ||
+            duplicate.action_required_events[0].event_type !==
+              'OBSERVER_CONFIG_ERROR'
+          ) {
+            throw new Error('S4-R4-B duplicate source did not fail closed');
+          }
+
+          class FakeDataRange {
+            constructor(sheet){this.sheet=sheet;}
+            getValues(){return this.sheet.values.map(row=>row.slice());}
+          }
+          class FakeRange {
+            constructor(sheet,row,col,numRows,numCols){
+              this.sheet=sheet;
+              this.row=row;
+              this.col=col;
+              this.numRows=numRows;
+              this.numCols=numCols;
+            }
+            setValues(values){
+              for(let r=0;r<this.numRows;r++){
+                const ri=this.row-1+r;
+                while(this.sheet.values.length<=ri)this.sheet.values.push([]);
+                const row=this.sheet.values[ri];
+                for(let col=0;col<this.numCols;col++){
+                  row[this.col-1+col]=values[r][col];
+                }
+              }
+              return this;
+            }
+          }
+          class FakeSheet {
+            constructor(name){
+              this.name=name;
+              this.values=[];
+            }
+            getDataRange(){return new FakeDataRange(this);}
+            getRange(row,col,numRows,numCols){
+              return new FakeRange(this,row,col,numRows,numCols);
+            }
+            appendRow(row){this.values.push(row.slice());}
+          }
+          class FakeSpreadsheet {
+            constructor(){
+              this.sheet=null;
+              this.requested=[];
+            }
+            getSheetByName(name){
+              this.requested.push('get:'+name);
+              if(name!==H3_MONITOR_OBSERVER_SHEET_){
+                throw new Error('protected sheet accessed:'+name);
+              }
+              return this.sheet;
+            }
+            insertSheet(name){
+              this.requested.push('insert:'+name);
+              if(name!==H3_MONITOR_OBSERVER_SHEET_){
+                throw new Error('protected sheet created:'+name);
+              }
+              if(this.sheet)throw new Error('duplicate insert');
+              this.sheet=new FakeSheet(name);
+              return this.sheet;
+            }
+          }
+
+          const fake = new FakeSpreadsheet();
+          const write1=h3MonitoringObserverWriteSnapshot_(fake,snapshot);
+          if (
+            write1.schema !== 'H3_MONITOR_OBSERVER_V1' ||
+            write1.status !== 'RECORDED' ||
+            write1.write_performed !== true ||
+            fake.sheet.values.length !== 2
+          ) {
+            throw new Error('S4-R4-B telemetry write fixture mismatch');
+          }
+
+          const stored=h3MonitoringObserverStoredSnapshot_(fake,'3級');
+          if (
+            !stored ||
+            stored.snapshot_sha256 !== snapshot.snapshot_sha256 ||
+            stored.status !== snapshot.status
+          ) {
+            throw new Error('S4-R4-B stored snapshot readback mismatch');
+          }
+
+          const later=h3MonitoringObserverSnapshot_(
+            '3級',
+            [{source_id:'A',reader:()=>({
+              status:'OK',data:{value:3},action_required_events:[]
+            })}],
+            now+60000
+          );
+          h3MonitoringObserverWriteSnapshot_(fake,later);
+          if(fake.sheet.values.length!==2){
+            throw new Error(
+              'S4-R4-B telemetry must update one row per level'
+            );
+          }
+          const storedLater=h3MonitoringObserverStoredSnapshot_(fake,'3級');
+          if (
+            storedLater.snapshot_sha256 !== later.snapshot_sha256 ||
+            storedLater.status !== 'HEALTHY'
+          ) {
+            throw new Error('S4-R4-B telemetry update readback mismatch');
+          }
+
+          if (
+            fake.requested.some(x=>
+              !x.endsWith(H3_MONITOR_OBSERVER_SHEET_)
+            )
+          ) {
+            throw new Error(
+              'S4-R4-B fixture accessed non-telemetry sheet'
+            );
+          }
+
+          console.log('Common monitoring observer foundation fixture PASS');
+          NODE
+
       - name: Deterministic ranking fixture
         run: |
           node <<'NODE'

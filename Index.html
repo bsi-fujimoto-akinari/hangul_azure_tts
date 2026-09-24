@@ -885,6 +885,71 @@
             observer
           );
 
+          var email =
+            model.email_notifications || {};
+          var emailCard =
+            monitorCard_(
+              'Email',
+              email.status || email.config_status || '—'
+            );
+          emailCard.appendChild(
+            monitorMetric_(
+              'Config',
+              email.config_status || '—'
+            )
+          );
+          emailCard.appendChild(
+            monitorMetric_(
+              'Active / Sent',
+              String(
+                Number(
+                  email.active_count || 0
+                )
+              ) +
+              ' / ' +
+              String(
+                Number(
+                  email.sent_current_count || 0
+                )
+              )
+            )
+          );
+          emailCard.appendChild(
+            monitorMetric_(
+              'Pending / Error',
+              String(
+                Number(
+                  email.pending_count || 0
+                )
+              ) +
+              ' / ' +
+              String(
+                Number(
+                  email.error_count || 0
+                )
+              )
+            )
+          );
+          emailCard.appendChild(
+            monitorMetric_(
+              'Ambiguous',
+              Number(
+                email.ambiguous_count || 0
+              )
+            )
+          );
+          emailCard.appendChild(
+            monitorMetric_(
+              'Last sent',
+              monitorTime_(
+                email.last_sent_at
+              )
+            )
+          );
+          grid.appendChild(
+            emailCard
+          );
+
           var semantic =
             model.semantic_authoring || {};
           var semanticCard =

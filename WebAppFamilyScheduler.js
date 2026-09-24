@@ -5314,6 +5314,286 @@ function h3MonitoringObserverEmailRun() {
 // S4-R4-F DEDUPLICATED ACTION-REQUIRED EMAIL END
 
 
+// S4-R4-H PRODUCTION MONITOR CUTOVER START
+var H3_MONITOR_PRODUCTION_TRIGGER_SCHEMA_ =
+  'H3_MONITOR_PRODUCTION_TRIGGER_V1';
+var H3_MONITOR_PRODUCTION_PREFLIGHT_SCHEMA_ =
+  'H3_MONITOR_PRODUCTION_PREFLIGHT_V1';
+var H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_ =
+  'S4-R4-H';
+var H3_MONITOR_PRODUCTION_TRIGGER_HANDLER_ =
+  'h3MonitoringObserverEmailRun';
+var H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_ = 1;
+var H3_MONITOR_PRODUCTION_TRIGGER_ID_KEY_ =
+  'H3_MONITOR_PRODUCTION_TRIGGER_ID';
+var H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_KEY_ =
+  'H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS';
+var H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_KEY_ =
+  'H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT';
+var H3_MONITOR_PRODUCTION_REQUIRED_SCOPES_ = [
+  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/script.external_request',
+  'https://www.googleapis.com/auth/spreadsheets',
+  'https://www.googleapis.com/auth/script.send_mail',
+  'https://www.googleapis.com/auth/script.scriptapp'
+];
+
+function h3MonitoringProductionRequireScopes_() {
+  ScriptApp.requireScopes(
+    ScriptApp.AuthMode.FULL,
+    H3_MONITOR_PRODUCTION_REQUIRED_SCOPES_
+  );
+}
+
+function h3MonitoringProductionTriggerMatches_() {
+  return ScriptApp.getProjectTriggers().filter(function(trigger){
+    return String(trigger.getHandlerFunction()||'')===
+      H3_MONITOR_PRODUCTION_TRIGGER_HANDLER_;
+  });
+}
+
+function h3MonitoringProductionTriggerMetadata_() {
+  var props=PropertiesService.getScriptProperties();
+  return {
+    trigger_id:String(
+      props.getProperty(H3_MONITOR_PRODUCTION_TRIGGER_ID_KEY_)||''
+    ),
+    cadence_hours:String(
+      props.getProperty(H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_KEY_)||''
+    ),
+    contract:String(
+      props.getProperty(H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_KEY_)||''
+    )
+  };
+}
+
+function h3MonitoringProductionTriggerClearMetadata_() {
+  var props=PropertiesService.getScriptProperties();
+  props.deleteProperty(H3_MONITOR_PRODUCTION_TRIGGER_ID_KEY_);
+  props.deleteProperty(H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_KEY_);
+  props.deleteProperty(H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_KEY_);
+}
+
+function h3MonitoringProductionTriggerStatus_() {
+  var all=ScriptApp.getProjectTriggers();
+  var matches=all.filter(function(trigger){
+    return String(trigger.getHandlerFunction()||'')===
+      H3_MONITOR_PRODUCTION_TRIGGER_HANDLER_;
+  });
+  var meta=h3MonitoringProductionTriggerMetadata_();
+  var one=matches.length===1 ? matches[0] : null;
+  var uniqueId=one ? String(one.getUniqueId()||'') : '';
+  var eventType=one ? String(one.getEventType()||'') : '';
+  var triggerSource=one ? String(one.getTriggerSource()||'') : '';
+  var clockOk=!!one &&
+    one.getEventType()===ScriptApp.EventType.CLOCK &&
+    one.getTriggerSource()===ScriptApp.TriggerSource.CLOCK;
+  var metadataPresent=!!(
+    meta.trigger_id || meta.cadence_hours || meta.contract
+  );
+  var metadataMatch=!!one &&
+    meta.trigger_id===uniqueId &&
+    meta.cadence_hours===
+      String(H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_) &&
+    meta.contract===H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_;
+  var status;
+  if(matches.length===0){
+    status=metadataPresent ? 'ERROR' : 'ABSENT';
+  } else if(matches.length===1 && clockOk && metadataMatch){
+    status='READY';
+  } else {
+    status='ERROR';
+  }
+  return {
+    schema:H3_MONITOR_PRODUCTION_TRIGGER_SCHEMA_,
+    status:status,
+    trigger_handler:H3_MONITOR_PRODUCTION_TRIGGER_HANDLER_,
+    configured_cadence_hours:
+      H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_,
+    project_trigger_count:all.length,
+    matching_trigger_count:matches.length,
+    event_type:eventType,
+    trigger_source:triggerSource,
+    metadata_present:metadataPresent,
+    metadata_match:metadataMatch,
+    duplicate_trigger:matches.length>1,
+    write_performed:false
+  };
+}
+
+function h3MonitoringProductionTriggerStatus() {
+  h3MonitoringProductionRequireScopes_();
+  return h3MonitoringProductionTriggerStatus_();
+}
+
+function h3MonitoringProductionPreflight_() {
+  var config=h3MonitoringEmailConfigStatus_();
+  var snapshot=h3MonitoringObserverPreview();
+  var trigger=h3MonitoringProductionTriggerStatus_();
+  var observerReady=
+    snapshot &&
+    String(snapshot.schema||'')===
+      H3_MONITOR_OBSERVER_SNAPSHOT_SCHEMA_ &&
+    snapshot.write_performed===false &&
+    String(snapshot.status||'')==='HEALTHY' &&
+    Number(snapshot.health&&snapshot.health.error_count||0)===0 &&
+    Number(
+      snapshot.health&&snapshot.health.action_required_count||0
+    )===0;
+  var triggerReady=
+    trigger.status==='ABSENT' || trigger.status==='READY';
+  var ready=
+    config.status==='READY' &&
+    config.valid===true &&
+    Number(config.recipient_count||0)===1 &&
+    config.write_performed===false &&
+    observerReady &&
+    triggerReady;
+  return {
+    schema:H3_MONITOR_PRODUCTION_PREFLIGHT_SCHEMA_,
+    status:ready ? 'READY' : 'ERROR',
+    email_config_status:String(config.status||''),
+    observer_status:String(snapshot&&snapshot.status||''),
+    observer_error_count:Number(
+      snapshot&&snapshot.health&&snapshot.health.error_count||0
+    ),
+    action_required_count:Number(
+      snapshot&&snapshot.health&&
+      snapshot.health.action_required_count||0
+    ),
+    trigger_status:String(trigger.status||''),
+    matching_trigger_count:Number(
+      trigger.matching_trigger_count||0
+    ),
+    write_performed:false
+  };
+}
+
+function h3MonitoringProductionPreflight() {
+  h3MonitoringProductionRequireScopes_();
+  return h3MonitoringProductionPreflight_();
+}
+
+function h3MonitoringProductionTriggerEnsure() {
+  h3MonitoringProductionRequireScopes_();
+  var preflight=h3MonitoringProductionPreflight_();
+  if(preflight.status!=='READY'){
+    throw new Error('MONITOR_PRODUCTION_PREFLIGHT_NOT_READY');
+  }
+
+  var lock=LockService.getScriptLock();
+  if(!lock.tryLock(30000)){
+    throw new Error('MONITOR_PRODUCTION_TRIGGER_LOCK_BUSY');
+  }
+  try {
+    var before=h3MonitoringProductionTriggerStatus_();
+    if(before.status==='READY'){
+      return {
+        schema:H3_MONITOR_PRODUCTION_TRIGGER_SCHEMA_,
+        status:'READY',
+        created:false,
+        trigger:before,
+        write_performed:false
+      };
+    }
+    if(before.status!=='ABSENT'){
+      throw new Error('MONITOR_PRODUCTION_TRIGGER_NOT_ABSENT');
+    }
+
+    var created=ScriptApp
+      .newTrigger(H3_MONITOR_PRODUCTION_TRIGGER_HANDLER_)
+      .timeBased()
+      .everyHours(H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_)
+      .create();
+    var props=PropertiesService.getScriptProperties();
+    props.setProperty(
+      H3_MONITOR_PRODUCTION_TRIGGER_ID_KEY_,
+      String(created.getUniqueId()||'')
+    );
+    props.setProperty(
+      H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_KEY_,
+      String(H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_)
+    );
+    props.setProperty(
+      H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_KEY_,
+      H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_
+    );
+
+    var after=h3MonitoringProductionTriggerStatus_();
+    if(
+      after.status!=='READY' ||
+      Number(after.matching_trigger_count)!==1
+    ){
+      try { ScriptApp.deleteTrigger(created); } catch(ignore) {}
+      h3MonitoringProductionTriggerClearMetadata_();
+      throw new Error(
+        'MONITOR_PRODUCTION_TRIGGER_READBACK_MISMATCH'
+      );
+    }
+    return {
+      schema:H3_MONITOR_PRODUCTION_TRIGGER_SCHEMA_,
+      status:'READY',
+      created:true,
+      trigger:after,
+      write_performed:true
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function h3MonitoringProductionTriggerRemove() {
+  h3MonitoringProductionRequireScopes_();
+  var lock=LockService.getScriptLock();
+  if(!lock.tryLock(30000)){
+    throw new Error('MONITOR_PRODUCTION_TRIGGER_LOCK_BUSY');
+  }
+  try {
+    var status=h3MonitoringProductionTriggerStatus_();
+    if(status.status==='ABSENT'){
+      return {
+        schema:H3_MONITOR_PRODUCTION_TRIGGER_SCHEMA_,
+        status:'ABSENT',
+        removed:false,
+        write_performed:false
+      };
+    }
+    if(status.status!=='READY'){
+      throw new Error(
+        'MONITOR_PRODUCTION_TRIGGER_REMOVE_FAIL_CLOSED'
+      );
+    }
+    var meta=h3MonitoringProductionTriggerMetadata_();
+    var matches=h3MonitoringProductionTriggerMatches_();
+    if(
+      matches.length!==1 ||
+      String(matches[0].getUniqueId()||'')!==meta.trigger_id
+    ){
+      throw new Error(
+        'MONITOR_PRODUCTION_TRIGGER_REMOVE_IDENTITY_MISMATCH'
+      );
+    }
+    ScriptApp.deleteTrigger(matches[0]);
+    h3MonitoringProductionTriggerClearMetadata_();
+    var after=h3MonitoringProductionTriggerStatus_();
+    if(after.status!=='ABSENT'){
+      throw new Error(
+        'MONITOR_PRODUCTION_TRIGGER_REMOVE_READBACK_MISMATCH'
+      );
+    }
+    return {
+      schema:H3_MONITOR_PRODUCTION_TRIGGER_SCHEMA_,
+      status:'ABSENT',
+      removed:true,
+      write_performed:true
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+// S4-R4-H PRODUCTION MONITOR CUTOVER END
+
+
 // S4-R4-E HOME MONITOR READ MODEL START
 function h3MonitoringHomeSource_(snapshot,sourceId) {
   var matches=(snapshot.sources||[]).filter(function(source){

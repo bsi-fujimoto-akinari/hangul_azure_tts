@@ -183,6 +183,19 @@ New 5L sets use K1-K5 individual audio only. Do not create new combined 5L audio
 
 SCRIPT_TXT is not a preissue prerequisite. When needed for Review/audit convenience, materialize it explicitly after the five audio rows are done with `persistListeningSetScript(SET_ID)`; failure to create this noncanonical TXT must not invalidate an otherwise-valid learner issue.
 
+
+### Plain-text Drive raw replacement connector contract
+
+When replacing an existing raw Drive text file through the connected Drive API, preserve the existing Drive file ID and treat the transfer handle as an adapter contract, not as ordinary file content.
+
+- An export/materialization call may return `file_uri` as a structured object containing fields such as `file_id`, `download_url`, MIME type, and file name.
+- The Drive `update_file.file_uri` input is a scalar connector file reference. Do not pass the whole `file_uri` object and do not substitute its `download_url`.
+- In the verified current connector runtime, if `file_uri.file_id` is returned as `sediment://file_...`, normalize it to the bare `file_...` token before calling `update_file`.
+- A type/schema mismatch at this boundary is adapter-shape evidence, not evidence of missing Drive permission. Do not change permissions or infer access failure from that mismatch. Re-read the live connector schema, retry only with the validated scalar reference, or fail closed.
+- After replacement, perform a fresh raw readback of the target file and verify the expected content/hash. Any format drift or unresolved adapter mismatch is fail-closed.
+
+This rule applies to canonical/current plain-text maintenance and complements the existing raw-write/readback/hash policy; it does not relax scope, authorization, or stable-file-ID requirements.
+
 ## 9. Current production and Review invariants
 
 - Production commit gate is `NORMAL_LIVE_ACTIVE`; no fixed one-set arm remains.

@@ -1115,6 +1115,13 @@ jobs:
 
           h3FsKv_=()=>({...state});
           h3FsRequire_=()=>{};
+          h3WrittenParseJson_=(value,code)=>{
+            try {
+              return JSON.parse(String(value||''));
+            } catch (_err) {
+              throw new Error(code);
+            }
+          };
           h3FsTable_=sh=>{
             if(sh.name==='written_answer_sync_v1') {
               const r=new Array(syncHeaders.length).fill('');

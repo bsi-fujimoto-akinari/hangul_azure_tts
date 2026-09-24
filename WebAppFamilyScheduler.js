@@ -48,6 +48,21 @@ var H3_FS_LOG_HEADERS_ = [
   'RESULT_STATUS','NOTES'
 ];
 
+var H3_FS_AUTHORING_QUEUE_SHEET_ = 'authoring_queue_v1';
+var H3_FS_AUTHORING_QUEUE_SCHEMA_ =
+  'H3_FAMILY_SCHEDULER_AUTHORING_QUEUE_V1';
+var H3_FS_AUTHORING_CONTRACT_ID_ =
+  'H3-SEMANTIC-AUTHORING-QUEUE-20260924-V1';
+var H3_FS_AUTHORING_REQUEST_SCHEMA_ =
+  'H3_FAMILY_SCHEDULER_AUTHORING_JOB_REQUEST_V1';
+var H3_FS_AUTHORING_QUEUE_HEADERS_ = [
+  'JOB_ID','CREATED_AT','UPDATED_AT','LEVEL','FAMILY','TARGET_ID',
+  'TARGET_KIND','AUTHORING_TARGET','STATUS','PRIORITY','SNAPSHOT_SHA256',
+  'IDEMPOTENCY_KEY','SOURCE_CONSTRAINT_JSON','SCHEDULER_CONTEXT_JSON',
+  'AUTHORING_REQUEST_JSON','RESULT_REF','RESULT_SHA256','ERROR',
+  'ATTEMPT_COUNT','CLAIMED_AT','COMPLETED_AT'
+];
+
 function h3FsTable_(sheet) {
   if (!sheet) return {headers:[],map:{},rows:[]};
   var v=sheet.getDataRange().getValues();
@@ -1163,6 +1178,260 @@ function h3FsIssueAppliedForSet_(ss,level,setId) {
   return found.length?found[0]:null;
 }
 
+function h3FsAuthoringQueue_(ss) {
+  var sh=ss.getSheetByName(H3_FS_AUTHORING_QUEUE_SHEET_);
+  if(!sh)throw new Error('FAMILY_SCHEDULER_AUTHORING_QUEUE_MISSING');
+  var t=h3FsTable_(sh);
+  h3FsRequire_(
+    t,
+    H3_FS_AUTHORING_QUEUE_HEADERS_,
+    H3_FS_AUTHORING_QUEUE_SHEET_
+  );
+  return {sheet:sh,table:t};
+}
+
+function h3FsAuthoringTargetIdentity_(ss,family,prep) {
+  var target=String(prep.authoring_target||'');
+  if(family==='W'){
+    return {
+      target_id:String(prep.stage_id||target),
+      target_kind:'WRITTEN_STAGE'
+    };
+  }
+  if(family==='L'){
+    var ls=h3FsKv_(ss,'listening_state_v1');
+    var next=Number(ls.NEXT_LISTENING_SET_NO||0);
+    if(!Number.isInteger(next)||next<1){
+      throw new Error('FAMILY_SCHEDULER_AUTHORING_LISTENING_SET_NO_INVALID');
+    }
+    return {
+      target_id:
+        '5L:'+String(next)+
+        (prep.k1_ready_id?':'+String(prep.k1_ready_id):''),
+      target_kind:
+        target==='K1_READY'
+          ? 'LISTENING_K1_READY'
+          : 'LISTENING_K2_K5_PRESTAGE'
+    };
+  }
+  if(family==='R'){
+    return {
+      target_id:String(prep.skill_id||target),
+      target_kind:'READING_SOURCE'
+    };
+  }
+  if(family==='T'){
+    return {
+      target_id:[
+        String(prep.skill_id||target),
+        String(prep.translation_direction||'')
+      ].join(':'),
+      target_kind:'TRANSLATION_SURFACE'
+    };
+  }
+  throw new Error('FAMILY_SCHEDULER_AUTHORING_FAMILY_INVALID:'+family);
+}
+
+function h3FsAuthoringUpsert_(ss,level,evaluation,prep) {
+  if(!prep||String(prep.status||'')!=='AUTHORING_REQUIRED'){
+    return {status:'NO_JOB',reason:'NOT_AUTHORING_REQUIRED'};
+  }
+
+  var family=String(prep.family||evaluation.recommended_family||'');
+  if(H3_FS_FAMILIES_.indexOf(family)<0){
+    throw new Error('FAMILY_SCHEDULER_AUTHORING_FAMILY_INVALID:'+family);
+  }
+
+  var q=h3FsAuthoringQueue_(ss);
+  var identity=h3FsAuthoringTargetIdentity_(ss,family,prep);
+  var metric=
+    evaluation.family_metrics &&
+    evaluation.family_metrics[family]
+      ? evaluation.family_metrics[family]
+      : {};
+  var schedulerContext={
+    schema:H3_FS_AUTHORING_QUEUE_SCHEMA_,
+    global_set_clock:Number(evaluation.global_set_clock||0),
+    recommended_family:String(evaluation.recommended_family||''),
+    primary_reason:String(evaluation.primary_reason||''),
+    readiness_state:String(metric.readiness_state||''),
+    family_metric:metric
+  };
+  var sourceConstraint={
+    contract_id:H3_FS_AUTHORING_CONTRACT_ID_,
+    semantic_authoring_only:true,
+    use_current_authority:true,
+    no_official_provenance_invention:true,
+    no_issue:true,
+    no_learner_history_score_pointer_counter_write:true
+  };
+  var authoringRequest={
+    schema:H3_FS_AUTHORING_REQUEST_SCHEMA_,
+    contract_id:H3_FS_AUTHORING_CONTRACT_ID_,
+    level:String(level),
+    family:family,
+    target_id:identity.target_id,
+    target_kind:identity.target_kind,
+    authoring_target:String(prep.authoring_target||''),
+    preparation_request:prep.authoring_request||null,
+    preparation_context:prep,
+    boundary:{
+      semantic_authoring_required:true,
+      deterministic_preparation_owned_by_apps_script:true,
+      issue_performed:false,
+      learner_state_mutated:false
+    }
+  };
+  var snapshot=h3FsSha_({
+    contract_id:H3_FS_AUTHORING_CONTRACT_ID_,
+    level:String(level),
+    family:family,
+    target_id:identity.target_id,
+    target_kind:identity.target_kind,
+    authoring_target:String(prep.authoring_target||''),
+    scheduler_context:schedulerContext,
+    source_constraint:sourceConstraint,
+    authoring_request:authoringRequest
+  });
+  var idempotencyKey='H3AQK-'+h3FsSha_({
+    contract_id:H3_FS_AUTHORING_CONTRACT_ID_,
+    family:family,
+    target_id:identity.target_id,
+    target_kind:identity.target_kind,
+    snapshot_sha256:snapshot
+  });
+  var existing=null;
+  q.table.rows.forEach(function(r,i){
+    if(String(r[q.table.map.IDEMPOTENCY_KEY]||'')!==idempotencyKey)return;
+    if(existing){
+      throw new Error(
+        'FAMILY_SCHEDULER_AUTHORING_DUPLICATE_IDEMPOTENCY_KEY:'+
+        idempotencyKey
+      );
+    }
+    existing={
+      row_number:i+2,
+      job_id:String(r[q.table.map.JOB_ID]||''),
+      status:String(r[q.table.map.STATUS]||'')
+    };
+  });
+  if(existing){
+    return {
+      status:'EXISTING',
+      job_id:existing.job_id,
+      job_status:existing.status,
+      idempotency_key:idempotencyKey,
+      snapshot_sha256:snapshot
+    };
+  }
+
+  var now=new Date().toISOString();
+  var jobId='H3AQ-'+idempotencyKey.slice(-20);
+  q.sheet.appendRow([
+    jobId,
+    now,
+    now,
+    String(level),
+    family,
+    identity.target_id,
+    identity.target_kind,
+    String(prep.authoring_target||''),
+    'OPEN',
+    100,
+    snapshot,
+    idempotencyKey,
+    h3FsCanonical_(sourceConstraint),
+    h3FsCanonical_(schedulerContext),
+    h3FsCanonical_(authoringRequest),
+    '',
+    '',
+    '',
+    0,
+    '',
+    ''
+  ]);
+  SpreadsheetApp.flush();
+
+  var verify=h3FsAuthoringQueue_(ss),matches=[];
+  verify.table.rows.forEach(function(r,i){
+    if(String(r[verify.table.map.IDEMPOTENCY_KEY]||'')===idempotencyKey){
+      matches.push({row:r,row_number:i+2});
+    }
+  });
+  if(matches.length!==1){
+    throw new Error(
+      'FAMILY_SCHEDULER_AUTHORING_QUEUE_READBACK_COUNT:'+matches.length
+    );
+  }
+  var vr=matches[0].row,vm=verify.table.map;
+  if(
+    String(vr[vm.JOB_ID]||'')!==jobId ||
+    String(vr[vm.STATUS]||'')!=='OPEN' ||
+    String(vr[vm.SNAPSHOT_SHA256]||'')!==snapshot
+  ){
+    throw new Error('FAMILY_SCHEDULER_AUTHORING_QUEUE_READBACK_FAIL');
+  }
+
+  return {
+    status:'OPEN_CREATED',
+    job_id:jobId,
+    job_status:'OPEN',
+    idempotency_key:idempotencyKey,
+    snapshot_sha256:snapshot,
+    target_id:identity.target_id,
+    target_kind:identity.target_kind
+  };
+}
+
+function h3FsSemanticAuthoringBridge_(ss,level,evaluation) {
+  if(
+    !evaluation ||
+    H3_FS_FAMILIES_.indexOf(
+      String(evaluation.recommended_family||'')
+    )<0
+  ){
+    return {status:'NO_JOB',reason:'NO_RECOMMENDED_FAMILY'};
+  }
+
+  var family=String(evaluation.recommended_family);
+  var readiness=h3FsReadiness_(ss);
+  var current=readiness[family];
+  if(!current||current.eligible!==true){
+    return {status:'NO_JOB',reason:'FAMILY_NOT_ELIGIBLE',family:family};
+  }
+  if(String(current.state||'')==='READY'){
+    return {status:'NO_JOB',reason:'READY',family:family};
+  }
+  if(String(current.state||'')!=='PREPARE_REQUIRED'){
+    return {
+      status:'NO_JOB',
+      reason:'READINESS_'+String(current.state||'UNKNOWN'),
+      family:family
+    };
+  }
+
+  var prep;
+  if(family==='L'){
+    prep=h3FsBuildListeningPrepare_(ss);
+  } else if(family==='W'){
+    prep=h3FsPrepareWritten_(ss);
+  } else if(family==='R'){
+    prep=h3FsPrepareReading_(ss);
+  } else {
+    prep=h3FsPrepareTranslation_(ss);
+  }
+
+  if(String(prep.status||'')!=='AUTHORING_REQUIRED'){
+    return {
+      status:'NO_JOB',
+      reason:'DETERMINISTIC_PREPARATION_AVAILABLE',
+      family:family,
+      preparation_status:String(prep.status||'')
+    };
+  }
+  return h3FsAuthoringUpsert_(ss,level,evaluation,prep);
+}
+
 function h3FsObserveCommitted_(ss,level,family,setId,selectionSource) {
   if(H3_FS_FAMILIES_.indexOf(family)<0){
     throw new Error('FAMILY_SCHEDULER_FAMILY_INVALID:'+family);
@@ -1228,9 +1497,10 @@ function h3FsObserveCommitted_(ss,level,family,setId,selectionSource) {
   }
 
   var next=h3FsEvaluationAtClock_(ss,level,commit.global_clock);
-  var nextResult;
+  var nextResult,nextEvaluation;
   if(!next){
     var e=h3FsEvaluate_(ss,level);
+    nextEvaluation=e;
     if(Number(e.global_set_clock)!==Number(commit.global_clock)){
       throw new Error('FAMILY_SCHEDULER_POSTCOMMIT_EVAL_CLOCK_MISMATCH');
     }
@@ -1243,6 +1513,7 @@ function h3FsObserveCommitted_(ss,level,family,setId,selectionSource) {
     };
   } else {
     var replay=h3FsEvaluate_(ss,level);
+    nextEvaluation=replay;
     if(
       String(next.RECOMMENDED_FAMILY||'')!==String(replay.recommended_family||'') ||
       String(next.PRIMARY_REASON||'')!==String(replay.primary_reason||'') ||
@@ -1258,6 +1529,9 @@ function h3FsObserveCommitted_(ss,level,family,setId,selectionSource) {
     };
   }
 
+  var authoringBridge=
+    h3FsSemanticAuthoringBridge_(ss,level,nextEvaluation);
+
   return {
     schema:'H3_FAMILY_SCHEDULER_F4_OBSERVATION_V1',
     status:'PASS',
@@ -1266,7 +1540,8 @@ function h3FsObserveCommitted_(ss,level,family,setId,selectionSource) {
     sync_status:sync.status,
     observed_commit:observedResult,
     global_set_clock:commit.global_clock,
-    next_evaluation:nextResult
+    next_evaluation:nextResult,
+    authoring_bridge:authoringBridge
   };
 }
 

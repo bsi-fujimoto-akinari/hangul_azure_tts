@@ -231,6 +231,19 @@ jobs:
               'H3_MONITOR_PRODUCTION_PREFLIGHT_V1'
           )
           if out is None:
+              root=parse_json(sys.argv[1])
+              safe={
+                  'type':type(root).__name__,
+                  'keys':sorted(root.keys()) if isinstance(root,dict) else [],
+              }
+              if isinstance(root,dict):
+                  err=root.get('error')
+                  if isinstance(err,dict):
+                      safe['error_status']=str(err.get('status',''))
+                      safe['error_message']=str(err.get('message',''))[:500]
+                  elif err is not None:
+                      safe['error']=str(err)[:500]
+              print('S4-R4-H preflight diagnostic: '+json.dumps(safe))
               raise SystemExit('S4-R4-H preflight schema missing')
           expected={
               'status':'READY',

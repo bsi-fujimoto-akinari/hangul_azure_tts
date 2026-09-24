@@ -430,7 +430,7 @@ The SET_ID numeric suffix is a date-local Reading allocation serial and is never
 
 The P8 group 245 stage is permitted to reach `PREISSUE_READY` only with exact stored locked-bundle JSON plus source-binding and locked-bundle hash parity. `PREISSUE_READY` is not `ISSUED` and must not appear as current learning.
 
-`WebAppReadingProduction.js` owns the staged Reading render/transaction path. Render requires `ISSUED`; commit remains disabled until Review/HOME integration and explicit issue gating are complete. No 5W Answer Sync, 5W source ratio, or 5W scheduler state is reused.
+`WebAppReadingProduction.js` owns the Reading render/transaction path. Render requires `ISSUED`; the controlled Reading commit gate is enabled. After an authoritative COMMITTED Reading transaction, `WebAppReadingSchedulerProjection.js` idempotently projects the exact Reading log into `rt_evidence_v1`, refreshes the affected `rt_skill_queue_v1` identities, and advances `rt_lane_state_v1.READING_CLOCK` only for the new family clock. A post-commit projection failure is recorded as `POSTCOMMIT_PROJECTION:*` and blocks recurring Reading preparation until a same-transaction recovery succeeds. No 5W Answer Sync or 5W source ratio is reused; the shared 5W-derived R/T opportunity anchor is consumed only by the committed sidecar projection.
 
 
 ## S3-PREP-FINAL

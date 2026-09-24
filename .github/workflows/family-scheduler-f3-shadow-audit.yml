@@ -2154,6 +2154,11 @@ jobs:
               "RS13",
               "RS14",
               "Events",
+              "home.firstElementChild",
+              "'aria-expanded',",
+              "'false'",
+              "monitor-home-details",
+              "monitor-home-chevron",
           ]
           for token in required_index:
               if token not in index:
@@ -2176,6 +2181,9 @@ jobs:
               ".monitor-home-grid",
               ".monitor-home-source",
               ".monitor-home-event-list",
+              ".monitor-home-details[hidden]",
+              "body.mobile-device .monitor-home-grid",
+              ".monitor-home-toggle[aria-expanded=\"true\"]",
           ]
           for token in required_style:
               if token not in style:

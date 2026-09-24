@@ -909,6 +909,169 @@
     white-space: nowrap;
   }
 
+  .monitoring-home-panel {
+    display: grid;
+    gap: 12px;
+  }
+
+  .monitor-home-head,
+  .monitor-home-source-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .monitor-home-title {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .monitor-home-title h3,
+  .monitor-home-events h4,
+  .monitor-home-source-head h4 {
+    margin: 0;
+  }
+
+  .monitor-home-time {
+    color: #737373;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .monitor-home-overall,
+  .monitor-home-source-status {
+    flex: 0 0 auto;
+    border: 1px solid #d4d4d4;
+    border-radius: 999px;
+    padding: 4px 8px;
+    background: #f7f7f7;
+    color: #4b5563;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .monitor-home-overall[data-status="ERROR"],
+  .monitor-home-source-status[data-status="ERROR"] {
+    border-color: #d7a8a8;
+    background: #fff2f2;
+    color: #9a3434;
+  }
+
+  .monitor-home-overall[data-status="ACTION_REQUIRED"],
+  .monitor-home-overall[data-status="DEGRADED"],
+  .monitor-home-source-status[data-status="WARNING"] {
+    border-color: #d8c58f;
+    background: #fff9e8;
+    color: #7a611b;
+  }
+
+  .monitor-home-grid {
+    display: grid;
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .monitor-home-source {
+    min-width: 0;
+    display: grid;
+    gap: 6px;
+    padding: 10px;
+    border: 1px solid #e2e2e2;
+    border-radius: 10px;
+    background: #fafafa;
+  }
+
+  .monitor-home-source-head {
+    margin-bottom: 2px;
+  }
+
+  .monitor-home-source-head h4,
+  .monitor-home-events h4 {
+    font-size: 13px;
+  }
+
+  .monitor-home-metric {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    font-size: 12px;
+  }
+
+  .monitor-home-metric-label {
+    min-width: 0;
+    color: #666;
+  }
+
+  .monitor-home-metric-value {
+    flex: 0 0 auto;
+    color: #262626;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .monitor-home-events {
+    display: grid;
+    gap: 6px;
+    padding-top: 2px;
+  }
+
+  .monitor-home-empty {
+    margin: 0;
+    color: #737373;
+    font-size: 12px;
+  }
+
+  .monitor-home-event-list {
+    display: grid;
+    gap: 5px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .monitor-home-event {
+    display: grid;
+    grid-template-columns:
+      minmax(0, auto)
+      minmax(0, 1fr);
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: #f4f4f4;
+    font-size: 11px;
+  }
+
+  .monitor-home-event span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: #666;
+  }
+
+  @media (max-width: 619px) {
+    .monitor-home-grid {
+      grid-template-columns:
+        minmax(0, 1fr);
+    }
+
+    .monitor-home-title {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .monitor-home-event {
+      grid-template-columns:
+        minmax(0, 1fr);
+      gap: 2px;
+    }
+  }
+
   .review-controls-sticky {
     position: sticky;
     top: 0;

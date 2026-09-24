@@ -511,6 +511,218 @@ jobs:
           print("Family Scheduler live issue contract PASS")
           PY
 
+      - name: P03 listening preparation safety contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          fs = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+          prep = Path(
+              "WebAppFamilySchedulerPreparation.js"
+          ).read_text(encoding="utf-8")
+
+          required_fs = [
+              "function h3FsReadyListeningPayload_(ss,nextSetNo)",
+              "function h3FsLockedListeningPayload_(ss,nextSetNo)",
+              "function h3FsBoundListeningK1Row_(ss,k1ReadyId,setId)",
+              "function h3FsBoundListeningPrestage_(ss,nextSetNo,setId)",
+              "function h3FsResumableListeningPrepare_(ss,nextSetNo)",
+              "var resume=h3FsResumableListeningPrepare_(ss,next);",
+              "FAMILY_SCHEDULER_K1_READY_AMBIGUOUS",
+              "lt.map.PARENT_SET_ID+1",
+          ]
+          for token in required_fs:
+              if token not in fs:
+                  raise SystemExit(
+                      f"missing P03 listening safety token: {token}"
+                  )
+
+          build_start = fs.index(
+              "function h3FsBuildListeningPrepare_(ss)"
+          )
+          build_end = fs.index(
+              "function h3FsAuthoringTarget_(family)",
+              build_start,
+          )
+          build = fs[build_start:build_end]
+          if not (
+              build.index("h3FsResumableListeningPrepare_(")
+              < build.index("h3FsLatestReadyK1_(")
+          ):
+              raise SystemExit(
+                  "P03 bound resume must precede fresh K1 selection."
+              )
+
+          required_prep = [
+              "h3FsReadyListeningPayload_(ss,next)",
+              "h3FsLockedListeningPayload_(ss,next)",
+              "h3FsBoundListeningK1Row_(",
+              "h3FsBoundListeningPrestage_(",
+              "listening_set_id:boundPayload",
+              "FAMILY_SCHEDULER_PREP_FINAL_LISTENING_RESUME_IDENTITY_DRIFT",
+          ]
+          for token in required_prep:
+              if token not in prep:
+                  raise SystemExit(
+                      f"missing P03 provenance token: {token}"
+                  )
+
+          print("P03 listening preparation safety static contract PASS")
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          vm.runInThisContext(
+            fs.readFileSync('WebAppFamilyScheduler.js','utf8')
+          );
+
+          function assert(ok,msg) {
+            if (!ok) throw new Error(msg);
+          }
+          function makeTable(headers,rows) {
+            return {
+              headers,
+              map:Object.fromEntries(headers.map((h,i)=>[h,i])),
+              rows
+            };
+          }
+
+          global.H3_BACKEND_PRESTAGE_TAB =
+            'listening_prestage_v1';
+          global.H3_BACKEND_PREPARE_SCHEMA =
+            'H3_LISTENING_BACKEND_PREPARE_V1';
+          global.H3_BACKEND_PRESTAGE_HEADERS = [
+            'PRESTAGE_ID','CREATED_AT','STATUS',
+            'TARGET_LISTENING_SET_NO','POLICY_ID',
+            'PRIMARY_POLICY_ID','SCHEDULER_SNAPSHOT_SHA256',
+            'SOURCE_PROVENANCE_JSON','PRESTAGE_SHA256',
+            'BOUND_LISTENING_SET_ID','CONSUMED_AT'
+          ];
+
+          const payloadHeaders = [
+            'LISTENING_SET_ID','LISTENING_SET_NO','STATUS',
+            'K1_READY_ID','ISSUED_AT'
+          ];
+          const k1Headers = [
+            'K1_READY_ID','CREATED_AT','STATUS',
+            'BOUND_LISTENING_SET_ID','CONSUMED_AT',
+            'IMAGE_SHA256','QA_PROFILE','AUDIT_RESULT'
+          ];
+          const prestageHeaders = H3_BACKEND_PRESTAGE_HEADERS;
+          let tables = {};
+          const ss = {
+            getSheetByName:name =>
+              tables[name] ? {table:tables[name]} : null
+          };
+
+          h3FsTable_ = sh =>
+            sh ? sh.table : {headers:[],map:{},rows:[]};
+          h3FsRequire_ = ()=>{};
+          h3FsKv_ = ()=>({NEXT_LISTENING_SET_NO:4});
+
+          const setId='H3-20260925-L04';
+          const k1Id='H3-K1R-20260925-001';
+          tables['listening_set_payload_v1'] = makeTable(
+            payloadHeaders,
+            [[setId,4,'LOCKED',k1Id,'']]
+          );
+          tables['listening_k1_ready_v1'] = makeTable(
+            k1Headers,
+            [[
+              k1Id,'2026-09-25T07:00:00+09:00','READY',
+              setId,'','img-sha','K1-QA','PASS'
+            ]]
+          );
+          tables[H3_BACKEND_PRESTAGE_TAB] = makeTable(
+            prestageHeaders,
+            [[
+              'PS-4','2026-09-25T07:00:00+09:00','BOUND',4,
+              'POLICY','PRIMARY','scheduler-sha',
+              '{"K2":{"mode":"CORE"}}','prestage-sha',
+              setId,''
+            ]]
+          );
+
+          const resume=h3FsBuildListeningPrepare_(ss);
+          assert(resume.resume===true,'bound state did not resume');
+          assert(
+            resume.request.set_id===setId &&
+            resume.request.k1_ready_id===k1Id,
+            'resume request did not preserve bound identities'
+          );
+
+          tables['listening_set_payload_v1'] = makeTable(
+            payloadHeaders, []
+          );
+          tables['listening_k1_ready_v1'] = makeTable(
+            k1Headers,
+            [
+              ['H3-K1R-20260925-001','2026-09-25T07:00:00+09:00',
+               'READY','','','','',''],
+              ['H3-K1R-20260925-002','2026-09-25T07:01:00+09:00',
+               'READY','','','','','']
+            ]
+          );
+          let threw=false;
+          try {
+            h3FsLatestReadyK1_(ss);
+          } catch(err) {
+            threw=String(err.message).includes(
+              'FAMILY_SCHEDULER_K1_READY_AMBIGUOUS'
+            );
+          }
+          assert(threw,'multiple eligible K1 rows must fail closed');
+
+          vm.runInThisContext(
+            fs.readFileSync(
+              'WebAppFamilySchedulerPreparation.js',
+              'utf8'
+            )
+          );
+
+          tables['listening_set_payload_v1'] = makeTable(
+            payloadHeaders,
+            [[setId,4,'AUDIO_BOUND',k1Id,'']]
+          );
+          tables['listening_k1_ready_v1'] = makeTable(
+            k1Headers,
+            [[
+              k1Id,'2026-09-25T07:00:00+09:00','READY',
+              setId,'','img-sha','K1-QA','PASS'
+            ]]
+          );
+          tables[H3_BACKEND_PRESTAGE_TAB] = makeTable(
+            prestageHeaders,
+            [[
+              'PS-4','2026-09-25T07:00:00+09:00','BOUND',4,
+              'POLICY','PRIMARY','scheduler-sha',
+              '{"K2":{"mode":"CORE"}}','prestage-sha',
+              setId,''
+            ]]
+          );
+
+          const identity=h3FsPrepFinalListeningIdentity_(ss,null);
+          assert(
+            identity.listening_set_id===setId,
+            'READY identity did not bind to payload set ID'
+          );
+          assert(
+            identity.k1 &&
+            identity.k1.k1_ready_id===k1Id &&
+            identity.k1.image_sha256==='img-sha',
+            'READY identity did not resolve payload K1 provenance'
+          );
+          assert(
+            identity.k2_k5 &&
+            identity.k2_k5.prestage_id==='PS-4' &&
+            identity.k2_k5.prestage_sha256==='prestage-sha',
+            'READY identity did not resolve bound prestage provenance'
+          );
+
+          console.log('P03 listening preparation safety fixture PASS');
+          NODE
+
       - name: P02 issue transaction integrity contract
         run: |
           python - <<'PY'

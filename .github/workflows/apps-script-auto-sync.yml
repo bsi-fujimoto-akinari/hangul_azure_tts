@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: apps-script-auto-sync-main
@@ -19,6 +20,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (
         github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
         github.event.workflow_run.head_branch == 'main' &&
         github.event.workflow_run.head_repository.full_name == github.repository
       )
@@ -33,7 +35,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
             echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
           else
-            echo "sha=main" >> "$GITHUB_OUTPUT"
+            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Checkout audited main source
@@ -42,13 +44,82 @@ jobs:
           ref: ${{ steps.source.outputs.sha }}
           fetch-depth: 2
 
-      - name: Verify checked-out source is main lineage
+      - name: Verify exact audited main source
         shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          TRIGGER_NAME: ${{ github.event_name }}
+          TRIGGER_AUDIT_SHA: ${{ github.event.workflow_run.head_sha || '' }}
+          TRIGGER_AUDIT_EVENT: ${{ github.event.workflow_run.event || '' }}
+          TRIGGER_AUDIT_CONCLUSION: ${{ github.event.workflow_run.conclusion || '' }}
         run: |
-          git fetch origin main --depth=2
-          if ! git merge-base --is-ancestor HEAD origin/main &&              ! git merge-base --is-ancestor origin/main HEAD; then
-            echo "::error::Checked-out source is not on main lineage."
+          set -euo pipefail
+          git fetch origin main --depth=1
+
+          checked_out="$(git rev-parse HEAD)"
+          main_sha="$(git rev-parse origin/main)"
+          if [ "$checked_out" != "$SOURCE_SHA" ]; then
+            echo "::error::Checked-out SHA does not match the resolved source SHA."
             exit 1
+          fi
+          if [ "$main_sha" != "$SOURCE_SHA" ]; then
+            echo "::error::Credentialed Apps Script work is restricted to the exact current main SHA."
+            exit 1
+          fi
+
+          if [ "$TRIGGER_NAME" = "workflow_run" ]; then
+            if [ "$TRIGGER_AUDIT_SHA" != "$SOURCE_SHA" ] || \
+               [ "$TRIGGER_AUDIT_EVENT" != "push" ] || \
+               [ "$TRIGGER_AUDIT_CONCLUSION" != "success" ]; then
+              echo "::error::Triggering Repository audit is not a successful push audit for the exact source SHA."
+              exit 1
+            fi
+          else
+            python3 - <<'PY'
+          import json
+          import os
+          import urllib.parse
+          import urllib.request
+
+          repo = os.environ['GH_REPOSITORY']
+          sha = os.environ['SOURCE_SHA']
+          token = os.environ['GH_TOKEN']
+          query = urllib.parse.urlencode({
+              'branch': 'main',
+              'status': 'completed',
+              'per_page': '100',
+          })
+          url = (
+              f'https://api.github.com/repos/{repo}/actions/workflows/'
+              f'repository-audit.yml/runs?{query}'
+          )
+          req = urllib.request.Request(
+              url,
+              headers={
+                  'Accept': 'application/vnd.github+json',
+                  'Authorization': f'Bearer {token}',
+                  'X-GitHub-Api-Version': '2022-11-28',
+              },
+          )
+          with urllib.request.urlopen(req, timeout=30) as response:
+              payload = json.load(response)
+
+          matches = [
+              run for run in payload.get('workflow_runs', [])
+              if run.get('head_sha') == sha
+              and run.get('head_branch') == 'main'
+              and run.get('event') == 'push'
+              and run.get('status') == 'completed'
+              and run.get('conclusion') == 'success'
+          ]
+          if not matches:
+              raise SystemExit(
+                  'No successful Repository audit push run exists for the exact current main SHA.'
+              )
+          print(f'Exact audited main source verified: {sha}')
+          PY
           fi
 
       - name: Detect Apps Script-impacting change
@@ -71,8 +142,19 @@ jobs:
 
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
+      - name: Detect synchronization-policy change
+        id: policy_change
+        shell: bash
+        run: |
+          if git diff-tree --no-commit-id --name-only -r HEAD | \
+             grep -Fxq '.github/workflows/apps-script-auto-sync.yml'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Check clasp credential availability
-        if: steps.impact.outputs.changed == 'true'
+        if: steps.impact.outputs.changed == 'true' || steps.policy_change.outputs.changed == 'true'
         id: auth
         shell: bash
         env:
@@ -86,13 +168,13 @@ jobs:
           fi
 
       - name: Setup Node
-        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
+        if: (steps.impact.outputs.changed == 'true' || steps.policy_change.outputs.changed == 'true') && steps.auth.outputs.ready == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
       - name: Materialize clasp credentials
-        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
+        if: (steps.impact.outputs.changed == 'true' || steps.policy_change.outputs.changed == 'true') && steps.auth.outputs.ready == 'true'
         shell: bash
         env:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
@@ -112,7 +194,7 @@ jobs:
 
 
       - name: Verify exact Apps Script target
-        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
+        if: (steps.impact.outputs.changed == 'true' || steps.policy_change.outputs.changed == 'true') && steps.auth.outputs.ready == 'true'
         shell: bash
         run: |
           python3 - <<'PY'
@@ -127,7 +209,7 @@ jobs:
           PY
 
       - name: Show Apps Script file status
-        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
+        if: (steps.impact.outputs.changed == 'true' || steps.policy_change.outputs.changed == 'true') && steps.auth.outputs.ready == 'true'
         shell: bash
         run: npx -y @google/clasp@3.4.0 show-file-status --json
 
@@ -147,6 +229,111 @@ jobs:
             exit 1
           fi
 
+      - name: Attest Apps Script HEAD source against exact audited main
+        id: source_attestation
+        if: (steps.impact.outputs.changed == 'true' || steps.policy_change.outputs.changed == 'true') && steps.auth.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo_dir="$GITHUB_WORKSPACE"
+          readback_dir="$(mktemp -d)"
+          trap 'rm -rf "$readback_dir"' EXIT
+
+          cp "$repo_dir/.clasp.json" "$readback_dir/.clasp.json"
+          (
+            cd "$readback_dir"
+            npx -y @google/clasp@3.4.0 pull
+          )
+
+          REPO_DIR="$repo_dir" READBACK_DIR="$readback_dir" python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          repo = Path(os.environ['REPO_DIR'])
+          readback = Path(os.environ['READBACK_DIR'])
+
+          expected = sorted(
+              p for p in subprocess.check_output(
+                  [
+                      'git', '-C', str(repo), 'ls-files',
+                      '*.js', '*.gs', '*.html', 'appsscript.json'
+                  ],
+                  text=True,
+              ).splitlines()
+              if p
+          )
+          actual = sorted(
+              p.relative_to(readback).as_posix()
+              for p in readback.rglob('*')
+              if p.is_file()
+              and p.name != '.clasp.json'
+              and (
+                  p.suffix in {'.js', '.gs', '.html'}
+                  or p.name == 'appsscript.json'
+              )
+          )
+
+          if expected != actual:
+              missing = sorted(set(expected) - set(actual))
+              extra = sorted(set(actual) - set(expected))
+              raise SystemExit(
+                  f'Apps Script readback file-set mismatch; missing={missing}; extra={extra}'
+              )
+
+          def normalized_text(path):
+              text = path.read_text(encoding='utf-8')
+              text = text.replace('\r\n', '\n').replace('\r', '\n')
+              return text.splitlines()
+
+          digest_source = hashlib.sha256()
+          digest_readback = hashlib.sha256()
+
+          for rel in expected:
+              source_path = repo / rel
+              readback_path = readback / rel
+              if rel == 'appsscript.json':
+                  source_value = json.loads(source_path.read_text(encoding='utf-8'))
+                  readback_value = json.loads(readback_path.read_text(encoding='utf-8'))
+                  if source_value != readback_value:
+                      raise SystemExit('Apps Script manifest readback mismatch.')
+                  source_bytes = json.dumps(
+                      source_value, sort_keys=True, separators=(',', ':')
+                  ).encode('utf-8')
+                  readback_bytes = json.dumps(
+                      readback_value, sort_keys=True, separators=(',', ':')
+                  ).encode('utf-8')
+              else:
+                  source_lines = normalized_text(source_path)
+                  readback_lines = normalized_text(readback_path)
+                  if source_lines != readback_lines:
+                      raise SystemExit(f'Apps Script source readback mismatch: {rel}')
+                  source_bytes = ('\n'.join(source_lines)).encode('utf-8')
+                  readback_bytes = ('\n'.join(readback_lines)).encode('utf-8')
+
+              digest_source.update(rel.encode('utf-8') + b'\0' + source_bytes + b'\0')
+              digest_readback.update(rel.encode('utf-8') + b'\0' + readback_bytes + b'\0')
+
+          source_sha = digest_source.hexdigest()
+          readback_sha = digest_readback.hexdigest()
+          if source_sha != readback_sha:
+              raise SystemExit('Apps Script aggregate source attestation digest mismatch.')
+
+          output_path = os.environ['GITHUB_OUTPUT']
+          with open(output_path, 'a', encoding='utf-8') as output:
+              output.write('attested=true\n')
+              output.write(f'file_count={len(expected)}\n')
+              output.write(f'source_digest={source_sha}\n')
+              output.write(f'readback_digest={readback_sha}\n')
+
+          print(
+              f'Apps Script source attestation PASS: '
+              f'{len(expected)} files; digest={source_sha}'
+          )
+          PY
+
       - name: Read deployment inventory
         if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
         shell: bash
@@ -162,7 +349,11 @@ jobs:
             echo ""
             echo "- source: $(git rev-parse HEAD 2>/dev/null || echo unavailable)"
             echo "- Apps Script-impacting change: ${{ steps.impact.outputs.changed || 'unknown' }}"
+            echo "- synchronization-policy change: ${{ steps.policy_change.outputs.changed || 'unknown' }}"
             echo "- clasp credential ready: ${{ steps.auth.outputs.ready || 'not-needed' }}"
+            echo "- source attestation: ${{ steps.source_attestation.outputs.attested || 'not-run' }}"
+            echo "- attested file count: ${{ steps.source_attestation.outputs.file_count || 'not-run' }}"
+            echo "- source digest: ${{ steps.source_attestation.outputs.source_digest || 'not-run' }}"
             echo "- target script ID: 1p_e1jKICTZXHpCrQ7rwU9HilloZdkFBpHry_lCq5YgXpaiU4FNEQlDa-"
             echo '- manifest overwrite mode: audited CI only (clasp push --force)'
             echo '- versioned /exec deployment: not changed by this workflow'

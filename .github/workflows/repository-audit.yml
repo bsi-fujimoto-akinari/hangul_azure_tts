@@ -160,12 +160,14 @@ jobs:
           ops_path = Path('OPERATIONS.md')
           sync = sync_path.read_text(encoding='utf-8')
           ops = ops_path.read_text(encoding='utf-8')
+          github_attempt_token = '$' + '{{ github.run_attempt }}'
+          command = 'run-' + 'function'
 
           required_sync = [
               'intended_smoke_sha:',
               'Detect read-only smoke preflight request',
               'Validate one-revision read-only smoke boundary',
-              '${{ github.run_attempt }}',
+              github_attempt_token,
               'steps.source_attestation.outputs.attested',
               'steps.smoke_boundary.outputs.ready',
           ]
@@ -189,31 +191,34 @@ jobs:
                   + ', '.join(missing_ops)
               )
 
-          run_function_refs = []
+          command_refs = []
+          pattern = re.compile(
+              rf'(?m)^[^#\\n]*\\bclasp\\b[^\\n]*\\b{re.escape(command)}\\b'
+          )
           for path in sorted(Path('.github/workflows').glob('*.yml')):
               contents = path.read_text(encoding='utf-8')
-              for match in re.finditer(r'(?m)^[^#\n]*\bclasp\b[^\n]*\brun-function\b', contents):
-                  run_function_refs.append((path, match.start(), contents))
+              for match in pattern.finditer(contents):
+                  command_refs.append((path, match.start(), contents))
 
-          for path, pos, contents in run_function_refs:
+          for path, pos, contents in command_refs:
               if path != sync_path:
                   raise SystemExit(
-                      f'Credentialed clasp run-function is only allowed in {sync_path}: {path}'
+                      f'Credentialed clasp execution is only allowed in {sync_path}: {path}'
                   )
               boundary_pos = contents.find('Validate one-revision read-only smoke boundary')
               if boundary_pos < 0 or pos <= boundary_pos:
                   raise SystemExit(
-                      'clasp run-function must occur after the permanent smoke boundary.'
+                      'Credentialed clasp execution must occur after the permanent smoke boundary.'
                   )
               prefix = contents[max(boundary_pos, pos - 1200):pos]
               if "if: steps.smoke_boundary.outputs.ready == 'true'" not in prefix:
                   raise SystemExit(
-                      'clasp run-function must be gated by smoke_boundary ready=true.'
+                      'Credentialed clasp execution must be gated by smoke_boundary ready=true.'
                   )
 
           print(
               'Credentialed Apps Script smoke boundary contract: PASS; '
-              f'run-function refs={len(run_function_refs)}'
+              f'credentialed command refs={len(command_refs)}'
           )
           PY
 

@@ -733,7 +733,7 @@ jobs:
               "function h3FsSemanticAuthoringBridge_(ss,level,evaluation)"
           )
           bridge_end = fs.index(
-              "function h3FsObserveCommitted_", bridge_start
+              "function h3FamilySchedulerObserveAfterCommit_", bridge_start
           )
           bridge = fs[bridge_start:bridge_end]
           for token in [

@@ -2285,13 +2285,17 @@ function h3FamilySchedulerIssueRoutePreview() {
   return h3FsIssueRoute_(resolved,readiness,current);
 }
 
-function h3FamilySchedulerHomeNext() {
+function h3FsHomeNextLocked_() {
   var lock=LockService.getScriptLock();
   lock.waitLock(30000);
   try {
     var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
     var evaluation=h3FsEvaluate_(ss,'3級');
-    var existing=h3FsEvaluationAtClock_(ss,'3級',evaluation.global_set_clock);
+    var existing=h3FsEvaluationAtClock_(
+      ss,
+      '3級',
+      evaluation.global_set_clock
+    );
     if(!existing){
       h3FsAppend_(ss,'3級',evaluation);
     }
@@ -2299,12 +2303,19 @@ function h3FamilySchedulerHomeNext() {
     var resolved=h3FsResolveLive_(evaluation);
     var current=h3ReviewCurrentLearning_(ss);
     var readiness=h3FsReadiness_(ss);
-    var route=h3FsIssueRoute_(resolved,readiness,current);
+    var route=h3FsIssueRoute_(
+      resolved,
+      readiness,
+      current
+    );
 
     var out={
       schema:'H3_FAMILY_SCHEDULER_HOME_NEXT_V1',
       scheduler_applied:false,
       issue_performed:false,
+      preparation_performed:false,
+      preparation_status:'',
+      prepared_set_id:'',
       route_kind:String(route.route_kind||''),
       family:String(route.family||'NONE'),
       provider_kind:String(route.provider_kind||''),
@@ -2315,6 +2326,8 @@ function h3FamilySchedulerHomeNext() {
       requires_prepare:route.requires_prepare===true,
       result_status:String(route.result_status||''),
       client_action:'NONE',
+      authoring_target:'',
+      prepare_request:null,
       render_request:null,
       issue_event_id:'',
       issue_log_status:''
@@ -2326,7 +2339,9 @@ function h3FamilySchedulerHomeNext() {
     }
 
     if(route.result_status!=='READY'){
-      throw new Error('FAMILY_SCHEDULER_HOME_NEXT_ROUTE_NOT_READY');
+      throw new Error(
+        'FAMILY_SCHEDULER_HOME_NEXT_ROUTE_NOT_READY'
+      );
     }
 
     if(route.route_kind==='CURRENT_SET'){
@@ -2341,17 +2356,41 @@ function h3FamilySchedulerHomeNext() {
 
     if(route.route_kind==='FAMILY'){
       if(route.requires_prepare){
-        out.client_action='PREPARE_REQUIRED';
+        if(route.family==='L'){
+          var prep=h3FsBuildListeningPrepare_(ss);
+          if(prep.status==='READY_TO_PREPARE'){
+            out.client_action='PREPARE_LISTENING';
+            out.prepare_request=prep.request;
+            out.prepared_set_id=prep.request.set_id;
+            out.preparation_status='READY_TO_PREPARE';
+            return out;
+          }
+          out.client_action='AUTHORING_REQUIRED';
+          out.authoring_target=prep.authoring_target;
+          out.preparation_status='AUTHORING_REQUIRED';
+          return out;
+        }
+
+        out.client_action='AUTHORING_REQUIRED';
+        out.authoring_target=
+          h3FsAuthoringTarget_(route.family);
+        out.preparation_status='AUTHORING_REQUIRED';
         return out;
       }
 
-      var issued=h3FsIssuePreparedFamily_(ss,route.family);
-      var currentAfter=h3ReviewCurrentLearning_(ss);
+      var issued=h3FsIssuePreparedFamily_(
+        ss,
+        route.family
+      );
+      var currentAfter=
+        h3ReviewCurrentLearning_(ss);
       if(
         !currentAfter ||
         String(currentAfter.set_id||'')!==String(issued.set_id||'')
       ){
-        throw new Error('FAMILY_SCHEDULER_ISSUE_CURRENT_READBACK_MISMATCH');
+        throw new Error(
+          'FAMILY_SCHEDULER_ISSUE_CURRENT_READBACK_MISMATCH'
+        );
       }
 
       out.scheduler_applied=true;
@@ -2364,7 +2403,11 @@ function h3FamilySchedulerHomeNext() {
       out.client_action='OPEN_ISSUED';
       out.render_request=issued.render_request;
       try {
-        out.issue_event_id=h3FsAppendIssueApplied_(ss,evaluation,issued);
+        out.issue_event_id=h3FsAppendIssueApplied_(
+          ss,
+          evaluation,
+          issued
+        );
         out.issue_log_status='RECORDED';
       } catch(_logErr) {
         out.issue_event_id='';
@@ -2373,10 +2416,66 @@ function h3FamilySchedulerHomeNext() {
       return out;
     }
 
-    throw new Error('FAMILY_SCHEDULER_HOME_NEXT_ROUTE_KIND_INVALID');
+    throw new Error(
+      'FAMILY_SCHEDULER_HOME_NEXT_ROUTE_KIND_INVALID'
+    );
   } finally {
     lock.releaseLock();
   }
+}
+
+function h3FamilySchedulerHomeNext() {
+  var first=h3FsHomeNextLocked_();
+
+  if(first.client_action!=='PREPARE_LISTENING'){
+    return first;
+  }
+
+  var request=first.prepare_request;
+  if(
+    !request ||
+    request.schema!==H3_BACKEND_PREPARE_SCHEMA ||
+    !request.set_id ||
+    !request.k1_ready_id
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_LISTENING_PREPARE_REQUEST_INVALID'
+    );
+  }
+
+  // This call owns its own source/finalization locks and runs
+  // targeted audio between them; no outer scheduler lock is held.
+  var prepared=prepareListeningBackendSet(
+    request
+  );
+  if(
+    !prepared ||
+    prepared.schema!==H3_BACKEND_RESULT_SCHEMA ||
+    prepared.status!=='PREISSUE_READY' ||
+    prepared.preissue!=='PASS' ||
+    prepared.issue_performed!==false ||
+    String(prepared.set_id||'')!==String(request.set_id)
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_LISTENING_PREPARE_READBACK_FAIL'
+    );
+  }
+
+  var second=h3FsHomeNextLocked_();
+  second.preparation_performed=true;
+  second.preparation_status='PREISSUE_READY';
+  second.prepared_set_id=String(prepared.set_id||'');
+
+  if(
+    second.client_action!=='OPEN_ISSUED' &&
+    second.client_action!=='OPEN_CURRENT'
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_POST_PREPARE_ROUTE_INVALID'
+    );
+  }
+
+  return second;
 }
 
 function h3FamilySchedulerShadowTick() {

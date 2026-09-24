@@ -9,6 +9,8 @@
 var H3_FS_RT_PREP_CONTRACT_ID_ =
   'H3-FAMILY-SCHEDULER-RT-PREP-20260924-V1';
 
+var H3_FS_RT_PREP_SYNC_REVISION_ = '20260924-R1';
+
 var H3_FS_OFFICIAL_ITEMS_SHEET_ = 'official_items';
 var H3_FS_OFFICIAL_ANSWER_SHEET_ = 'official_answer_detail_v1';
 var H3_FS_OFFICIAL_SKILL_SHEET_ = 'official_item_skill_map_v2';

@@ -679,6 +679,80 @@ jobs:
           print("W/R/T preparation static contract PASS")
           PY
 
+      - name: Semantic authoring queue contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          fs = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+
+          required = [
+              "authoring_queue_v1",
+              "H3_FAMILY_SCHEDULER_AUTHORING_QUEUE_V1",
+              "H3-SEMANTIC-AUTHORING-QUEUE-20260924-V1",
+              "function h3FsAuthoringUpsert_(ss,level,evaluation,prep)",
+              "function h3FsSemanticAuthoringBridge_(ss,level,evaluation)",
+              "h3FsSemanticAuthoringBridge_(ss,level,nextEvaluation)",
+              "'IDEMPOTENCY_KEY'",
+              "'SNAPSHOT_SHA256'",
+              "'OPEN'",
+              "authoring_bridge:authoringBridge",
+          ]
+          for token in required:
+              if token not in fs:
+                  raise SystemExit(
+                      f"semantic authoring queue invariant missing: {token}"
+                  )
+
+          upsert_start = fs.index(
+              "function h3FsAuthoringUpsert_(ss,level,evaluation,prep)"
+          )
+          upsert_end = fs.index(
+              "function h3FsSemanticAuthoringBridge_", upsert_start
+          )
+          upsert = fs[upsert_start:upsert_end]
+          if upsert.count("appendRow(") != 1:
+              raise SystemExit(
+                  "semantic authoring queue must have exactly one append surface"
+              )
+          for token in [
+              "h3FsIssuePreparedFamily_(",
+              "h3FsIssueWritten_(",
+              "prepareListeningBackendSet(",
+              "h3FamilySchedulerHomeNext(",
+              "h3WrittenSubmit_(",
+              "h3ReadingSubmit_(",
+              "h3TranslationV2Submit_(",
+          ]:
+              if token in upsert:
+                  raise SystemExit(
+                      f"authoring queue upsert must not issue/submit: {token}"
+                  )
+
+          bridge_start = fs.index(
+              "function h3FsSemanticAuthoringBridge_(ss,level,evaluation)"
+          )
+          bridge_end = fs.index(
+              "function h3FsObserveCommitted_", bridge_start
+          )
+          bridge = fs[bridge_start:bridge_end]
+          for token in [
+              "h3FsIssuePreparedFamily_(",
+              "h3FsIssueWritten_(",
+              "prepareListeningBackendSet(",
+              "h3FamilySchedulerHomeNext(",
+              "h3WrittenSubmit_(",
+              "h3ReadingSubmit_(",
+              "h3TranslationV2Submit_(",
+          ]:
+              if token in bridge:
+                  raise SystemExit(
+                      f"semantic bridge must stay preissue-only: {token}"
+                  )
+
+          print("Semantic authoring queue contract PASS")
+          PY
+
       - name: Deterministic ranking fixture
         run: |
           node <<'NODE'

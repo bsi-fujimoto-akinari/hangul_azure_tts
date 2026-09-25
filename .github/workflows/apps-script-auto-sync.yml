@@ -137,12 +137,34 @@ jobs:
         shell: bash
         env:
           INTENDED_SMOKE_SHA: ${{ github.event.inputs.intended_smoke_sha || '' }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          UXR2B_MANUAL_REPAIR: ${{ github.event.inputs.uxr2b_review_audio_repair || 'false' }}
         run: |
+          set -euo pipefail
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "$INTENDED_SMOKE_SHA" ]; then
             echo "requested=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "requested=false" >> "$GITHUB_OUTPUT"
+            echo "repair_requested=$UXR2B_MANUAL_REPAIR" >> "$GITHUB_OUTPUT"
+            echo "intended_sha=$INTENDED_SMOKE_SHA" >> "$GITHUB_OUTPUT"
+            echo "request_mode=manual_dispatch" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            parent_sha="$(git rev-parse HEAD^)"
+            if [ "$parent_sha" = "7bf95428859bedf071c3cd58b0a03421d6fe4b69" ]; then
+              echo "requested=true" >> "$GITHUB_OUTPUT"
+              echo "repair_requested=true" >> "$GITHUB_OUTPUT"
+              echo "intended_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+              echo "request_mode=uxr2b_one_shot_push" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+          echo "requested=false" >> "$GITHUB_OUTPUT"
+          echo "repair_requested=false" >> "$GITHUB_OUTPUT"
+          echo "intended_sha=" >> "$GITHUB_OUTPUT"
+          echo "request_mode=none" >> "$GITHUB_OUTPUT"
 
       - name: Detect Apps Script-impacting change
         id: impact
@@ -366,14 +388,32 @@ jobs:
         shell: bash
         env:
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
-          INTENDED_SMOKE_SHA: ${{ github.event.inputs.intended_smoke_sha || '' }}
+          INTENDED_SMOKE_SHA: ${{ steps.smoke_request.outputs.intended_sha || '' }}
           SOURCE_ATTESTED: ${{ steps.source_attestation.outputs.attested || '' }}
+          REQUEST_MODE: ${{ steps.smoke_request.outputs.request_mode || 'none' }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
-            echo "::error::Temporary credentialed smoke is manual-dispatch only."
+
+          if [ "$REQUEST_MODE" = "manual_dispatch" ]; then
+            if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+              echo "::error::Manual credentialed smoke requires workflow_dispatch."
+              exit 1
+            fi
+          elif [ "$REQUEST_MODE" = "uxr2b_one_shot_push" ]; then
+            if [ "${{ github.event_name }}" != "workflow_run" ]; then
+              echo "::error::UXR-2B one-shot repair requires the audited workflow_run path."
+              exit 1
+            fi
+            parent_sha="$(git rev-parse HEAD^)"
+            if [ "$parent_sha" != "7bf95428859bedf071c3cd58b0a03421d6fe4b69" ]; then
+              echo "::error::UXR-2B one-shot repair is restricted to the single revision immediately after the authorized base SHA."
+              exit 1
+            fi
+          else
+            echo "::error::Unknown smoke request mode."
             exit 1
           fi
+
           if [ "${{ github.run_attempt }}" != "1" ]; then
             echo "::error::Temporary credentialed smoke is one-attempt only; workflow reruns are not authorized."
             exit 1
@@ -401,7 +441,7 @@ jobs:
         if: steps.smoke_boundary.outputs.ready == 'true'
         shell: bash
         env:
-          UXR2B_REPAIR_REQUESTED: ${{ github.event.inputs.uxr2b_review_audio_repair || 'false' }}
+          UXR2B_REPAIR_REQUESTED: ${{ steps.smoke_request.outputs.repair_requested || 'false' }}
         run: |
           set -euo pipefail
 

@@ -4625,6 +4625,117 @@ jobs:
           }
           NODE
 
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const client = fs.readFileSync('Client.html', 'utf8');
+          const start = client.indexOf(
+            'function updateReviewHeaderStats_('
+          );
+          const end = client.indexOf(
+            '\n\n  function loadConfirmedStabilityCoverage_(',
+            start
+          );
+          if (start < 0 || end < 0) {
+            throw new Error(
+              'HOME stability header function could not be isolated.'
+            );
+          }
+
+          const ctx = vm.createContext({
+            console,
+            app: {
+              confirmedStabilityCoverage: null,
+              reviewFamilyFilter: 'ALL'
+            }
+          });
+          vm.runInContext(
+            client.slice(start, end),
+            ctx,
+            {filename:'Client.html'}
+          );
+
+          const run = coverage => {
+            const count = {textContent: ''};
+            const metric = {
+              textContent: '',
+              ariaLabel: '',
+              setAttribute(name, value) {
+                if (name === 'aria-label') {
+                  this.ariaLabel = value;
+                }
+              }
+            };
+            const library = {
+              querySelector(selector) {
+                if (selector === '.home-history-count') {
+                  return count;
+                }
+                if (selector === '.home-stability-rate') {
+                  return metric;
+                }
+                return null;
+              }
+            };
+            const history = {
+              closest(selector) {
+                return selector === '.review-library'
+                  ? library
+                  : null;
+              }
+            };
+
+            ctx.app.confirmedStabilityCoverage = coverage;
+            ctx.app.reviewFamilyFilter = 'ALL';
+            ctx.updateReviewHeaderStats_(history, 7);
+
+            return {
+              count: count.textContent,
+              metric: metric.textContent,
+              ariaLabel: metric.ariaLabel
+            };
+          };
+
+          for (const coverage of [
+            null,
+            {by_filter: {ALL: {}}},
+            {by_filter: {ALL: {percent: null}}}
+          ]) {
+            const result = run(coverage);
+            if (result.metric !== '—') {
+              throw new Error(
+                'Missing/null HOME stability coverage must render em dash.'
+              );
+            }
+          }
+
+          const zero = run({
+            by_filter: {ALL: {percent: 0}}
+          });
+          if (zero.metric !== '0.0%') {
+            throw new Error('Zero stability coverage rendered incorrectly.');
+          }
+
+          const numeric = run({
+            by_filter: {ALL: {percent: 12.34}}
+          });
+          if (
+            numeric.metric !== '12.3%' ||
+            numeric.count !== '7' ||
+            numeric.ariaLabel !==
+              'Confirmed Stability Coverage 12.3%'
+          ) {
+            throw new Error(
+              'Numeric HOME stability coverage rendered incorrectly.'
+            );
+          }
+
+          console.log(
+            'HOME stability null guard: PASS'
+          );
+          NODE
+
       - name: Check parameterless direct boot
         shell: bash
         run: |

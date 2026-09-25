@@ -743,7 +743,7 @@ jobs:
 
           for needle in [
               "request.mode === 'LISTENING'",
-              'buildProductionRenderPayload_(request)',
+              'buildProductionRenderPayload_(',
               'getProductionMediaPayload_(request)',
               'h3ProdSubmit_(request)',
           ]:
@@ -1947,12 +1947,15 @@ jobs:
               if forbidden in written:
                   raise SystemExit(f'Written projection is not storage-pure: {forbidden}')
 
+          # Review permalink routing now legitimately carries review_kind
+          # through WebApp.js. Keep only the direct Written Review helper
+          # activation guard; the UXR-5 permalink audit below validates the
+          # new review_kind/set_id/surface_family/q_no contract.
           for forbidden in [
-              'review_kind',
               'h3WrittenReview',
           ]:
               if forbidden in web:
-                  raise SystemExit(f'WebApp Written route was activated: {forbidden}')
+                  raise SystemExit(f'WebApp direct Written Review route was activated: {forbidden}')
           PY
 
           node <<'NODE'
@@ -2581,8 +2584,9 @@ jobs:
           # Production Written provider is active; WebApp keeps using common Review dispatch.
           if "var H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ =\n  h3ReviewWrittenProviderFactory_;" not in core:
               raise SystemExit('Written provider is not active in production.')
+          # Review permalinks legitimately carry review_kind through
+          # WebApp.js. Keep only the direct Written Review helper guard.
           for forbidden in [
-              'review_kind',
               'h3WrittenReview',
           ]:
               if forbidden in web:
@@ -2814,7 +2818,8 @@ jobs:
           required_web = [
               "var mode = 'HOME';",
               "params.mode === 'REVIEW'",
-              "txnId = String(",
+              "params.txn_id",
+              "String(params.txn_id)",
               "h3ReviewRenderRequest_(",
               "h3ReviewMediaRequest_(",
               "h3ReviewSubmitRequest_(",
@@ -2859,10 +2864,8 @@ jobs:
               'function buildPersistentReviewCard(',
               'function appendReviewTranslations(',
               'function buildLearningBlock(',
-              "'review-progress'",
               "'review-progress-button'",
               "app.payload.txn_id || null",
-              "'技術情報'",
               "'ホーム'",
               "'review-controls-sticky'",
               "復習優先度",
@@ -2874,6 +2877,16 @@ jobs:
           if '<section id="home" class="home hidden"></section>' not in index:
               raise SystemExit('R3-09D HOME root is missing from Index.html.')
 
+          for needle in [
+              'id="surface-sticky"',
+              'id="mobile-progress"',
+              'class="review-progress surface-progress"',
+          ]:
+              if needle not in index:
+                  raise SystemExit(
+                      f'R3-09D shared Review navigation root missing: {needle}'
+                  )
+
           if 'family-scheduler-next-caption' in index or 'nextCaption' in index:
               raise SystemExit('F5 NEXT caption returned; family-only display required.')
 
@@ -2882,7 +2895,6 @@ jobs:
               '.review-filter-button',
               '.review-history-item',
               '.review-priority-track',
-              '.review-technical',
           ]:
               if needle not in style:
                   raise SystemExit(f'R3-09D Review CSS invariant missing: {needle}')
@@ -3150,6 +3162,7 @@ jobs:
           from pathlib import Path
 
           client = Path('Client.html').read_text(encoding='utf-8')
+          index = Path('Index.html').read_text(encoding='utf-8')
           style = Path('Stylesheet.html').read_text(encoding='utf-8')
           architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
           operations = Path('OPERATIONS.md').read_text(encoding='utf-8')
@@ -3159,16 +3172,43 @@ jobs:
           review_end = client.index('function buildPersistentReviewCard(', review_start)
           review = client[review_start:review_end]
 
+          progress_start = client.index('function buildReviewProgress_(')
+          progress_end = client.index(
+              'function initialReviewIndexFromRequest_(',
+              progress_start,
+          )
+          progress = client[progress_start:progress_end]
+
           for needle in [
-              "'review-progress'",
-              "'review-progress-button'",
-              'part.result',
+              'configureSurfaceChrome_(',
+              'buildReviewProgress_(',
               'function setReviewPage(',
               "'ホーム'",
           ]:
               if needle not in review:
                   raise SystemExit(
                       f'R3-09E refined Review invariant missing: {needle}'
+                  )
+
+          for needle in [
+              "'mobile-progress'",
+              "'review-progress-button'",
+              'part.result',
+              'setReviewPage(',
+          ]:
+              if needle not in progress:
+                  raise SystemExit(
+                      f'R3-09E Review progress renderer invariant missing: {needle}'
+                  )
+
+          for needle in [
+              'id="surface-sticky"',
+              'id="mobile-progress"',
+              'class="review-progress surface-progress"',
+          ]:
+              if needle not in index:
+                  raise SystemExit(
+                      f'R3-09E shared Review navigation root missing: {needle}'
                   )
 
           for forbidden in [
@@ -3542,15 +3582,19 @@ jobs:
                   'Shared Review learning-block newlines are not preserved.'
               )
 
-          # Technical information remains the independent disclosure.
-          if "document.createElement(\n        'details'\n      )" not in review:
-              raise SystemExit(
-                  'Review technical information is no longer a DETAILS disclosure.'
-              )
-          if "'review-technical'" not in review or "'技術情報'" not in review:
-              raise SystemExit(
-                  'Review technical disclosure contract changed.'
-              )
+          # UXR-5 retires the learner-facing technical-information
+          # disclosure in favor of the sticky Review permalink copy control.
+          for forbidden in [
+              "'review-technical'",
+              "'review-technical-question-links'",
+              "'技術情報'",
+              "'技術情報をコピー'",
+          ]:
+              if forbidden in review:
+                  raise SystemExit(
+                      'Legacy Review technical disclosure returned: ' +
+                      forbidden
+                  )
 
           # Active learning does not inherit Review-only structured style.
           if 'review-explanation-written' in questions:
@@ -3563,7 +3607,7 @@ jobs:
               '## 33. Review explanation visibility and structured text',
               '5L | 5W | READING | TRANSLATION',
               'structurally always visible',
-              'technical-information block remains the Review disclosure',
+              'legacy technical-information disclosure is removed',
               'does not change scoring',
               'must preserve stored newline boundaries',
           ]:
@@ -4724,8 +4768,34 @@ jobs:
           )
           if not boot:
               raise SystemExit('Could not isolate h3WebBootRequest_.')
-          if 'legacy_review_id' in boot.group('body'):
-              raise SystemExit('Legacy Review must not create a parameterized learner boot URL.')
+          for needle in [
+              'legacy_review_id',
+              'review_kind',
+              'set_id',
+              'q_no',
+          ]:
+              if needle not in boot.group('body'):
+                  raise SystemExit(
+                      f'Review boot parser lost compatibility field: {needle}'
+                  )
+
+          permalink_start = client.index(
+              'function reviewPermalinkForQuestion_('
+          )
+          permalink_end = client.index(
+              'function surfaceLinkIcon_(',
+              permalink_start,
+          )
+          permalink = client[permalink_start:permalink_end]
+          for forbidden in [
+              'legacy_review_id=',
+              'txn_id=',
+          ]:
+              if forbidden in permalink:
+                  raise SystemExit(
+                      'Learner Review permalink exposes internal identity: ' +
+                      forbidden
+                  )
 
           for needle in [
               "function loadLegacyReview(",
@@ -10078,154 +10148,208 @@ jobs:
           print('UXR-4 question/Review navigation/media audit: PASS')
           PY
 
-      - name: Audit UXR-5 Review technical question deep links
+      - name: Audit UXR-5 shared navigation and Review permalinks
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
+          code = Path('Code.js').read_text(encoding='utf-8')
           web = Path('WebApp.js').read_text(encoding='utf-8')
+          core = Path('WebAppReviewCore.js').read_text(encoding='utf-8')
+          persistence = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          surface_bridge = Path('WebAppSurfaceReviewBridge.js').read_text(encoding='utf-8')
+          architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
           index = Path('Index.html').read_text(encoding='utf-8')
           client = Path('Client.html').read_text(encoding='utf-8')
           style = Path('Stylesheet.html').read_text(encoding='utf-8')
 
           for token in [
-              'template.technicalLinkBaseJson',
-              "'QUESTION_DEEP_LINK_Q_NO_INVALID'",
-              'q_no: questionNo',
+              "params.mode ===\n      'REVIEW'",
+              "params.mode ===\n      'REVIEW_REPLAY'",
+          ]:
+              if token not in code:
+                  raise SystemExit(
+                      f'UXR-5 outer Review route missing: {token}'
+                  )
+
+          if "params.mode ===\n      'WRITTEN'" in code:
+              raise SystemExit(
+                  'UXR-5 must not open the WRITTEN production route at doGet.'
+              )
+
+          for token in [
+              'var legacyReviewId = null;',
+              'var reviewKind = null;',
+              "params.mode === 'REVIEW'",
+              "params.review_kind",
+              "params.set_id",
+              "'LISTENING',\n        'WRITTEN',\n        'REVIEW'",
+              'review_kind:\n      reviewKind',
+              'legacy_review_id:\n      legacyReviewId',
+              'function h3WebAttachSurfaceSetNo_(',
+              'payload.surface_set_no',
+              'function h3WebAttachPostSubmitReviewSurface_(',
+              "'H3_REVIEW_HOME_INDEX_SYNC_V1'",
+              "'POSTSUBMIT_REVIEW_5L_SET_NO_MISMATCH'",
+              "'POSTSUBMIT_REVIEW_ISSUE_NO_MISMATCH'",
           ]:
               if token not in web:
                   raise SystemExit(
-                      f'UXR-5 server contract missing: {token}'
+                      f'UXR-5 WebApp permalink/display contract missing: {token}'
                   )
 
           for token in [
-              'window.H3_TECHNICAL_LINK_BASE',
-              'technicalLinkBaseJson',
+              'function h3ReviewResolvePermalinkRequest_(',
+              'request.q_no === null ||',
+              'request.q_no === undefined ||',
+              'h3ReviewHomeIndexFind_(',
+              'h3ReviewHomeIndexRowEntry_(',
+              'entry.txn_id || null',
+              'entry.legacy_review_id || null',
+              "'REVIEW_PERMALINK_SET_NOT_FOUND:'",
+          ]:
+              if token not in core:
+                  raise SystemExit(
+                      f'UXR-5 Review resolver missing: {token}'
+                  )
+
+          for token in [
+              'id="surface-sticky"',
+              'id="surface-title"',
+              'id="surface-link-copy"',
+              'class="review-progress surface-progress"',
           ]:
               if token not in index:
                   raise SystemExit(
-                      f'UXR-5 template contract missing: {token}'
+                      f'UXR-5 shared surface chrome missing: {token}'
                   )
 
+          family_append = index.index(
+              'actions.appendChild(\n            familyGroup'
+          )
+          next_append = index.index(
+              'actions.appendChild(\n            nextWrap'
+          )
+          if family_append > next_append:
+              raise SystemExit(
+                  'UXR-5 HOME order must be L/W/R/T/NEXT.'
+              )
+
           for token in [
-              'function technicalQuestionDeepLink_(',
-              'function reviewQuestionDeepLink_(',
-              'function initialQuestionIndexFromRequest_(',
-              'function scrollToQuestionDeepLinkTarget_(',
-              "'review-technical-question-links'",
-              "'review-technical-question-link'",
-              "'_URL='",
-              "'問題を開く'",
+              'function reviewPermalinkForQuestion_(',
+              "'mode=REVIEW'",
+              "'review_kind=' +",
+              "'surface_family=' +",
+              "'set_id=' +",
+              "'q_no=' +",
+              'function copyReviewPermalink_(',
+              'function configureSurfaceChrome_(',
+              'function buildReviewProgress_(',
+              'function initialReviewIndexFromRequest_(',
+              "'review-progress-button progress-button'",
+              "'［' +",
           ]:
               if token not in client:
                   raise SystemExit(
                       f'UXR-5 client contract missing: {token}'
                   )
 
-          render_start = client.index(
-              'function renderQuestions(questions)'
-          )
-          render_end = client.index(
-              'function buildAudioBlock(',
-              render_start,
-          )
-          render = client[render_start:render_end]
-          for forbidden in [
-              'technicalQuestionDeepLink_(',
-              'question-deep-link',
-              "'問題を開く'",
-          ]:
-              if forbidden in render:
-                  raise SystemExit(
-                      'UXR-5 link leaked onto learning question header: ' +
-                      forbidden
-                  )
-
           review_start = client.index(
               'function renderPersistentReview('
           )
-          tech_start = client.index(
-              'var technical =',
+          review_end = client.index(
+              'function setReviewPage(',
               review_start,
           )
-          tech_end = client.index(
-              'var actions =',
-              tech_start,
-          )
-          tech = client[tech_start:tech_end]
-          for required in [
-              'reviewQuestionDeepLink_(',
-              "'review-technical-question-links'",
-              "'_URL='",
-              "'問題を開く'",
-              'technicalLines.join',
-          ]:
-              if required not in tech:
-                  raise SystemExit(
-                      'UXR-5 Review technical-info contract missing: ' +
-                      required
-                  )
+          review = client[review_start:review_end]
 
-          builder_start = client.index(
-              'function technicalQuestionDeepLink_('
-          )
-          builder_end = client.index(
-              'function reviewQuestionDeepLink_(',
-              builder_start,
-          )
-          builder = client[
-              builder_start:builder_end
-          ]
-
-          for required in [
-              "'mode='",
-              "'surface_family='",
-              "'set_id='",
-              "'q_no='",
+          for token in [
+              'configureSurfaceChrome_(',
+              'buildReviewProgress_(',
+              'initialReviewIndexFromRequest_(',
           ]:
-              if required not in builder:
+              if token not in review:
                   raise SystemExit(
-                      'UXR-5 URL route identity missing: ' +
-                      required
+                      f'UXR-5 Review shared chrome missing: {token}'
                   )
 
           for forbidden in [
-              'visible_choices',
-              'choice_ids',
-              'correct_answer',
-              'user_answer',
-              'answer_text',
-              'question_text',
-              'question_key',
-              'item_id',
-              'txn_id',
-              'legacy_review_id',
-              'receipt',
+              "'review-technical'",
+              "'review-technical-question-links'",
+              "'技術情報'",
+              "'技術情報をコピー'",
           ]:
-              if forbidden in builder:
+              if forbidden in review:
                   raise SystemExit(
-                      'UXR-5 URL leaks question/answer data: ' +
+                      'UXR-5 legacy technical block remains: ' +
                       forbidden
                   )
 
-          if '.question-deep-link {' in style:
+          for forbidden in [
+              '.review-technical {',
+              '.review-technical-question-links {',
+              '.review-technical-question-link {',
+              '.review-technical-ids {',
+          ]:
+              if forbidden in style:
+                  raise SystemExit(
+                      'UXR-5 legacy technical CSS remains: ' +
+                      forbidden
+                  )
+
+          if web.count(
+              'h3WebAttachPostSubmitReviewSurface_('
+          ) != 5:
               raise SystemExit(
-                  'UXR-5 obsolete learning-header link style remains.'
+                  'UXR-5 post-submit Review surface projection must have one helper + four family calls.'
+              )
+
+          for source, label in [
+              (persistence, 'WebAppReviewPersistence.js'),
+              (surface_bridge, 'WebAppSurfaceReviewBridge.js'),
+          ]:
+              if 'surface_set_no' in source:
+                  raise SystemExit(
+                      'UXR-5 surface_set_no leaked into persistent Review authority: ' +
+                      label
+                  )
+
+          for token in [
+              'The common learner-Web projection for the displayed set number is `surface_set_no`.',
+              '`5L -> LISTENING_SET_NO`',
+              '`5W -> review_home_index_v1.SET_NO`',
+              '`READING -> issue_no`',
+              '`TRANSLATION -> issue_no`',
+              'never persisted into canonical Review JSON or hash/binding authority',
+          ]:
+              if token not in architecture:
+                  raise SystemExit(
+                      f'UXR-5 surface_set_no architecture contract missing: {token}'
+                  )
+
+          if 'display_set_no' in web or 'display_set_no' in client:
+              raise SystemExit(
+                  'UXR-5 obsolete display_set_no projection remains.'
               )
 
           for token in [
-              '.review-technical-question-links {',
-              '.review-technical-question-link {',
+              '.surface-sticky {',
+              '.surface-title-row {',
+              '.surface-link-copy {',
+              '.surface-sticky .surface-progress {',
+              '.review-progress-button {',
+              '.review-progress-button.current {',
+              'min-height: 60px;',
+              'min-height: 58px;',
           ]:
               if token not in style:
                   raise SystemExit(
-                      'UXR-5 Review technical-link style missing: ' +
-                      token
+                      f'UXR-5 shared UI/Monitor style missing: {token}'
                   )
 
           print(
-              'UXR-5 Review technical deep-link static audit: PASS'
+              'UXR-5 shared navigation and Review permalink static audit: PASS'
           )
           PY
 
@@ -10244,10 +10368,30 @@ jobs:
             h3SystemTestSetIdAllowed_: value =>
               value ===
               'SYSTEM_TEST-H3-L5E2E-R3-06-20260919-01',
+            H3_WEB_RUNTIME_SPREADSHEET_ID:
+              'RUNTIME',
             SpreadsheetApp: {
               openById: () => ({})
             },
-            h3ReviewCurrentLearning_: () => null
+            h3ReviewCurrentLearning_: () => null,
+            h3ReviewSurfaceMetadata_:
+              (kind, family, level) => ({
+                learning_surface_schema:
+                  'H3_LEARNING_SURFACE_V1',
+                provider_kind: String(kind || ''),
+                surface_family: String(family || ''),
+                level: String(level || '')
+              }),
+            h3ReviewHomeIndexTable_: () => ({
+              map: {SET_NO: 0},
+              rows: []
+            }),
+            h3ReviewHomeIndexFind_:
+              (_table, _kind, setId) =>
+                setId === 'W-OLD'
+                  ? {row: [9]}
+                  : null,
+            h3ReviewHomeIndexNextSetNo_: () => 8
           });
 
           vm.runInContext(source, ctx, {
@@ -10264,61 +10408,77 @@ jobs:
               ctx
             );
 
-          const listening = boot({
-            mode: 'LISTENING',
-            set_id: 'H3-20260920-L04',
-            q_no: '3'
-          });
-          if (
-            listening.mode !== 'LISTENING' ||
-            listening.set_id !==
-              'H3-20260920-L04' ||
-            listening.q_no !== 3
-          ) {
-            throw new Error(
-              'UXR-5 listening q_no boot mismatch.'
-            );
-          }
+          const cases = [
+            {
+              review_kind: 'LISTENING',
+              surface_family: '5L',
+              set_id: 'H3-20260920-L04',
+              q_no: '5'
+            },
+            {
+              review_kind: 'WRITTEN',
+              surface_family: '5W',
+              set_id: 'H3-20260914-03',
+              q_no: '5'
+            },
+            {
+              review_kind: 'WRITTEN',
+              surface_family: 'READING',
+              set_id: 'H3-20260921-R001',
+              q_no: '2'
+            },
+            {
+              review_kind: 'WRITTEN',
+              surface_family: 'TRANSLATION',
+              set_id: 'H3-20260922-T003',
+              q_no: '2'
+            }
+          ];
 
-          const reading = boot({
-            mode: 'WRITTEN',
-            surface_family: 'READING',
-            set_id: 'H3-20260921-R001',
-            q_no: '2'
-          });
-          if (
-            reading.mode !== 'WRITTEN' ||
-            reading.surface_family !==
-              'READING' ||
-            reading.set_id !==
-              'H3-20260921-R001' ||
-            reading.q_no !== 2
-          ) {
-            throw new Error(
-              'UXR-5 Reading q_no boot mismatch.'
-            );
+          for (const expected of cases) {
+            const actual = boot({
+              mode: 'REVIEW',
+              ...expected
+            });
+            if (
+              actual.mode !== 'REVIEW' ||
+              actual.review_kind !==
+                expected.review_kind ||
+              actual.surface_family !==
+                expected.surface_family ||
+              actual.set_id !==
+                expected.set_id ||
+              actual.q_no !==
+                Number(expected.q_no)
+            ) {
+              throw new Error(
+                'UXR-5 Review permalink boot mismatch: ' +
+                  JSON.stringify({
+                    expected,
+                    actual
+                  })
+              );
+            }
           }
 
           for (const params of [
             {
-              mode: 'LISTENING',
+              mode: 'REVIEW',
+              review_kind: 'LISTENING',
+              surface_family: '5L',
               set_id: 'H3-20260920-L04',
               q_no: '0'
             },
             {
-              mode: 'LISTENING',
-              set_id: 'H3-20260920-L04',
+              mode: 'REVIEW',
+              review_kind: 'WRITTEN',
+              surface_family: '5W',
+              set_id: 'H3-20260914-03',
               q_no: '6'
             },
             {
-              mode: 'LISTENING',
-              set_id: 'H3-20260920-L04',
-              q_no: 'abc'
-            },
-            {
               mode: 'REVIEW',
-              txn_id:
-                'H3TX-20260919-000005',
+              set_id: 'H3-20260914-03',
               q_no: '1'
             }
           ]) {
@@ -10337,14 +10497,231 @@ jobs:
             }
             if (!rejected) {
               throw new Error(
-                'UXR-5 invalid q_no route was accepted: ' +
-                JSON.stringify(params)
+                'UXR-5 invalid Review permalink was accepted: ' +
+                  JSON.stringify(params)
               );
             }
           }
 
+          const projectSurface = payload =>
+            vm.runInContext(
+              'h3WebAttachSurfaceSetNo_(' +
+                JSON.stringify(payload) +
+              ')',
+              ctx
+            );
+
+          const projected = [
+            [
+              {
+                mode:'LISTENING',
+                provider_kind:'LISTENING',
+                surface_family:'5L',
+                set_id:'L-12',
+                listening_set_no:12
+              },
+              12
+            ],
+            [
+              {
+                mode:'WRITTEN',
+                provider_kind:'WRITTEN',
+                surface_family:'5W',
+                set_id:'W-NEW'
+              },
+              8
+            ],
+            [
+              {
+                mode:'REVIEW',
+                kind:'WRITTEN',
+                surface_family:'5W',
+                set_id:'W-OLD'
+              },
+              9
+            ],
+            [
+              {
+                mode:'WRITTEN',
+                provider_kind:'WRITTEN',
+                surface_family:'READING',
+                set_id:'R-3',
+                issue_no:3
+              },
+              3
+            ],
+            [
+              {
+                mode:'WRITTEN',
+                provider_kind:'WRITTEN',
+                surface_family:'TRANSLATION',
+                set_id:'T-2',
+                issue_no:2
+              },
+              2
+            ]
+          ];
+
+          for (const [payload, expected] of projected) {
+            const actual = projectSurface(payload);
+            if (actual.surface_set_no !== expected) {
+              throw new Error(
+                'UXR-5 surface_set_no projection mismatch: ' +
+                JSON.stringify({payload, expected, actual})
+              );
+            }
+          }
+
+          const attachPostSubmit = (payload, sync) =>
+            vm.runInContext(
+              'h3WebAttachPostSubmitReviewSurface_(' +
+                JSON.stringify(payload) + ',' +
+                JSON.stringify(sync) +
+              ')',
+              ctx
+            );
+
+          const postSubmitCases = [
+            {
+              payload:{
+                mode:'REVIEW',
+                set_id:'L-12',
+                listening_set_no:12
+              },
+              sync:{
+                schema:'H3_REVIEW_HOME_INDEX_SYNC_V1',
+                status:'PASS',
+                kind:'LISTENING',
+                surface_family:'5L',
+                level:'3級',
+                set_id:'L-12',
+                set_no:12
+              },
+              family:'5L',
+              kind:'LISTENING',
+              setNo:12
+            },
+            {
+              payload:{
+                mode:'REVIEW',
+                kind:'WRITTEN',
+                set_id:'W-8'
+              },
+              sync:{
+                schema:'H3_REVIEW_HOME_INDEX_SYNC_V1',
+                status:'PASS',
+                kind:'WRITTEN',
+                surface_family:'5W',
+                level:'3級',
+                set_id:'W-8',
+                set_no:8
+              },
+              family:'5W',
+              kind:'WRITTEN',
+              setNo:8
+            },
+            {
+              payload:{
+                mode:'REVIEW',
+                kind:'WRITTEN',
+                provider_kind:'WRITTEN',
+                surface_family:'READING',
+                level:'3級',
+                set_id:'R-3',
+                issue_no:3
+              },
+              sync:{
+                schema:'H3_REVIEW_HOME_INDEX_SYNC_V1',
+                status:'PASS',
+                kind:'WRITTEN',
+                surface_family:'READING',
+                level:'3級',
+                set_id:'R-3',
+                set_no:3
+              },
+              family:'READING',
+              kind:'WRITTEN',
+              setNo:3
+            },
+            {
+              payload:{
+                mode:'REVIEW',
+                kind:'WRITTEN',
+                provider_kind:'WRITTEN',
+                surface_family:'TRANSLATION',
+                level:'3級',
+                set_id:'T-2',
+                issue_no:2
+              },
+              sync:{
+                schema:'H3_REVIEW_HOME_INDEX_SYNC_V1',
+                status:'PASS',
+                kind:'WRITTEN',
+                surface_family:'TRANSLATION',
+                level:'3級',
+                set_id:'T-2',
+                set_no:2
+              },
+              family:'TRANSLATION',
+              kind:'WRITTEN',
+              setNo:2
+            }
+          ];
+
+          for (const test of postSubmitCases) {
+            const actual =
+              attachPostSubmit(
+                test.payload,
+                test.sync
+              );
+            if (
+              actual.kind !== test.kind ||
+              actual.provider_kind !== test.kind ||
+              actual.surface_family !== test.family ||
+              actual.surface_set_no !== test.setNo ||
+              actual.learning_surface_schema !==
+                'H3_LEARNING_SURFACE_V1'
+            ) {
+              throw new Error(
+                'UXR-5 post-submit Review projection mismatch: ' +
+                JSON.stringify({test, actual})
+              );
+            }
+          }
+
+          let mismatchRejected = false;
+          try {
+            attachPostSubmit(
+              {
+                mode:'REVIEW',
+                set_id:'L-12',
+                listening_set_no:13
+              },
+              {
+                schema:'H3_REVIEW_HOME_INDEX_SYNC_V1',
+                status:'PASS',
+                kind:'LISTENING',
+                surface_family:'5L',
+                level:'3級',
+                set_id:'L-12',
+                set_no:12
+              }
+            );
+          } catch (err) {
+            mismatchRejected =
+              String(err && err.message || err)
+                .includes(
+                  'POSTSUBMIT_REVIEW_5L_SET_NO_MISMATCH'
+                );
+          }
+          if (!mismatchRejected) {
+            throw new Error(
+              'UXR-5 post-submit authority mismatch did not fail closed.'
+            );
+          }
+
           console.log(
-            'UXR-5 Review technical deep-link boot audit: PASS'
+            'UXR-5 Review permalink/surface projection audit: PASS'
           );
           NODE
 

@@ -21,7 +21,251 @@ function include_(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
+function h3WebAttachSurfaceSetNo_(
+  payload
+) {
+  if (
+    !payload ||
+    !payload.set_id ||
+    [
+      'LISTENING',
+      'WRITTEN',
+      'REVIEW'
+    ].indexOf(
+      String(payload.mode || '')
+    ) < 0
+  ) {
+    return payload;
+  }
+
+  var kind =
+    String(
+      payload.kind ||
+      payload.provider_kind ||
+      (
+        payload.mode === 'LISTENING'
+          ? 'LISTENING'
+          : 'WRITTEN'
+      )
+    );
+  var family =
+    String(
+      payload.surface_family ||
+      (
+        kind === 'LISTENING'
+          ? '5L'
+          : '5W'
+      )
+    );
+  var setNo = 0;
+
+  if (
+    ['LISTENING', 'WRITTEN']
+      .indexOf(kind) < 0
+  ) {
+    throw new Error(
+      'SURFACE_SET_NO_KIND_INVALID'
+    );
+  }
+
+  if (family === '5L') {
+    setNo =
+      Number(
+        payload.listening_set_no || 0
+      );
+  } else if (
+    family === 'READING' ||
+    family === 'TRANSLATION'
+  ) {
+    setNo =
+      Number(
+        payload.issue_no || 0
+      );
+  } else if (family === '5W') {
+    var spreadsheet =
+      SpreadsheetApp.openById(
+        H3_WEB_RUNTIME_SPREADSHEET_ID
+      );
+    var table =
+      h3ReviewHomeIndexTable_(
+        spreadsheet
+      );
+    var existing =
+      h3ReviewHomeIndexFind_(
+        table,
+        kind,
+        String(payload.set_id)
+      );
+
+    if (existing) {
+      setNo =
+        Number(
+          existing.row[
+            table.map.SET_NO
+          ] || 0
+        );
+    } else {
+      if (payload.mode === 'REVIEW') {
+        throw new Error(
+          'SURFACE_SET_NO_REVIEW_INDEX_MISSING'
+        );
+      }
+      setNo =
+        h3ReviewHomeIndexNextSetNo_(
+          table,
+          kind,
+          family
+        );
+    }
+  } else {
+    throw new Error(
+      'SURFACE_SET_NO_FAMILY_INVALID'
+    );
+  }
+
+  if (
+    !Number.isInteger(setNo) ||
+    setNo < 1
+  ) {
+    throw new Error(
+      'SURFACE_SET_NO_INVALID'
+    );
+  }
+
+  if (
+    payload.surface_set_no !==
+      null &&
+    payload.surface_set_no !==
+      undefined &&
+    Number(
+      payload.surface_set_no
+    ) !== setNo
+  ) {
+    throw new Error(
+      'SURFACE_SET_NO_MISMATCH'
+    );
+  }
+
+  payload.surface_set_no =
+    setNo;
+  return payload;
+}
+
+
+function h3WebAttachPostSubmitReviewSurface_(
+  payload,
+  homeIndexSync
+) {
+  if (
+    !payload ||
+    payload.mode !== 'REVIEW' ||
+    !payload.set_id ||
+    !homeIndexSync ||
+    homeIndexSync.schema !==
+      'H3_REVIEW_HOME_INDEX_SYNC_V1' ||
+    homeIndexSync.status !== 'PASS' ||
+    String(homeIndexSync.set_id || '') !==
+      String(payload.set_id)
+  ) {
+    throw new Error(
+      'POSTSUBMIT_REVIEW_SURFACE_SYNC_INVALID'
+    );
+  }
+
+  var metadata =
+    h3ReviewSurfaceMetadata_(
+      homeIndexSync.kind,
+      homeIndexSync.surface_family,
+      homeIndexSync.level
+    );
+  var setNo =
+    Number(
+      homeIndexSync.set_no || 0
+    );
+
+  if (
+    !Number.isInteger(setNo) ||
+    setNo < 1
+  ) {
+    throw new Error(
+      'POSTSUBMIT_REVIEW_SURFACE_SET_NO_INVALID'
+    );
+  }
+
+  [
+    ['kind', metadata.provider_kind],
+    [
+      'provider_kind',
+      metadata.provider_kind
+    ],
+    [
+      'surface_family',
+      metadata.surface_family
+    ],
+    ['level', metadata.level]
+  ].forEach(
+    function (pair) {
+      var key = pair[0];
+      var expected = pair[1];
+      if (
+        payload[key] &&
+        String(payload[key]) !==
+          String(expected)
+      ) {
+        throw new Error(
+          'POSTSUBMIT_REVIEW_SURFACE_IDENTITY_MISMATCH:' +
+            key
+        );
+      }
+    }
+  );
+
+  if (
+    metadata.surface_family === '5L' &&
+    Number(
+      payload.listening_set_no || 0
+    ) !== setNo
+  ) {
+    throw new Error(
+      'POSTSUBMIT_REVIEW_5L_SET_NO_MISMATCH'
+    );
+  }
+
+  if (
+    (
+      metadata.surface_family ===
+        'READING' ||
+      metadata.surface_family ===
+        'TRANSLATION'
+    ) &&
+    Number(
+      payload.issue_no || 0
+    ) !== setNo
+  ) {
+    throw new Error(
+      'POSTSUBMIT_REVIEW_ISSUE_NO_MISMATCH'
+    );
+  }
+
+  payload.learning_surface_schema =
+    metadata.learning_surface_schema;
+  payload.kind =
+    metadata.provider_kind;
+  payload.provider_kind =
+    metadata.provider_kind;
+  payload.surface_family =
+    metadata.surface_family;
+  payload.level =
+    metadata.level;
+  payload.surface_set_no =
+    setNo;
+
+  return payload;
+}
+
 function getListeningWebSet(request) {
+  var payload;
+
   if (
     request &&
     [
@@ -30,13 +274,23 @@ function getListeningWebSet(request) {
       'REVIEW_REPLAY'
     ].indexOf(request.mode) >= 0
   ) {
-    return h3ReviewRenderRequest_(
-      request
+    payload =
+      h3ReviewRenderRequest_(
+        request
+      );
+    return h3WebAttachSurfaceSetNo_(
+      payload
     );
   }
 
   if (request && request.mode === 'LISTENING') {
-    return buildProductionRenderPayload_(request);
+    payload =
+      buildProductionRenderPayload_(
+        request
+      );
+    return h3WebAttachSurfaceSetNo_(
+      payload
+    );
   }
 
   if (request && request.mode === 'WRITTEN') {
@@ -44,8 +298,12 @@ function getListeningWebSet(request) {
       request.surface_family ===
         'READING'
     ) {
-      return buildReadingProductionRenderPayload_(
-        request
+      payload =
+        buildReadingProductionRenderPayload_(
+          request
+        );
+      return h3WebAttachSurfaceSetNo_(
+        payload
       );
     }
 
@@ -60,18 +318,27 @@ function getListeningWebSet(request) {
           request.set_id
         )
       ) {
-        return buildTranslationV2ProductionRenderPayload_(
-          request
-        );
+        payload =
+          buildTranslationV2ProductionRenderPayload_(
+            request
+          );
+      } else {
+        payload =
+          buildTranslationProductionRenderPayload_(
+            request
+          );
       }
-
-      return buildTranslationProductionRenderPayload_(
-        request
+      return h3WebAttachSurfaceSetNo_(
+        payload
       );
     }
 
-    return buildWrittenProductionRenderPayload_(
-      request
+    payload =
+      buildWrittenProductionRenderPayload_(
+        request
+      );
+    return h3WebAttachSurfaceSetNo_(
+      payload
     );
   }
 
@@ -140,6 +407,12 @@ function submitListeningWebAnswers(request) {
         result.after_sync
       );
 
+    result.after_sync =
+      h3WebAttachPostSubmitReviewSurface_(
+        result.after_sync,
+        result.home_index_sync
+      );
+
     result.family_scheduler_shadow =
       h3FamilySchedulerObserveAfterCommit_(
         'L',
@@ -194,7 +467,10 @@ function submitListeningWebAnswers(request) {
       }
 
       readingResult.after_sync =
-        readingReviewReadback;
+        h3WebAttachPostSubmitReviewSurface_(
+          readingReviewReadback,
+          readingResult.home_index_sync
+        );
 
       readingResult.family_scheduler_shadow =
         h3FamilySchedulerObserveAfterCommit_(
@@ -271,12 +547,15 @@ function submitListeningWebAnswers(request) {
       }
 
       translationResult.after_sync =
-        h3SurfaceReviewOpenForLearner_({
-          surface_family:
-            'TRANSLATION',
-          set_id:
-            translationResult.set_id
-        });
+        h3WebAttachPostSubmitReviewSurface_(
+          h3SurfaceReviewOpenForLearner_({
+            surface_family:
+              'TRANSLATION',
+            set_id:
+              translationResult.set_id
+          }),
+          translationResult.home_index_sync
+        );
 
       translationResult.family_scheduler_shadow =
         h3FamilySchedulerObserveAfterCommit_(
@@ -309,6 +588,12 @@ function submitListeningWebAnswers(request) {
       h3ReviewHomeIndexUpsertAfterCommit_(
         writtenResult,
         writtenResult.after_sync
+      );
+
+    writtenResult.after_sync =
+      h3WebAttachPostSubmitReviewSurface_(
+        writtenResult.after_sync,
+        writtenResult.home_index_sync
       );
 
     writtenResult.family_scheduler_shadow =
@@ -349,6 +634,8 @@ function h3WebBootRequest_(e) {
   var mode = 'HOME';
   var setId = null;
   var txnId = null;
+  var legacyReviewId = null;
+  var reviewKind = null;
   var surfaceFamily = null;
   var questionNo = null;
   var params =
@@ -361,12 +648,42 @@ function h3WebBootRequest_(e) {
   if (paramKeys.length) {
     if (
       params.mode === 'REVIEW' &&
-      params.txn_id
+      (
+        params.txn_id ||
+        params.legacy_review_id ||
+        (
+          params.review_kind &&
+          params.set_id
+        )
+      )
     ) {
       mode = 'REVIEW';
-      txnId = String(
+      setId =
+        params.set_id
+          ? String(params.set_id)
+          : null;
+      txnId =
         params.txn_id
-      );
+          ? String(params.txn_id)
+          : null;
+      legacyReviewId =
+        params.legacy_review_id
+          ? String(
+              params.legacy_review_id
+            )
+          : null;
+      reviewKind =
+        params.review_kind
+          ? String(
+              params.review_kind
+            )
+          : null;
+      if (params.surface_family) {
+        surfaceFamily =
+          String(
+            params.surface_family
+          );
+      }
     } else if (
       params.mode === 'LISTENING' &&
       params.set_id
@@ -450,8 +767,23 @@ function h3WebBootRequest_(e) {
     if (
       [
         'LISTENING',
-        'WRITTEN'
+        'WRITTEN',
+        'REVIEW'
       ].indexOf(mode) < 0 ||
+      (
+        mode === 'REVIEW' &&
+        (
+          !setId ||
+          [
+            'LISTENING',
+            'WRITTEN'
+          ].indexOf(
+            String(
+              reviewKind || ''
+            )
+          ) < 0
+        )
+      ) ||
       !/^[1-5]$/.test(
         String(params.q_no)
       )
@@ -473,6 +805,10 @@ function h3WebBootRequest_(e) {
       surfaceFamily,
     set_id: setId,
     txn_id: txnId,
+    legacy_review_id:
+      legacyReviewId,
+    review_kind:
+      reviewKind,
     q_no: questionNo
   };
 }

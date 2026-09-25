@@ -1009,10 +1009,29 @@
           )
           .classList.remove('hidden');
 
-        app.activeIndex = 0;
+        var initialIndex =
+          initialQuestionIndexFromRequest_(
+            webRequest,
+            payload
+          );
+        app.activeIndex =
+          initialIndex;
         updateMobilePager();
         updateLiveSummary();
         scheduleInitialAudioPrefetch();
+
+        if (
+          webRequest &&
+          webRequest.q_no !== null &&
+          webRequest.q_no !== undefined &&
+          String(
+            webRequest.q_no
+          ) !== ''
+        ) {
+          scrollToQuestionDeepLinkTarget_(
+            initialIndex
+          );
+        }
       })
       .withFailureHandler(function (err) {
         setLoading(false);
@@ -2068,6 +2087,186 @@
     return index + 1;
   }
 
+  function technicalQuestionDeepLink_(
+    payload,
+    qNo
+  ) {
+    var base =
+      String(
+        window.H3_TECHNICAL_LINK_BASE ||
+        ''
+      ).trim();
+    var mode =
+      String(
+        payload &&
+        payload.mode ||
+        ''
+      );
+    var family =
+      resolveLearningSurfaceFamily_(
+        payload
+      );
+    var setId =
+      String(
+        payload &&
+        payload.set_id ||
+        ''
+      );
+    var ordinal =
+      Number(qNo);
+
+    if (
+      !base ||
+      !/^https:\/\/script\.google\.com\/macros\/s\/[^/?#]+\/(?:dev|exec)$/
+        .test(base) ||
+      [
+        'LISTENING',
+        'WRITTEN'
+      ].indexOf(mode) < 0 ||
+      !setId ||
+      !Number.isInteger(ordinal) ||
+      ordinal < 1 ||
+      ordinal > 5
+    ) {
+      return '';
+    }
+
+    var query = [
+      'mode=' +
+        encodeURIComponent(mode)
+    ];
+
+    if (
+      mode === 'WRITTEN' &&
+      [
+        'READING',
+        'TRANSLATION'
+      ].indexOf(family) >= 0
+    ) {
+      query.push(
+        'surface_family=' +
+          encodeURIComponent(
+            family
+          )
+      );
+    }
+
+    query.push(
+      'set_id=' +
+        encodeURIComponent(setId)
+    );
+    query.push(
+      'q_no=' +
+        encodeURIComponent(
+          String(ordinal)
+        )
+    );
+
+    return (
+      base +
+      '?' +
+      query.join('&')
+    );
+  }
+
+  function initialQuestionIndexFromRequest_(
+    request,
+    payload
+  ) {
+    var raw =
+      request &&
+      request.q_no;
+
+    if (
+      raw === null ||
+      raw === undefined ||
+      String(raw) === ''
+    ) {
+      return 0;
+    }
+
+    var qNo =
+      Number(raw);
+
+    if (
+      !payload ||
+      [
+        'LISTENING',
+        'WRITTEN'
+      ].indexOf(
+        String(payload.mode || '')
+      ) < 0 ||
+      String(
+        request.set_id || ''
+      ) !==
+        String(
+          payload.set_id || ''
+        ) ||
+      !Number.isInteger(qNo) ||
+      qNo < 1 ||
+      qNo > 5 ||
+      !Array.isArray(
+        payload.questions
+      )
+    ) {
+      throw new Error(
+        'QUESTION_DEEP_LINK_REQUEST_INVALID'
+      );
+    }
+
+    var matches = [];
+
+    payload.questions.forEach(
+      function (question, index) {
+        if (
+          authoritativeQuestionOrdinal_(
+            question,
+            index,
+            payload.questions
+          ) === qNo
+        ) {
+          matches.push(index);
+        }
+      }
+    );
+
+    if (matches.length !== 1) {
+      throw new Error(
+        'QUESTION_DEEP_LINK_TARGET_INVALID:' +
+          String(qNo)
+      );
+    }
+
+    return matches[0];
+  }
+
+  function scrollToQuestionDeepLinkTarget_(
+    index
+  ) {
+    window.setTimeout(
+      function () {
+        var card =
+          document.querySelector(
+            '.question-card[data-index="' +
+              String(index) +
+              '"]'
+          );
+
+        if (
+          card &&
+          card.scrollIntoView
+        ) {
+          card.scrollIntoView({
+            block: 'start',
+            behavior: 'auto'
+          });
+        }
+      },
+      0
+    );
+  }
+
+
   function reviewQuestionOrdinal_(
     review,
     part,
@@ -2148,6 +2347,41 @@
       });
 
       head.appendChild(title);
+
+      var technicalLinkUrl =
+        technicalQuestionDeepLink_(
+          app.payload,
+          qNo
+        );
+
+      if (technicalLinkUrl) {
+        var technicalLink =
+          document.createElement('a');
+        technicalLink.className =
+          'question-deep-link';
+        technicalLink.href =
+          technicalLinkUrl;
+        technicalLink.target =
+          '_blank';
+        technicalLink.rel =
+          'noopener';
+        technicalLink.textContent =
+          'URL';
+        technicalLink.setAttribute(
+          'aria-label',
+          'Q' +
+            qNo +
+            ' 技術リンク'
+        );
+        technicalLink.title =
+          'Q' +
+          qNo +
+          ' 技術リンク';
+        head.appendChild(
+          technicalLink
+        );
+      }
+
       head.appendChild(uncertain);
       card.appendChild(head);
 
@@ -2741,6 +2975,30 @@
             return true;
           }
         );
+
+    var activeKey =
+      (
+        app.payload &&
+        app.payload.mode !== 'REVIEW'
+      )
+        ? audioKeyForIndex_(
+            app.activeIndex
+          )
+        : null;
+    var activePosition =
+      activeKey
+        ? keys.indexOf(activeKey)
+        : -1;
+
+    if (activePosition > 0) {
+      keys.splice(
+        activePosition,
+        1
+      );
+      keys.unshift(
+        activeKey
+      );
+    }
 
     keys.forEach(
       function (

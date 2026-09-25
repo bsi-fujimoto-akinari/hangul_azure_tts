@@ -66,8 +66,34 @@
     font-size: 17px;
     align-self: center;
   }
+  .question-deep-link {
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    min-height: 30px;
+    border: 1px solid #c8c8c8;
+    border-radius: 8px;
+    background: #fff;
+    color: #555;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+    text-decoration: none;
+  }
+  .question-deep-link:focus-visible {
+    outline: 2px solid #555;
+    outline-offset: 2px;
+  }
+  .question-card {
+    scroll-margin-top: 58px;
+  }
   .written-question .question-head {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns:
+      minmax(0, 1fr)
+      auto
+      auto;
   }
   .question-prompt {
     white-space: pre-wrap;
@@ -434,6 +460,11 @@
     }
     .question-head { margin-bottom: 8px; }
     .question-title { font-size: 17px; }
+    .question-deep-link {
+      min-width: 36px;
+      min-height: 36px;
+      font-size: 11px;
+    }
     .question-prompt {
       font-size: 16px;
       line-height: 1.6;

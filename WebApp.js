@@ -7,6 +7,10 @@
 function h3WebDoGet_(e) {
   var template = HtmlService.createTemplateFromFile('Index');
   template.bootJson = JSON.stringify(h3WebBootRequest_(e));
+  template.technicalLinkBaseJson =
+    JSON.stringify(
+      H3_LEARNER_WEB_APP_BASE_URL
+    );
   return template
     .evaluate()
     .setTitle('H3')
@@ -346,6 +350,7 @@ function h3WebBootRequest_(e) {
   var setId = null;
   var txnId = null;
   var surfaceFamily = null;
+  var questionNo = null;
   var params =
     e && e.parameter
       ? e.parameter
@@ -437,6 +442,29 @@ function h3WebBootRequest_(e) {
     }
   }
 
+  if (
+    params.q_no !== undefined &&
+    params.q_no !== null &&
+    String(params.q_no) !== ''
+  ) {
+    if (
+      [
+        'LISTENING',
+        'WRITTEN'
+      ].indexOf(mode) < 0 ||
+      !/^[1-5]$/.test(
+        String(params.q_no)
+      )
+    ) {
+      throw new Error(
+        'QUESTION_DEEP_LINK_Q_NO_INVALID'
+      );
+    }
+
+    questionNo =
+      Number(params.q_no);
+  }
+
   return {
     schema:
       'H3_WEB_RENDER_REQUEST_V1',
@@ -444,7 +472,8 @@ function h3WebBootRequest_(e) {
     surface_family:
       surfaceFamily,
     set_id: setId,
-    txn_id: txnId
+    txn_id: txnId,
+    q_no: questionNo
   };
 }
 

@@ -3,6 +3,7 @@ var H3_REVIEW_AUDIO_SCHEMA_='H3_REVIEW_AUDIO_ASSET_V1';
 var H3_REVIEW_AUDIO_GENERATOR_VERSION_='review-audio-v2-1200ms';
 var H3_REVIEW_AUDIO_BREAK_MS_=1200;
 var H3_REVIEW_AUDIO_FILE_VERSION_='rv2_1200ms';
+var H3_REVIEW_AUDIO_STALE_REPLACED_FOLDER_ID_='1CcFqmt9ljhgiTXheYAQ0suxGZZkWTGEp';
 var H3_REVIEW_AUDIO_FOLDER_IDS_={
   '5W':'1dLf1KhHic8SU-4XOGueZSM55vznS024C',
   '2R':'18V3zOrKRhIgTCL_McrXjWDu6OIZupNn5',
@@ -151,20 +152,43 @@ function h3ReviewAudioLegacy5WScript_(q){
   throw new Error('REVIEW_AUDIO_5W_SECTION_UNSUPPORTED:'+sec);
 }
 
-function h3ReviewAudioCanonicalize5WScript_(q,sec,script){
+function h3ReviewAudioCanonicalize5WScript_(q,sec,script,setId){
   var s=h3ReviewAudioNormalizeText_(script);
+
+  if(
+    String(setId||'')==='H3-20260915-01' &&
+    sec==='D4'
+  ){
+    var surface=String(q.question_surface||q.question_body||'');
+    var correct=String(q.correct_answer_text||'').trim();
+    if(
+      surface.indexOf(
+        '빨간 우산은 멀리서도 [눈에 띄었어요].'
+      )<0 ||
+      correct!=='멀리서도 쉽게 보였어요'
+    ){
+      throw new Error(
+        'REVIEW_AUDIO_UXR2B_D4_SOURCE_MISMATCH'
+      );
+    }
+    return [
+      '빨간 우산은 멀리서도 눈에 띄었어요.',
+      '빨간 우산은 멀리서도 쉽게 보였어요.'
+    ].join('\n');
+  }
+
   if(sec!=='D5')return s;
 
-  var surface=q.question_surface||q.question_body||'';
-  var body=typeof surface==='string'?
-    surface:
-    String((surface&&surface.body)||(surface&&surface.rendered)||q.question_body||'');
-  var correct=String(q.correct_answer_text||'').trim();
+  var d5surface=q.question_surface||q.question_body||'';
+  var body=typeof d5surface==='string'?
+    d5surface:
+    String((d5surface&&d5surface.body)||(d5surface&&d5surface.rendered)||q.question_body||'');
+  var d5correct=String(q.correct_answer_text||'').trim();
   var lines=h3ReviewAudioExtractHangulLines_(body);
 
-  if(lines.length>=2&&correct){
+  if(lines.length>=2&&d5correct){
     return h3ReviewAudioNormalizeText_(lines.slice(0,2).map(function(x){
-      return h3ReviewAudioFillBlank_(x.replace(/^[・•]\s*/,''),correct);
+      return h3ReviewAudioFillBlank_(x.replace(/^[・•]\s*/,''),d5correct);
     }).join('\n'));
   }
 
@@ -262,7 +286,7 @@ function h3ReviewAudioPlan5W_(ss,setId){
   return qs.map(function(q,i){
     var sec=String(q.section||('D'+(i+2)));
     var script=String(q.script_text||'').trim()||h3ReviewAudioLegacy5WScript_(q);
-    script=h3ReviewAudioCanonicalize5WScript_(q,sec,script);
+    script=h3ReviewAudioCanonicalize5WScript_(q,sec,script,setId);
     return h3ReviewAudioPlanEntry_(
       '5W',setId,sec,script,
       {sheet:source,source_schema:payload.schema||payload.reconstruction_schema||'',section:sec,q_no:i+1},
@@ -662,6 +686,98 @@ function h3ReviewAudioValidateStaleCanonical_(row,plan){
   return{file:f,file_id:oldFileId,generator_version:oldGen,audio_text_sha256:oldHash};
 }
 
+function h3ReviewAudioExactContentRepairMigration_(row,plan){
+  if(
+    plan.surface_family!=='5W' ||
+    plan.set_id!=='H3-20260915-01' ||
+    plan.slot_key!=='D4'
+  ){
+    return null;
+  }
+
+  var oldStatus=String(row.row[row.map.STATUS]||'');
+  var oldGen=String(row.row[row.map.GENERATOR_VERSION]||'');
+  var oldHash=String(row.row[row.map.AUDIO_TEXT_SHA256]||'');
+  var oldFileId=String(row.row[row.map.AUDIO_FILE_ID]||'');
+  var oldFolder=String(row.row[row.map.DRIVE_FOLDER_ID]||'');
+
+  if(
+    oldStatus!=='DONE' ||
+    oldGen!==H3_REVIEW_AUDIO_GENERATOR_VERSION_ ||
+    oldHash!=='c939ca154c064c652c0088714d8e85a9f53235945159cd46fb378caef2534a6d' ||
+    oldFileId!=='1908KkxNbra1OpLYbBOsFDbO2StJFCt3r' ||
+    oldFolder!==H3_REVIEW_AUDIO_FOLDER_IDS_['5W'] ||
+    plan.audio_text_sha256!=='d01412d363148f3c42532953cbd73c12d8f19706e32edf533d1f0de65c5d880c'
+  ){
+    throw new Error(
+      'REVIEW_AUDIO_UXR2B_D4_MIGRATION_SOURCE_MISMATCH'
+    );
+  }
+
+  var f=DriveApp.getFileById(oldFileId);
+  if(
+    f.isTrashed() ||
+    f.getMimeType()!=='audio/mpeg' ||
+    f.getSize()<128
+  ){
+    throw new Error(
+      'REVIEW_AUDIO_UXR2B_D4_OLD_FILE_INVALID'
+    );
+  }
+
+  return{
+    file:f,
+    file_id:oldFileId,
+    generator_version:oldGen,
+    audio_text_sha256:oldHash,
+    retire_mode:'STALE_REPLACED_ARCHIVE',
+    archive_folder_id:
+      H3_REVIEW_AUDIO_STALE_REPLACED_FOLDER_ID_
+  };
+}
+
+function h3ReviewAudioRetireMigrationFile_(migration,plan){
+  if(!migration)return;
+
+  if(
+    migration.retire_mode===
+      'STALE_REPLACED_ARCHIVE'
+  ){
+    var archive=
+      DriveApp.getFolderById(
+        migration.archive_folder_id
+      );
+    migration.file.moveTo(archive);
+
+    var parents=[];
+    var it=migration.file.getParents();
+    while(it.hasNext()){
+      parents.push(it.next().getId());
+    }
+    if(
+      parents.indexOf(
+        migration.archive_folder_id
+      )<0 ||
+      parents.indexOf(
+        plan.drive_folder_id
+      )>=0
+    ){
+      throw new Error(
+        'REVIEW_AUDIO_UXR2B_D4_ARCHIVE_VERIFY_FAILED'
+      );
+    }
+    return;
+  }
+
+  migration.file.setTrashed(true);
+  if(!migration.file.isTrashed()){
+    throw new Error(
+      'REVIEW_AUDIO_STALE_FILE_NOT_TRASHED:'+
+      plan.set_id+':'+plan.slot_key
+    );
+  }
+}
+
 function h3ReviewAudioWriteAssetRow_(sheet,rowNumber,plan,file,status,errorText,createdAt){
   var now=new Date().toISOString();
   sheet.getRange(rowNumber,1,1,H3_REVIEW_AUDIO_HEADERS_.length).setValues([[
@@ -696,14 +812,26 @@ function h3ReviewAudioGeneratePlannedAsset_(ss,plan){
     var oldStatus=String(row.row[row.map.STATUS]||'');
     var oldGen=String(row.row[row.map.GENERATOR_VERSION]||'');
 
-    if(oldStatus==='DONE'&&oldGen===H3_REVIEW_AUDIO_GENERATOR_VERSION_){
+    migration=
+      h3ReviewAudioExactContentRepairMigration_(
+        row,
+        plan
+      );
+
+    if(
+      !migration &&
+      oldStatus==='DONE' &&
+      oldGen===H3_REVIEW_AUDIO_GENERATOR_VERSION_
+    ){
       if(oldHash!==plan.audio_text_sha256){
         throw new Error('REVIEW_AUDIO_EXISTING_ROW_HASH_MISMATCH:'+plan.set_id+':'+plan.slot_key);
       }
       return{status:'NO_OP',set_id:plan.set_id,slot_key:plan.slot_key};
     }
 
-    migration=h3ReviewAudioValidateStaleCanonical_(row,plan);
+    if(!migration){
+      migration=h3ReviewAudioValidateStaleCanonical_(row,plan);
+    }
     if(!migration&&oldHash!==plan.audio_text_sha256){
       throw new Error('REVIEW_AUDIO_EXISTING_ROW_HASH_MISMATCH:'+plan.set_id+':'+plan.slot_key);
     }
@@ -733,10 +861,10 @@ function h3ReviewAudioGeneratePlannedAsset_(ss,plan){
     h3ReviewAudioWriteAssetRow_(sheet,rowNumber,plan,file,'DONE','',createdAt);
 
     if(migration){
-      migration.file.setTrashed(true);
-      if(!migration.file.isTrashed()){
-        throw new Error('REVIEW_AUDIO_STALE_FILE_NOT_TRASHED:'+plan.set_id+':'+plan.slot_key);
-      }
+      h3ReviewAudioRetireMigrationFile_(
+        migration,
+        plan
+      );
     }
 
     return{
@@ -748,7 +876,12 @@ function h3ReviewAudioGeneratePlannedAsset_(ss,plan){
       audio_url:file.getUrl(),
       audio_text_sha256:plan.audio_text_sha256,
       generator_version:H3_REVIEW_AUDIO_GENERATOR_VERSION_,
-      replaced_file_id:migration?migration.file_id:''
+      replaced_file_id:migration?migration.file_id:'',
+      retired_mode:migration?String(migration.retire_mode||'TRASH'):'',
+      stale_replaced_folder_id:
+        migration&&migration.retire_mode==='STALE_REPLACED_ARCHIVE'
+          ? migration.archive_folder_id
+          : ''
     };
   }catch(e){
     if(!migration){
@@ -766,6 +899,58 @@ function h3ReviewAudioGenerateSet_(family,setId){
   return h3ReviewAudioPlanForSet_(ss,family,setId).map(function(p){
     return h3ReviewAudioGeneratePlannedAsset_(ss,p);
   });
+}
+
+
+function runUxr2bReviewAudioRepair(){
+  var ss=h3ReviewAudioRuntimeSpreadsheet_();
+  var plans=
+    h3ReviewAudioPlanForSet_(
+      ss,
+      '5W',
+      'H3-20260915-01'
+    ).filter(function(plan){
+      return plan.slot_key==='D4';
+    });
+
+  if(
+    plans.length!==1 ||
+    plans[0].audio_text_sha256!==
+      'd01412d363148f3c42532953cbd73c12d8f19706e32edf533d1f0de65c5d880c' ||
+    plans[0].voice_assignment.primary.label!=='JiMin'
+  ){
+    throw new Error(
+      'UXR2B_REVIEW_AUDIO_PLAN_INVALID'
+    );
+  }
+
+  var result=
+    h3ReviewAudioGeneratePlannedAsset_(
+      ss,
+      plans[0]
+    );
+
+  if(
+    result.status!=='DONE' ||
+    result.replaced_file_id!==
+      '1908KkxNbra1OpLYbBOsFDbO2StJFCt3r' ||
+    result.retired_mode!==
+      'STALE_REPLACED_ARCHIVE' ||
+    result.stale_replaced_folder_id!==
+      H3_REVIEW_AUDIO_STALE_REPLACED_FOLDER_ID_
+  ){
+    throw new Error(
+      'UXR2B_REVIEW_AUDIO_REPAIR_RESULT_INVALID'
+    );
+  }
+
+  return{
+    schema:'H3_UXR2B_REVIEW_AUDIO_REPAIR_V1',
+    status:'PASS',
+    set_id:'H3-20260915-01',
+    slot_key:'D4',
+    result:result
+  };
 }
 
 

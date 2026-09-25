@@ -23,8 +23,241 @@
     reviewSort: 'REVIEW_LEVEL',
     reviewVisited: {},
     reviewCompletionPending: false,
-    reviewCompletionRefreshPending: false
+    reviewCompletionRefreshPending: false,
+    runtimeTraceId: h3CreateRuntimeTraceId_()
   };
+
+  function h3CreateRuntimeTraceId_() {
+    var raw = '';
+    try {
+      if (
+        window.crypto &&
+        typeof window.crypto.randomUUID ===
+          'function'
+      ) {
+        raw =
+          window.crypto
+            .randomUUID()
+            .replace(/-/g, '');
+      }
+    } catch (_cryptoError) {}
+
+    if (!raw) {
+      raw =
+        String(Date.now()) +
+        String(
+          Math.random()
+        ).replace(/\D/g, '');
+    }
+
+    return (
+      'H3TRACE-' +
+      raw.slice(0, 32)
+    );
+  }
+
+  function h3ClientRuntimeErrorPayload_(
+    stage,
+    error,
+    context
+  ) {
+    var payload =
+      app.payload || {};
+    var boot =
+      window.H3_BOOT || {};
+    var source =
+      error || {};
+    var errorName =
+      source &&
+      source.name
+        ? String(source.name)
+        : 'Error';
+    var errorMessage =
+      source &&
+      source.message !== undefined
+        ? String(source.message)
+        : String(
+            error ||
+            'CLIENT_ERROR'
+          );
+    var stack =
+      source &&
+      source.stack
+        ? String(source.stack)
+        : '';
+
+    return {
+      schema:
+        'H3_WEB_RUNTIME_CLIENT_ERROR_V1',
+      trace_id:
+        app.runtimeTraceId,
+      entrypoint:
+        'Client.html',
+      stage:
+        String(
+          stage ||
+          'client.runtime'
+        ),
+      mode:
+        payload.mode ||
+        boot.mode ||
+        null,
+      review_kind:
+        payload.kind ||
+        payload.provider_kind ||
+        boot.review_kind ||
+        null,
+      surface_family:
+        payload.surface_family ||
+        boot.surface_family ||
+        null,
+      set_id:
+        payload.set_id ||
+        boot.set_id ||
+        null,
+      q_no:
+        (
+          Number(
+            app.activeIndex
+          ) >= 0
+        )
+          ? (
+              Number(
+                app.activeIndex
+              ) + 1
+            )
+          : null,
+      txn_id:
+        payload.txn_id ||
+        null,
+      error_code:
+        'CLIENT_RUNTIME_ERROR',
+      error_name:
+        errorName,
+      error_message:
+        errorMessage,
+      stack:
+        stack,
+      context:
+        context || {}
+    };
+  }
+
+  function h3ReportClientRuntimeError_(
+    stage,
+    error,
+    context,
+    onRecorded
+  ) {
+    if (
+      typeof google === 'undefined' ||
+      !google.script ||
+      !google.script.run
+    ) {
+      return;
+    }
+
+    try {
+      google.script.run
+        .withSuccessHandler(
+          function (result) {
+            if (
+              typeof onRecorded ===
+                'function'
+            ) {
+              onRecorded(
+                result || null
+              );
+            }
+          }
+        )
+        .withFailureHandler(
+          function () {}
+        )
+        .reportWebRuntimeClientError(
+          h3ClientRuntimeErrorPayload_(
+            stage,
+            error,
+            context
+          )
+        );
+    } catch (_reportError) {}
+  }
+
+  function h3ShowClientRuntimeFailure_(
+    message,
+    stage,
+    error,
+    context
+  ) {
+    showError(message);
+    h3ReportClientRuntimeError_(
+      stage,
+      error,
+      context,
+      function (result) {
+        if (
+          result &&
+          result.error_id
+        ) {
+          showError(
+            message +
+            '\nError ID: ' +
+            String(
+              result.error_id
+            )
+          );
+        }
+      }
+    );
+  }
+
+  window.addEventListener(
+    'error',
+    function (event) {
+      h3ShowClientRuntimeFailure_(
+        '画面処理でエラーが発生しました。',
+        'client.window_error',
+        event &&
+        (
+          event.error ||
+          event.message
+        ),
+        {
+          client_event:
+            'window.error',
+          line:
+            Number(
+              event &&
+              event.lineno ||
+              0
+            ),
+          column:
+            Number(
+              event &&
+              event.colno ||
+              0
+            )
+        }
+      );
+    }
+  );
+
+  window.addEventListener(
+    'unhandledrejection',
+    function (event) {
+      h3ShowClientRuntimeFailure_(
+        '画面処理でエラーが発生しました。',
+        'client.unhandled_rejection',
+        event &&
+        event.reason,
+        {
+          client_event:
+            'unhandledrejection'
+        }
+      );
+    }
+  );
 
   document.addEventListener(
     'h3-family-scheduler-open-current',

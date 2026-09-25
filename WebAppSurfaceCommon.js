@@ -247,7 +247,7 @@ function h3LearningSurfaceLegacyReviewMetadata_(
 
 
 var H3_REVIEW_EXPLANATION_STYLE_CONTRACT_ID_ =
-  'H3-REVIEW-EXPLANATION-STYLE-20260923-V3';
+  'H3-REVIEW-EXPLANATION-STYLE-20260925-V4';
 
 
 function h3ReviewExplanationStyleComparable_(value) {
@@ -677,6 +677,33 @@ function h3ReviewExplanationStyleHasAwkwardMeta_(
 }
 
 
+function h3ReviewExplanationStyleHasGenericTestTakingMeta_(
+  value
+) {
+  var generic =
+    /(?:内容一致問題では|タイトル選択では|この設問では|設問では|この問題では|正解を選ぶ(?:には|とき)|選択肢を一つずつ照合)/;
+
+  return String(value || '')
+    .split('\n')
+    .some(function (line) {
+      var found = false;
+
+      h3ReviewExplanationStyleMapUnquotedLine_(
+        line,
+        function (segment) {
+          if (generic.test(segment)) {
+            found = true;
+          }
+          generic.lastIndex = 0;
+          return segment;
+        }
+      );
+
+      return found;
+    });
+}
+
+
 function h3ReviewExplanationStyleRepresentativeLines_(
   explanation
 ) {
@@ -790,6 +817,20 @@ function h3ReviewExplanationStyleValidateAuthoring_(
     ) {
       throw new Error(
         'REVIEW_EXPLANATION_STYLE_AWKWARD_META:' +
+          String(label || '') +
+          ':' +
+          entry.field
+      );
+    }
+
+    if (
+      entry.value &&
+      h3ReviewExplanationStyleHasGenericTestTakingMeta_(
+        entry.value
+      )
+    ) {
+      throw new Error(
+        'REVIEW_EXPLANATION_STYLE_GENERIC_TEST_META:' +
           String(label || '') +
           ':' +
           entry.field
@@ -1232,6 +1273,12 @@ function h3ReviewExplanationStyleSelfCheck_() {
       h3ReviewExplanationStyleNormalizeMetaText_(
         'この表現が合う。'
       )
+    ) ||
+    !h3ReviewExplanationStyleHasGenericTestTakingMeta_(
+      '内容一致問題では、本文と選択肢を照合する。'
+    ) ||
+    h3ReviewExplanationStyleHasGenericTestTakingMeta_(
+      '本文では二つの状態を対比している。'
     )
   ) {
     throw new Error(

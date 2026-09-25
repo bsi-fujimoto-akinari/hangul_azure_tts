@@ -134,7 +134,6 @@ jobs:
               '.github/workflows/repository-audit.yml',
               '.github/scripts/repository_audit_impact.py',
               '.github/workflows/apps-script-auto-sync.yml',
-              '.github/workflows/written-incident-recovery-20260925.yml',
               '.github/workflows/rs10-soft-signal-audit.yml',
               '.github/workflows/rs12-prospective-evidence-audit.yml',
               '.github/workflows/rs13-real-data-shadow-audit.yml',
@@ -262,6 +261,9 @@ jobs:
               'Bind exact-main observability source provenance',
               'h3ObservabilityBindSource',
               'steps.source_binding_boundary.outputs.ready',
+              'Validate bounded Written incident recovery boundary',
+              'h3RecoverWrittenIncident20260925',
+              'steps.written_recovery_boundary.outputs.ready',
               'Validate automatic read-only live smoke boundary',
               'Run impact-selected automatic live smoke',
               'h3AutomaticLiveSmoke',
@@ -315,6 +317,7 @@ jobs:
                   ))
 
           binding_refs = 0
+          recovery_refs = 0
           automatic_refs = 0
           manual_refs = 0
 
@@ -326,6 +329,9 @@ jobs:
 
               binding_boundary_pos = contents.find(
                   'Validate exact-main observability source-binding boundary'
+              )
+              recovery_boundary_pos = contents.find(
+                  'Validate bounded Written incident recovery boundary'
               )
               automatic_boundary_pos = contents.find(
                   'Validate automatic read-only live smoke boundary'
@@ -354,6 +360,32 @@ jobs:
                       raise SystemExit(
                           'Observability source binding must be gated by '
                           'source_binding_boundary ready=true.'
+                      )
+                  continue
+
+              if 'h3RecoverWrittenIncident20260925' in line:
+                  recovery_refs += 1
+                  if (
+                      binding_boundary_pos < 0
+                      or recovery_boundary_pos < 0
+                      or automatic_boundary_pos < 0
+                      or recovery_boundary_pos <= binding_boundary_pos
+                      or pos <= recovery_boundary_pos
+                      or pos >= automatic_boundary_pos
+                  ):
+                      raise SystemExit(
+                          'Bounded Written incident recovery must occur after its '
+                          'exact-main/source-binding boundary and before the '
+                          'automatic smoke boundary.'
+                      )
+                  prefix = contents[max(recovery_boundary_pos, pos - 2600):pos]
+                  if (
+                      "if: steps.written_recovery_boundary.outputs.ready == 'true'"
+                      not in prefix
+                  ):
+                      raise SystemExit(
+                          'Bounded Written incident recovery must be gated by '
+                          'written_recovery_boundary ready=true.'
                       )
                   continue
 
@@ -395,6 +427,10 @@ jobs:
               raise SystemExit(
                   f'Expected exactly one permanent observability binding command; found {binding_refs}.'
               )
+          if recovery_refs != 1:
+              raise SystemExit(
+                  f'Expected exactly one temporary bounded Written recovery command; found {recovery_refs}.'
+              )
           if automatic_refs != 1:
               raise SystemExit(
                   f'Expected exactly one permanent automatic live smoke command; found {automatic_refs}.'
@@ -403,6 +439,7 @@ jobs:
           print(
               'Credentialed Apps Script execution boundaries: PASS; '
               f'observability binding refs={binding_refs}; '
+              f'bounded Written recovery refs={recovery_refs}; '
               f'automatic smoke refs={automatic_refs}; '
               f'ad hoc smoke refs={manual_refs}'
           )

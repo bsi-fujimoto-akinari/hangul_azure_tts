@@ -10078,154 +10078,152 @@ jobs:
           print('UXR-4 question/Review navigation/media audit: PASS')
           PY
 
-      - name: Audit UXR-5 Review technical question deep links
+      - name: Audit UXR-5 shared navigation and Review permalinks
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
+          code = Path('Code.js').read_text(encoding='utf-8')
           web = Path('WebApp.js').read_text(encoding='utf-8')
+          core = Path('WebAppReviewCore.js').read_text(encoding='utf-8')
           index = Path('Index.html').read_text(encoding='utf-8')
           client = Path('Client.html').read_text(encoding='utf-8')
           style = Path('Stylesheet.html').read_text(encoding='utf-8')
 
           for token in [
-              'template.technicalLinkBaseJson',
-              "'QUESTION_DEEP_LINK_Q_NO_INVALID'",
-              'q_no: questionNo',
+              "params.mode ===\n      'REVIEW'",
+              "params.mode ===\n      'REVIEW_REPLAY'",
+          ]:
+              if token not in code:
+                  raise SystemExit(
+                      f'UXR-5 outer Review route missing: {token}'
+                  )
+
+          if "params.mode ===\n      'WRITTEN'" in code:
+              raise SystemExit(
+                  'UXR-5 must not open the WRITTEN production route at doGet.'
+              )
+
+          for token in [
+              'var legacyReviewId = null;',
+              'var reviewKind = null;',
+              "params.mode === 'REVIEW'",
+              "params.review_kind",
+              "params.set_id",
+              "'LISTENING',\n        'WRITTEN',\n        'REVIEW'",
+              'review_kind:\n      reviewKind',
+              'legacy_review_id:\n      legacyReviewId',
+              'function h3WebAttachDisplayIdentity_(',
+              'payload.display_set_no',
           ]:
               if token not in web:
                   raise SystemExit(
-                      f'UXR-5 server contract missing: {token}'
+                      f'UXR-5 WebApp permalink/display contract missing: {token}'
                   )
 
           for token in [
-              'window.H3_TECHNICAL_LINK_BASE',
-              'technicalLinkBaseJson',
+              'function h3ReviewResolvePermalinkRequest_(',
+              'h3ReviewHomeIndexFind_(',
+              'h3ReviewHomeIndexRowEntry_(',
+              'entry.txn_id || null',
+              'entry.legacy_review_id || null',
+              "'REVIEW_PERMALINK_SET_NOT_FOUND:'",
+          ]:
+              if token not in core:
+                  raise SystemExit(
+                      f'UXR-5 Review resolver missing: {token}'
+                  )
+
+          for token in [
+              'id="surface-sticky"',
+              'id="surface-title"',
+              'id="surface-link-copy"',
+              'class="review-progress surface-progress"',
           ]:
               if token not in index:
                   raise SystemExit(
-                      f'UXR-5 template contract missing: {token}'
+                      f'UXR-5 shared surface chrome missing: {token}'
                   )
 
+          family_append = index.index(
+              'actions.appendChild(\n            familyGroup'
+          )
+          next_append = index.index(
+              'actions.appendChild(\n            nextWrap'
+          )
+          if family_append > next_append:
+              raise SystemExit(
+                  'UXR-5 HOME order must be L/W/R/T/NEXT.'
+              )
+
           for token in [
-              'function technicalQuestionDeepLink_(',
-              'function reviewQuestionDeepLink_(',
-              'function initialQuestionIndexFromRequest_(',
-              'function scrollToQuestionDeepLinkTarget_(',
-              "'review-technical-question-links'",
-              "'review-technical-question-link'",
-              "'_URL='",
-              "'問題を開く'",
+              'function reviewPermalinkForQuestion_(',
+              "'mode=REVIEW'",
+              "'review_kind=' +",
+              "'surface_family=' +",
+              "'set_id=' +",
+              "'q_no=' +",
+              'function copyReviewPermalink_(',
+              'function configureSurfaceChrome_(',
+              'function buildReviewProgress_(',
+              'function initialReviewIndexFromRequest_(',
+              "'review-progress-button progress-button'",
+              "'［' +",
           ]:
               if token not in client:
                   raise SystemExit(
                       f'UXR-5 client contract missing: {token}'
                   )
 
-          render_start = client.index(
-              'function renderQuestions(questions)'
-          )
-          render_end = client.index(
-              'function buildAudioBlock(',
-              render_start,
-          )
-          render = client[render_start:render_end]
-          for forbidden in [
-              'technicalQuestionDeepLink_(',
-              'question-deep-link',
-              "'問題を開く'",
-          ]:
-              if forbidden in render:
-                  raise SystemExit(
-                      'UXR-5 link leaked onto learning question header: ' +
-                      forbidden
-                  )
-
           review_start = client.index(
               'function renderPersistentReview('
           )
-          tech_start = client.index(
-              'var technical =',
+          review_end = client.index(
+              'function setReviewPage(',
               review_start,
           )
-          tech_end = client.index(
-              'var actions =',
-              tech_start,
-          )
-          tech = client[tech_start:tech_end]
-          for required in [
-              'reviewQuestionDeepLink_(',
-              "'review-technical-question-links'",
-              "'_URL='",
-              "'問題を開く'",
-              'technicalLines.join',
-          ]:
-              if required not in tech:
-                  raise SystemExit(
-                      'UXR-5 Review technical-info contract missing: ' +
-                      required
-                  )
+          review = client[review_start:review_end]
 
-          builder_start = client.index(
-              'function technicalQuestionDeepLink_('
-          )
-          builder_end = client.index(
-              'function reviewQuestionDeepLink_(',
-              builder_start,
-          )
-          builder = client[
-              builder_start:builder_end
-          ]
-
-          for required in [
-              "'mode='",
-              "'surface_family='",
-              "'set_id='",
-              "'q_no='",
+          for token in [
+              'configureSurfaceChrome_(',
+              'buildReviewProgress_(',
+              'initialReviewIndexFromRequest_(',
           ]:
-              if required not in builder:
+              if token not in review:
                   raise SystemExit(
-                      'UXR-5 URL route identity missing: ' +
-                      required
+                      f'UXR-5 Review shared chrome missing: {token}'
                   )
 
           for forbidden in [
-              'visible_choices',
-              'choice_ids',
-              'correct_answer',
-              'user_answer',
-              'answer_text',
-              'question_text',
-              'question_key',
-              'item_id',
-              'txn_id',
-              'legacy_review_id',
-              'receipt',
+              "'review-technical'",
+              "'review-technical-question-links'",
+              "'技術情報'",
+              "'技術情報をコピー'",
           ]:
-              if forbidden in builder:
+              if forbidden in review:
                   raise SystemExit(
-                      'UXR-5 URL leaks question/answer data: ' +
+                      'UXR-5 legacy technical block remains: ' +
                       forbidden
                   )
 
-          if '.question-deep-link {' in style:
-              raise SystemExit(
-                  'UXR-5 obsolete learning-header link style remains.'
-              )
-
           for token in [
-              '.review-technical-question-links {',
-              '.review-technical-question-link {',
+              '.surface-sticky {',
+              '.surface-title-row {',
+              '.surface-link-copy {',
+              '.surface-sticky .surface-progress {',
+              '.review-progress-button {',
+              '.review-progress-button.current {',
+              'min-height: 60px;',
+              'min-height: 58px;',
           ]:
               if token not in style:
                   raise SystemExit(
-                      'UXR-5 Review technical-link style missing: ' +
-                      token
+                      f'UXR-5 shared UI/Monitor style missing: {token}'
                   )
 
           print(
-              'UXR-5 Review technical deep-link static audit: PASS'
+              'UXR-5 shared navigation and Review permalink static audit: PASS'
           )
           PY
 
@@ -10264,61 +10262,77 @@ jobs:
               ctx
             );
 
-          const listening = boot({
-            mode: 'LISTENING',
-            set_id: 'H3-20260920-L04',
-            q_no: '3'
-          });
-          if (
-            listening.mode !== 'LISTENING' ||
-            listening.set_id !==
-              'H3-20260920-L04' ||
-            listening.q_no !== 3
-          ) {
-            throw new Error(
-              'UXR-5 listening q_no boot mismatch.'
-            );
-          }
+          const cases = [
+            {
+              review_kind: 'LISTENING',
+              surface_family: '5L',
+              set_id: 'H3-20260920-L04',
+              q_no: '5'
+            },
+            {
+              review_kind: 'WRITTEN',
+              surface_family: '5W',
+              set_id: 'H3-20260914-03',
+              q_no: '5'
+            },
+            {
+              review_kind: 'WRITTEN',
+              surface_family: 'READING',
+              set_id: 'H3-20260921-R001',
+              q_no: '2'
+            },
+            {
+              review_kind: 'WRITTEN',
+              surface_family: 'TRANSLATION',
+              set_id: 'H3-20260922-T003',
+              q_no: '2'
+            }
+          ];
 
-          const reading = boot({
-            mode: 'WRITTEN',
-            surface_family: 'READING',
-            set_id: 'H3-20260921-R001',
-            q_no: '2'
-          });
-          if (
-            reading.mode !== 'WRITTEN' ||
-            reading.surface_family !==
-              'READING' ||
-            reading.set_id !==
-              'H3-20260921-R001' ||
-            reading.q_no !== 2
-          ) {
-            throw new Error(
-              'UXR-5 Reading q_no boot mismatch.'
-            );
+          for (const expected of cases) {
+            const actual = boot({
+              mode: 'REVIEW',
+              ...expected
+            });
+            if (
+              actual.mode !== 'REVIEW' ||
+              actual.review_kind !==
+                expected.review_kind ||
+              actual.surface_family !==
+                expected.surface_family ||
+              actual.set_id !==
+                expected.set_id ||
+              actual.q_no !==
+                Number(expected.q_no)
+            ) {
+              throw new Error(
+                'UXR-5 Review permalink boot mismatch: ' +
+                  JSON.stringify({
+                    expected,
+                    actual
+                  })
+              );
+            }
           }
 
           for (const params of [
             {
-              mode: 'LISTENING',
+              mode: 'REVIEW',
+              review_kind: 'LISTENING',
+              surface_family: '5L',
               set_id: 'H3-20260920-L04',
               q_no: '0'
             },
             {
-              mode: 'LISTENING',
-              set_id: 'H3-20260920-L04',
+              mode: 'REVIEW',
+              review_kind: 'WRITTEN',
+              surface_family: '5W',
+              set_id: 'H3-20260914-03',
               q_no: '6'
             },
             {
-              mode: 'LISTENING',
-              set_id: 'H3-20260920-L04',
-              q_no: 'abc'
-            },
-            {
               mode: 'REVIEW',
-              txn_id:
-                'H3TX-20260919-000005',
+              set_id: 'H3-20260914-03',
               q_no: '1'
             }
           ]) {
@@ -10337,14 +10351,14 @@ jobs:
             }
             if (!rejected) {
               throw new Error(
-                'UXR-5 invalid q_no route was accepted: ' +
-                JSON.stringify(params)
+                'UXR-5 invalid Review permalink was accepted: ' +
+                  JSON.stringify(params)
               );
             }
           }
 
           console.log(
-            'UXR-5 Review technical deep-link boot audit: PASS'
+            'UXR-5 Review permalink boot audit: PASS'
           );
           NODE
 

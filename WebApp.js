@@ -278,6 +278,19 @@ function h3WebAttachPostSubmitReviewSurface_(
 }
 
 function getListeningWebSet(request) {
+  return h3ObservabilityCall_(
+    'getListeningWebSet',
+    request,
+    'render',
+    function () {
+      return h3GetListeningWebSetCore_(
+        request
+      );
+    }
+  );
+}
+
+function h3GetListeningWebSetCore_(request) {
   var payload;
 
   if (
@@ -363,6 +376,19 @@ function getListeningWebSet(request) {
 }
 
 function getListeningWebMedia(request) {
+  return h3ObservabilityCall_(
+    'getListeningWebMedia',
+    request,
+    'media',
+    function () {
+      return h3GetListeningWebMediaCore_(
+        request
+      );
+    }
+  );
+}
+
+function h3GetListeningWebMediaCore_(request) {
   if (
     request &&
     [
@@ -394,14 +420,38 @@ function completeReviewSession(request) {
       request
     );
   } catch (err) {
+    var logged =
+      h3ObservabilityLogServerError_(
+        'completeReviewSession',
+        request,
+        'review.complete',
+        err
+      );
     return h3ReviewCompletionFailureResult_(
-      err
+      h3ObservabilityAnnotateError_(
+        err,
+        logged &&
+        logged.error_id
+      )
     );
   }
 }
 
 
 function submitListeningWebAnswers(request) {
+  return h3ObservabilityCall_(
+    'submitListeningWebAnswers',
+    request,
+    'submit',
+    function () {
+      return h3SubmitListeningWebAnswersCore_(
+        request
+      );
+    }
+  );
+}
+
+function h3SubmitListeningWebAnswersCore_(request) {
   if (request && request.mode === 'LISTENING') {
     var result =
       h3ProdSubmit_(request);

@@ -355,6 +355,106 @@ jobs:
           )
           PY
 
+      - name: Validate exact-main observability source-binding boundary
+        id: source_binding_boundary
+        if: steps.source_attestation.outputs.attested == 'true' && steps.auth.outputs.ready == 'true'
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          SOURCE_DIGEST: ${{ steps.source_attestation.outputs.source_digest || '' }}
+          SOURCE_FILE_COUNT: ${{ steps.source_attestation.outputs.file_count || '' }}
+          SOURCE_ATTESTED: ${{ steps.source_attestation.outputs.attested || '' }}
+        run: |
+          set -euo pipefail
+          if [ "$SOURCE_ATTESTED" != "true" ]; then
+            echo "::error::Observability source binding requires immediate successful source attestation."
+            exit 1
+          fi
+          python3 - "$SOURCE_SHA" "$SOURCE_DIGEST" "$SOURCE_FILE_COUNT" <<'PY'
+          import json
+          import pathlib
+          import re
+          import sys
+
+          source_sha, source_digest, file_count = sys.argv[1:4]
+          if re.fullmatch(r'[0-9a-f]{40}', source_sha) is None:
+              raise SystemExit('Observability source SHA is not one exact immutable commit SHA.')
+          if re.fullmatch(r'[0-9a-f]{64}', source_digest) is None:
+              raise SystemExit('Observability source digest is invalid.')
+          if not file_count.isdigit() or int(file_count) < 1:
+              raise SystemExit('Observability source file count is invalid.')
+
+          manifest = json.loads(pathlib.Path('appsscript.json').read_text(encoding='utf-8'))
+          if manifest.get('executionApi', {}).get('access') != 'MYSELF':
+              raise SystemExit('Observability source binding requires executionApi.access=MYSELF.')
+          if manifest.get('webapp', {}).get('access') != 'MYSELF':
+              raise SystemExit('Observability source binding requires webapp.access=MYSELF.')
+          PY
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Bind exact-main observability source provenance
+        if: steps.source_binding_boundary.outputs.ready == 'true'
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          SOURCE_DIGEST: ${{ steps.source_attestation.outputs.source_digest }}
+          SOURCE_FILE_COUNT: ${{ steps.source_attestation.outputs.file_count }}
+        run: |
+          set -euo pipefail
+          params="$(python3 - "$SOURCE_SHA" "$SOURCE_DIGEST" "$SOURCE_FILE_COUNT" <<'PY'
+          import json
+          import sys
+
+          print(json.dumps([{
+              'schema': 'H3_OBSERVABILITY_SOURCE_BINDING_V1',
+              'source_sha': sys.argv[1],
+              'source_digest': sys.argv[2],
+              'source_file_count': int(sys.argv[3]),
+          }], separators=(',', ':')))
+          PY
+          )"
+          out=/tmp/h3-observability-source-binding.out
+          err=/tmp/h3-observability-source-binding.err
+          set +e
+          npx -y @google/clasp@3.4.0 --json run-function h3ObservabilityBindSource --params "$params" >"$out" 2>"$err"
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Exact-main observability source binding failed."
+            cat "$err"
+            cat "$out"
+            exit "$status"
+          fi
+          python3 - "$out" "$SOURCE_SHA" "$SOURCE_DIGEST" "$SOURCE_FILE_COUNT" <<'PY'
+          import json
+          import sys
+
+          envelope = json.loads(open(sys.argv[1], encoding='utf-8').read())
+          if envelope.get('error'):
+              raise SystemExit('Observability source binding returned an Apps Script error envelope.')
+          result = envelope.get('response')
+          if not isinstance(result, dict):
+              raise SystemExit('Observability source binding response is not an object.')
+          expected = {
+              'schema': 'H3_OBSERVABILITY_SOURCE_BINDING_RESULT_V1',
+              'status': 'PASS',
+              'source_sha': sys.argv[2],
+              'source_digest': sys.argv[3],
+              'source_file_count': int(sys.argv[4]),
+          }
+          for key, value in expected.items():
+              if result.get(key) != value:
+                  raise SystemExit(
+                      f'Observability source binding readback mismatch for {key}: '
+                      f'{result.get(key)!r} != {value!r}'
+                  )
+          print(
+              'Observability source binding PASS: '
+              f"sha={result['source_sha']}; digest={result['source_digest']}; "
+              f"files={result['source_file_count']}"
+          )
+          PY
+
       - name: Validate one-revision read-only smoke boundary
         id: smoke_boundary
         if: steps.smoke_request.outputs.requested == 'true' && steps.auth.outputs.ready == 'true'

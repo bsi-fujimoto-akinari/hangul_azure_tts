@@ -6034,11 +6034,13 @@ function h3MonitoringNotificationMessage_(plan,snapshot) {
   return {subject:subject,body:lines.join('\n'),events:events};
 }
 
-function h3MonitoringNotificationSend_(recipient,message) {
+function h3MonitoringNotificationRemainingQuota_() {
   var quota=Number(MailApp.getRemainingDailyQuota());
-  if(!isFinite(quota)||quota<1){
-    throw new Error('MONITOR_EMAIL_QUOTA_EXHAUSTED');
-  }
+  if(!isFinite(quota)||quota<1)return 0;
+  return Math.floor(quota);
+}
+
+function h3MonitoringNotificationSend_(recipient,message) {
   MailApp.sendEmail(
     String(recipient),
     String(message.subject||''),
@@ -6046,7 +6048,7 @@ function h3MonitoringNotificationSend_(recipient,message) {
   );
 }
 
-function h3MonitoringNotificationProcess_(ss,snapshot,nowMs) {
+function h3MonitoringNotificationProcessUnlocked_(ss,snapshot,nowMs) {
   if(
     !snapshot ||
     String(snapshot.schema||'')!==H3_MONITOR_OBSERVER_SNAPSHOT_SCHEMA_ ||
@@ -6061,6 +6063,96 @@ function h3MonitoringNotificationProcess_(ss,snapshot,nowMs) {
     throw new Error('MONITOR_NOTIFICATION_TIME_INVALID');
   }
   var nowIso=new Date(nowMs).toISOString();
+  var prior=h3MonitoringNotificationReadStates_(ss);
+  var plan=h3MonitoringNotificationPlan_(
+    prior,snapshot.action_required_events||[],nowIso
+  );
+
+  if(!plan.candidate_identities.length){
+    var passive=h3MonitoringNotificationWriteStates_(ss,plan.states);
+    return {
+      schema:H3_MONITOR_NOTIFICATION_SCHEMA_,
+      status:'NO_EMAIL',
+      candidate_count:0,
+      email_sent:false,
+      state_write_performed:passive.write_performed,
+      write_performed:passive.write_performed
+    };
+  }
+
+  var config=h3MonitoringEmailConfigStatus_();
+  if(config.status!=='READY'){
+    h3MonitoringNotificationMarkConfigError_(
+      plan,String(config.error||'MONITOR_EMAIL_CONFIG_ERROR')
+    );
+    var configWrite=
+      h3MonitoringNotificationWriteStates_(ss,plan.states);
+    return {
+      schema:H3_MONITOR_NOTIFICATION_SCHEMA_,
+      status:'CONFIG_ERROR',
+      candidate_count:plan.candidate_identities.length,
+      email_sent:false,
+      state_write_performed:configWrite.write_performed,
+      write_performed:configWrite.write_performed
+    };
+  }
+
+  var quota=h3MonitoringNotificationRemainingQuota_();
+  if(quota<1){
+    var quotaWrite=h3MonitoringNotificationWriteStates_(ss,plan.states);
+    return {
+      schema:H3_MONITOR_NOTIFICATION_SCHEMA_,
+      status:'QUOTA_DEFERRED',
+      candidate_count:plan.candidate_identities.length,
+      email_sent:false,
+      quota_remaining:0,
+      retry_budget_consumed:false,
+      state_write_performed:quotaWrite.write_performed,
+      write_performed:quotaWrite.write_performed
+    };
+  }
+
+  h3MonitoringNotificationClaim_(plan,nowIso);
+  h3MonitoringNotificationWriteStates_(ss,plan.states);
+  var message=h3MonitoringNotificationMessage_(plan,snapshot);
+  try {
+    h3MonitoringNotificationSend_(
+      h3MonitoringEmailRecipient_(),message
+    );
+  } catch(sendErr) {
+    h3MonitoringNotificationMarkSendResult_(
+      plan,false,nowIso,sendErr
+    );
+    h3MonitoringNotificationWriteStates_(ss,plan.states);
+    return {
+      schema:H3_MONITOR_NOTIFICATION_SCHEMA_,
+      status:plan.states.some(function(state){
+        return plan.candidate_identities.indexOf(state.identity)>=0 &&
+          state.status==='RETRY_EXHAUSTED';
+      }) ? 'RETRY_EXHAUSTED' : 'SEND_ERROR',
+      candidate_count:plan.candidate_identities.length,
+      email_sent:false,
+      state_write_performed:true,
+      error:h3MonitoringObserverErrorText_(sendErr),
+      write_performed:true
+    };
+  }
+
+  h3MonitoringNotificationMarkSendResult_(
+    plan,true,nowIso,''
+  );
+  h3MonitoringNotificationWriteStates_(ss,plan.states);
+  return {
+    schema:H3_MONITOR_NOTIFICATION_SCHEMA_,
+    status:'SENT',
+    candidate_count:plan.candidate_identities.length,
+    email_sent:true,
+    state_write_performed:true,
+    write_performed:true
+  };
+}
+
+function h3MonitoringNotificationProcess_(ss,snapshot,nowMs) {
   var lock=LockService.getScriptLock();
   if(!lock.tryLock(30000)){
     return {
@@ -6071,80 +6163,9 @@ function h3MonitoringNotificationProcess_(ss,snapshot,nowMs) {
     };
   }
   try {
-    var prior=h3MonitoringNotificationReadStates_(ss);
-    var plan=h3MonitoringNotificationPlan_(
-      prior,snapshot.action_required_events||[],nowIso
-    );
-
-    if(!plan.candidate_identities.length){
-      var passive=h3MonitoringNotificationWriteStates_(ss,plan.states);
-      return {
-        schema:H3_MONITOR_NOTIFICATION_SCHEMA_,
-        status:'NO_EMAIL',
-        candidate_count:0,
-        email_sent:false,
-        state_write_performed:passive.write_performed,
-        write_performed:passive.write_performed
-      };
-    }
-
-    var config=h3MonitoringEmailConfigStatus_();
-    if(config.status!=='READY'){
-      h3MonitoringNotificationMarkConfigError_(
-        plan,String(config.error||'MONITOR_EMAIL_CONFIG_ERROR')
-      );
-      var configWrite=
-        h3MonitoringNotificationWriteStates_(ss,plan.states);
-      return {
-        schema:H3_MONITOR_NOTIFICATION_SCHEMA_,
-        status:'CONFIG_ERROR',
-        candidate_count:plan.candidate_identities.length,
-        email_sent:false,
-        state_write_performed:configWrite.write_performed,
-        write_performed:configWrite.write_performed
-      };
-    }
-
-    h3MonitoringNotificationClaim_(plan,nowIso);
-    h3MonitoringNotificationWriteStates_(ss,plan.states);
-    var message=h3MonitoringNotificationMessage_(plan,snapshot);
-    try {
-      h3MonitoringNotificationSend_(
-        h3MonitoringEmailRecipient_(),message
-      );
-    } catch(sendErr) {
-      h3MonitoringNotificationMarkSendResult_(
-        plan,false,nowIso,sendErr
-      );
-      h3MonitoringNotificationWriteStates_(ss,plan.states);
-      return {
-        schema:H3_MONITOR_NOTIFICATION_SCHEMA_,
-        status:plan.states.some(function(state){
-          return plan.candidate_identities.indexOf(state.identity)>=0 &&
-            state.status==='RETRY_EXHAUSTED';
-        }) ? 'RETRY_EXHAUSTED' : 'SEND_ERROR',
-        candidate_count:plan.candidate_identities.length,
-        email_sent:false,
-        state_write_performed:true,
-        error:h3MonitoringObserverErrorText_(sendErr),
-        write_performed:true
-      };
-    }
-
-    h3MonitoringNotificationMarkSendResult_(
-      plan,true,nowIso,''
-    );
-    h3MonitoringNotificationWriteStates_(ss,plan.states);
-    return {
-      schema:H3_MONITOR_NOTIFICATION_SCHEMA_,
-      status:'SENT',
-      candidate_count:plan.candidate_identities.length,
-      email_sent:true,
-      state_write_performed:true,
-      write_performed:true
-    };
+    return h3MonitoringNotificationProcessUnlocked_(ss,snapshot,nowMs);
   } finally {
-    lock.releaseLock();
+    try{lock.releaseLock();}catch(_ignore){}
   }
 }
 
@@ -6204,24 +6225,47 @@ function h3MonitoringNotificationCurrent() {
 }
 
 function h3MonitoringObserverEmailRun() {
-  var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
-  var snapshot=h3MonitoringObserverSnapshot_(
-    '3級',h3MonitoringObserverSourceSpecs_(ss),Date.now()
-  );
-  var observer=h3MonitoringObserverWriteSnapshot_(ss,snapshot);
-  var notification=h3MonitoringNotificationProcess_(
-    ss,snapshot,Date.now()
-  );
-  return {
-    schema:'H3_MONITOR_OBSERVER_EMAIL_RUN_V1',
-    status:String(notification.status||''),
-    observer:observer,
-    notification:notification,
-    production_trigger_created:false,
-    semantic_authoring_performed:false,
-    rs13_close_performed:false,
-    rs14_activation_performed:false
-  };
+  var lock=LockService.getScriptLock();
+  if(!lock.tryLock(30000)){
+    return {
+      schema:'H3_MONITOR_OBSERVER_EMAIL_RUN_V1',
+      status:'LOCK_BUSY',
+      observer:null,
+      notification:{
+        schema:H3_MONITOR_NOTIFICATION_SCHEMA_,
+        status:'LOCK_BUSY',
+        write_performed:false,
+        email_sent:false
+      },
+      production_trigger_created:false,
+      semantic_authoring_performed:false,
+      rs13_close_performed:false,
+      rs14_activation_performed:false
+    };
+  }
+  try {
+    var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
+    var nowMs=Date.now();
+    var snapshot=h3MonitoringObserverSnapshot_(
+      '3級',h3MonitoringObserverSourceSpecs_(ss),nowMs
+    );
+    var observer=h3MonitoringObserverWriteSnapshotUnlocked_(ss,snapshot);
+    var notification=h3MonitoringNotificationProcessUnlocked_(
+      ss,snapshot,nowMs
+    );
+    return {
+      schema:'H3_MONITOR_OBSERVER_EMAIL_RUN_V1',
+      status:String(notification.status||''),
+      observer:observer,
+      notification:notification,
+      production_trigger_created:false,
+      semantic_authoring_performed:false,
+      rs13_close_performed:false,
+      rs14_activation_performed:false
+    };
+  } finally {
+    try{lock.releaseLock();}catch(_ignore){}
+  }
 }
 // S4-R4-F DEDUPLICATED ACTION-REQUIRED EMAIL END
 

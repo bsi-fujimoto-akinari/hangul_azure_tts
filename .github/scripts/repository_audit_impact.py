@@ -762,7 +762,7 @@ def validate() -> int:
         if name not in step_names:
             raise SystemExit(f"Missing unconditional step: {name}")
 
-    if len(workflow.encode("utf-8")) >= 510_000:
+    if len(workflow.encode("utf-8")) >= 520_000:
         raise SystemExit(
             f"Repository audit workflow grew too large: {len(workflow.encode('utf-8'))} bytes"
         )

@@ -260,6 +260,12 @@ jobs:
               'Bind exact-main observability source provenance',
               'h3ObservabilityBindSource',
               'steps.source_binding_boundary.outputs.ready',
+              'Detect Apps Script remote file-set drift',
+              'id: remote_file_set',
+              'steps.remote_file_set.outputs.refresh',
+              'H3_DELETE_ONLY_SYNC_REFRESH',
+              'git diff --exit-code -- "$marker_file"',
+              'delete_only_refresh=true',
               'Validate automatic read-only live smoke boundary',
               'Run impact-selected automatic live smoke',
               'h3AutomaticLiveSmoke',
@@ -287,6 +293,9 @@ jobs:
               'authenticated source_attestation',
               "if: steps.automatic_smoke_boundary.outputs.ready == 'true'",
               "if: steps.smoke_boundary.outputs.ready == 'true'",
+              'Remote-only deletion refresh',
+              'H3_DELETE_ONLY_SYNC_REFRESH',
+              'pre-push remote file-set drift check',
           ]
           missing_ops = [token for token in required_ops if token not in ops]
           if missing_ops:
@@ -294,6 +303,29 @@ jobs:
                   'Apps Script credentialed execution documentation missing: '
                   + ', '.join(missing_ops)
               )
+
+          drift_pos = sync.find('Detect Apps Script remote file-set drift')
+          push_pos = sync.find('Push audited main to Apps Script HEAD')
+          attest_pos = sync.find('Attest Apps Script HEAD source against exact audited main')
+          if min(drift_pos, push_pos, attest_pos) < 0 or not (
+              drift_pos < push_pos < attest_pos
+          ):
+              raise SystemExit(
+                  'Apps Script remote file-set drift / push / attestation order is invalid.'
+              )
+
+          push_window = sync[push_pos:attest_pos]
+          for token in [
+              "steps.remote_file_set.outputs.refresh == 'true'",
+              'H3_DELETE_ONLY_SYNC_REFRESH',
+              'restore_exact',
+              'git diff --exit-code -- "$marker_file"',
+              'delete_only_refresh=true',
+          ]:
+              if token not in push_window:
+                  raise SystemExit(
+                      'Deletion-only source refresh contract missing: ' + token
+                  )
 
           command_refs = []
           pattern = re.compile(

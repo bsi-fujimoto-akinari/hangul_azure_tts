@@ -9680,7 +9680,7 @@ jobs:
               'function h3ReviewApplyListeningLearnerTextCorrections_(',
               'function h3WrittenReviewApplyLearnerTextCorrections_(',
               'H3-REVIEW-JA-QUALITY-20260923-V1',
-              'H3-REVIEW-JA-QUALITY-20260925-V2',
+              'H3-REVIEW-JA-QUALITY-20260926-V3',
               '最近運動していないので、なんだか体が重い気がします。',
               '友達との約束は必ず守らなければなりません。',
               '時間がたつのも忘れていました。',
@@ -10172,7 +10172,7 @@ jobs:
               '・久しぶりに友達の近況を聞きました。\n・海外にいる家族から良い知らせが届きました。'],
             ['H3-20260913-02',
               '・試験を控えて勉強に（　）を使っています。\n→ ・最近は健康にもっと（　）を使わなければなりません。',
-              '・試験を控えて勉強に気を配っています。\n・最近は健康にもっと気をつけなければなりません。'],
+              '・試験を控えて勉強に力を入れています。\n・最近は健康にもっと気をつけなければなりません。'],
             ['H3-20260913-03',
               '・最近、健康にかなり（　）を使っています。\n→ ・その人の言葉はあまり（　）を使わないでください。',
               '・最近は健康にかなり気を配っています。\n・その人の言葉はあまり気にしないでください。'],
@@ -10309,12 +10309,37 @@ jobs:
                   {
                     section: 'D4',
                     question_surface: {
+                      rendered:
+                        'Q3 [筆4/置換]\n' +
+                        '次の下線部と最も近い意味のものを選んでください。\n' +
+                        '빨간 우산은 멀리서도 [눈에 띄었어요].\n' +
+                        '① 멀리서도 쉽게 보였어요\n' +
+                        '② 눈이 아파서 보기 힘들었어요\n' +
+                        '③ 비를 맞아 금방 젖었어요\n' +
+                        '④ 사람들 사이에서 곧 사라졌어요',
                       body:
                         '次の下線部と最も近い意味のものを選んでください。\n' +
-                        '빨간 우산은 멀리서도 [눈에 띄었어요].'
+                        '빨간 우산은 멀리서도 [눈에 띄었어요].',
+                      choices: [
+                        {position:1,symbol:'①',text:'멀리서도 쉽게 보였어요'},
+                        {position:2,symbol:'②',text:'눈이 아파서 보기 힘들었어요'},
+                        {position:3,symbol:'③',text:'비를 맞아 금방 젖었어요'},
+                        {position:4,symbol:'④',text:'사람들 사이에서 곧 사라졌어요'}
+                      ]
                     },
+                    correct_answer_position: 1,
                     correct_answer_text:
                       '멀리서도 쉽게 보였어요',
+                    explanation: {
+                      choices: [
+                        {ko:'멀리서도 쉽게 보였어요',ja:'遠くからでもすぐ見えました'},
+                        {ko:'눈이 아파서 보기 힘들었어요',ja:'目が痛くて見るのが大変でした'},
+                        {ko:'비를 맞아 금방 젖었어요',ja:'雨にぬれてすぐ濡れました'},
+                        {ko:'사람들 사이에서 곧 사라졌어요',ja:'人々の間ですぐ見えなくなりました'}
+                      ],
+                      reason:
+                        '눈에 띄다 は周囲の中で「目につく・目立つ」という意味なので、멀리서도 쉽게 보였어요 が最も近いです。'
+                    },
                     script_text: oldScript
                   }
                 ]
@@ -10323,6 +10348,31 @@ jobs:
             d4.sections[2].script_text,
             '빨간 우산은 멀리서도 눈에 띄었어요.\n' +
             '빨간 우산은 멀리서도 쉽게 보였어요.'
+          );
+          assert.strictEqual(
+            d4.sections[2].question_surface.choices[0].text,
+            '쉽게 보였어요'
+          );
+          assert.strictEqual(
+            d4.sections[2].correct_answer_text,
+            '멀리서도 쉽게 보였어요'
+          );
+          assert.strictEqual(
+            d4.sections[2].explanation.choices[0].ko,
+            '쉽게 보였어요'
+          );
+          assert.strictEqual(
+            d4.sections[2].explanation.choices[0].ja,
+            'すぐ見えました'
+          );
+          assert.strictEqual(
+            d4.sections[2].explanation.reason,
+            '눈에 띄다 は周囲の中で「目につく・目立つ」という意味なので、쉽게 보였어요 が最も近いです。'
+          );
+          assert(
+            !d4.sections[2].question_surface.rendered.includes(
+              '① 멀리서도 쉽게 보였어요'
+            )
           );
           assert(
             !d4.sections[2].script_text.includes(

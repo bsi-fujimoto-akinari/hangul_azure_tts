@@ -330,6 +330,47 @@ function h3WrittenParseIssuedAnswers_(context) {
 }
 
 
+function h3WrittenReviewValidateD5JapaneseBody_(
+  review
+) {
+  var lines =
+    String(
+      review &&
+      review.body_ja ||
+      ''
+    )
+      .split(/\r?\n/)
+      .map(function (line) {
+        return String(line || '').trim();
+      })
+      .filter(Boolean);
+
+  if (lines.length !== 2) {
+    throw new Error(
+      'WRITTEN_REVIEW_D5_JA_LINE_COUNT_INVALID'
+    );
+  }
+
+  if (
+    lines.some(function (line) {
+      return /[（(][ \t　]*[）)]/.test(line);
+    })
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_D5_JA_BLANK_REMAINS'
+    );
+  }
+
+  if (/^→/.test(lines[1])) {
+    throw new Error(
+      'WRITTEN_REVIEW_D5_JA_SECOND_LINE_ARROW'
+    );
+  }
+
+  return true;
+}
+
+
 function h3WrittenReviewAuthoring_(context) {
   var meta = h3WrittenParseJson_(
     context.questionMetaJson,
@@ -366,6 +407,12 @@ function h3WrittenReviewAuthoring_(context) {
         throw new Error(
           'WRITTEN_REVIEW_AUTHORING_MISSING:Q' +
             String(index + 1)
+        );
+      }
+
+      if (index === 3) {
+        h3WrittenReviewValidateD5JapaneseBody_(
+          review
         );
       }
 

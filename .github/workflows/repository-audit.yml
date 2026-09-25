@@ -35,6 +35,7 @@ jobs:
               '.gitignore',
               'Code.js',
               'WebApp.js',
+              'WebAppObservability.js',
               'WebAppFixture.js',
               'WebAppProduction.js',
               'WebAppTransactionCommon.js',

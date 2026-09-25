@@ -889,6 +889,8 @@ jobs:
               "review",
               "new MutationObserver(",
               "repeat(4, minmax(0, 1fr))",
+              "minmax(0, 2fr)",
+              "minmax(0, 4fr)",
               "nextButton.addEventListener(",
               ".h3FamilySchedulerIssueRoutePreview()",
               ".h3FamilySchedulerHomeNext()",
@@ -899,6 +901,18 @@ jobs:
 
           if index.count("family-scheduler-launcher") < 3:
               raise SystemExit("F5 launcher style/injection contract incomplete.")
+
+          actions_start = index.index(".family-scheduler-actions {")
+          actions_end = index.index("}", actions_start)
+          actions_css = index[actions_start:actions_end]
+          if (
+              "minmax(0, 2fr)" not in actions_css
+              or "minmax(0, 4fr)" not in actions_css
+              or "minmax(0, 1fr)" in actions_css
+          ):
+              raise SystemExit(
+                  "UXR-3 NEXT width ratio must be approximately 2x one family button."
+              )
 
           preview_start = index.index("(function () {")
           preview = index[preview_start:]
@@ -3190,6 +3204,9 @@ jobs:
               "panel.dataset.monitorRequestGeneration",
               "model.recent_events_truncated ===",
               "monitor-home-event-summary",
+              "function renderMonitorPlaceholder_(",
+              "monitor-home-placeholder",
+              "renderMonitorPlaceholder_(",
           ]
           for token in required_index:
               if token not in index:
@@ -3199,6 +3216,57 @@ jobs:
           if index.count("!monitorRequestCurrent_(") < 2:
               raise SystemExit(
                   "P11 stale callback guard missing from success/failure paths"
+              )
+
+          placeholder_start = index.index(
+              "function renderMonitorPlaceholder_("
+          )
+          render_start = index.index(
+              "function renderMonitor_(",
+              placeholder_start,
+          )
+          placeholder = index[
+              placeholder_start:render_start
+          ]
+          for token in [
+              "monitor-home-head monitor-home-placeholder",
+              "'monitor-home-time'",
+              "'monitor-home-overall'",
+              "monitor-home-placeholder-chevron",
+          ]:
+              if token not in placeholder:
+                  raise SystemExit(
+                      f"UXR-3 Monitor placeholder incomplete: {token}"
+                  )
+
+          render_head_end = index.index(
+              "panel.appendChild(\n            head\n          );",
+              render_start,
+          )
+          render_head = index[
+              render_start:render_head_end
+          ]
+          title_start = render_head.index(
+              "var titleWrap ="
+          )
+          actions_start = render_head.index(
+              "var headActions ="
+          )
+          if (
+              "'monitor-home-time'" in
+              render_head[title_start:actions_start]
+          ):
+              raise SystemExit(
+                  "UXR-3 Monitor time must not remain stacked in the title group."
+              )
+          if (
+              "'monitor-home-time'" not in
+              render_head[actions_start:]
+              or "'monitor-home-overall'" not in
+              render_head[actions_start:]
+          ):
+              raise SystemExit(
+                  "UXR-3 Monitor time/status must share the inline action group."
               )
           if (
               "全' +" not in index
@@ -3227,6 +3295,9 @@ jobs:
               ".monitor-home-details[hidden]",
               "body.mobile-device .monitor-home-grid",
               ".monitor-home-toggle[aria-expanded=\"true\"]",
+              ".monitor-home-placeholder-chevron",
+              "min-height: 23px",
+              "font-variant-numeric: tabular-nums",
           ]
           for token in required_style:
               if token not in style:

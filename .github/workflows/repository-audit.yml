@@ -3532,13 +3532,13 @@ jobs:
                       f'Review explanation body invariant missing: {needle}'
                   )
 
-          if ".review-explanation-written" not in style:
+          if ".review-learning-block p" not in style:
               raise SystemExit(
-                  'Structured Written Review scoped style is missing.'
+                  'Shared Review learning-block style is missing.'
               )
           if "white-space: pre-line;" not in style:
               raise SystemExit(
-                  'Structured Written Review newlines are not preserved.'
+                  'Shared Review learning-block newlines are not preserved.'
               )
 
           # Technical information remains the independent disclosure.

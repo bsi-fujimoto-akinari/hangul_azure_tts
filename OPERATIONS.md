@@ -251,7 +251,7 @@ The Apps Script `workflow_run` may appear after Repository audit completion; pol
 
 `.github/workflows/repository-audit.yml` computes the changed-file set once near the start of the job.
 
-Normal pull-request/push audits skip a feature audit step when none of the tracked files explicitly consumed by that step changed. The audit workflow itself is fail-safe:
+Normal pull-request/push audits short-circuit a feature audit body before heavy work when none of the tracked files explicitly consumed by that audit changed. The GitHub step may still appear as successful in the run UI. The audit workflow itself is fail-safe:
 
 - a change to `.github/workflows/repository-audit.yml` forces `full=true` and runs the complete audit suite;
 - `workflow_dispatch` runs the complete audit suite;

@@ -9701,12 +9701,23 @@ jobs:
           ];
 
           for (const [setId, oldText, newText] of d5Cases) {
+            const q3Old =
+              setId === 'H3-20260914-02'
+                ? 'この映画は思ったより面白くて、時間が経つのも分かりませんでした。'
+                : (
+                    setId === 'H3-20260917-01'
+                      ? '祭りの入口に立てた大きな案内板は、遠くからでも［一目で目に入りました］。'
+                      : 'unchanged-q3'
+                  );
             const payload = {
               mode: 'REVIEW',
               set_id: setId,
               sections: [
-                {}, {}, {},
-                { explanation: { body_ja: oldText } }
+                { explanation: { body_ja: 'unchanged-q1' } },
+                { explanation: { body_ja: 'unchanged-q2' } },
+                { explanation: { body_ja: q3Old } },
+                { explanation: { body_ja: oldText } },
+                { explanation: { body_ja: 'unchanged-q5' } }
               ]
             };
             const out =

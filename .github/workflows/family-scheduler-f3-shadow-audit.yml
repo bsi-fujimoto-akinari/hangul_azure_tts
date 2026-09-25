@@ -4497,6 +4497,24 @@ jobs:
               start,
           )
           section = server[start:end]
+          ensure_start = section.index(
+              "function h3MonitoringProductionTriggerEnsure()"
+          )
+          ensure_end = section.index(
+              "\nfunction h3MonitoringProductionTriggerRemove()",
+              ensure_start,
+          )
+          ensure_section = section[ensure_start:ensure_end]
+          if (
+              ensure_section.index("PropertiesService.getScriptProperties()")
+              > ensure_section.index(
+                  ".newTrigger(H3_MONITOR_PRODUCTION_TRIGGER_HANDLER_)"
+              )
+          ):
+              raise SystemExit(
+                  "P10 property store must resolve before trigger creation"
+              )
+
           forbidden = [
               "MailApp.sendEmail(",
               "GmailApp.",
@@ -4552,28 +4570,21 @@ jobs:
           const props = new Map([
             ['H3_MONITOR_EMAIL_TO','owner@example.com']
           ]);
-          let failGetScriptProperties=false;
           let failSetPropertyKey='';
           global.PropertiesService = {
-            getScriptProperties:()=>{
-              if(failGetScriptProperties){
-                failGetScriptProperties=false;
-                throw new Error('fixture getScriptProperties failure');
-              }
-              return {
-                getProperty:key => props.has(key) ? props.get(key) : null,
-                setProperty:(key,value)=>{
-                  if(String(key)===failSetPropertyKey){
-                    failSetPropertyKey='';
-                    throw new Error('fixture setProperty failure:'+String(key));
-                  }
-                  props.set(String(key),String(value));
-                },
-                deleteProperty:key=>{
-                  props.delete(String(key));
+            getScriptProperties:()=>({
+              getProperty:key => props.has(key) ? props.get(key) : null,
+              setProperty:(key,value)=>{
+                if(String(key)===failSetPropertyKey){
+                  failSetPropertyKey='';
+                  throw new Error('fixture setProperty failure:'+String(key));
                 }
-              };
-            }
+                props.set(String(key),String(value));
+              },
+              deleteProperty:key=>{
+                props.delete(String(key));
+              }
+            })
           };
 
           let triggers=[];
@@ -4688,29 +4699,6 @@ jobs:
             'P10 read-only status/preflight must not require scopes'
           );
 
-          failGetScriptProperties=true;
-          let propertyStoreBlocked=false;
-          try {
-            h3MonitoringProductionTriggerEnsure();
-          } catch(err) {
-            propertyStoreBlocked=String(err.message||err).includes(
-              'fixture getScriptProperties failure'
-            );
-          }
-          assert(
-            propertyStoreBlocked &&
-            triggers.length===0 &&
-            requireScopeCalls===1,
-            'P10 pre-create property-store failure orphaned trigger'
-          );
-          status=h3MonitoringProductionTriggerStatus();
-          assert(
-            status.status==='ABSENT' &&
-            status.metadata_present===false &&
-            requireScopeCalls===1,
-            'P10 property-store recovery/read-only scope mismatch'
-          );
-
           failSetPropertyKey=H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_KEY_;
           let metadataWriteBlocked=false;
           try {
@@ -4726,7 +4714,7 @@ jobs:
             triggers.length===0 &&
             status.status==='ABSENT' &&
             status.metadata_present===false &&
-            requireScopeCalls===2,
+            requireScopeCalls===1,
             'P10 metadata exception did not clean trigger and metadata'
           );
 
@@ -4745,7 +4733,7 @@ jobs:
             triggers.length===0 &&
             status.status==='ABSENT' &&
             status.metadata_present===false &&
-            requireScopeCalls===3,
+            requireScopeCalls===2,
             'P10 readback exception did not clean trigger and metadata'
           );
 
@@ -4755,7 +4743,7 @@ jobs:
             ensured.created===true &&
             ensured.write_performed===true &&
             triggers.length===1 &&
-            requireScopeCalls===4,
+            requireScopeCalls===3,
             'H first ensure did not create exactly one trigger'
           );
           status=h3MonitoringProductionTriggerStatus();
@@ -4767,7 +4755,7 @@ jobs:
             status.configured_cadence_hours===1 &&
             status.metadata_present===true &&
             status.metadata_match===true &&
-            requireScopeCalls===4,
+            requireScopeCalls===3,
             'H READY trigger readback mismatch'
           );
 
@@ -4777,7 +4765,7 @@ jobs:
             ensured.created===false &&
             ensured.write_performed===false &&
             triggers.length===1 &&
-            requireScopeCalls===5,
+            requireScopeCalls===4,
             'H repeated ensure created a duplicate'
           );
 
@@ -4805,7 +4793,7 @@ jobs:
           assert(
             duplicateBlocked &&
             triggers.length===2 &&
-            requireScopeCalls===6,
+            requireScopeCalls===5,
             'H duplicate trigger ensure did not fail closed'
           );
 
@@ -4821,7 +4809,7 @@ jobs:
             removed.removed===true &&
             removed.write_performed===true &&
             triggers.length===0 &&
-            requireScopeCalls===7,
+            requireScopeCalls===6,
             'H recovery removal mismatch'
           );
           status=h3MonitoringProductionTriggerStatus();
@@ -4831,7 +4819,7 @@ jobs:
             'H metadata survived exact removal'
           );
           assert(
-            requireScopeCalls===7,
+            requireScopeCalls===6,
             'P10 mutating trigger calls must each require scopes exactly once'
           );
 

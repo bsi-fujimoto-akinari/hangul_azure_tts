@@ -12,7 +12,7 @@
       .family-scheduler-actions {
         display: grid;
         grid-template-columns:
-          minmax(0, 1fr)
+          minmax(0, 2fr)
           minmax(0, 4fr);
         gap: 10px;
         width: 100%;
@@ -717,6 +717,74 @@
           }
         }
 
+        function renderMonitorPlaceholder_(
+          panel
+        ) {
+          clearMonitorPanel_(
+            panel
+          );
+
+          var head =
+            monitorEl_(
+              'div',
+              'monitor-home-head monitor-home-placeholder'
+            );
+          var titleWrap =
+            monitorEl_(
+              'span',
+              'monitor-home-title'
+            );
+          titleWrap.appendChild(
+            monitorEl_(
+              'span',
+              'monitor-home-heading',
+              'Monitor'
+            )
+          );
+          head.appendChild(
+            titleWrap
+          );
+
+          var headActions =
+            monitorEl_(
+              'span',
+              'monitor-home-head-actions'
+            );
+          headActions.appendChild(
+            monitorEl_(
+              'span',
+              'monitor-home-time',
+              '—'
+            )
+          );
+          headActions.appendChild(
+            monitorEl_(
+              'span',
+              'monitor-home-overall',
+              '—'
+            )
+          );
+          var chevron =
+            monitorEl_(
+              'span',
+              'monitor-home-chevron monitor-home-placeholder-chevron',
+              '▾'
+            );
+          chevron.setAttribute(
+            'aria-hidden',
+            'true'
+          );
+          headActions.appendChild(
+            chevron
+          );
+          head.appendChild(
+            headActions
+          );
+          panel.appendChild(
+            head
+          );
+        }
+
         function renderMonitor_(
           model
         ) {
@@ -768,15 +836,6 @@
               'Monitor'
             )
           );
-          titleWrap.appendChild(
-            monitorEl_(
-              'span',
-              'monitor-home-time',
-              monitorTime_(
-                model.last_checked_at
-              )
-            )
-          );
           head.appendChild(
             titleWrap
           );
@@ -786,6 +845,15 @@
               'span',
               'monitor-home-head-actions'
             );
+          headActions.appendChild(
+            monitorEl_(
+              'span',
+              'monitor-home-time',
+              monitorTime_(
+                model.last_checked_at
+              )
+            )
+          );
           var overall =
             monitorEl_(
               'span',
@@ -1261,11 +1329,32 @@
               'div',
               'monitor-home-head'
             );
-          head.appendChild(
+          var titleWrap =
             monitorEl_(
-              'h3',
-              '',
+              'span',
+              'monitor-home-title'
+            );
+          titleWrap.appendChild(
+            monitorEl_(
+              'span',
+              'monitor-home-heading',
               'Monitor'
+            )
+          );
+          head.appendChild(
+            titleWrap
+          );
+
+          var headActions =
+            monitorEl_(
+              'span',
+              'monitor-home-head-actions'
+            );
+          headActions.appendChild(
+            monitorEl_(
+              'span',
+              'monitor-home-time',
+              '—'
             )
           );
           var badge =
@@ -1276,8 +1365,11 @@
             );
           badge.dataset.status =
             'ERROR';
-          head.appendChild(
+          headActions.appendChild(
             badge
+          );
+          head.appendChild(
+            headActions
           );
           panel.appendChild(
             head
@@ -1315,6 +1407,9 @@
             panel.setAttribute(
               'aria-live',
               'polite'
+            );
+            renderMonitorPlaceholder_(
+              panel
             );
           }
           placeMonitorPanel_(

@@ -287,6 +287,8 @@ Across learner Review surfaces (`5L | 5W | READING | TRANSLATION`), the learner 
 
 This visibility rule is presentation-only. It does not change scoring, learner history, provider routing, source authority, Review hashes, or active-learning answer behavior.
 
+The common learner-Web projection for the displayed set number is `surface_set_no`. It is not a new source identity and is never persisted into canonical Review JSON or hash/binding authority. Its source remains family-specific: `5L -> LISTENING_SET_NO`, `5W -> review_home_index_v1.SET_NO`, `READING -> issue_no`, and `TRANSLATION -> issue_no`. Normal set opens and immediate post-submit Review responses must expose the same projected `surface_set_no`.
+
 Structured learning-block text across `5L | 5W | READING | TRANSLATION` must preserve stored newline boundaries. In particular, a Hanja network stored as target, `⇒` related examples, and `≠` homophone examples on separate lines must render as the same three visual lines. The renderer must not infer or synthesize line splits when the stored content itself is one line; such content corrections belong to the source/payload layer.
 
 ## 34. Written 5W approved explanation overlay

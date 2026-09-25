@@ -212,52 +212,58 @@
     );
   }
 
-  window.addEventListener(
-    'error',
-    function (event) {
-      h3ShowClientRuntimeFailure_(
-        '画面処理でエラーが発生しました。',
-        'client.window_error',
-        event &&
-        (
-          event.error ||
-          event.message
-        ),
-        {
-          client_event:
-            'window.error',
-          line:
-            Number(
-              event &&
-              event.lineno ||
-              0
-            ),
-          column:
-            Number(
-              event &&
-              event.colno ||
-              0
-            )
-        }
-      );
-    }
-  );
+  if (
+    window &&
+    typeof window.addEventListener ===
+      'function'
+  ) {
+    window.addEventListener(
+      'error',
+      function (event) {
+        h3ShowClientRuntimeFailure_(
+          '画面処理でエラーが発生しました。',
+          'client.window_error',
+          event &&
+          (
+            event.error ||
+            event.message
+          ),
+          {
+            client_event:
+              'window.error',
+            line:
+              Number(
+                event &&
+                event.lineno ||
+                0
+              ),
+            column:
+              Number(
+                event &&
+                event.colno ||
+                0
+              )
+          }
+        );
+      }
+    );
 
-  window.addEventListener(
-    'unhandledrejection',
-    function (event) {
-      h3ShowClientRuntimeFailure_(
-        '画面処理でエラーが発生しました。',
-        'client.unhandled_rejection',
-        event &&
-        event.reason,
-        {
-          client_event:
-            'unhandledrejection'
-        }
-      );
-    }
-  );
+    window.addEventListener(
+      'unhandledrejection',
+      function (event) {
+        h3ShowClientRuntimeFailure_(
+          '画面処理でエラーが発生しました。',
+          'client.unhandled_rejection',
+          event &&
+          event.reason,
+          {
+            client_event:
+              'unhandledrejection'
+          }
+        );
+      }
+    );
+  }
 
   document.addEventListener(
     'h3-family-scheduler-open-current',

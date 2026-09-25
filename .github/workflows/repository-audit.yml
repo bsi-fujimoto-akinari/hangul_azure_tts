@@ -10078,6 +10078,211 @@ jobs:
           print('UXR-4 question/Review navigation/media audit: PASS')
           PY
 
+      - name: Audit UXR-5 exact question technical deep link
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+          index = Path('Index.html').read_text(encoding='utf-8')
+          client = Path('Client.html').read_text(encoding='utf-8')
+          style = Path('Stylesheet.html').read_text(encoding='utf-8')
+
+          for needle in [
+              'template.technicalLinkBaseJson',
+              "'QUESTION_DEEP_LINK_Q_NO_INVALID'",
+              'q_no: questionNo',
+          ]:
+              if needle not in web:
+                  raise SystemExit(
+                      f'UXR-5 server contract missing: {needle}'
+                  )
+
+          for needle in [
+              'window.H3_TECHNICAL_LINK_BASE',
+              'technicalLinkBaseJson',
+          ]:
+              if needle not in index:
+                  raise SystemExit(
+                      f'UXR-5 template contract missing: {needle}'
+                  )
+
+          for needle in [
+              'function technicalQuestionDeepLink_(',
+              'function initialQuestionIndexFromRequest_(',
+              'function scrollToQuestionDeepLinkTarget_(',
+              "'q_no=' +",
+              "'surface_family=' +",
+              "'set_id=' +",
+              "'question-deep-link'",
+              "technicalLink.textContent =\n          'URL';",
+              "technicalLink.target =\n          '_blank';",
+              'authoritativeQuestionOrdinal_(',
+          ]:
+              if needle not in client:
+                  raise SystemExit(
+                      f'UXR-5 client contract missing: {needle}'
+                  )
+
+          builder_start = client.index(
+              'function technicalQuestionDeepLink_('
+          )
+          builder_end = client.index(
+              'function initialQuestionIndexFromRequest_(',
+              builder_start,
+          )
+          builder = client[builder_start:builder_end]
+
+          for forbidden in [
+              'visible_choices',
+              'choice_ids',
+              'correct_answer',
+              'user_answer',
+              'answer_text',
+              'question_text',
+              'question_key',
+              'item_id',
+              'txn_id',
+              'legacy_review_id',
+          ]:
+              if forbidden in builder:
+                  raise SystemExit(
+                      'UXR-5 technical URL leaks question/answer data: ' +
+                      forbidden
+                  )
+
+          if builder.count("query.push(") != 3:
+              raise SystemExit(
+                  'UXR-5 technical URL query cardinality changed.'
+              )
+
+          if 'mode=' not in builder:
+              raise SystemExit(
+                  'UXR-5 technical URL route mode missing.'
+              )
+
+          if '.question-deep-link {' not in style:
+              raise SystemExit(
+                  'UXR-5 technical-link style missing.'
+              )
+
+          review_start = client.index(
+              'function renderPersistentReview('
+          )
+          review_end = client.index(
+              'function setReviewPage(',
+              review_start,
+          )
+          if 'question-deep-link' in client[
+              review_start:review_end
+          ]:
+              raise SystemExit(
+                  'UXR-5 technical link leaked into Review renderer.'
+              )
+
+          print(
+              'UXR-5 exact question technical deep-link static audit: PASS'
+          )
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const source =
+            fs.readFileSync(
+              'WebApp.js',
+              'utf8'
+            );
+          const ctx =
+            vm.createContext({
+              console,
+              H3_WEB_SYSTEM_TEST_R3_06_SET_ID:
+                'SYSTEM_TEST-H3-L5E2E-R3-06-20260919-01',
+              h3SystemTestSetIdAllowed_:
+                value =>
+                  value ===
+                    'SYSTEM_TEST-H3-L5E2E-R3-06-20260919-01',
+              SpreadsheetApp: {
+                openById: () => ({})
+              },
+              h3ReviewCurrentLearning_:
+                () => null
+            });
+
+          vm.runInContext(
+            source,
+            ctx,
+            { filename: 'WebApp.js' }
+          );
+
+          const listening =
+            vm.runInContext(
+              "h3WebBootRequest_({parameter:{mode:'LISTENING',set_id:'H3-20260919-L03',q_no:'4'}})",
+              ctx
+            );
+          if (
+            listening.mode !==
+              'LISTENING' ||
+            listening.set_id !==
+              'H3-20260919-L03' ||
+            listening.q_no !== 4
+          ) {
+            throw new Error(
+              'UXR-5 listening deep-link boot mismatch.'
+            );
+          }
+
+          const reading =
+            vm.runInContext(
+              "h3WebBootRequest_({parameter:{mode:'WRITTEN',surface_family:'READING',set_id:'H3-20260922-R003',q_no:'2'}})",
+              ctx
+            );
+          if (
+            reading.mode !==
+              'WRITTEN' ||
+            reading.surface_family !==
+              'READING' ||
+            reading.q_no !== 2
+          ) {
+            throw new Error(
+              'UXR-5 Reading deep-link boot mismatch.'
+            );
+          }
+
+          for (const expression of [
+            "h3WebBootRequest_({parameter:{mode:'LISTENING',set_id:'H3-20260919-L03',q_no:'0'}})",
+            "h3WebBootRequest_({parameter:{mode:'LISTENING',set_id:'H3-20260919-L03',q_no:'6'}})",
+            "h3WebBootRequest_({parameter:{mode:'REVIEW',txn_id:'H3TX-20260919-000005',q_no:'1'}})"
+          ]) {
+            let failed = false;
+            try {
+              vm.runInContext(
+                expression,
+                ctx
+              );
+            } catch (error) {
+              failed =
+                String(
+                  error &&
+                  error.message ||
+                  error
+                ) ===
+                'QUESTION_DEEP_LINK_Q_NO_INVALID';
+            }
+            if (!failed) {
+              throw new Error(
+                'UXR-5 invalid deep-link request did not fail closed.'
+              );
+            }
+          }
+
+          console.log(
+            'UXR-5 exact question technical deep-link boot audit: PASS'
+          );
+          NODE
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

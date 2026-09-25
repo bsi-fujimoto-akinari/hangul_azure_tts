@@ -9598,6 +9598,311 @@ jobs:
           print('E5-G Review audio close contract: PASS')
           PY
 
+      - name: Audit UXR-2B 5W Review content repair
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const assert = require('assert');
+          const crypto = require('crypto');
+
+          function load(path) {
+            const context = {
+              console,
+              JSON,
+              Object,
+              Array,
+              String,
+              Number,
+              Math,
+              RegExp,
+              Error,
+              Date,
+              Boolean,
+              parseInt
+            };
+            vm.createContext(context);
+            vm.runInContext(
+              fs.readFileSync(path, 'utf8'),
+              context,
+              { filename: path }
+            );
+            return context;
+          }
+
+          const persistence =
+            load('WebAppReviewPersistence.js');
+          const written =
+            load('WebAppWrittenProduction.js');
+          const audio =
+            load('ReviewAudioBackfill.js');
+          const style =
+            load('WebAppSurfaceCommon.js');
+
+          const d5Cases = [
+            ['H3-20260913-01',
+              '・久しぶりに友達の（　）を聞きました。\n→ ・海外にいる家族から良い（　）が来ました。',
+              '・久しぶりに友達の近況を聞きました。\n・海外にいる家族から良い知らせが届きました。'],
+            ['H3-20260913-02',
+              '・試験を控えて勉強に（　）を使っています。\n→ ・最近は健康にもっと（　）を使わなければなりません。',
+              '・試験を控えて勉強に気を配っています。\n・最近は健康にもっと気をつけなければなりません。'],
+            ['H3-20260913-03',
+              '・最近、健康にかなり（　）を使っています。\n→ ・その人の言葉はあまり（　）を使わないでください。',
+              '・最近は健康にかなり気を配っています。\n・その人の言葉はあまり気にしないでください。'],
+            ['H3-20260914-01',
+              '・友達とした約束は必ず（　）なければなりません。\n→ ・人の秘密はきちんと（　）なければなりません。',
+              '・友達との約束は必ず守らなければなりません。\n・人の秘密はきちんと守らなければなりません。'],
+            ['H3-20260914-02',
+              '・韓国文化に（　）が多いです。\n→ ・その問題にはあまり（　）がありません。',
+              '・韓国文化にとても関心があります。\n・その問題にはあまり関心がありません。'],
+            ['H3-20260914-03',
+              '・友達に旅行の写真を（　）。\n→ ・週末は家族と一緒に楽しく（　）。',
+              '・友達に旅行の写真を送りました。\n・週末は家族と一緒に楽しく過ごしました。'],
+            ['H3-20260914-04',
+              '・難しい数学の問題を（　）。\n→ ・互いに話して誤解を（　）。',
+              '・難しい数学の問題を解きました。\n・互いに話して誤解を解きました。'],
+            ['H3-20260914-05',
+              '・忙しいのに時間を（　）。\n→ ・発表しようと勇気を（　）。',
+              '・忙しいのに時間を作りました。\n・発表しようと勇気を出しました。'],
+            ['H3-20260914-06',
+              '・旅行の計画を（　）。\n→ ・今年の目標を（　）。',
+              '・旅行の計画を立てました。\n・今年の目標を立てました。'],
+            ['H3-20260915-01',
+              '・明日から実践するために勉強の計画をあらかじめ（　　　）。\n→ ・会議を始める前に今月の販売目標を具体的に（　　　）。',
+              '・明日から実践するために勉強の計画をあらかじめ立てました。\n・会議を始める前に今月の販売目標を具体的に立てました。'],
+            ['H3-20260916-01',
+              '・忙しいのに私に会うために時間を（　　　）。\n→ ・知らない人に先に話しかけるために勇気を（　　　）。',
+              '・忙しいのに私に会うために時間を作りました。\n・知らない人に先に話しかけようと勇気を出しました。'],
+            ['H3-20260916-02',
+              '・複雑な問題を一つずつ（　　　）。\n→ ・友達と率直に話して誤解を（　　　）。',
+              '・複雑な問題を一つずつ解きました。\n・友達と率直に話して誤解を解きました。'],
+            ['H3-20260917-01',
+              '・お客さんが来る前に夕食の膳を（　　　）。\n→ ・とても驚きましたが、すぐに気を（　　　）。',
+              '・お客さんが来る前に夕食の膳を整えました。\n・とても驚きましたが、すぐに気を取り直しました。'],
+            ['H3-20260917-02',
+              '・チゲを小さな（　　　）に取り分けて食べました。\n→ ・その友達は人をうまく導けるので、大きな（　　　）になりそうです。',
+              '・チゲを小さな器に取り分けて食べました。\n・その友達は人をうまく導けるので、大きな器の人物になりそうです。'],
+            ['H3-20260918-01',
+              '・交通事故の衝撃で、しばらく（　　　）を失いました。\n→ ・最初はとても慌てましたが、すぐに（　　　）を取り戻して警察に連絡しました。',
+              '・交通事故の衝撃で、しばらく意識を失いました。\n・最初はとても慌てましたが、すぐに気を取り直して警察に連絡しました。'],
+            ['H3-20260918-02',
+              '・電話が来て、しばらく画面から目を（　　　）。\n→ ・引っ越しながら、壁に貼っておいた写真を（　　　）。',
+              '・電話が来て、しばらく画面から目を離しました。\n・引っ越しの際、壁に貼っておいた写真を剥がしました。'],
+            ['H3-20260918-03',
+              '・通知音を聞いて、しばらく画面から目を（　　　）。\n→ ・ノートに間違って貼ったラベルをもう一度（　　　）。',
+              '・通知音を聞いて、しばらく画面から目を離しました。\n・ノートに間違って貼ったラベルをもう一度剥がしました。'],
+            ['H3-20260920-01',
+              '・旅行の前に全体の日程をあらかじめ（　　　）。\n→ ・新年になると一年の目標を（　　　）。',
+              '・旅行の前に全体の日程をあらかじめ立てます。\n・新年になると一年の目標を立てます。']
+          ];
+
+          for (const [setId, oldText, newText] of d5Cases) {
+            const payload = {
+              mode: 'REVIEW',
+              set_id: setId,
+              sections: [
+                {}, {}, {},
+                { explanation: { body_ja: oldText } }
+              ]
+            };
+            const out =
+              persistence
+                .h3WrittenReviewApplyLearnerTextCorrections_(
+                  payload
+                );
+            assert.strictEqual(
+              out.sections[3].explanation.body_ja,
+              newText,
+              setId
+            );
+            assert.strictEqual(
+              /[（(][ \t　]*[）)]/.test(newText),
+              false,
+              setId + ' retains blank'
+            );
+            assert.strictEqual(
+              /^→/.test(newText.split('\n')[1]),
+              false,
+              setId + ' retains second-line arrow'
+            );
+          }
+
+          assert.strictEqual(d5Cases.length, 18);
+
+          assert.strictEqual(
+            written.h3WrittenReviewValidateD5JapaneseBody_({
+              body_ja:
+                '・一つ目の完成した訳です。\n・二つ目の完成した訳です。'
+            }),
+            true
+          );
+
+          for (const bad of [
+            '・一つ目（　　　）。\n・二つ目です。',
+            '・一つ目です。\n→ ・二つ目です。',
+            '・一つだけです。'
+          ]) {
+            assert.throws(
+              () =>
+                written
+                  .h3WrittenReviewValidateD5JapaneseBody_({
+                    body_ja: bad
+                  }),
+              /WRITTEN_REVIEW_D5_JA_/
+            );
+          }
+
+          const oldScript =
+            'Q3 [D4][PARAPHRASE]\n' +
+            '次の下線部と最も近い意味のものを選んでください。\n' +
+            '빨간 우산은 멀리서도 [눈에 띄었어요].\n' +
+            '① 멀리서도 쉽게 보였어요\n' +
+            '② 눈이 아파서 보기 힘들었어요\n' +
+            '③ 비를 맞아 금방 젖었어요\n' +
+            '④ 사람들 사이에서 곧 사라졌어요';
+
+          const d4 =
+            persistence
+              .h3WrittenReviewApplyD4CompletedSurfaceCorrection_({
+                mode: 'REVIEW',
+                set_id: 'H3-20260915-01',
+                sections: [
+                  {}, {},
+                  {
+                    section: 'D4',
+                    question_surface: {
+                      body:
+                        '次の下線部と最も近い意味のものを選んでください。\n' +
+                        '빨간 우산은 멀리서도 [눈에 띄었어요].'
+                    },
+                    correct_answer_text:
+                      '멀리서도 쉽게 보였어요',
+                    script_text: oldScript
+                  }
+                ]
+              });
+          assert.strictEqual(
+            d4.sections[2].script_text,
+            '빨간 우산은 멀리서도 눈에 띄었어요.\n' +
+            '빨간 우산은 멀리서도 쉽게 보였어요.'
+          );
+          assert(
+            !d4.sections[2].script_text.includes(
+              '멀리서도 멀리서도'
+            )
+          );
+
+          const audioText =
+            audio.h3ReviewAudioCanonicalize5WScript_(
+              {
+                question_surface:
+                  'Q3 [D4][PARAPHRASE]\n' +
+                  '빨간 우산은 멀리서도 [눈에 띄었어요].',
+                correct_answer_text:
+                  '멀리서도 쉽게 보였어요'
+              },
+              'D4',
+              oldScript,
+              'H3-20260915-01'
+            );
+          assert.strictEqual(
+            audioText,
+            '빨간 우산은 멀리서도 눈에 띄었어요.\n' +
+            '빨간 우산은 멀리서도 쉽게 보였어요.'
+          );
+          assert.strictEqual(
+            crypto
+              .createHash('sha256')
+              .update(audioText, 'utf8')
+              .digest('hex'),
+            'd01412d363148f3c42532953cbd73c12d8f19706e32edf533d1f0de65c5d880c'
+          );
+
+          const fixes = [
+            ['H3-20260914-03','D6',
+             '같이 전시회 보러 갈래요?',
+             '一緒に展示会を見に行きませんか？'],
+            ['H3-20260914-05','D6',
+             '네, 부탁드려요.',
+             'はい、お願いします。'],
+            ['H3-20260916-01','D3',
+             '준비해야 해요.',
+             '準備しなければなりません。'],
+            ['H3-20260918-01','D6',
+             '중간에 넘어졌던 참가자 말이죠?',
+             '途中で転んだ参加者のことですよね？'],
+            ['H3-20260918-03','D6',
+             '친구와 북한산에 가기로 했어요.',
+             '友達と北漢山に行くことにしました。']
+          ];
+          for (const [setId, section, ko, ja] of fixes) {
+            const payload = {
+              surface_family: '5W',
+              set_id: setId,
+              sections: [{
+                section,
+                correct_answer_text: ko,
+                explanation: {
+                  reason: '意味関係を確認する。',
+                  learning_blocks: [{
+                    usage: ko + '\n→ ' + ja
+                  }]
+                }
+              }]
+            };
+            assert.doesNotThrow(() =>
+              style.h3ReviewExplanationStyleApplyPayload_(
+                payload
+              )
+            );
+            assert.notStrictEqual(
+              payload.sections[0]
+                .explanation
+                .learning_blocks[0]
+                .usage,
+              ko + '\n→ ' + ja
+            );
+          }
+
+          assert.throws(
+            () =>
+              style
+                .h3ReviewExplanationStyleValidateAuthoring_(
+                  {
+                    reason: '意味を確認する。',
+                    learning_blocks: [{
+                      example_ko: '정답 문장.'
+                    }]
+                  },
+                  ['정답 문장.'],
+                  'UXR2B_SYNTHETIC_DUP'
+                ),
+            /REVIEW_EXPLANATION_STYLE_EXAMPLE_DUPLICATES_ANSWER/
+          );
+
+          const audioSource =
+            fs.readFileSync(
+              'ReviewAudioBackfill.js',
+              'utf8'
+            );
+          for (const needle of [
+            'H3_REVIEW_AUDIO_STALE_REPLACED_FOLDER_ID_',
+            'REVIEW_AUDIO_UXR2B_D4_MIGRATION_SOURCE_MISMATCH',
+            'STALE_REPLACED_ARCHIVE',
+            'runUxr2bReviewAudioRepair'
+          ]) {
+            assert(
+              audioSource.includes(needle),
+              'Missing audio repair contract: ' + needle
+            );
+          }
+
+          console.log(
+            'UXR-2B 5W Review content repair audit: PASS'
+          );
+          NODE
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

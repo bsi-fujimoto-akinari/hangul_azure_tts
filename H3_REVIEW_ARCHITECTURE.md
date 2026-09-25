@@ -283,7 +283,7 @@ Reading and Translation learner pilots are active and source-locked, while their
 
 ## 33. Review explanation visibility and structured text
 
-Across learner Review surfaces (`5L | 5W | READING | TRANSLATION`), the learner explanation is structurally always visible for `○ / △ / ×`. The explanation container is an ordinary non-disclosure block, not a `<details>` element, and it has no result-dependent open/closed state. The separate technical-information block remains the Review disclosure: it uses `<details>` and remains independently collapsible.
+Across learner Review surfaces (`5L | 5W | READING | TRANSLATION`), the learner explanation is structurally always visible for `○ / △ / ×`. The explanation container is an ordinary non-disclosure block, not a `<details>` element, and it has no result-dependent open/closed state. The legacy technical-information disclosure is removed. Review instead exposes a sticky set-title + Q-navigation header, with a copy-link control that copies the permalink for the currently displayed Review question; active-learning pages use the same sticky title/navigation layout without the copy-link control.
 
 This visibility rule is presentation-only. It does not change scoring, learner history, provider routing, source authority, Review hashes, or active-learning answer behavior.
 

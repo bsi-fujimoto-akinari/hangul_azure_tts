@@ -150,7 +150,7 @@ jobs:
               sys.exit(1)
           PY
 
-      - name: Verify credentialed Apps Script smoke boundary
+      - name: Verify credentialed Apps Script execution boundaries
         shell: bash
         run: |
           python3 - <<'PY'
@@ -167,6 +167,10 @@ jobs:
           required_sync = [
               'intended_smoke_sha:',
               'Detect read-only smoke preflight request',
+              'Validate exact-main observability source-binding boundary',
+              'Bind exact-main observability source provenance',
+              'h3ObservabilityBindSource',
+              'steps.source_binding_boundary.outputs.ready',
               'Validate one-revision read-only smoke boundary',
               github_attempt_token,
               'steps.source_attestation.outputs.attested',
@@ -175,11 +179,14 @@ jobs:
           missing_sync = [token for token in required_sync if token not in sync]
           if missing_sync:
               raise SystemExit(
-                  'Apps Script smoke boundary contract missing from auto-sync: '
+                  'Apps Script credentialed execution boundary missing from auto-sync: '
                   + ', '.join(missing_sync)
               )
 
           required_ops = [
+              'Exact-main observability source binding',
+              'H3_OBSERVABILITY_SOURCE_SHA',
+              'H3_OBSERVABILITY_SOURCE_DIGEST',
               'manual workflow_dispatch with intended_smoke_sha=',
               'run_attempt=1',
               'authenticated source_attestation',
@@ -188,39 +195,174 @@ jobs:
           missing_ops = [token for token in required_ops if token not in ops]
           if missing_ops:
               raise SystemExit(
-                  'Apps Script smoke boundary documentation missing: '
+                  'Apps Script credentialed execution documentation missing: '
                   + ', '.join(missing_ops)
               )
 
           command_refs = []
           pattern = re.compile(
-              rf'(?m)^[^#\\n]*\\bclasp\\b[^\\n]*\\b{re.escape(command)}\\b'
+              rf'(?m)^[^#\n]*\bclasp\b[^\n]*\b{re.escape(command)}\b'
           )
           for path in sorted(Path('.github/workflows').glob('*.yml')):
               contents = path.read_text(encoding='utf-8')
               for match in pattern.finditer(contents):
-                  command_refs.append((path, match.start(), contents))
+                  line_end = contents.find('\n', match.start())
+                  if line_end < 0:
+                      line_end = len(contents)
+                  command_refs.append((
+                      path,
+                      match.start(),
+                      contents,
+                      contents[match.start():line_end],
+                  ))
 
-          for path, pos, contents in command_refs:
+          binding_refs = 0
+          smoke_refs = 0
+          for path, pos, contents, line in command_refs:
               if path != sync_path:
                   raise SystemExit(
                       f'Credentialed clasp execution is only allowed in {sync_path}: {path}'
                   )
-              boundary_pos = contents.find('Validate one-revision read-only smoke boundary')
-              if boundary_pos < 0 or pos <= boundary_pos:
+
+              binding_boundary_pos = contents.find(
+                  'Validate exact-main observability source-binding boundary'
+              )
+              smoke_boundary_pos = contents.find(
+                  'Validate one-revision read-only smoke boundary'
+              )
+
+              if 'h3ObservabilityBindSource' in line:
+                  binding_refs += 1
+                  if (
+                      binding_boundary_pos < 0
+                      or pos <= binding_boundary_pos
+                      or (
+                          smoke_boundary_pos >= 0
+                          and pos >= smoke_boundary_pos
+                      )
+                  ):
+                      raise SystemExit(
+                          'Observability source binding must occur after its '
+                          'exact-main attestation boundary and before smoke_boundary.'
+                      )
+                  prefix = contents[max(binding_boundary_pos, pos - 2200):pos]
+                  if (
+                      "if: steps.source_binding_boundary.outputs.ready == 'true'"
+                      not in prefix
+                  ):
+                      raise SystemExit(
+                          'Observability source binding must be gated by '
+                          'source_binding_boundary ready=true.'
+                      )
+                  continue
+
+              smoke_refs += 1
+              if smoke_boundary_pos < 0 or pos <= smoke_boundary_pos:
                   raise SystemExit(
-                      'Credentialed clasp execution must occur after the permanent smoke boundary.'
+                      'Credentialed smoke execution must occur after the permanent smoke boundary.'
                   )
-              prefix = contents[max(boundary_pos, pos - 1200):pos]
+              prefix = contents[max(smoke_boundary_pos, pos - 1200):pos]
               if "if: steps.smoke_boundary.outputs.ready == 'true'" not in prefix:
                   raise SystemExit(
-                      'Credentialed clasp execution must be gated by smoke_boundary ready=true.'
+                      'Credentialed smoke execution must be gated by smoke_boundary ready=true.'
                   )
 
+          if binding_refs != 1:
+              raise SystemExit(
+                  f'Expected exactly one permanent observability binding command; found {binding_refs}.'
+              )
+
           print(
-              'Credentialed Apps Script smoke boundary contract: PASS; '
-              f'credentialed command refs={len(command_refs)}'
+              'Credentialed Apps Script execution boundaries: PASS; '
+              f'observability binding refs={binding_refs}; smoke refs={smoke_refs}'
           )
+          PY
+
+      - name: Audit structured Web runtime observability contract
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          obs = Path('WebAppObservability.js').read_text(encoding='utf-8')
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+          client = Path('Client.html').read_text(encoding='utf-8')
+          family = Path('WebAppFamilyScheduler.js').read_text(encoding='utf-8')
+          manifest = json.loads(Path('appsscript.json').read_text(encoding='utf-8'))
+
+          required_obs = [
+              "'H3_WEB_RUNTIME_ERROR_V1'",
+              "'web_runtime_error_log_v1'",
+              "'H3_OBSERVABILITY_SOURCE_BINDING_V1'",
+              "'H3_OBSERVABILITY_SOURCE_BINDING_RESULT_V1'",
+              "'H3_OBSERVABILITY_SOURCE_SHA'",
+              "'H3_OBSERVABILITY_SOURCE_DIGEST'",
+              'H3_OBSERVABILITY_RETENTION_DAYS_ = 90',
+              'H3_OBSERVABILITY_MAX_EVENTS_ = 5000',
+              'function h3ObservabilityBindSource(',
+              'function reportWebRuntimeClientError(',
+              'function h3ObservabilityCall_(',
+              'function h3ObservabilityPruneRuntimeErrorsUnlocked_(',
+              "'SOURCE_SHA'",
+              "'SOURCE_DIGEST'",
+              "'SOURCE_FILE_COUNT'",
+          ]
+          missing_obs = [token for token in required_obs if token not in obs]
+          if missing_obs:
+              raise SystemExit(
+                  'Structured observability implementation missing: '
+                  + ', '.join(missing_obs)
+              )
+
+          for token in [
+              "'getListeningWebSet'",
+              "'getListeningWebMedia'",
+              "'submitListeningWebAnswers'",
+              'h3ObservabilityLogServerError_(',
+          ]:
+              if token not in web:
+                  raise SystemExit(
+                      f'Web runtime observability entrypoint missing: {token}'
+                  )
+
+          for token in [
+              "'H3_WEB_RUNTIME_CLIENT_ERROR_V1'",
+              "window.addEventListener(\n    'error'",
+              "window.addEventListener(\n    'unhandledrejection'",
+              '.reportWebRuntimeClientError(',
+          ]:
+              if token not in client:
+                  raise SystemExit(
+                      f'Client runtime observability hook missing: {token}'
+                  )
+
+          if 'h3ObservabilityPruneRuntimeErrorsUnlocked_(' not in family:
+              raise SystemExit(
+                  'Existing production monitoring cadence does not maintain the error-log retention policy.'
+              )
+
+          if manifest.get('executionApi', {}).get('access') != 'MYSELF':
+              raise SystemExit(
+                  'executionApi.access must remain MYSELF for observability source binding.'
+              )
+          if manifest.get('webapp', {}).get('access') != 'MYSELF':
+              raise SystemExit(
+                  'webapp.access must remain MYSELF for observability source binding.'
+              )
+
+          forbidden = [
+              'JSON.stringify(request)',
+              'JSON.stringify(source)',
+          ]
+          present = [token for token in forbidden if token in obs]
+          if present:
+              raise SystemExit(
+                  'Runtime error logger must not serialize raw request/source objects: '
+                  + ', '.join(present)
+              )
+
+          print('Structured Web runtime observability contract: PASS')
           PY
 
       - name: Reject credential files and likely embedded secrets

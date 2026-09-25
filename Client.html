@@ -2693,12 +2693,16 @@
       return [];
     }
 
+    var items = [];
+
     if (
       Array.isArray(
         app.payload.questions
       )
     ) {
-      return app.payload.questions;
+      items = items.concat(
+        app.payload.questions
+      );
     }
 
     if (
@@ -2706,10 +2710,12 @@
         app.payload.sections
       )
     ) {
-      return app.payload.sections;
+      items = items.concat(
+        app.payload.sections
+      );
     }
 
-    return [];
+    return items;
   }
 
   function scheduleInitialAudioPrefetch() {

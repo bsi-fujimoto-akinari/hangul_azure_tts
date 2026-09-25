@@ -86,10 +86,24 @@ function h3WebAttachSurfaceSetNo_(
       SpreadsheetApp.openById(
         H3_WEB_RUNTIME_SPREADSHEET_ID
       );
-    var table =
+    var indexed =
       h3ReviewHomeIndexTable_(
         spreadsheet
       );
+    var table =
+      indexed &&
+      indexed.table;
+
+    if (
+      !table ||
+      !Array.isArray(table.rows) ||
+      !table.map
+    ) {
+      throw new Error(
+        'SURFACE_SET_NO_HOME_INDEX_TABLE_INVALID'
+      );
+    }
+
     var existing =
       h3ReviewHomeIndexFind_(
         table,

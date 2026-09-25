@@ -1,0 +1,190 @@
+name: Written incident recovery 2026-09-25
+
+on:
+  workflow_run:
+    workflows: ["Apps Script auto-sync"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: written-incident-recovery-20260925
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'workflow_run' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout exact synced main
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
+
+      - name: Verify exact one-time recovery source
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=2
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(git rev-parse origin/main)" = "$SOURCE_SHA"
+          test -f WebAppIncidentRecovery20260925.js
+          python3 - <<'PY'
+          from pathlib import Path
+
+          text = Path(
+              'WebAppIncidentRecovery20260925.js'
+          ).read_text(encoding='utf-8')
+
+          required = [
+              "function h3RecoverWrittenIncident20260925()",
+              "'H3-20260925-01'",
+              "'H3TX-20260925-000001'",
+              "'STD-B002-S1'",
+              "h3FsWrittenGenerationInsert_(",
+              "h3WrittenAnswerSync_(",
+              "h3WrittenProductionReviewEnsure_(",
+              "h3ReviewHomeIndexUpsertAfterCommit_(",
+              "h3FamilySchedulerObserveAfterCommit_(",
+          ]
+          for needle in required:
+              if needle not in text:
+                  raise SystemExit(
+                      f'Recovery source invariant missing: {needle}'
+                  )
+          PY
+
+      - name: Require clasp credentials
+        shell: bash
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CLASPRC_JSON" ]; then
+            echo "::error::CLASPRC_JSON is required for incident recovery."
+            exit 1
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Materialize clasp credentials
+        shell: bash
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          value = os.environ.get('CLASPRC_JSON', '')
+          if not value.strip():
+              raise SystemExit('CLASPRC_JSON is empty')
+
+          path = Path.home() / '.clasprc.json'
+          path.write_text(value, encoding='utf-8')
+          path.chmod(0o600)
+          PY
+
+      - name: Verify exact Apps Script target
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          expected = (
+              '1p_e1jKICTZXHpCrQ7rwU9HilloZdkFBpHry_lCq5YgXpaiU4FNEQlDa-'
+          )
+          data = json.loads(
+              Path('.clasp.json').read_text(encoding='utf-8')
+          )
+          actual = data.get('scriptId')
+          if actual != expected:
+              raise SystemExit(
+                  f'Apps Script target mismatch: {actual!r}'
+              )
+          PY
+
+      - name: Execute bounded Written incident recovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=/tmp/h3-written-recovery.out
+          err=/tmp/h3-written-recovery.err
+
+          set +e
+          npx -y @google/clasp@3.4.0 --json run-function \
+            h3RecoverWrittenIncident20260925 \
+            >"$out" 2>"$err"
+          status=$?
+          set -e
+
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Written incident recovery execution failed."
+            cat "$err"
+            cat "$out"
+            exit "$status"
+          fi
+
+          python3 - "$out" <<'PY'
+          import json
+          import sys
+
+          envelope = json.loads(
+              open(sys.argv[1], encoding='utf-8').read()
+          )
+          if envelope.get('error'):
+              raise SystemExit(
+                  'Recovery returned an Apps Script error envelope.'
+              )
+
+          result = envelope.get('response')
+          if not isinstance(result, dict):
+              raise SystemExit(
+                  'Recovery response is not an object.'
+              )
+
+          if result.get('schema') != (
+              'H3_WRITTEN_INCIDENT_RECOVERY_20260925_V1'
+          ):
+              raise SystemExit(
+                  f"Unexpected recovery schema: {result.get('schema')!r}"
+              )
+          if result.get('status') not in {
+              'PASS',
+              'PASS_WITH_KNOWN_5L_BLOCKER',
+          }:
+              raise SystemExit(
+                  f"Recovery status is not accepted: {result.get('status')!r}"
+              )
+          if result.get('set_id') != 'H3-20260925-01':
+              raise SystemExit('Recovery SET_ID mismatch.')
+          if result.get('txn_id') != 'H3TX-20260925-000001':
+              raise SystemExit('Recovery TXN_ID mismatch.')
+          if result.get('recovery_complete') is not True:
+              raise SystemExit(
+                  'Recovery did not attest completion.'
+              )
+          if int(result.get('history_global_clock') or 0) != 28:
+              raise SystemExit(
+                  'Recovered global history clock is not 28.'
+              )
+
+          print(json.dumps(result, ensure_ascii=False))
+          PY

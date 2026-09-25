@@ -132,11 +132,43 @@
         node.classList.add('hidden');
       });
 
-    document
-      .getElementById(
+    var surfaceSticky =
+      document.getElementById(
+        'surface-sticky'
+      );
+    var surfaceProgress =
+      document.getElementById(
         'mobile-progress'
-      )
-      .classList.add('hidden');
+      );
+    var surfaceTitle =
+      document.getElementById(
+        'surface-title'
+      );
+    var surfaceLink =
+      document.getElementById(
+        'surface-link-copy'
+      );
+
+    if (surfaceSticky) {
+      surfaceSticky.classList.add(
+        'hidden'
+      );
+    }
+    if (surfaceProgress) {
+      surfaceProgress.textContent = '';
+    }
+    if (surfaceTitle) {
+      surfaceTitle.textContent = '';
+    }
+    if (surfaceLink) {
+      surfaceLink.classList.add(
+        'hidden'
+      );
+      surfaceLink.onclick = null;
+      surfaceLink.removeAttribute(
+        'data-copied'
+      );
+    }
 
     var error =
       document.getElementById(
@@ -960,7 +992,9 @@
         if (payload.mode === 'REVIEW') {
           app.locked = true;
           renderPersistentReview(
-            payload
+            payload,
+            webRequest &&
+              webRequest.q_no
           );
           return;
         }
@@ -2087,8 +2121,92 @@
     return index + 1;
   }
 
-  function technicalQuestionDeepLink_(
-    payload,
+  function surfaceFamilyCode_(
+    surfaceFamily
+  ) {
+    var family =
+      String(surfaceFamily || '');
+    var codes = {
+      '5L': '5L',
+      '5W': '5W',
+      READING: '2R',
+      TRANSLATION: '2T'
+    };
+    return codes[family] || family;
+  }
+
+
+  function surfaceSetNo_(
+    payload
+  ) {
+    var values = [
+      payload &&
+        payload.display_set_no,
+      payload &&
+        payload.listening_set_no,
+      payload &&
+        payload.family_set_no,
+      payload &&
+        payload.reading_set_no,
+      payload &&
+        payload.translation_set_no,
+      payload &&
+        payload.written_set_no,
+      payload &&
+        payload.issue_no
+    ];
+
+    for (
+      var i = 0;
+      i < values.length;
+      i += 1
+    ) {
+      var value =
+        Number(values[i]);
+      if (
+        Number.isInteger(value) &&
+        value > 0
+      ) {
+        return value;
+      }
+    }
+
+    return null;
+  }
+
+
+  function surfaceTitleText_(
+    payload
+  ) {
+    var family =
+      resolveLearningSurfaceFamily_(
+        payload
+      );
+    var code =
+      surfaceFamilyCode_(
+        family
+      );
+    var setNo =
+      surfaceSetNo_(
+        payload
+      );
+
+    if (!code || !setNo) {
+      throw new Error(
+        'SURFACE_DISPLAY_IDENTITY_MISSING'
+      );
+    }
+
+    return (
+      code +
+      ' #' +
+      String(setNo)
+    );
+  }
+
+
+  function reviewPermalinkForQuestion_(
+    review,
     qNo
   ) {
     var base =
@@ -2096,20 +2214,29 @@
         window.H3_TECHNICAL_LINK_BASE ||
         ''
       ).trim();
-    var mode =
+    var kind =
       String(
-        payload &&
-        payload.mode ||
+        review &&
+        (
+          review.kind ||
+          review.provider_kind
+        ) ||
         ''
       );
     var family =
-      resolveLearningSurfaceFamily_(
-        payload
+      String(
+        review &&
+        review.surface_family ||
+        (
+          kind === 'LISTENING'
+            ? '5L'
+            : '5W'
+        )
       );
     var setId =
       String(
-        payload &&
-        payload.set_id ||
+        review &&
+        review.set_id ||
         ''
       );
     var ordinal =
@@ -2122,99 +2249,340 @@
       [
         'LISTENING',
         'WRITTEN'
-      ].indexOf(mode) < 0 ||
+      ].indexOf(kind) < 0 ||
       !setId ||
       !Number.isInteger(ordinal) ||
       ordinal < 1 ||
       ordinal > 5
     ) {
-      return '';
-    }
-
-    var query = [
-      'mode=' +
-        encodeURIComponent(mode)
-    ];
-
-    if (
-      mode === 'WRITTEN' &&
-      [
-        'READING',
-        'TRANSLATION'
-      ].indexOf(family) >= 0
-    ) {
-      query.push(
-        'surface_family=' +
-          encodeURIComponent(
-            family
-          )
+      throw new Error(
+        'REVIEW_PERMALINK_IDENTITY_INVALID'
       );
     }
-
-    query.push(
-      'set_id=' +
-        encodeURIComponent(setId)
-    );
-    query.push(
-      'q_no=' +
-        encodeURIComponent(
-          String(ordinal)
-        )
-    );
 
     return (
       base +
       '?' +
-      query.join('&')
+      [
+        'mode=REVIEW',
+        'review_kind=' +
+          encodeURIComponent(kind),
+        'surface_family=' +
+          encodeURIComponent(family),
+        'set_id=' +
+          encodeURIComponent(setId),
+        'q_no=' +
+          encodeURIComponent(
+            String(ordinal)
+          )
+      ].join('&')
     );
   }
 
-  function reviewQuestionDeepLink_(
-    review,
-    part,
-    index
-  ) {
-    if (
-      !review ||
-      !String(
-        review.set_id || ''
-      )
-    ) {
-      return '';
-    }
 
-    var family =
-      String(
-        review.surface_family ||
+  function surfaceLinkIcon_() {
+    var ns =
+      'http://www.w3.org/2000/svg';
+    var svg =
+      document.createElementNS(
+        ns,
+        'svg'
+      );
+    svg.setAttribute(
+      'viewBox',
+      '0 0 24 24'
+    );
+    svg.setAttribute(
+      'fill',
+      'none'
+    );
+    svg.setAttribute(
+      'stroke',
+      'currentColor'
+    );
+    svg.setAttribute(
+      'stroke-width',
+      '2'
+    );
+    svg.setAttribute(
+      'stroke-linecap',
+      'round'
+    );
+    svg.setAttribute(
+      'stroke-linejoin',
+      'round'
+    );
+    svg.setAttribute(
+      'aria-hidden',
+      'true'
+    );
+
+    [
+      'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71',
+      'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'
+    ].forEach(
+      function (pathData) {
+        var path =
+          document.createElementNS(
+            ns,
+            'path'
+          );
+        path.setAttribute(
+          'd',
+          pathData
+        );
+        svg.appendChild(path);
+      }
+    );
+
+    return svg;
+  }
+
+
+  function markPermalinkCopied_(
+    button
+  ) {
+    button.dataset.copied =
+      'true';
+    button.setAttribute(
+      'aria-label',
+      'リンクをコピーしました'
+    );
+    button.title =
+      'リンクをコピーしました';
+
+    window.setTimeout(
+      function () {
+        if (!button) {
+          return;
+        }
+        button.removeAttribute(
+          'data-copied'
+        );
+        button.setAttribute(
+          'aria-label',
+          'この復習問題へのリンクをコピー'
+        );
+        button.title =
+          'この復習問題へのリンクをコピー';
+      },
+      1400
+    );
+  }
+
+
+  function copyReviewPermalink_(
+    text,
+    button
+  ) {
+    function fallback() {
+      var area =
+        document.createElement(
+          'textarea'
+        );
+      area.value = text;
+      area.setAttribute(
+        'readonly',
         ''
       );
-    var mode =
-      (
-        review.kind ===
-          'WRITTEN' ||
-        [
-          '5W',
-          'READING',
-          'TRANSLATION'
-        ].indexOf(family) >= 0
-      )
-        ? 'WRITTEN'
-        : 'LISTENING';
+      area.style.position =
+        'fixed';
+      area.style.opacity =
+        '0';
+      document.body.appendChild(
+        area
+      );
+      area.select();
+      document.execCommand(
+        'copy'
+      );
+      document.body.removeChild(
+        area
+      );
+      markPermalinkCopied_(
+        button
+      );
+    }
 
-    return technicalQuestionDeepLink_(
-      {
-        mode: mode,
-        surface_family:
-          family,
-        set_id:
-          String(review.set_id)
-      },
-      reviewQuestionOrdinal_(
-        review,
-        part,
-        index
-      )
+    if (
+      navigator.clipboard &&
+      navigator.clipboard.writeText
+    ) {
+      navigator.clipboard
+        .writeText(text)
+        .then(
+          function () {
+            markPermalinkCopied_(
+              button
+            );
+          }
+        )
+        .catch(fallback);
+      return;
+    }
+
+    fallback();
+  }
+
+
+  function configureSurfaceChrome_(
+    payload,
+    isReview
+  ) {
+    var sticky =
+      document.getElementById(
+        'surface-sticky'
+      );
+    var title =
+      document.getElementById(
+        'surface-title'
+      );
+    var copyButton =
+      document.getElementById(
+        'surface-link-copy'
+      );
+
+    title.textContent =
+      surfaceTitleText_(
+        payload
+      );
+
+    copyButton.textContent = '';
+    copyButton.appendChild(
+      surfaceLinkIcon_()
     );
+    copyButton.classList.toggle(
+      'hidden',
+      !isReview
+    );
+    copyButton.onclick = null;
+    copyButton.removeAttribute(
+      'data-copied'
+    );
+
+    if (isReview) {
+      copyButton.onclick =
+        function () {
+          var part =
+            payload.sections &&
+            payload.sections[
+              app.activeIndex
+            ];
+          var qNo =
+            reviewQuestionOrdinal_(
+              payload,
+              part,
+              app.activeIndex
+            );
+          copyReviewPermalink_(
+            reviewPermalinkForQuestion_(
+              payload,
+              qNo
+            ),
+            copyButton
+          );
+        };
+    }
+
+    sticky.classList.remove(
+      'hidden'
+    );
+  }
+
+
+  function buildReviewProgress_(
+    review
+  ) {
+    var root =
+      document.getElementById(
+        'mobile-progress'
+      );
+    root.textContent = '';
+
+    review.sections.forEach(
+      function (part, index) {
+        var qNo =
+          reviewQuestionOrdinal_(
+            review,
+            part,
+            index
+          );
+        var button =
+          el(
+            'button',
+            'review-progress-button'
+          );
+
+        button.type = 'button';
+        button.dataset.index =
+          String(index);
+        button.dataset.questionOrdinal =
+          String(qNo);
+        button.textContent =
+          'Q' +
+          qNo +
+          ' ' +
+          part.result;
+        button.setAttribute(
+          'aria-label',
+          'Q' +
+          qNo +
+          ' ' +
+          part.result
+        );
+        button.addEventListener(
+          'click',
+          function () {
+            setReviewPage(
+              index,
+              review
+            );
+          }
+        );
+        root.appendChild(button);
+      }
+    );
+  }
+
+
+  function initialReviewIndexFromRequest_(
+    review,
+    rawQNo
+  ) {
+    if (
+      rawQNo === null ||
+      rawQNo === undefined ||
+      String(rawQNo) === ''
+    ) {
+      return 0;
+    }
+
+    var qNo =
+      Number(rawQNo);
+    var matches = [];
+
+    review.sections.forEach(
+      function (part, index) {
+        if (
+          reviewQuestionOrdinal_(
+            review,
+            part,
+            index
+          ) === qNo
+        ) {
+          matches.push(index);
+        }
+      }
+    );
+
+    if (matches.length !== 1) {
+      throw new Error(
+        'REVIEW_PERMALINK_Q_NO_INVALID:' +
+        String(rawQNo)
+      );
+    }
+
+    return matches[0];
   }
 
 
@@ -2364,12 +2732,24 @@
         surfaceLearnerLabel_(
           app.surfaceFamily
         );
-      title.textContent =
-        'Q' + qNo + ' ' +
+      var displayLabel =
         questionDisplayLabel_(
           q.display,
           app.surfaceFamily,
           q.section
+        );
+      title.textContent =
+        'Q' + qNo + ' ' +
+        (
+          app.surfaceFamily === '5W'
+            ? (
+                '［' +
+                writtenReviewDisplayLabel_(
+                  q
+                ) +
+                '］'
+              )
+            : displayLabel
         );
 
       var uncertain = el('button', 'uncertain');
@@ -3297,6 +3677,11 @@
   function buildMobileProgress(
     questions
   ) {
+    configureSurfaceChrome_(
+      app.payload,
+      false
+    );
+
     var root =
       document.getElementById(
         'mobile-progress'
@@ -3323,7 +3708,7 @@
         var button =
           el(
             'button',
-            'progress-button'
+            'review-progress-button progress-button'
           );
         button.type = 'button';
         button.textContent =
@@ -3401,7 +3786,7 @@
     }
 
     if (isMobileMode()) {
-      var progress = document.getElementById('mobile-progress');
+      var progress = document.getElementById('surface-sticky');
       if (progress && progress.scrollIntoView) {
         progress.scrollIntoView({ block: 'start', behavior: 'smooth' });
       }
@@ -4263,7 +4648,8 @@
 
 
   function renderPersistentReview(
-    review
+    review,
+    initialQNo
   ) {
     review =
       normalizeTranslationReview_(
@@ -4293,63 +4679,13 @@
       review
     );
 
-    var pager =
-      el(
-        'nav',
-        'review-progress'
-      );
-    pager.setAttribute(
-      'aria-label',
-      '復習問題'
+    configureSurfaceChrome_(
+      review,
+      true
     );
-
-    review.sections.forEach(
-      function (part, index) {
-        var qNo =
-          reviewQuestionOrdinal_(
-            review,
-            part,
-            index
-          );
-        var button =
-          el(
-            'button',
-            'review-progress-button'
-          );
-
-        button.type = 'button';
-        button.dataset.index =
-          String(index);
-        button.dataset.questionOrdinal =
-          String(qNo);
-        button.textContent =
-          'Q' +
-          qNo +
-          ' ' +
-          part.result;
-        button.setAttribute(
-          'aria-label',
-          'Q' +
-          qNo +
-          ' ' +
-          part.result
-        );
-
-        button.addEventListener(
-          'click',
-          function () {
-            setReviewPage(
-              index,
-              review
-            );
-          }
-        );
-
-        pager.appendChild(button);
-      }
+    buildReviewProgress_(
+      review
     );
-
-    root.appendChild(pager);
 
     var cards =
       el(
@@ -4371,186 +4707,6 @@
     );
 
     root.appendChild(cards);
-
-    var technical =
-      document.createElement(
-        'details'
-      );
-    technical.className =
-      'review-technical';
-
-    var technicalSummary =
-      document.createElement(
-        'summary'
-      );
-    technicalSummary.textContent =
-      '技術情報';
-    technical.appendChild(
-      technicalSummary
-    );
-
-    var ids =
-      document.createElement('p');
-    var technicalLines = [
-      'SET_ID=' +
-        review.set_id +
-        (
-          review.kind ===
-            'WRITTEN'
-            ? '\nREVIEW_KIND=WRITTEN'
-            : (
-                review.legacy_review_id
-                  ? (
-                      '\nLEGACY_REVIEW_ID=' +
-                      review.legacy_review_id
-                    )
-                  : (
-                      '\nTXN_ID=' +
-                      review.txn_id
-                    )
-              )
-        )
-    ];
-
-    var questionLinks =
-      el(
-        'div',
-        'review-technical-question-links'
-      );
-
-    review.sections.forEach(
-      function (part, index) {
-        var qNo =
-          reviewQuestionOrdinal_(
-            review,
-            part,
-            index
-          );
-        var url =
-          reviewQuestionDeepLink_(
-            review,
-            part,
-            index
-          );
-
-        if (!url) {
-          return;
-        }
-
-        technicalLines.push(
-          'Q' +
-            qNo +
-            '_URL=' +
-            url
-        );
-
-        var row =
-          document.createElement('p');
-        row.className =
-          'review-technical-question-link';
-
-        var label =
-          document.createElement('span');
-        label.textContent =
-          'Q' +
-          qNo +
-          '　';
-        row.appendChild(label);
-
-        var link =
-          document.createElement('a');
-        link.href = url;
-        link.target =
-          '_blank';
-        link.rel =
-          'noopener';
-        link.textContent =
-          '問題を開く';
-        link.setAttribute(
-          'aria-label',
-          'Q' +
-            qNo +
-            ' 技術リンクを開く'
-        );
-        row.appendChild(link);
-
-        questionLinks.appendChild(
-          row
-        );
-      }
-    );
-
-    ids.textContent =
-      technicalLines.join('\n');
-    ids.className =
-      'review-technical-ids';
-    technical.appendChild(ids);
-
-    if (
-      questionLinks.childNodes.length
-    ) {
-      technical.appendChild(
-        questionLinks
-      );
-    }
-
-    var copyIds =
-      el(
-        'button',
-        'copy-button'
-      );
-    copyIds.type = 'button';
-    copyIds.textContent =
-      '技術情報をコピー';
-    copyIds.addEventListener(
-      'click',
-      function () {
-        copyReceipt(
-          ids.textContent,
-          copyIds
-        );
-      }
-    );
-    technical.appendChild(
-      copyIds
-    );
-
-    if (
-      review.technical &&
-      review.technical.receipt
-    ) {
-      var pre =
-        document.createElement(
-          'pre'
-        );
-      pre.textContent =
-        review.technical.receipt;
-      technical.appendChild(pre);
-
-      var copy =
-        el(
-          'button',
-          'copy-button'
-        );
-      copy.type = 'button';
-      copy.textContent =
-        'receiptをコピー';
-      copy.addEventListener(
-        'click',
-        function () {
-          copyReceipt(
-            review.technical
-              .receipt,
-            copy
-          );
-        }
-      );
-      technical.appendChild(copy);
-    }
-
-    root.appendChild(
-      technical
-    );
 
     var actions =
       el(
@@ -4579,7 +4735,10 @@
     root.appendChild(actions);
 
     setReviewPage(
-      0,
+      initialReviewIndexFromRequest_(
+        review,
+        initialQNo
+      ),
       review
     );
     scheduleInitialAudioPrefetch();

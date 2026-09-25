@@ -1947,12 +1947,15 @@ jobs:
               if forbidden in written:
                   raise SystemExit(f'Written projection is not storage-pure: {forbidden}')
 
+          # Review permalink routing now legitimately carries review_kind
+          # through WebApp.js. Keep only the direct Written Review helper
+          # activation guard; the UXR-5 permalink audit below validates the
+          # new review_kind/set_id/surface_family/q_no contract.
           for forbidden in [
-              'review_kind',
               'h3WrittenReview',
           ]:
               if forbidden in web:
-                  raise SystemExit(f'WebApp Written route was activated: {forbidden}')
+                  raise SystemExit(f'WebApp direct Written Review route was activated: {forbidden}')
           PY
 
           node <<'NODE'

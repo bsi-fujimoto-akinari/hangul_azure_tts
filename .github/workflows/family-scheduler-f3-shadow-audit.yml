@@ -4917,6 +4917,209 @@ jobs:
           );
           NODE
 
+      - name: Written issue generation-log contract
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          text = Path('WebAppFamilyScheduler.js').read_text(encoding='utf-8')
+
+          for needle in [
+              "var H3_FS_WRITTEN_GENLOG_HEADERS_ = [",
+              "function h3FsWrittenGenerationPlan_(",
+              "function h3FsWrittenGenerationInsert_(",
+              "function h3FsWrittenGenerationRollback_(",
+              "'generation_log_v1'",
+              "'FAMILY_SCHEDULER_WRITTEN_GENLOG_PREEXISTING:'",
+              "'FAMILY_SCHEDULER_WRITTEN_GENLOG_READBACK_INVALID:'",
+              "'FAMILY_SCHEDULER_WRITTEN_GENLOG_RECOVERY_REQUIRED:'",
+              "h3FsWrittenGenerationInsert_(",
+              "h3FsWrittenGenerationRollback_(",
+          ]:
+              if needle not in text:
+                  raise SystemExit(
+                      f'Written issue generation-log invariant missing: {needle}'
+                  )
+
+          start = text.index('function h3FsIssueWritten_(ss) {')
+          end = text.index('\nfunction h3FsIssueReading_', start)
+          body = text[start:end]
+
+          insert_at = body.index('h3FsWrittenGenerationInsert_(')
+          issued_at = body.index("stageValues[m.STATUS]='ISSUED'")
+          if insert_at >= issued_at:
+              raise SystemExit(
+                  'Written generation log is not materialized before stage ISSUE.'
+              )
+
+          if "WRITTEN_SYNC_GENLOG_COUNT" in text:
+              raise SystemExit(
+                  'Family Scheduler must not weaken Answer Sync GENLOG count guard.'
+              )
+
+          print('Written issue generation-log static contract PASS')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+
+          global.hash_ = value =>
+            crypto.createHash('sha256')
+              .update(String(value), 'utf8')
+              .digest('hex');
+
+          vm.runInThisContext(
+            fs.readFileSync(
+              'WebAppFamilyScheduler.js',
+              'utf8'
+            )
+          );
+
+          const row = new Array(24).fill('');
+          const map = {
+            QUESTION_META_JSON: 6,
+            POLICY_ID: 18
+          };
+          row[map.POLICY_ID] =
+            'H3-GEN-POLICY-TEST';
+          row[map.QUESTION_META_JSON] =
+            JSON.stringify({
+              questions: [
+                {
+                  q:1,
+                  section:'筆2／語彙',
+                  bucket:'TOWMI',
+                  skill_id:'H3-P2-SK001',
+                  retest:false,
+                  question:'Q1',
+                  choices:['a','b','c','d'],
+                  source:{norm_id:'N1'}
+                },
+                {
+                  q:2,
+                  section:'筆3／文法',
+                  bucket:'TOWMI',
+                  skill_id:'H3-P3-SK001',
+                  retest:false,
+                  question:'Q2',
+                  choices:['a','b','c','d']
+                },
+                {
+                  q:3,
+                  section:'筆4／置換',
+                  bucket:'TOWMI',
+                  skill_id:'RT-H3-TEST-Q3',
+                  retest:true,
+                  question:'Q3',
+                  choices:['a','b','c','d'],
+                  provenance:{
+                    origin_set:'H3-ORIGIN',
+                    due_min:2,
+                    due_max:5,
+                    origin_bucket:'TOWMI'
+                  }
+                },
+                {
+                  q:4,
+                  section:'筆5／共通',
+                  bucket:'NEWFMT',
+                  skill_id:'H3-P5-SK001',
+                  retest:false,
+                  question:'Q4',
+                  choices:['a','b','c','d']
+                },
+                {
+                  q:5,
+                  section:'筆6／応答',
+                  bucket:'OFFICIAL',
+                  skill_id:'H3-P6-SK001',
+                  retest:false,
+                  question:'Q5',
+                  choices:['a','b','c','d']
+                }
+              ]
+            });
+
+          const plan =
+            h3FsWrittenGenerationPlan_(
+              {
+                row,
+                map,
+                stage_id:'STD-B009-S1'
+              },
+              'H3-20990101-01',
+              '2099-01-01T00:00:00+09:00'
+            );
+
+          if (
+            plan.rows.length !== 5 ||
+            plan.headers.length !== 16
+          ) {
+            throw new Error(
+              'Written generation plan shape mismatch.'
+            );
+          }
+
+          const ids = plan.rows.map(x=>x[0]);
+          if (
+            new Set(ids).size !== 5 ||
+            ids[0] !== 'GEN-H3-20990101-01-Q1' ||
+            ids[4] !== 'GEN-H3-20990101-01-Q5'
+          ) {
+            throw new Error(
+              'Written generation identity mismatch.'
+            );
+          }
+
+          plan.rows.forEach((row,index)=>{
+            if (
+              row[1] !== 'H3-20990101-01' ||
+              Number(row[2]) !== index + 1 ||
+              row[4] !== '3級' ||
+              row[11] !== 'ISSUED' ||
+              !/^[0-9a-f]{64}$/.test(row[10])
+            ) {
+              throw new Error(
+                'Written generation row invariant mismatch:'+
+                String(index+1)
+              );
+            }
+          });
+
+          if (
+            new Set(
+              plan.rows.map(row=>row[10])
+            ).size !== 5
+          ) {
+            throw new Error(
+              'Written surface hashes must be surface-specific.'
+            );
+          }
+
+          const provenance =
+            JSON.parse(plan.rows[2][8]);
+          if (
+            provenance.stage_id !== 'STD-B009-S1' ||
+            provenance.retest !== true ||
+            provenance.origin_set !== 'H3-ORIGIN' ||
+            provenance.due_min !== 2 ||
+            provenance.due_max !== 5 ||
+            provenance.source_ratio_plan !==
+              'N2-R1_11_6_2_1'
+          ) {
+            throw new Error(
+              'Written generation provenance mismatch.'
+            );
+          }
+
+          console.log(
+            'Written issue generation-log fixture PASS'
+          );
+          NODE
+
       - name: Deterministic ranking fixture
         run: |
           node <<'NODE'

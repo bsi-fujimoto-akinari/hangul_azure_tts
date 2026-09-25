@@ -3,7 +3,6 @@ var H3_REVIEW_AUDIO_SCHEMA_='H3_REVIEW_AUDIO_ASSET_V1';
 var H3_REVIEW_AUDIO_GENERATOR_VERSION_='review-audio-v2-1200ms';
 var H3_REVIEW_AUDIO_BREAK_MS_=1200;
 var H3_REVIEW_AUDIO_FILE_VERSION_='rv2_1200ms';
-var H3_REVIEW_AUDIO_STALE_REPLACED_FOLDER_ID_='1CcFqmt9ljhgiTXheYAQ0suxGZZkWTGEp';
 var H3_REVIEW_AUDIO_FOLDER_IDS_={
   '5W':'1dLf1KhHic8SU-4XOGueZSM55vznS024C',
   '2R':'18V3zOrKRhIgTCL_McrXjWDu6OIZupNn5',
@@ -686,98 +685,6 @@ function h3ReviewAudioValidateStaleCanonical_(row,plan){
   return{file:f,file_id:oldFileId,generator_version:oldGen,audio_text_sha256:oldHash};
 }
 
-function h3ReviewAudioExactContentRepairMigration_(row,plan){
-  if(
-    plan.surface_family!=='5W' ||
-    plan.set_id!=='H3-20260915-01' ||
-    plan.slot_key!=='D4'
-  ){
-    return null;
-  }
-
-  var oldStatus=String(row.row[row.map.STATUS]||'');
-  var oldGen=String(row.row[row.map.GENERATOR_VERSION]||'');
-  var oldHash=String(row.row[row.map.AUDIO_TEXT_SHA256]||'');
-  var oldFileId=String(row.row[row.map.AUDIO_FILE_ID]||'');
-  var oldFolder=String(row.row[row.map.DRIVE_FOLDER_ID]||'');
-
-  if(
-    oldStatus!=='DONE' ||
-    oldGen!==H3_REVIEW_AUDIO_GENERATOR_VERSION_ ||
-    oldHash!=='c939ca154c064c652c0088714d8e85a9f53235945159cd46fb378caef2534a6d' ||
-    oldFileId!=='1908KkxNbra1OpLYbBOsFDbO2StJFCt3r' ||
-    oldFolder!==H3_REVIEW_AUDIO_FOLDER_IDS_['5W'] ||
-    plan.audio_text_sha256!=='d01412d363148f3c42532953cbd73c12d8f19706e32edf533d1f0de65c5d880c'
-  ){
-    throw new Error(
-      'REVIEW_AUDIO_UXR2B_D4_MIGRATION_SOURCE_MISMATCH'
-    );
-  }
-
-  var f=DriveApp.getFileById(oldFileId);
-  if(
-    f.isTrashed() ||
-    f.getMimeType()!=='audio/mpeg' ||
-    f.getSize()<128
-  ){
-    throw new Error(
-      'REVIEW_AUDIO_UXR2B_D4_OLD_FILE_INVALID'
-    );
-  }
-
-  return{
-    file:f,
-    file_id:oldFileId,
-    generator_version:oldGen,
-    audio_text_sha256:oldHash,
-    retire_mode:'STALE_REPLACED_ARCHIVE',
-    archive_folder_id:
-      H3_REVIEW_AUDIO_STALE_REPLACED_FOLDER_ID_
-  };
-}
-
-function h3ReviewAudioRetireMigrationFile_(migration,plan){
-  if(!migration)return;
-
-  if(
-    migration.retire_mode===
-      'STALE_REPLACED_ARCHIVE'
-  ){
-    var archive=
-      DriveApp.getFolderById(
-        migration.archive_folder_id
-      );
-    migration.file.moveTo(archive);
-
-    var parents=[];
-    var it=migration.file.getParents();
-    while(it.hasNext()){
-      parents.push(it.next().getId());
-    }
-    if(
-      parents.indexOf(
-        migration.archive_folder_id
-      )<0 ||
-      parents.indexOf(
-        plan.drive_folder_id
-      )>=0
-    ){
-      throw new Error(
-        'REVIEW_AUDIO_UXR2B_D4_ARCHIVE_VERIFY_FAILED'
-      );
-    }
-    return;
-  }
-
-  migration.file.setTrashed(true);
-  if(!migration.file.isTrashed()){
-    throw new Error(
-      'REVIEW_AUDIO_STALE_FILE_NOT_TRASHED:'+
-      plan.set_id+':'+plan.slot_key
-    );
-  }
-}
-
 function h3ReviewAudioWriteAssetRow_(sheet,rowNumber,plan,file,status,errorText,createdAt){
   var now=new Date().toISOString();
   sheet.getRange(rowNumber,1,1,H3_REVIEW_AUDIO_HEADERS_.length).setValues([[
@@ -812,26 +719,14 @@ function h3ReviewAudioGeneratePlannedAsset_(ss,plan){
     var oldStatus=String(row.row[row.map.STATUS]||'');
     var oldGen=String(row.row[row.map.GENERATOR_VERSION]||'');
 
-    migration=
-      h3ReviewAudioExactContentRepairMigration_(
-        row,
-        plan
-      );
-
-    if(
-      !migration &&
-      oldStatus==='DONE' &&
-      oldGen===H3_REVIEW_AUDIO_GENERATOR_VERSION_
-    ){
+    if(oldStatus==='DONE'&&oldGen===H3_REVIEW_AUDIO_GENERATOR_VERSION_){
       if(oldHash!==plan.audio_text_sha256){
         throw new Error('REVIEW_AUDIO_EXISTING_ROW_HASH_MISMATCH:'+plan.set_id+':'+plan.slot_key);
       }
       return{status:'NO_OP',set_id:plan.set_id,slot_key:plan.slot_key};
     }
 
-    if(!migration){
-      migration=h3ReviewAudioValidateStaleCanonical_(row,plan);
-    }
+    migration=h3ReviewAudioValidateStaleCanonical_(row,plan);
     if(!migration&&oldHash!==plan.audio_text_sha256){
       throw new Error('REVIEW_AUDIO_EXISTING_ROW_HASH_MISMATCH:'+plan.set_id+':'+plan.slot_key);
     }
@@ -861,10 +756,10 @@ function h3ReviewAudioGeneratePlannedAsset_(ss,plan){
     h3ReviewAudioWriteAssetRow_(sheet,rowNumber,plan,file,'DONE','',createdAt);
 
     if(migration){
-      h3ReviewAudioRetireMigrationFile_(
-        migration,
-        plan
-      );
+      migration.file.setTrashed(true);
+      if(!migration.file.isTrashed()){
+        throw new Error('REVIEW_AUDIO_STALE_FILE_NOT_TRASHED:'+plan.set_id+':'+plan.slot_key);
+      }
     }
 
     return{
@@ -876,12 +771,7 @@ function h3ReviewAudioGeneratePlannedAsset_(ss,plan){
       audio_url:file.getUrl(),
       audio_text_sha256:plan.audio_text_sha256,
       generator_version:H3_REVIEW_AUDIO_GENERATOR_VERSION_,
-      replaced_file_id:migration?migration.file_id:'',
-      retired_mode:migration?String(migration.retire_mode||'TRASH'):'',
-      stale_replaced_folder_id:
-        migration&&migration.retire_mode==='STALE_REPLACED_ARCHIVE'
-          ? migration.archive_folder_id
-          : ''
+      replaced_file_id:migration?migration.file_id:''
     };
   }catch(e){
     if(!migration){
@@ -899,58 +789,6 @@ function h3ReviewAudioGenerateSet_(family,setId){
   return h3ReviewAudioPlanForSet_(ss,family,setId).map(function(p){
     return h3ReviewAudioGeneratePlannedAsset_(ss,p);
   });
-}
-
-
-function runUxr2bReviewAudioRepair(){
-  var ss=h3ReviewAudioRuntimeSpreadsheet_();
-  var plans=
-    h3ReviewAudioPlanForSet_(
-      ss,
-      '5W',
-      'H3-20260915-01'
-    ).filter(function(plan){
-      return plan.slot_key==='D4';
-    });
-
-  if(
-    plans.length!==1 ||
-    plans[0].audio_text_sha256!==
-      'd01412d363148f3c42532953cbd73c12d8f19706e32edf533d1f0de65c5d880c' ||
-    plans[0].voice_assignment.primary.label!=='JiMin'
-  ){
-    throw new Error(
-      'UXR2B_REVIEW_AUDIO_PLAN_INVALID'
-    );
-  }
-
-  var result=
-    h3ReviewAudioGeneratePlannedAsset_(
-      ss,
-      plans[0]
-    );
-
-  if(
-    result.status!=='DONE' ||
-    result.replaced_file_id!==
-      '1908KkxNbra1OpLYbBOsFDbO2StJFCt3r' ||
-    result.retired_mode!==
-      'STALE_REPLACED_ARCHIVE' ||
-    result.stale_replaced_folder_id!==
-      H3_REVIEW_AUDIO_STALE_REPLACED_FOLDER_ID_
-  ){
-    throw new Error(
-      'UXR2B_REVIEW_AUDIO_REPAIR_RESULT_INVALID'
-    );
-  }
-
-  return{
-    schema:'H3_UXR2B_REVIEW_AUDIO_REPAIR_V1',
-    status:'PASS',
-    set_id:'H3-20260915-01',
-    slot_key:'D4',
-    result:result
-  };
 }
 
 

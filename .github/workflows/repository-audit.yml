@@ -9157,10 +9157,11 @@ jobs:
               'function h3ReviewApplyListeningLearnerTextCorrections_(',
               'function h3WrittenReviewApplyLearnerTextCorrections_(',
               'H3-REVIEW-JA-QUALITY-20260923-V1',
+              'H3-REVIEW-JA-QUALITY-20260925-V2',
               '最近運動していないので、なんだか体が重い気がします。',
-              '友達との約束は必ず（　）なければなりません。',
+              '友達との約束は必ず守らなければなりません。',
               '時間がたつのも忘れていました。',
-              '韓国文化への（　）が高いです。',
+              '韓国文化にとても関心があります。',
               'ぱっと目に入りました',
               'h3ReviewApplyListeningLearnerTextCorrections_(\n    buildPersistentReviewPayload_(',
               'h3WrittenReviewApplyLearnerTextCorrections_(',
@@ -9265,7 +9266,7 @@ jobs:
                 4:'・友達とした約束は必ず（　）なければなりません。\n→ ・人の秘密はきちんと（　）なければなりません。'
               },
               nextByQ:{
-                4:'・友達との約束は必ず（　）なければなりません。\n→ ・人の秘密はきちんと（　）なければなりません。'
+                4:'・友達との約束は必ず守らなければなりません。\n・人の秘密はきちんと守らなければなりません。'
               }
             },
             {
@@ -9276,7 +9277,7 @@ jobs:
               },
               nextByQ:{
                 3:'この映画は思ったより面白くて、時間がたつのも忘れていました。',
-                4:'・韓国文化への（　）が高いです。\n→ ・その問題にはあまり（　）がありません。'
+                4:'・韓国文化にとても関心があります。\n・その問題にはあまり関心がありません。'
               }
             },
             {

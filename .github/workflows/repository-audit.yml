@@ -171,6 +171,8 @@ jobs:
               github_attempt_token,
               'steps.source_attestation.outputs.attested',
               'steps.smoke_boundary.outputs.ready',
+              'uxr2b_one_shot_push',
+              '7bf95428859bedf071c3cd58b0a03421d6fe4b69',
           ]
           missing_sync = [token for token in required_sync if token not in sync]
           if missing_sync:
@@ -184,6 +186,8 @@ jobs:
               'run_attempt=1',
               'authenticated source_attestation',
               "if: steps.smoke_boundary.outputs.ready == 'true'",
+              'UXR-2B one-shot exception',
+              '7bf95428859bedf071c3cd58b0a03421d6fe4b69',
           ]
           missing_ops = [token for token in required_ops if token not in ops]
           if missing_ops:
@@ -215,6 +219,16 @@ jobs:
               if "if: steps.smoke_boundary.outputs.ready == 'true'" not in prefix:
                   raise SystemExit(
                       'Credentialed clasp execution must be gated by smoke_boundary ready=true.'
+                  )
+
+          if 'uxr2b_one_shot_push' in sync:
+              if "github.event_name }}\" = \"workflow_run" not in sync:
+                  raise SystemExit(
+                      'UXR-2B one-shot push exception must remain workflow_run-bound.'
+                  )
+              if 'git rev-parse HEAD^' not in sync:
+                  raise SystemExit(
+                      'UXR-2B one-shot push exception must verify the immediate parent SHA.'
                   )
 
           print(

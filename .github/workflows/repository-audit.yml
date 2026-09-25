@@ -152,7 +152,7 @@ jobs:
               sys.exit(1)
           PY
 
-      - name: Audit canonical four-Chat code-change handoff contract
+      - name: Audit canonical four-Phase code-change workflow contract
         shell: bash
         run: |
           python3 - <<'PY'
@@ -161,51 +161,61 @@ jobs:
           ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
 
           required = [
-              'H3_CODE_CHANGE_4CHAT_HANDOFF_V1',
-              'CHAT-1 DESIGN',
-              'CHAT-2 IMPLEMENT',
-              'CHAT-3 INTEGRATE',
-              'CHAT-4 ACCEPT_AND_CLOSE',
-              'PR_HEAD_SHA=<immutable handoff SHA>',
+              'H3_CODE_CHANGE_4PHASE_WORKFLOW_V1',
+              'PHASE-1 DESIGN',
+              'PHASE-2 IMPLEMENT',
+              'PHASE-3 INTEGRATE',
+              'PHASE-4 ACCEPT_AND_CLOSE',
+              'the normal execution unit is **one Chat**',
+              'Continue in the current Chat',
+              'CROSS_CHAT_HANDOFF=EXCEPTION_ONLY',
+              'CODE_CHANGE_DEFAULT_CHAT_POLICY=ONE_CHAT_CLOSE',
+              'LEGACY_CODE_CHANGE_CONTRACT=H3_CODE_CHANGE_4CHAT_HANDOFF_V1',
+              'LEGACY_CODE_CHANGE_CONTRACT_STATUS=SUPERSEDED_COMPATIBILITY_ONLY',
+              'PR_HEAD_SHA=<immutable SHA>',
               'continuity.state=clean',
               'active_work_id=null',
               'NEXT_SINGLE_ACTION',
               'UNRELATED_READY_WORK_STATUS',
+              'HANDOFF_REASON',
               'canonical state edit -> schema validation -> commit -> raw readback -> commit-SHA verification',
               'PR merge -> exact merge SHA capture',
               'Apps Script push -> source attestation',
               'live smoke -> exact result/log interpretation',
               'temporary diagnostic execution -> diagnosis of that result',
-              'fresh-read the authorities required by that phase',
-              'Recovery/repair suffix Chats are exception paths, not a new normal workflow.',
+              'Prior Chat summaries are handoff aids, never substitutes for canonical readback.',
+              'they do **not** require separate Chat conversations',
           ]
           missing = [token for token in required if token not in ops]
           if missing:
               raise SystemExit(
-                  'Canonical four-Chat code-change handoff contract missing: '
+                  'Canonical four-Phase code-change workflow contract missing: '
                   + ', '.join(missing)
               )
 
           order = [
-              ops.index('CHAT-1 DESIGN'),
-              ops.index('CHAT-2 IMPLEMENT'),
-              ops.index('CHAT-3 INTEGRATE'),
-              ops.index('CHAT-4 ACCEPT_AND_CLOSE'),
+              ops.index('PHASE-1 DESIGN'),
+              ops.index('PHASE-2 IMPLEMENT'),
+              ops.index('PHASE-3 INTEGRATE'),
+              ops.index('PHASE-4 ACCEPT_AND_CLOSE'),
           ]
           if order != sorted(order) or len(set(order)) != 4:
               raise SystemExit(
-                  'Four-Chat code-change phases are not present exactly in canonical order.'
+                  'Four-Phase code-change workflow is not present exactly in canonical order.'
               )
 
-          if (
-              'Prior Chat summaries are handoff aids, never substitutes for canonical readback.'
-              not in ops
-          ):
+          forbidden_default = [
+              'the canonical default is exactly four ordered Chat phases',
+              'This four-Chat structure is the default',
+          ]
+          present_forbidden = [token for token in forbidden_default if token in ops]
+          if present_forbidden:
               raise SystemExit(
-                  'Four-Chat contract must require canonical fresh readback across Chat boundaries.'
+                  'Superseded four-Chat default remains active in Operations: '
+                  + ', '.join(present_forbidden)
               )
 
-          print('Canonical four-Chat code-change handoff contract: PASS')
+          print('Canonical four-Phase one-Chat-default code-change workflow: PASS')
           PY
 
       - name: Verify credentialed Apps Script execution boundaries

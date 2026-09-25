@@ -10887,6 +10887,11 @@ jobs:
               'WebAppSurfaceReviewBridge.js',
               'utf8'
             );
+          const stylesheetText =
+            fs.readFileSync(
+              'Stylesheet.html',
+              'utf8'
+            );
           const contractText =
             fs.readFileSync(
               'H3_REVIEW_EXPLANATION_STYLE_CONTRACT.md',
@@ -10900,7 +10905,7 @@ jobs:
 
           assert(
             contractText.includes(
-              'H3-REVIEW-EXPLANATION-STYLE-20260923-V3'
+              'H3-REVIEW-EXPLANATION-STYLE-20260925-V4'
             )
           );
           assert(
@@ -10963,7 +10968,7 @@ jobs:
           );
           assert.strictEqual(
             selfCheck.contract_id,
-            'H3-REVIEW-EXPLANATION-STYLE-20260923-V3'
+            'H3-REVIEW-EXPLANATION-STYLE-20260925-V4'
           );
           assert.strictEqual(
             selfCheck.known_example_fix_count,
@@ -11018,6 +11023,46 @@ jobs:
                 'この形が自然。'
               ),
             false
+          );
+
+          assert.strictEqual(
+            context
+              .h3ReviewExplanationStyleHasGenericTestTakingMeta_(
+                '内容一致問題では、本文と選択肢を照合する。'
+              ),
+            true
+          );
+          assert.strictEqual(
+            context
+              .h3ReviewExplanationStyleHasGenericTestTakingMeta_(
+                '本文では二つの状態を対比している。'
+              ),
+            false
+          );
+
+          let genericRejected = false;
+          try {
+            context
+              .h3ReviewExplanationStyleValidateAuthoring_(
+                {
+                  reason:
+                    'この設問では、語順を手掛かりにする。',
+                  learning_blocks: []
+                },
+                ['別の正答'],
+                'SELF_CHECK_GENERIC'
+              );
+          } catch (err) {
+            genericRejected =
+              String(
+                err && err.message || err
+              ).indexOf(
+                'REVIEW_EXPLANATION_STYLE_GENERIC_TEST_META'
+              ) === 0;
+          }
+          assert.strictEqual(
+            genericRejected,
+            true
           );
 
           const protectedText =
@@ -11095,6 +11140,15 @@ jobs:
                   ' contains awkward meta-text: ' +
                   outside
               );
+              assert(
+                !context
+                  .h3ReviewExplanationStyleHasGenericTestTakingMeta_(
+                    outside
+                  ),
+                label +
+                  ' contains generic test-taking meta-text: ' +
+                  outside
+              );
             }
           }
 
@@ -11106,6 +11160,63 @@ jobs:
             translationText,
             'Translation'
           );
+
+          [
+            '内容一致問題では',
+            'タイトル選択では',
+            'この設問では'
+          ].forEach(needle => {
+            assert(
+              !readingText.includes(needle),
+              'Reading generic test meta remains: ' +
+                needle
+            );
+          });
+
+          assert(
+            translationText.includes(
+              "form: '낫다 ≠ 덜 아프다'"
+            ),
+            'Translation semantic non-equivalence marker missing.'
+          );
+          assert(
+            !translationText.includes(
+              "form: '낫다 ↔ 덜 아프다'"
+            ),
+            'Translation misleading bidirectional marker remains.'
+          );
+          assert.strictEqual(
+            (
+              translationText.match(
+                /'TRANSLATION_FUTURE:'/g
+              ) || []
+            ).length,
+            1,
+            'Translation future authoring validation must run exactly once.'
+          );
+
+          assert(
+            stylesheetText.includes(
+              '.review-learning-block p {\n' +
+              '    margin: 4px 0;\n' +
+              '    white-space: pre-line;'
+            ),
+            'Shared Review learning-block newline preservation missing.'
+          );
+
+          [
+            '## 4.2 Shared pronunciation blocks',
+            '## 4.3 Shared Hanja network',
+            '## 4.4 Semantic relation symbols',
+            '## 4.5 Learner-oriented Japanese and test meta',
+            'meaningfully different ordinary context'
+          ].forEach(needle => {
+            assert(
+              contractText.includes(needle),
+              'Explanation V4 contract clause missing: ' +
+                needle
+            );
+          });
 
           const fiveL = {
             surface_family: '5L',

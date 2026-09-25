@@ -1258,7 +1258,7 @@ function h3ReviewApplyListeningLearnerTextCorrections_(
     out.technical || {};
   out.technical
     .learner_text_correction_id =
-      'H3-REVIEW-JA-QUALITY-20260925-V2';
+      'H3-REVIEW-JA-QUALITY-20260923-V1';
 
   return out;
 }
@@ -1493,7 +1493,7 @@ function h3WrittenReviewApplyLearnerTextCorrections_(
     out.technical || {};
   out.technical
     .learner_text_correction_id =
-      'H3-REVIEW-JA-QUALITY-20260923-V1';
+      'H3-REVIEW-JA-QUALITY-20260925-V2';
 
   return out;
 }

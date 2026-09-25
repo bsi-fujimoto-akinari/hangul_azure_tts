@@ -36,6 +36,7 @@ jobs:
               'Code.js',
               'WebApp.js',
               'WebAppObservability.js',
+              'WebAppLiveSmoke.js',
               'WebAppFixture.js',
               'WebAppProduction.js',
               'WebAppTransactionCommon.js',
@@ -168,10 +169,15 @@ jobs:
           required_sync = [
               'intended_smoke_sha:',
               'Detect read-only smoke preflight request',
+              'Detect automatic live smoke plan',
               'Validate exact-main observability source-binding boundary',
               'Bind exact-main observability source provenance',
               'h3ObservabilityBindSource',
               'steps.source_binding_boundary.outputs.ready',
+              'Validate automatic read-only live smoke boundary',
+              'Run impact-selected automatic live smoke',
+              'h3AutomaticLiveSmoke',
+              'steps.automatic_smoke_boundary.outputs.ready',
               'Validate one-revision read-only smoke boundary',
               github_attempt_token,
               'steps.source_attestation.outputs.attested',
@@ -186,11 +192,14 @@ jobs:
 
           required_ops = [
               'Exact-main observability source binding',
+              'Automatic live smoke',
+              'H3_AUTOMATIC_LIVE_SMOKE_REQUEST_V1',
               'H3_OBSERVABILITY_SOURCE_SHA',
               'H3_OBSERVABILITY_SOURCE_DIGEST',
               'manual workflow_dispatch with intended_smoke_sha=',
               'run_attempt=1',
               'authenticated source_attestation',
+              "if: steps.automatic_smoke_boundary.outputs.ready == 'true'",
               "if: steps.smoke_boundary.outputs.ready == 'true'",
           ]
           missing_ops = [token for token in required_ops if token not in ops]
@@ -218,7 +227,9 @@ jobs:
                   ))
 
           binding_refs = 0
-          smoke_refs = 0
+          automatic_refs = 0
+          manual_refs = 0
+
           for path, pos, contents, line in command_refs:
               if path != sync_path:
                   raise SystemExit(
@@ -228,7 +239,10 @@ jobs:
               binding_boundary_pos = contents.find(
                   'Validate exact-main observability source-binding boundary'
               )
-              smoke_boundary_pos = contents.find(
+              automatic_boundary_pos = contents.find(
+                  'Validate automatic read-only live smoke boundary'
+              )
+              manual_boundary_pos = contents.find(
                   'Validate one-revision read-only smoke boundary'
               )
 
@@ -236,15 +250,13 @@ jobs:
                   binding_refs += 1
                   if (
                       binding_boundary_pos < 0
+                      or automatic_boundary_pos < 0
                       or pos <= binding_boundary_pos
-                      or (
-                          smoke_boundary_pos >= 0
-                          and pos >= smoke_boundary_pos
-                      )
+                      or pos >= automatic_boundary_pos
                   ):
                       raise SystemExit(
                           'Observability source binding must occur after its '
-                          'exact-main attestation boundary and before smoke_boundary.'
+                          'exact-main boundary and before the automatic smoke boundary.'
                       )
                   prefix = contents[max(binding_boundary_pos, pos - 2200):pos]
                   if (
@@ -257,26 +269,145 @@ jobs:
                       )
                   continue
 
-              smoke_refs += 1
-              if smoke_boundary_pos < 0 or pos <= smoke_boundary_pos:
+              if 'h3AutomaticLiveSmoke' in line:
+                  automatic_refs += 1
+                  if (
+                      automatic_boundary_pos < 0
+                      or manual_boundary_pos < 0
+                      or pos <= automatic_boundary_pos
+                      or pos >= manual_boundary_pos
+                  ):
+                      raise SystemExit(
+                          'Automatic live smoke must occur after its permanent '
+                          'automatic boundary and before the manual smoke boundary.'
+                      )
+                  prefix = contents[max(automatic_boundary_pos, pos - 2600):pos]
+                  if (
+                      "if: steps.automatic_smoke_boundary.outputs.ready == 'true'"
+                      not in prefix
+                  ):
+                      raise SystemExit(
+                          'Automatic live smoke must be gated by '
+                          'automatic_smoke_boundary ready=true.'
+                      )
+                  continue
+
+              manual_refs += 1
+              if manual_boundary_pos < 0 or pos <= manual_boundary_pos:
                   raise SystemExit(
-                      'Credentialed smoke execution must occur after the permanent smoke boundary.'
+                      'Ad hoc credentialed smoke execution must occur after the manual smoke boundary.'
                   )
-              prefix = contents[max(smoke_boundary_pos, pos - 1200):pos]
+              prefix = contents[max(manual_boundary_pos, pos - 1200):pos]
               if "if: steps.smoke_boundary.outputs.ready == 'true'" not in prefix:
                   raise SystemExit(
-                      'Credentialed smoke execution must be gated by smoke_boundary ready=true.'
+                      'Ad hoc credentialed smoke execution must be gated by smoke_boundary ready=true.'
                   )
 
           if binding_refs != 1:
               raise SystemExit(
                   f'Expected exactly one permanent observability binding command; found {binding_refs}.'
               )
+          if automatic_refs != 1:
+              raise SystemExit(
+                  f'Expected exactly one permanent automatic live smoke command; found {automatic_refs}.'
+              )
 
           print(
               'Credentialed Apps Script execution boundaries: PASS; '
-              f'observability binding refs={binding_refs}; smoke refs={smoke_refs}'
+              f'observability binding refs={binding_refs}; '
+              f'automatic smoke refs={automatic_refs}; '
+              f'ad hoc smoke refs={manual_refs}'
           )
+          PY
+
+      - name: Audit automatic read-only live smoke contract
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          smoke = Path('WebAppLiveSmoke.js').read_text(encoding='utf-8')
+          sync = Path('.github/workflows/apps-script-auto-sync.yml').read_text(encoding='utf-8')
+
+          required_smoke = [
+              "'H3_AUTOMATIC_LIVE_SMOKE_REQUEST_V1'",
+              "'H3_AUTOMATIC_LIVE_SMOKE_RESULT_V1'",
+              "'REVIEW_5W'",
+              "'SYSTEM_TEST_RENDER'",
+              "'H3-20260914-03'",
+              'H3_WEB_SYSTEM_TEST_R3_06_SET_ID',
+              'h3GetListeningWebSetCore_({',
+              "'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1'",
+              "'H3_WEB_SET_V1'",
+              'surface_set_no',
+              'sections.length !== 5',
+              'questions.length !== 5',
+              'write_performed:',
+              'false',
+              'function h3AutomaticLiveSmoke(',
+          ]
+          missing = [token for token in required_smoke if token not in smoke]
+          if missing:
+              raise SystemExit(
+                  'Automatic live smoke implementation missing contract token(s): '
+                  + ', '.join(missing)
+              )
+
+          forbidden = [
+              '.setValue(',
+              '.setValues(',
+              '.appendRow(',
+              '.deleteRow(',
+              '.deleteRows(',
+              '.insertRow',
+              '.insertSheet(',
+              '.deleteSheet(',
+              'setProperty(',
+              'setProperties(',
+              'deleteProperty(',
+              'PropertiesService',
+              'DriveApp.',
+              'UrlFetchApp.',
+              'MailApp.',
+              'ScriptApp.',
+              'h3ProdSubmit_(',
+              'submitListeningWebAnswers(',
+              'completeReviewSession(',
+              'processPending',
+          ]
+          present = [token for token in forbidden if token in smoke]
+          if present:
+              raise SystemExit(
+                  'Automatic live smoke source contains mutation-capable token(s): '
+                  + ', '.join(present)
+              )
+
+          required_sync = [
+              'Detect automatic live smoke plan',
+              'github.event_name }}" != "workflow_run"',
+              'Validate automatic read-only live smoke boundary',
+              'github.event.workflow_run.head_sha',
+              'steps.source_attestation.outputs.attested',
+              'steps.source_binding_boundary.outputs.ready',
+              "if: steps.automatic_smoke_boundary.outputs.ready == 'true'",
+              '--json run-function h3AutomaticLiveSmoke',
+              "'H3_AUTOMATIC_LIVE_SMOKE_REQUEST_V1'",
+              "'REVIEW_5W'",
+              "'SYSTEM_TEST_RENDER'",
+          ]
+          missing_sync = [token for token in required_sync if token not in sync]
+          if missing_sync:
+              raise SystemExit(
+                  'Automatic live smoke workflow contract missing: '
+                  + ', '.join(missing_sync)
+              )
+
+          if 'function_name' in smoke or 'entrypoint' in smoke:
+              raise SystemExit(
+                  'Automatic live smoke must not accept arbitrary function/entrypoint dispatch.'
+              )
+
+          print('Automatic read-only live smoke contract: PASS')
           PY
 
       - name: Audit structured Web runtime observability contract

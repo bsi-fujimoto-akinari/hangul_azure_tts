@@ -924,7 +924,7 @@ var H3_TRANSLATION_EXPLANATION_OVERLAY_V1_ = {
             '未来の見込み・予測を表す。ここでは薬を飲んだ後の状態の予測。'
             },
             {
-              form: '낫다 ↔ 덜 아프다',
+              form: '낫다 ≠ 덜 아프다',
               usage:
             '낫다 は「治る・よくなる」、덜 아프다 は「痛みが軽くなる」。同じではない。'
             }
@@ -1065,25 +1065,6 @@ function h3TranslationReviewApplyExplanationOverlay_(
             'OFFICIAL'
             ? 'SOURCE_LINKED_AUTHORED'
             : 'AUTHORED_RETEST';
-
-        h3ReviewExplanationStyleValidateAuthoring_(
-          explanation,
-          [
-            Array.isArray(question.choices)
-              ? String(
-                  question.choices[
-                    Number(
-                      question.correct_answer
-                    ) - 1
-                  ] || ''
-                )
-              : ''
-          ],
-          'TRANSLATION_FUTURE:' +
-            String(
-              question.item_id || ''
-            )
-        );
 
         h3ReviewExplanationStyleValidateAuthoring_(
           explanation,

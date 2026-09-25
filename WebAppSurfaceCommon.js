@@ -977,6 +977,28 @@ var H3_REVIEW_EXPLANATION_STYLE_EXAMPLE_FIXES_ = {
       '友達と北漢山に行くことにしました。',
     new_ja:
       '来月から毎朝運動することにしました。'
+  },
+  '5W|H3-20260913-01|D4': {
+    type: 'USAGE_PAIR',
+    old_ko:
+      '이번 일은 제가 맡을게요.',
+    new_ko:
+      '회의 준비는 제가 맡을게요.',
+    old_ja:
+      '今回の仕事は私が引き受けます。',
+    new_ja:
+      '会議の準備は私が引き受けます。'
+  },
+  '5W|H3-20260914-05|D4': {
+    type: 'USAGE_PAIR',
+    old_ko:
+      '그 소식을 듣고 마음이 놓였어요.',
+    new_ko:
+      '결과를 확인하고 마음이 놓였어요.',
+    old_ja:
+      'その知らせを聞いて、ほっとしました。',
+    new_ja:
+      '結果を確認して、ほっとしました。'
   }
 };
 
@@ -1063,6 +1085,107 @@ function h3ReviewExplanationStyleApplyExampleFix_(
         key
     );
   }
+}
+
+
+var H3_REVIEW_EXPLANATION_STYLE_META_FIXES_ = {
+  'READING|H3-20260921-R001|OFF-H3-P8-001': [
+    {
+      block_index: 0,
+      field: 'usage',
+      old_text:
+        '理由・原因を表す「～なので」。この設問では、後続の判断「마음의 여유를 가지고 … 견뎌 봅시다」の理由を作ります。',
+      new_text:
+        '理由・原因を表す「～なので」。後続の判断「마음의 여유를 가지고 … 견뎌 봅시다」の理由を作る。'
+    }
+  ],
+  'READING|H3-20260921-R001|OFF-H3-P8-002': [
+    {
+      block_index: 0,
+      field: 'usage',
+      old_text:
+        '本文では「月曜病」という一般的なイメージと、木曜日の疲労感を対比しています。タイトル選択ではこの対比が中心情報です。',
+      new_text:
+        '本文では「月曜病」という一般的なイメージと、木曜日の疲労感を対比している。この対比が本文の中心情報。'
+    }
+  ],
+  'READING|H3-20260921-R002|OFF-H3-P9-002': [
+    {
+      block_index: 2,
+      field: 'usage',
+      old_text:
+        '内容一致問題では、本文に明示された事実と選択肢を一つずつ照合します。',
+      new_text:
+        '対話では、業務量が増えたため職員を追加で採用する方針に二人が合意している。'
+    }
+  ],
+  'READING|H3-20260921-R003|OFF-H3-P10-002': [
+    {
+      block_index: 0,
+      field: 'usage',
+      old_text:
+        '「一昨年」。時間関係を問う内容一致問題では重要な手掛かりです。',
+      new_text:
+        '「一昨年」。재작년 여름부터 は、エアコンの不調が一昨年の夏から続いていることを表す。'
+    }
+  ]
+};
+
+
+function h3ReviewExplanationStyleApplyMetaFix_(
+  family,
+  setId,
+  part
+) {
+  if (!part || !part.explanation) {
+    return;
+  }
+
+  var identity =
+    String(
+      part.item_id ||
+      part.question_key ||
+      part.section ||
+      ''
+    );
+  var key = [
+    String(family || ''),
+    String(setId || ''),
+    identity
+  ].join('|');
+  var fixes =
+    H3_REVIEW_EXPLANATION_STYLE_META_FIXES_[
+      key
+    ];
+
+  if (!fixes) {
+    return;
+  }
+
+  fixes.forEach(function (fix) {
+    var blocks =
+      part.explanation.learning_blocks || [];
+    var block =
+      blocks[Number(fix.block_index)];
+
+    if (
+      !block ||
+      String(block[fix.field] || '') !==
+        String(fix.old_text)
+    ) {
+      throw new Error(
+        'REVIEW_EXPLANATION_STYLE_META_FIX_GATE_MISMATCH:' +
+          key +
+          ':' +
+          String(fix.block_index) +
+          ':' +
+          String(fix.field)
+      );
+    }
+
+    block[fix.field] =
+      fix.new_text;
+  });
 }
 
 
@@ -1181,6 +1304,12 @@ function h3ReviewExplanationStyleApplyPayload_(
     }
 
     h3ReviewExplanationStyleApplyExampleFix_(
+      family,
+      setId,
+      part
+    );
+
+    h3ReviewExplanationStyleApplyMetaFix_(
       family,
       setId,
       part
@@ -1329,6 +1458,10 @@ function h3ReviewExplanationStyleSelfCheck_() {
     known_example_fix_count:
       Object.keys(
         H3_REVIEW_EXPLANATION_STYLE_EXAMPLE_FIXES_
+      ).length,
+    known_meta_fix_count:
+      Object.keys(
+        H3_REVIEW_EXPLANATION_STYLE_META_FIXES_
       ).length
   };
 }

@@ -1,6 +1,6 @@
 # HANGUL canonical state
 
-This orphan branch is the machine-readable continuity authority for the HANGUL_EXAM project.
+This dedicated state-only branch is the machine-readable continuity authority for the HANGUL_EXAM project.
 
 - `current.json`: sole hot-state authority.
 - `current.schema.json`: strict JSON Schema for `current.json`.

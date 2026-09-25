@@ -21,7 +21,7 @@ function include_(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
-function h3WebAttachDisplayIdentity_(
+function h3WebAttachSurfaceSetNo_(
   payload
 ) {
   if (
@@ -57,51 +57,70 @@ function h3WebAttachDisplayIdentity_(
           : '5W'
       )
     );
+  var setNo = 0;
 
   if (
     ['LISTENING', 'WRITTEN']
       .indexOf(kind) < 0
   ) {
     throw new Error(
-      'DISPLAY_IDENTITY_KIND_INVALID'
+      'SURFACE_SET_NO_KIND_INVALID'
     );
   }
 
-  var spreadsheet =
-    SpreadsheetApp.openById(
-      H3_WEB_RUNTIME_SPREADSHEET_ID
-    );
-  var table =
-    h3ReviewHomeIndexTable_(
-      spreadsheet
-    );
-  var existing =
-    h3ReviewHomeIndexFind_(
-      table,
-      kind,
-      String(payload.set_id)
-    );
-  var setNo;
-
-  if (existing) {
+  if (family === '5L') {
     setNo =
       Number(
-        existing.row[
-          table.map.SET_NO
-        ] || 0
+        payload.listening_set_no || 0
       );
-  } else {
-    if (payload.mode === 'REVIEW') {
-      throw new Error(
-        'DISPLAY_IDENTITY_REVIEW_INDEX_MISSING'
-      );
-    }
+  } else if (
+    family === 'READING' ||
+    family === 'TRANSLATION'
+  ) {
     setNo =
-      h3ReviewHomeIndexNextSetNo_(
+      Number(
+        payload.issue_no || 0
+      );
+  } else if (family === '5W') {
+    var spreadsheet =
+      SpreadsheetApp.openById(
+        H3_WEB_RUNTIME_SPREADSHEET_ID
+      );
+    var table =
+      h3ReviewHomeIndexTable_(
+        spreadsheet
+      );
+    var existing =
+      h3ReviewHomeIndexFind_(
         table,
         kind,
-        family
+        String(payload.set_id)
       );
+
+    if (existing) {
+      setNo =
+        Number(
+          existing.row[
+            table.map.SET_NO
+          ] || 0
+        );
+    } else {
+      if (payload.mode === 'REVIEW') {
+        throw new Error(
+          'SURFACE_SET_NO_REVIEW_INDEX_MISSING'
+        );
+      }
+      setNo =
+        h3ReviewHomeIndexNextSetNo_(
+          table,
+          kind,
+          family
+        );
+    }
+  } else {
+    throw new Error(
+      'SURFACE_SET_NO_FAMILY_INVALID'
+    );
   }
 
   if (
@@ -109,15 +128,140 @@ function h3WebAttachDisplayIdentity_(
     setNo < 1
   ) {
     throw new Error(
-      'DISPLAY_IDENTITY_SET_NO_INVALID'
+      'SURFACE_SET_NO_INVALID'
     );
   }
 
-  payload.display_set_no =
+  if (
+    payload.surface_set_no !==
+      null &&
+    payload.surface_set_no !==
+      undefined &&
+    Number(
+      payload.surface_set_no
+    ) !== setNo
+  ) {
+    throw new Error(
+      'SURFACE_SET_NO_MISMATCH'
+    );
+  }
+
+  payload.surface_set_no =
     setNo;
   return payload;
 }
 
+
+function h3WebAttachPostSubmitReviewSurface_(
+  payload,
+  homeIndexSync
+) {
+  if (
+    !payload ||
+    payload.mode !== 'REVIEW' ||
+    !payload.set_id ||
+    !homeIndexSync ||
+    homeIndexSync.schema !==
+      'H3_REVIEW_HOME_INDEX_SYNC_V1' ||
+    homeIndexSync.status !== 'PASS' ||
+    String(homeIndexSync.set_id || '') !==
+      String(payload.set_id)
+  ) {
+    throw new Error(
+      'POSTSUBMIT_REVIEW_SURFACE_SYNC_INVALID'
+    );
+  }
+
+  var metadata =
+    h3ReviewSurfaceMetadata_(
+      homeIndexSync.kind,
+      homeIndexSync.surface_family,
+      homeIndexSync.level
+    );
+  var setNo =
+    Number(
+      homeIndexSync.set_no || 0
+    );
+
+  if (
+    !Number.isInteger(setNo) ||
+    setNo < 1
+  ) {
+    throw new Error(
+      'POSTSUBMIT_REVIEW_SURFACE_SET_NO_INVALID'
+    );
+  }
+
+  [
+    ['kind', metadata.provider_kind],
+    [
+      'provider_kind',
+      metadata.provider_kind
+    ],
+    [
+      'surface_family',
+      metadata.surface_family
+    ],
+    ['level', metadata.level]
+  ].forEach(
+    function (pair) {
+      var key = pair[0];
+      var expected = pair[1];
+      if (
+        payload[key] &&
+        String(payload[key]) !==
+          String(expected)
+      ) {
+        throw new Error(
+          'POSTSUBMIT_REVIEW_SURFACE_IDENTITY_MISMATCH:' +
+            key
+        );
+      }
+    }
+  );
+
+  if (
+    metadata.surface_family === '5L' &&
+    Number(
+      payload.listening_set_no || 0
+    ) !== setNo
+  ) {
+    throw new Error(
+      'POSTSUBMIT_REVIEW_5L_SET_NO_MISMATCH'
+    );
+  }
+
+  if (
+    (
+      metadata.surface_family ===
+        'READING' ||
+      metadata.surface_family ===
+        'TRANSLATION'
+    ) &&
+    Number(
+      payload.issue_no || 0
+    ) !== setNo
+  ) {
+    throw new Error(
+      'POSTSUBMIT_REVIEW_ISSUE_NO_MISMATCH'
+    );
+  }
+
+  payload.learning_surface_schema =
+    metadata.learning_surface_schema;
+  payload.kind =
+    metadata.provider_kind;
+  payload.provider_kind =
+    metadata.provider_kind;
+  payload.surface_family =
+    metadata.surface_family;
+  payload.level =
+    metadata.level;
+  payload.surface_set_no =
+    setNo;
+
+  return payload;
+}
 
 function getListeningWebSet(request) {
   var payload;
@@ -134,7 +278,7 @@ function getListeningWebSet(request) {
       h3ReviewRenderRequest_(
         request
       );
-    return h3WebAttachDisplayIdentity_(
+    return h3WebAttachSurfaceSetNo_(
       payload
     );
   }
@@ -144,7 +288,7 @@ function getListeningWebSet(request) {
       buildProductionRenderPayload_(
         request
       );
-    return h3WebAttachDisplayIdentity_(
+    return h3WebAttachSurfaceSetNo_(
       payload
     );
   }
@@ -158,7 +302,7 @@ function getListeningWebSet(request) {
         buildReadingProductionRenderPayload_(
           request
         );
-      return h3WebAttachDisplayIdentity_(
+      return h3WebAttachSurfaceSetNo_(
         payload
       );
     }
@@ -184,7 +328,7 @@ function getListeningWebSet(request) {
             request
           );
       }
-      return h3WebAttachDisplayIdentity_(
+      return h3WebAttachSurfaceSetNo_(
         payload
       );
     }
@@ -193,7 +337,7 @@ function getListeningWebSet(request) {
       buildWrittenProductionRenderPayload_(
         request
       );
-    return h3WebAttachDisplayIdentity_(
+    return h3WebAttachSurfaceSetNo_(
       payload
     );
   }
@@ -263,6 +407,12 @@ function submitListeningWebAnswers(request) {
         result.after_sync
       );
 
+    result.after_sync =
+      h3WebAttachPostSubmitReviewSurface_(
+        result.after_sync,
+        result.home_index_sync
+      );
+
     result.family_scheduler_shadow =
       h3FamilySchedulerObserveAfterCommit_(
         'L',
@@ -317,7 +467,10 @@ function submitListeningWebAnswers(request) {
       }
 
       readingResult.after_sync =
-        readingReviewReadback;
+        h3WebAttachPostSubmitReviewSurface_(
+          readingReviewReadback,
+          readingResult.home_index_sync
+        );
 
       readingResult.family_scheduler_shadow =
         h3FamilySchedulerObserveAfterCommit_(
@@ -394,12 +547,15 @@ function submitListeningWebAnswers(request) {
       }
 
       translationResult.after_sync =
-        h3SurfaceReviewOpenForLearner_({
-          surface_family:
-            'TRANSLATION',
-          set_id:
-            translationResult.set_id
-        });
+        h3WebAttachPostSubmitReviewSurface_(
+          h3SurfaceReviewOpenForLearner_({
+            surface_family:
+              'TRANSLATION',
+            set_id:
+              translationResult.set_id
+          }),
+          translationResult.home_index_sync
+        );
 
       translationResult.family_scheduler_shadow =
         h3FamilySchedulerObserveAfterCommit_(
@@ -432,6 +588,12 @@ function submitListeningWebAnswers(request) {
       h3ReviewHomeIndexUpsertAfterCommit_(
         writtenResult,
         writtenResult.after_sync
+      );
+
+    writtenResult.after_sync =
+      h3WebAttachPostSubmitReviewSurface_(
+        writtenResult.after_sync,
+        writtenResult.home_index_sync
       );
 
     writtenResult.family_scheduler_shadow =

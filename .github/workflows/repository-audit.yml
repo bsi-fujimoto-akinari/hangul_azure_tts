@@ -287,6 +287,7 @@ jobs:
               'authenticated source_attestation',
               "if: steps.automatic_smoke_boundary.outputs.ready == 'true'",
               "if: steps.smoke_boundary.outputs.ready == 'true'",
+              'Remote-only deletion refresh',
           ]
           missing_ops = [token for token in required_ops if token not in ops]
           if missing_ops:
@@ -294,6 +295,16 @@ jobs:
                   'Apps Script credentialed execution documentation missing: '
                   + ', '.join(missing_ops)
               )
+
+          d=sync.find('Detect Apps Script remote file-set drift')
+          p=sync.find('Push audited main to Apps Script HEAD')
+          a=sync.find('Attest Apps Script HEAD source against exact audited main')
+          if not (0 <= d < p < a):
+              raise SystemExit('Delete-only sync order invalid.')
+          w=sync[p:a]
+          for t in ['H3_DELETE_ONLY_SYNC_REFRESH','git diff --exit-code -- "$marker_file"',"steps.remote_file_set.outputs.refresh == 'true'"]:
+              if t not in w:
+                  raise SystemExit('Delete-only sync guard missing: '+t)
 
           command_refs = []
           pattern = re.compile(

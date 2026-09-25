@@ -277,21 +277,124 @@ jobs:
         shell: bash
         run: npx -y @google/clasp@3.4.0 show-file-status --json
 
-      - name: Push audited main to Apps Script HEAD
-        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
+      - name: Detect Apps Script remote file-set drift
+        id: remote_file_set
+        if: (steps.impact.outputs.changed == 'true' || steps.policy_change.outputs.changed == 'true' || steps.smoke_request.outputs.requested == 'true') && steps.auth.outputs.ready == 'true'
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
+          repo_dir="$GITHUB_WORKSPACE"
+          readback_dir="$(mktemp -d)"
+          trap 'rm -rf "$readback_dir"' EXIT
+
+          cp "$repo_dir/.clasp.json" "$readback_dir/.clasp.json"
+          (
+            cd "$readback_dir"
+            npx -y @google/clasp@3.4.0 pull >/tmp/h3-remote-file-set.out
+          )
+
+          REPO_DIR="$repo_dir" READBACK_DIR="$readback_dir" python3 - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+
+          repo = Path(os.environ['REPO_DIR'])
+          readback = Path(os.environ['READBACK_DIR'])
+          expected = sorted(
+              p for p in subprocess.check_output(
+                  [
+                      'git', '-C', str(repo), 'ls-files',
+                      '*.js', '*.gs', '*.html', 'appsscript.json'
+                  ],
+                  text=True,
+              ).splitlines()
+              if p
+          )
+          actual = sorted(
+              p.relative_to(readback).as_posix()
+              for p in readback.rglob('*')
+              if p.is_file()
+              and p.name != '.clasp.json'
+              and (
+                  p.suffix in {'.js', '.gs', '.html'}
+                  or p.name == 'appsscript.json'
+              )
+          )
+          missing = sorted(set(expected) - set(actual))
+          extra = sorted(set(actual) - set(expected))
+          refresh = bool(missing or extra)
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write(f"refresh={'true' if refresh else 'false'}\n")
+              output.write(f"missing_count={len(missing)}\n")
+              output.write(f"extra_count={len(extra)}\n")
+          print(
+              'Apps Script remote file-set drift: '
+              f"refresh={'true' if refresh else 'false'}; "
+              f'missing={missing}; extra={extra}'
+          )
+          PY
+
+      - name: Push audited main to Apps Script HEAD
+        id: source_push
+        if: (steps.impact.outputs.changed == 'true' || steps.remote_file_set.outputs.refresh == 'true') && steps.auth.outputs.ready == 'true'
+        shell: bash
+        env:
+          REMOTE_FILE_SET_REFRESH: ${{ steps.remote_file_set.outputs.refresh || 'false' }}
+        run: |
+          set -euo pipefail
+
+          validate_push_output() {
+            local label="$1"
+            local value="$2"
+            printf '%s\n' "$value"
+            if printf '%s\n' "$value" | grep -q 'Skipping push'; then
+              echo "::error::$label: clasp skipped the push."
+              exit 1
+            fi
+            if ! printf '%s\n' "$value" | grep -Eq '^Pushed (one|[0-9]+) file|^Pushed no files|^Script is already up to date[.]$'; then
+              echo "::error::$label: clasp did not report a completed push."
+              exit 1
+            fi
+          }
+
           output="$(npx -y @google/clasp@3.4.0 push --force 2>&1)"
-          printf '%s\n' "$output"
-          if printf '%s\n' "$output" | grep -q 'Skipping push'; then
-            echo "::error::clasp skipped the push."
-            exit 1
+          validate_push_output "initial push" "$output"
+
+          delete_only_refresh=false
+          if [ "$REMOTE_FILE_SET_REFRESH" = "true" ] && \
+             printf '%s\n' "$output" | grep -q '^Script is already up to date[.]$'; then
+            marker_file="Code.js"
+            exact_copy="$(mktemp)"
+            cp "$marker_file" "$exact_copy"
+            restore_exact() {
+              cp "$exact_copy" "$marker_file"
+            }
+            trap 'restore_exact; rm -f "$exact_copy"' EXIT
+
+            printf '\n// H3_DELETE_ONLY_SYNC_REFRESH\n' >> "$marker_file"
+            nudge_output="$(npx -y @google/clasp@3.4.0 push --force 2>&1)"
+            validate_push_output "delete-only nudge push" "$nudge_output"
+            if printf '%s\n' "$nudge_output" | grep -q '^Script is already up to date[.]$'; then
+              echo "::error::Delete-only nudge did not force an Apps Script content update."
+              exit 1
+            fi
+
+            restore_exact
+            git diff --exit-code -- "$marker_file"
+            final_output="$(npx -y @google/clasp@3.4.0 push --force 2>&1)"
+            validate_push_output "exact restore push" "$final_output"
+            if printf '%s\n' "$final_output" | grep -q '^Script is already up to date[.]$'; then
+              echo "::error::Exact restore push did not replace the temporary nudge."
+              exit 1
+            fi
+
+            rm -f "$exact_copy"
+            trap - EXIT
+            delete_only_refresh=true
           fi
-          if ! printf '%s\n' "$output" | grep -Eq '^Pushed (one|[0-9]+) file|^Pushed no files|^Script is already up to date[.]$'; then
-            echo "::error::clasp did not report a completed push."
-            exit 1
-          fi
+
+          echo "status=pass" >> "$GITHUB_OUTPUT"
+          echo "delete_only_refresh=$delete_only_refresh" >> "$GITHUB_OUTPUT"
 
       - name: Attest Apps Script HEAD source against exact audited main
         id: source_attestation
@@ -735,6 +838,11 @@ jobs:
             echo "- source: $(git rev-parse HEAD 2>/dev/null || echo unavailable)"
             echo "- Apps Script-impacting change: ${{ steps.impact.outputs.changed || 'unknown' }}"
             echo "- synchronization-policy change: ${{ steps.policy_change.outputs.changed || 'unknown' }}"
+            echo "- remote file-set refresh required: ${{ steps.remote_file_set.outputs.refresh || 'not-run' }}"
+            echo "- remote file-set missing count: ${{ steps.remote_file_set.outputs.missing_count || 'not-run' }}"
+            echo "- remote file-set extra count: ${{ steps.remote_file_set.outputs.extra_count || 'not-run' }}"
+            echo "- source push status: ${{ steps.source_push.outputs.status || 'not-run' }}"
+            echo "- deletion-only refresh used: ${{ steps.source_push.outputs.delete_only_refresh || 'false' }}"
             echo "- clasp credential ready: ${{ steps.auth.outputs.ready || 'not-needed' }}"
             echo "- source attestation: ${{ steps.source_attestation.outputs.attested || 'not-run' }}"
             echo "- attested file count: ${{ steps.source_attestation.outputs.file_count || 'not-run' }}"

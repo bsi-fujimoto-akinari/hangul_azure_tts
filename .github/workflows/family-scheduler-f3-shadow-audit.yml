@@ -3928,6 +3928,7 @@ jobs:
             quotaState.last_attempt_at==='',
             'P09 quota block consumed retry budget'
           );
+          failSend=false;
           dailyQuota=100;
           result=h3MonitoringNotificationProcess_(
             fake,snapshot([Q],t0+1080000),t0+1080000

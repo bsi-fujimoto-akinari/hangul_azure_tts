@@ -10,6 +10,11 @@ on:
         description: "Exact audited main SHA authorized for an optional temporary read-only Apps Script smoke preflight"
         required: false
         type: string
+      uxr2b_review_audio_repair:
+        description: "Run the one-shot UXR-2B H3-20260915-01 D4 Review audio repair at the exact intended smoke SHA"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -391,6 +396,90 @@ jobs:
             exit 1
           fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Run one-shot UXR-2B Review audio repair
+        if: steps.smoke_boundary.outputs.ready == 'true'
+        shell: bash
+        env:
+          UXR2B_REPAIR_REQUESTED: ${{ github.event.inputs.uxr2b_review_audio_repair || 'false' }}
+        run: |
+          set -euo pipefail
+
+          if [ "$UXR2B_REPAIR_REQUESTED" != "true" ]; then
+            echo 'UXR-2B Review audio repair not requested; skipped.'
+            exit 0
+          fi
+
+          npx -y @google/clasp@3.4.0 update-deployment \
+            AKfycbxmJnIPTKJY5beUVAU5d0RyKb0Nj-YarY8EkdyczgXHpJKVw4-0kdjv6cYEUXEDtw5D \
+            --description "UXR-2B exact D4 Review audio repair 2026-09-25" \
+            --json > /tmp/uxr2b-review-audio-deploy.json
+
+          npx -y @google/clasp@3.4.0 run-function \
+            runUxr2bReviewAudioRepair \
+            --nondev \
+            --user default \
+            --json > /tmp/uxr2b-review-audio-repair.json
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          dep = json.loads(
+              Path('/tmp/uxr2b-review-audio-deploy.json')
+              .read_text(encoding='utf-8')
+          )
+          if dep.get('deploymentId') != (
+              'AKfycbxmJnIPTKJY5beUVAU5d0RyKb0Nj-'
+              'YarY8EkdyczgXHpJKVw4-0kdjv6cYEUXEDtw5D'
+          ):
+              raise SystemExit('UXR-2B API deployment ID changed unexpectedly.')
+          if not dep.get('versionNumber'):
+              raise SystemExit('UXR-2B API deployment update returned no version.')
+
+          data = json.loads(
+              Path('/tmp/uxr2b-review-audio-repair.json')
+              .read_text(encoding='utf-8')
+          )
+          if data.get('error'):
+              raise SystemExit(
+                  f"UXR-2B Review audio repair returned error: {data['error']!r}"
+              )
+
+          response = data.get('response')
+          if not isinstance(response, dict):
+              raise SystemExit('UXR-2B Review audio repair response missing.')
+          if response.get('schema') != 'H3_UXR2B_REVIEW_AUDIO_REPAIR_V1':
+              raise SystemExit(f'Unexpected repair schema: {response!r}')
+          if response.get('status') != 'PASS':
+              raise SystemExit(f'Repair did not pass: {response!r}')
+          if response.get('set_id') != 'H3-20260915-01':
+              raise SystemExit(f'Wrong repair set: {response!r}')
+          if response.get('slot_key') != 'D4':
+              raise SystemExit(f'Wrong repair slot: {response!r}')
+
+          result = response.get('result') or {}
+          if result.get('audio_text_sha256') != (
+              'd01412d363148f3c42532953cbd73c12'
+              'd8f19706e32edf533d1f0de65c5d880c'
+          ):
+              raise SystemExit(f'Wrong repaired audio hash: {result!r}')
+          if result.get('replaced_file_id') != (
+              '1908KkxNbra1OpLYbBOsFDbO2StJFCt3r'
+          ):
+              raise SystemExit(f'Wrong replaced file: {result!r}')
+          if result.get('retired_mode') != 'STALE_REPLACED_ARCHIVE':
+              raise SystemExit(f'Wrong retire mode: {result!r}')
+          if result.get('stale_replaced_folder_id') != (
+              '1CcFqmt9ljhgiTXheYAQ0suxGZZkWTGEp'
+          ):
+              raise SystemExit(f'Wrong archive folder: {result!r}')
+
+          print('UXR-2B Review audio one-shot repair: PASS')
+          print(f"new_file_id={result.get('file_id')}")
+          print(f"audio_text_sha256={result.get('audio_text_sha256')}")
+          print('protected_scope=single_5W_D4_sidecar')
+          PY
 
       # Any temporary clasp run-function step must be inserted immediately after
       # smoke_boundary and gated by:

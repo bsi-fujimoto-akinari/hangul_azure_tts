@@ -743,7 +743,7 @@ jobs:
 
           for needle in [
               "request.mode === 'LISTENING'",
-              'buildProductionRenderPayload_(request)',
+              'buildProductionRenderPayload_(',
               'getProductionMediaPayload_(request)',
               'h3ProdSubmit_(request)',
           ]:

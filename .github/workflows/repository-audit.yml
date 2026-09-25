@@ -10193,6 +10193,7 @@ jobs:
               "'H3_REVIEW_HOME_INDEX_SYNC_V1'",
               "'POSTSUBMIT_REVIEW_5L_SET_NO_MISMATCH'",
               "'POSTSUBMIT_REVIEW_ISSUE_NO_MISMATCH'",
+              "'SURFACE_SET_NO_HOME_INDEX_TABLE_INVALID'",
           ]:
               if token not in web:
                   raise SystemExit(
@@ -10208,6 +10209,7 @@ jobs:
               'entry.txn_id || null',
               'entry.legacy_review_id || null',
               "'REVIEW_PERMALINK_SET_NOT_FOUND:'",
+              "'REVIEW_PERMALINK_HOME_INDEX_TABLE_INVALID'",
           ]:
               if token not in core:
                   raise SystemExit(
@@ -10383,14 +10385,26 @@ jobs:
                 level: String(level || '')
               }),
             h3ReviewHomeIndexTable_: () => ({
-              map: {SET_NO: 0},
-              rows: []
+              table: {
+                map: {SET_NO: 0},
+                rows: []
+              }
             }),
             h3ReviewHomeIndexFind_:
-              (_table, _kind, setId) =>
-                setId === 'W-OLD'
+              (table, _kind, setId) => {
+                if (
+                  !table ||
+                  !Array.isArray(table.rows) ||
+                  !table.map
+                ) {
+                  throw new Error(
+                    'UXR-5 test expected unwrapped HOME index table.'
+                  );
+                }
+                return setId === 'W-OLD'
                   ? {row: [9]}
-                  : null,
+                  : null;
+              },
             h3ReviewHomeIndexNextSetNo_: () => 8
           });
 
@@ -10717,6 +10731,89 @@ jobs:
           if (!mismatchRejected) {
             throw new Error(
               'UXR-5 post-submit authority mismatch did not fail closed.'
+            );
+          }
+
+          const reviewSource = fs.readFileSync(
+            'WebAppReviewCore.js',
+            'utf8'
+          );
+          const wrappedHomeIndex = {
+            table: {
+              map: {
+                KIND: 0,
+                SET_ID: 1,
+                SET_NO: 2
+              },
+              rows: [
+                ['WRITTEN', 'W-OLD', 9]
+              ]
+            }
+          };
+          const reviewCtx = vm.createContext({
+            console,
+            H3_WEB_RUNTIME_SPREADSHEET_ID:
+              'RUNTIME',
+            SpreadsheetApp: {
+              openById: () => ({})
+            },
+            h3ReviewHomeIndexTable_:
+              () => wrappedHomeIndex,
+            h3ReviewHomeIndexFind_:
+              (table, kind, setId) => {
+                if (
+                  table !== wrappedHomeIndex.table ||
+                  !Array.isArray(table.rows) ||
+                  !table.map
+                ) {
+                  throw new Error(
+                    'UXR-5 resolver did not unwrap HOME index table.'
+                  );
+                }
+                return (
+                  kind === 'WRITTEN' &&
+                  setId === 'W-OLD'
+                )
+                  ? {
+                      row: [
+                        'WRITTEN',
+                        'W-OLD',
+                        9
+                      ]
+                    }
+                  : null;
+              },
+            h3ReviewHomeIndexRowEntry_:
+              () => ({
+                surface_family: '5W',
+                txn_id: null,
+                legacy_review_id: null
+              })
+          });
+          vm.runInContext(
+            reviewSource,
+            reviewCtx,
+            {
+              filename:
+                'WebAppReviewCore.js'
+            }
+          );
+          const resolvedPermalink =
+            vm.runInContext(
+              "h3ReviewResolvePermalinkRequest_({mode:'REVIEW',review_kind:'WRITTEN',surface_family:'5W',set_id:'W-OLD',q_no:1})",
+              reviewCtx
+            );
+          if (
+            resolvedPermalink.review_kind !==
+              'WRITTEN' ||
+            resolvedPermalink.surface_family !==
+              '5W' ||
+            resolvedPermalink.set_id !==
+              'W-OLD' ||
+            resolvedPermalink.q_no !== 1
+          ) {
+            throw new Error(
+              'UXR-5 resolver wrapper regression.'
             );
           }
 

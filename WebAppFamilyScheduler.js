@@ -2889,6 +2889,336 @@ function h3FsAllocateWrittenSetId_(queueSheet) {
   return 'H3-'+date+'-'+String(n).padStart(2,'0');
 }
 
+var H3_FS_WRITTEN_GENLOG_HEADERS_ = [
+  'GEN_ID',
+  'SET_ID',
+  'Q_NO',
+  'CREATED_AT',
+  'LEVEL',
+  'SECTION',
+  'PRIMARY_BUCKET',
+  'SKILL_ID',
+  'PROVENANCE_JSON',
+  'POLICY_ID',
+  'SURFACE_HASH',
+  'STATUS',
+  'USER_RESULT',
+  'ANSWERED_AT',
+  'QUEUE_UPDATE_STATUS',
+  'NOTES'
+];
+
+function h3FsWrittenGenerationPlan_(
+  prepared,
+  setId,
+  issuedAt
+) {
+  var r=prepared.row,m=prepared.map;
+  var stageId=String(
+    prepared.stage_id||''
+  );
+  var policyId=String(
+    r[m.POLICY_ID]||''
+  );
+  var meta=h3FsJson_(
+    r[m.QUESTION_META_JSON],
+    null
+  );
+  if(
+    !stageId||
+    !policyId||
+    !meta||
+    !Array.isArray(meta.questions)||
+    meta.questions.length!==5
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_WRITTEN_GENLOG_META_INVALID'
+    );
+  }
+
+  var rows=meta.questions.map(
+    function(question,index){
+      var qNo=Number(
+        question&&question.q
+      );
+      var section=String(
+        question&&question.section||''
+      );
+      var bucket=String(
+        question&&question.bucket||''
+      );
+      var skillId=String(
+        question&&question.skill_id||''
+      );
+      var prompt=String(
+        question&&question.question||''
+      );
+      var choices=
+        question&&Array.isArray(question.choices)
+          ? question.choices.map(function(x){
+              return String(x);
+            })
+          : [];
+
+      if(
+        qNo!==index+1||
+        !section||
+        !bucket||
+        !skillId||
+        !prompt||
+        choices.length!==4
+      ){
+        throw new Error(
+          'FAMILY_SCHEDULER_WRITTEN_GENLOG_QUESTION_INVALID:'+
+          String(index+1)
+        );
+      }
+
+      var provenance={
+        bucket:bucket,
+        stage_id:stageId,
+        retest:question.retest===true
+      };
+
+      if(
+        question.provenance&&
+        Object.prototype.toString.call(
+          question.provenance
+        )==='[object Object]'
+      ){
+        Object.keys(
+          question.provenance
+        ).sort().forEach(function(key){
+          provenance[key]=
+            question.provenance[key];
+        });
+      }
+
+      if(
+        question.source&&
+        Object.prototype.toString.call(
+          question.source
+        )==='[object Object]'
+      ){
+        provenance.source=
+          question.source;
+      }
+
+      provenance.source_ratio_plan=
+        'N2-R1_11_6_2_1';
+
+      var surfaceHash=h3FsSha_({
+        schema:
+          'H3_WRITTEN_SURFACE_HASH_V2',
+        level:'3級',
+        section:section,
+        skill_id:skillId,
+        question:prompt,
+        choices:choices
+      });
+
+      return [
+        'GEN-'+String(setId)+'-Q'+
+          String(qNo),
+        String(setId),
+        qNo,
+        String(issuedAt),
+        '3級',
+        section,
+        bucket,
+        skillId,
+        JSON.stringify(provenance),
+        policyId,
+        surfaceHash,
+        'ISSUED',
+        '',
+        '',
+        '',
+        ''
+      ];
+    }
+  );
+
+  return {
+    headers:
+      H3_FS_WRITTEN_GENLOG_HEADERS_.slice(),
+    rows:rows,
+    gen_ids:rows.map(function(row){
+      return String(row[0]);
+    })
+  };
+}
+
+function h3FsWrittenGenerationRollback_(
+  logSheet,
+  firstRow,
+  plan
+) {
+  if(
+    !logSheet||
+    !firstRow||
+    !plan||
+    !Array.isArray(plan.rows)||
+    plan.rows.length!==5
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_WRITTEN_GENLOG_ROLLBACK_INPUT_INVALID'
+    );
+  }
+
+  var identity=logSheet
+    .getRange(
+      firstRow,
+      1,
+      plan.rows.length,
+      2
+    )
+    .getDisplayValues();
+
+  var matches=identity.every(
+    function(row,index){
+      return (
+        String(row[0]||'')===
+          String(plan.rows[index][0]) &&
+        String(row[1]||'')===
+          String(plan.rows[index][1])
+      );
+    }
+  );
+
+  if(!matches){
+    throw new Error(
+      'FAMILY_SCHEDULER_WRITTEN_GENLOG_ROLLBACK_IDENTITY_MISMATCH'
+    );
+  }
+
+  logSheet.deleteRows(
+    firstRow,
+    plan.rows.length
+  );
+  SpreadsheetApp.flush();
+}
+
+function h3FsWrittenGenerationInsert_(
+  ss,
+  prepared,
+  setId,
+  issuedAt
+) {
+  var logSheet=ss.getSheetByName(
+    'generation_log_v1'
+  );
+  if(!logSheet){
+    throw new Error(
+      'FAMILY_SCHEDULER_WRITTEN_GENLOG_MISSING'
+    );
+  }
+
+  var table=h3FsTable_(logSheet);
+  if(
+    JSON.stringify(table.headers)!==
+      JSON.stringify(
+        H3_FS_WRITTEN_GENLOG_HEADERS_
+      )
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_WRITTEN_GENLOG_HEADER_MISMATCH'
+    );
+  }
+
+  var existing=table.rows.filter(
+    function(row){
+      return String(
+        row[table.map.SET_ID]||''
+      )===String(setId);
+    }
+  );
+  if(existing.length){
+    throw new Error(
+      'FAMILY_SCHEDULER_WRITTEN_GENLOG_PREEXISTING:'+
+      String(existing.length)
+    );
+  }
+
+  var plan=h3FsWrittenGenerationPlan_(
+    prepared,
+    setId,
+    issuedAt
+  );
+  var firstRow=logSheet.getLastRow()+1;
+  var inserted=false;
+
+  try {
+    logSheet
+      .getRange(
+        firstRow,
+        1,
+        plan.rows.length,
+        plan.headers.length
+      )
+      .setValues(plan.rows);
+    inserted=true;
+    SpreadsheetApp.flush();
+
+    var readback=logSheet
+      .getRange(
+        firstRow,
+        1,
+        plan.rows.length,
+        plan.headers.length
+      )
+      .getDisplayValues();
+
+    readback.forEach(
+      function(row,index){
+        if(
+          String(row[0]||'')!==
+            String(plan.rows[index][0])||
+          String(row[1]||'')!==
+            String(setId)||
+          Number(row[2])!==index+1||
+          String(row[11]||'')!=='ISSUED'||
+          !/^[0-9a-f]{64}$/.test(
+            String(row[10]||'')
+          )
+        ){
+          throw new Error(
+            'FAMILY_SCHEDULER_WRITTEN_GENLOG_READBACK_INVALID:'+
+            String(index+1)
+          );
+        }
+      }
+    );
+
+    return {
+      sheet:logSheet,
+      first_row:firstRow,
+      plan:plan
+    };
+  } catch(err) {
+    if(inserted){
+      try {
+        h3FsWrittenGenerationRollback_(
+          logSheet,
+          firstRow,
+          plan
+        );
+      } catch(rollbackErr) {
+        throw new Error(
+          'FAMILY_SCHEDULER_WRITTEN_GENLOG_RECOVERY_REQUIRED:'+
+          String(err&&err.message||err)+
+          ':'+
+          String(
+            rollbackErr&&rollbackErr.message||
+            rollbackErr
+          )
+        );
+      }
+    }
+    throw err;
+  }
+}
+
 function h3FsIssueWritten_(ss) {
   var prepared=h3FsFindPreparedWritten_(ss);
   if(!prepared)throw new Error('FAMILY_SCHEDULER_WRITTEN_NOT_PREPARED');
@@ -2926,12 +3256,21 @@ function h3FsIssueWritten_(ss) {
 
   var queueRow=queueSheet.getLastRow()+1;
   var queueInserted=false;
+  var generationInsert=null;
   try {
     queueSheet
       .getRange(queueRow,1,1,HQ_HEADERS.length)
       .setValues([queueValues]);
     queueInserted=true;
     SpreadsheetApp.flush();
+
+    generationInsert=
+      h3FsWrittenGenerationInsert_(
+        ss,
+        prepared,
+        setId,
+        issuedAt
+      );
 
     var stageValues=stageSnapshot.slice();
     stageValues[m.STATUS]='ISSUED';
@@ -2968,22 +3307,88 @@ function h3FsIssueWritten_(ss) {
         )
     };
   } catch(err) {
+    var rollbackErrors=[];
+
     try {
       stageSheet
         .getRange(prepared.rowNumber,1,1,24)
         .setValues([stageSnapshot]);
-      if(queueInserted){
+    } catch(stageRollbackErr) {
+      rollbackErrors.push(
+        'STAGE:'+
+        String(
+          stageRollbackErr&&
+          stageRollbackErr.message||
+          stageRollbackErr
+        )
+      );
+    }
+
+    if(generationInsert){
+      try {
+        h3FsWrittenGenerationRollback_(
+          generationInsert.sheet,
+          generationInsert.first_row,
+          generationInsert.plan
+        );
+      } catch(genRollbackErr) {
+        rollbackErrors.push(
+          'GENLOG:'+
+          String(
+            genRollbackErr&&
+            genRollbackErr.message||
+            genRollbackErr
+          )
+        );
+      }
+    }
+
+    if(queueInserted){
+      try {
         var rowId=String(
           queueSheet
             .getRange(queueRow,1)
             .getDisplayValue()||''
         );
-        if(rowId===setId){
-          queueSheet.deleteRow(queueRow);
+        if(rowId!==setId){
+          throw new Error(
+            'QUEUE_IDENTITY_MISMATCH'
+          );
         }
+        queueSheet.deleteRow(queueRow);
+      } catch(queueRollbackErr) {
+        rollbackErrors.push(
+          'QUEUE:'+
+          String(
+            queueRollbackErr&&
+            queueRollbackErr.message||
+            queueRollbackErr
+          )
+        );
       }
+    }
+
+    try {
       SpreadsheetApp.flush();
-    } catch(_rollbackErr) {}
+    } catch(flushRollbackErr) {
+      rollbackErrors.push(
+        'FLUSH:'+
+        String(
+          flushRollbackErr&&
+          flushRollbackErr.message||
+          flushRollbackErr
+        )
+      );
+    }
+
+    if(rollbackErrors.length){
+      throw new Error(
+        'FAMILY_SCHEDULER_WRITTEN_ISSUE_RECOVERY_REQUIRED:'+
+        String(err&&err.message||err)+
+        ':'+
+        rollbackErrors.join('|')
+      );
+    }
     throw err;
   }
 }

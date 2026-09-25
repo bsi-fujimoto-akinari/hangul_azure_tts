@@ -1,0 +1,895 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/hangul/current.schema.json",
+  "title": "HANGUL canonical machine state v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "state_format",
+    "updated_at",
+    "authority",
+    "continuity",
+    "active_work",
+    "application_repository",
+    "runtime",
+    "secondary_evidence",
+    "monitoring",
+    "semantic_final_audit",
+    "uxr",
+    "canonical_sources",
+    "boundaries",
+    "closed_programs",
+    "migration"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "state_format": {
+      "type": "string",
+      "const": "hangul_current_v1"
+    },
+    "updated_at": {
+      "type": "string"
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "repository",
+        "ref",
+        "path",
+        "application_code_ref"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "git_branch_json"
+        },
+        "repository": {
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "application_code_ref": {
+          "type": "string"
+        }
+      }
+    },
+    "continuity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "active_work_id",
+        "next_ready_work_id",
+        "normal_active_chat_count",
+        "normal_active_work_count_max",
+        "no_auto_stage_advance",
+        "requires_explicit_approval_for_next"
+      ],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "clean",
+            "in_progress",
+            "blocked"
+          ]
+        },
+        "active_work_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "next_ready_work_id": {
+          "type": "string"
+        },
+        "normal_active_chat_count": {
+          "type": "integer"
+        },
+        "normal_active_work_count_max": {
+          "type": "integer"
+        },
+        "no_auto_stage_advance": {
+          "type": "boolean"
+        },
+        "requires_explicit_approval_for_next": {
+          "type": "boolean"
+        }
+      }
+    },
+    "active_work": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "work_id",
+        "status",
+        "title",
+        "last_checkpoint_at"
+      ],
+      "properties": {
+        "work_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "last_checkpoint_at": {
+          "type": "string"
+        }
+      }
+    },
+    "application_repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "main_sha",
+        "repository_audit",
+        "family_scheduler_audit",
+        "apps_script"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string"
+        },
+        "main_sha": {
+          "type": "string"
+        },
+        "repository_audit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "run_id"
+          ],
+          "properties": {
+            "status": {
+              "type": "string"
+            },
+            "run_id": {
+              "type": "integer"
+            }
+          }
+        },
+        "family_scheduler_audit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "run_id"
+          ],
+          "properties": {
+            "status": {
+              "type": "string"
+            },
+            "run_id": {
+              "type": "integer"
+            }
+          }
+        },
+        "apps_script": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "project_id",
+            "autosync",
+            "modified_at"
+          ],
+          "properties": {
+            "project_id": {
+              "type": "string"
+            },
+            "autosync": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "run_id",
+                "source_file_count",
+                "source_digest"
+              ],
+              "properties": {
+                "status": {
+                  "type": "string"
+                },
+                "run_id": {
+                  "type": "integer"
+                },
+                "source_file_count": {
+                  "type": "integer"
+                },
+                "source_digest": {
+                  "type": "string"
+                }
+              }
+            },
+            "modified_at": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "written",
+        "listening",
+        "reading",
+        "translation",
+        "last_family",
+        "family_scheduler",
+        "authoring_queue_job_count",
+        "monitor_observer",
+        "protected_runtime_mutation"
+      ],
+      "properties": {
+        "written": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "next_block_no",
+            "next_set_offset",
+            "next_stage",
+            "next_stage_status"
+          ],
+          "properties": {
+            "next_block_no": {
+              "type": "integer"
+            },
+            "next_set_offset": {
+              "type": "integer"
+            },
+            "next_stage": {
+              "type": "string"
+            },
+            "next_stage_status": {
+              "type": "string"
+            }
+          }
+        },
+        "listening": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "issue_no",
+            "next_set_no",
+            "status"
+          ],
+          "properties": {
+            "issue_no": {
+              "type": "integer"
+            },
+            "next_set_no": {
+              "type": "integer"
+            },
+            "status": {
+              "type": "string"
+            }
+          }
+        },
+        "reading": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "clock"
+          ],
+          "properties": {
+            "clock": {
+              "type": "integer"
+            }
+          }
+        },
+        "translation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "clock",
+            "last_action"
+          ],
+          "properties": {
+            "clock": {
+              "type": "integer"
+            },
+            "last_action": {
+              "type": "string"
+            }
+          }
+        },
+        "last_family": {
+          "type": "string"
+        },
+        "family_scheduler": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "global_clock"
+          ],
+          "properties": {
+            "mode": {
+              "type": "string"
+            },
+            "global_clock": {
+              "type": "integer"
+            }
+          }
+        },
+        "authoring_queue_job_count": {
+          "type": "integer"
+        },
+        "monitor_observer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "last_checked_at",
+            "source_count",
+            "error_count",
+            "action_required_count"
+          ],
+          "properties": {
+            "status": {
+              "type": "string"
+            },
+            "last_checked_at": {
+              "type": "string"
+            },
+            "source_count": {
+              "type": "integer"
+            },
+            "error_count": {
+              "type": "integer"
+            },
+            "action_required_count": {
+              "type": "integer"
+            }
+          }
+        },
+        "protected_runtime_mutation": {
+          "type": "integer"
+        }
+      }
+    },
+    "secondary_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "committed_genuine_rows",
+        "shadow_observation_rows",
+        "k1_authority_rows",
+        "rs13",
+        "rs14"
+      ],
+      "properties": {
+        "committed_genuine_rows": {
+          "type": "integer"
+        },
+        "shadow_observation_rows": {
+          "type": "integer"
+        },
+        "k1_authority_rows": {
+          "type": "integer"
+        },
+        "rs13": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "closed",
+            "explicit_review_ready"
+          ],
+          "properties": {
+            "status": {
+              "type": "string"
+            },
+            "closed": {
+              "type": "boolean"
+            },
+            "explicit_review_ready": {
+              "type": "boolean"
+            }
+          }
+        },
+        "rs14": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "active",
+            "preflight_gate_pass",
+            "distinct_events"
+          ],
+          "properties": {
+            "active": {
+              "type": "boolean"
+            },
+            "preflight_gate_pass": {
+              "type": "boolean"
+            },
+            "distinct_events": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "current",
+                "required"
+              ],
+              "properties": {
+                "current": {
+                  "type": "integer"
+                },
+                "required": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "monitoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "production_trigger",
+        "legacy_tasks_paused",
+        "auto_semantic_authoring",
+        "auto_rs13_close",
+        "auto_rs14_activate",
+        "real_email_sent"
+      ],
+      "properties": {
+        "production_trigger": {
+          "type": "string"
+        },
+        "legacy_tasks_paused": {
+          "type": "boolean"
+        },
+        "auto_semantic_authoring": {
+          "type": "boolean"
+        },
+        "auto_rs13_close": {
+          "type": "boolean"
+        },
+        "auto_rs14_activate": {
+          "type": "boolean"
+        },
+        "real_email_sent": {
+          "type": "integer"
+        }
+      }
+    },
+    "semantic_final_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "mode",
+        "closed_at",
+        "do_not_rerun"
+      ],
+      "properties": {
+        "status": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "closed_at": {
+          "type": "string"
+        },
+        "do_not_rerun": {
+          "type": "boolean"
+        }
+      }
+    },
+    "uxr": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "program_status",
+        "group_count",
+        "execution_step_count",
+        "order",
+        "steps"
+      ],
+      "properties": {
+        "program_status": {
+          "type": "string"
+        },
+        "group_count": {
+          "type": "integer"
+        },
+        "execution_step_count": {
+          "type": "integer"
+        },
+        "order": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "steps": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "UXR-1A-SHARED-EXPLANATION-PREP",
+            "UXR-1B-SHARED-EXPLANATION-IMPLEMENT-AUDIT",
+            "UXR-2A-5W-REVIEW-CONTENT-PREP",
+            "UXR-2B-5W-REVIEW-CONTENT-IMPLEMENT-AUDIT",
+            "UXR-3-HOME-UX-REFINEMENT",
+            "UXR-4-QUESTION-REVIEW-NAV-MEDIA",
+            "UXR-5-QUESTION-DEEP-LINK",
+            "UXR-6-RESPONSE-TIME-TELEMETRY-DESIGN"
+          ],
+          "properties": {
+            "UXR-1A-SHARED-EXPLANATION-PREP": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "completed_at"
+              ],
+              "properties": {
+                "status": {
+                  "type": "string"
+                },
+                "completed_at": {
+                  "type": "string"
+                }
+              }
+            },
+            "UXR-1B-SHARED-EXPLANATION-IMPLEMENT-AUDIT": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "completed_at",
+                "pr",
+                "main_sha"
+              ],
+              "properties": {
+                "status": {
+                  "type": "string"
+                },
+                "completed_at": {
+                  "type": "string"
+                },
+                "pr": {
+                  "type": "integer"
+                },
+                "main_sha": {
+                  "type": "string"
+                }
+              }
+            },
+            "UXR-2A-5W-REVIEW-CONTENT-PREP": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status"
+              ],
+              "properties": {
+                "status": {
+                  "type": "string"
+                }
+              }
+            },
+            "UXR-2B-5W-REVIEW-CONTENT-IMPLEMENT-AUDIT": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status"
+              ],
+              "properties": {
+                "status": {
+                  "type": "string"
+                }
+              }
+            },
+            "UXR-3-HOME-UX-REFINEMENT": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status"
+              ],
+              "properties": {
+                "status": {
+                  "type": "string"
+                }
+              }
+            },
+            "UXR-4-QUESTION-REVIEW-NAV-MEDIA": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status"
+              ],
+              "properties": {
+                "status": {
+                  "type": "string"
+                }
+              }
+            },
+            "UXR-5-QUESTION-DEEP-LINK": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status"
+              ],
+              "properties": {
+                "status": {
+                  "type": "string"
+                }
+              }
+            },
+            "UXR-6-RESPONSE-TIME-TELEMETRY-DESIGN": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status"
+              ],
+              "properties": {
+                "status": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "canonical_sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "quiz_rules",
+        "listening_render",
+        "listening_visual"
+      ],
+      "properties": {
+        "quiz_rules": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "drive_file_id",
+            "version"
+          ],
+          "properties": {
+            "drive_file_id": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          }
+        },
+        "listening_render": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "drive_file_id",
+            "version"
+          ],
+          "properties": {
+            "drive_file_id": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          }
+        },
+        "listening_visual": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "drive_file_id",
+            "version"
+          ],
+          "properties": {
+            "drive_file_id": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "learner_history_rewrite",
+        "score_rewrite",
+        "review_rewrite",
+        "counter_pointer_change",
+        "secondary_concept_backfill",
+        "historical_secondary_backfill",
+        "existing_committed_rt_history_rewrite",
+        "scheduler_forcing_for_rs13_data",
+        "no_auto_stage_advance"
+      ],
+      "properties": {
+        "learner_history_rewrite": {
+          "type": "boolean"
+        },
+        "score_rewrite": {
+          "type": "boolean"
+        },
+        "review_rewrite": {
+          "type": "boolean"
+        },
+        "counter_pointer_change": {
+          "type": "boolean"
+        },
+        "secondary_concept_backfill": {
+          "type": "boolean"
+        },
+        "historical_secondary_backfill": {
+          "type": "boolean"
+        },
+        "existing_committed_rt_history_rewrite": {
+          "type": "boolean"
+        },
+        "scheduler_forcing_for_rs13_data": {
+          "type": "boolean"
+        },
+        "no_auto_stage_advance": {
+          "type": "boolean"
+        }
+      }
+    },
+    "closed_programs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "codex53",
+        "s4_r4"
+      ],
+      "properties": {
+        "codex53": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "final_main_sha",
+            "do_not_rerun"
+          ],
+          "properties": {
+            "status": {
+              "type": "string"
+            },
+            "final_main_sha": {
+              "type": "string"
+            },
+            "do_not_rerun": {
+              "type": "boolean"
+            }
+          }
+        },
+        "s4_r4": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "do_not_rerun"
+          ],
+          "properties": {
+            "status": {
+              "type": "string"
+            },
+            "do_not_rerun": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "from",
+        "source_drive_file_ids",
+        "source_sha256",
+        "drive_current_role_after_cutover",
+        "source_drive_revision_ids",
+        "legacy_preservation"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string"
+        },
+        "source_drive_file_ids": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "work_plan",
+            "active_work",
+            "infra_status"
+          ],
+          "properties": {
+            "work_plan": {
+              "type": "string"
+            },
+            "active_work": {
+              "type": "string"
+            },
+            "infra_status": {
+              "type": "string"
+            }
+          }
+        },
+        "source_sha256": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "work_plan",
+            "active_work",
+            "infra_status"
+          ],
+          "properties": {
+            "work_plan": {
+              "type": "string"
+            },
+            "active_work": {
+              "type": "string"
+            },
+            "infra_status": {
+              "type": "string"
+            }
+          }
+        },
+        "drive_current_role_after_cutover": {
+          "type": "string"
+        },
+        "source_drive_revision_ids": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "work_plan",
+            "active_work",
+            "infra_status"
+          ],
+          "properties": {
+            "work_plan": {
+              "type": "string"
+            },
+            "active_work": {
+              "type": "string"
+            },
+            "infra_status": {
+              "type": "string"
+            }
+          }
+        },
+        "legacy_preservation": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

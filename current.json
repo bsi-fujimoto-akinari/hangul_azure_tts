@@ -1,0 +1,217 @@
+{
+  "schema_version": 1,
+  "state_format": "hangul_current_v1",
+  "updated_at": "2026-09-25T14:37:35+09:00",
+  "authority": {
+    "kind": "git_branch_json",
+    "repository": "bsi-fujimoto-akinari/hangul_azure_tts",
+    "ref": "refs/heads/state-current",
+    "path": "current.json",
+    "application_code_ref": "refs/heads/main"
+  },
+  "continuity": {
+    "state": "clean",
+    "active_work_id": null,
+    "next_ready_work_id": "UXR-2A-5W-REVIEW-CONTENT-PREP",
+    "normal_active_chat_count": 1,
+    "normal_active_work_count_max": 1,
+    "no_auto_stage_advance": true,
+    "requires_explicit_approval_for_next": true
+  },
+  "active_work": {
+    "work_id": null,
+    "status": "idle_awaiting_user_approval",
+    "title": "No active work; UXR-1B complete; 2A awaiting approval",
+    "last_checkpoint_at": "2026-09-25T14:22:34+09:00"
+  },
+  "application_repository": {
+    "repository": "bsi-fujimoto-akinari/hangul_azure_tts",
+    "main_sha": "6481114ab2eae095d83a8f189fbd4c5ba51373ce",
+    "repository_audit": {
+      "status": "pass",
+      "run_id": 36097073801
+    },
+    "family_scheduler_audit": {
+      "status": "pass",
+      "run_id": 36097073802
+    },
+    "apps_script": {
+      "project_id": "1p_e1jKICTZXHpCrQ7rwU9HilloZdkFBpHry_lCq5YgXpaiU4FNEQlDa-",
+      "autosync": {
+        "status": "pass",
+        "run_id": 36097107166,
+        "source_file_count": 55,
+        "source_digest": "e4886d49f6be87640017fc4a0a120af6270c651b7e60209300587538c1cbf32f"
+      },
+      "modified_at": "2026-09-25T05:05:59.694Z"
+    }
+  },
+  "runtime": {
+    "written": {
+      "next_block_no": 2,
+      "next_set_offset": 1,
+      "next_stage": "STD-B002-S1",
+      "next_stage_status": "ready_to_patch"
+    },
+    "listening": {
+      "issue_no": 3,
+      "next_set_no": 4,
+      "status": "n5_audio_timing_staged"
+    },
+    "reading": {
+      "clock": 3
+    },
+    "translation": {
+      "clock": 3,
+      "last_action": "CORE:H3-20260922-T003"
+    },
+    "last_family": "translation",
+    "family_scheduler": {
+      "mode": "shadow",
+      "global_clock": 27
+    },
+    "authoring_queue_job_count": 0,
+    "monitor_observer": {
+      "status": "healthy",
+      "last_checked_at": "2026-09-24T16:50:45.586Z",
+      "source_count": 3,
+      "error_count": 0,
+      "action_required_count": 0
+    },
+    "protected_runtime_mutation": 0
+  },
+  "secondary_evidence": {
+    "committed_genuine_rows": 0,
+    "shadow_observation_rows": 0,
+    "k1_authority_rows": 0,
+    "rs13": {
+      "status": "await_real_data",
+      "closed": false,
+      "explicit_review_ready": false
+    },
+    "rs14": {
+      "active": false,
+      "preflight_gate_pass": false,
+      "distinct_events": {
+        "current": 0,
+        "required": 6
+      }
+    }
+  },
+  "monitoring": {
+    "production_trigger": "active_exact_one_hourly_h3MonitoringObserverEmailRun",
+    "legacy_tasks_paused": true,
+    "auto_semantic_authoring": false,
+    "auto_rs13_close": false,
+    "auto_rs14_activate": false,
+    "real_email_sent": 0
+  },
+  "semantic_final_audit": {
+    "status": "pass",
+    "mode": "read_only",
+    "closed_at": "2026-09-25T02:02:37+09:00",
+    "do_not_rerun": true
+  },
+  "uxr": {
+    "program_status": "group1_done_2a_awaiting_approval",
+    "group_count": 6,
+    "execution_step_count": 8,
+    "order": [
+      "UXR-1A",
+      "UXR-1B",
+      "UXR-2A",
+      "UXR-2B",
+      "UXR-3",
+      "UXR-4",
+      "UXR-5",
+      "UXR-6"
+    ],
+    "steps": {
+      "UXR-1A-SHARED-EXPLANATION-PREP": {
+        "status": "done",
+        "completed_at": "2026-09-25T13:42:24+09:00"
+      },
+      "UXR-1B-SHARED-EXPLANATION-IMPLEMENT-AUDIT": {
+        "status": "done",
+        "completed_at": "2026-09-25T14:22:34+09:00",
+        "pr": 270,
+        "main_sha": "6481114ab2eae095d83a8f189fbd4c5ba51373ce"
+      },
+      "UXR-2A-5W-REVIEW-CONTENT-PREP": {
+        "status": "ready_awaiting_user_approval"
+      },
+      "UXR-2B-5W-REVIEW-CONTENT-IMPLEMENT-AUDIT": {
+        "status": "pending"
+      },
+      "UXR-3-HOME-UX-REFINEMENT": {
+        "status": "pending"
+      },
+      "UXR-4-QUESTION-REVIEW-NAV-MEDIA": {
+        "status": "pending"
+      },
+      "UXR-5-QUESTION-DEEP-LINK": {
+        "status": "pending"
+      },
+      "UXR-6-RESPONSE-TIME-TELEMETRY-DESIGN": {
+        "status": "hold_design_last"
+      }
+    }
+  },
+  "canonical_sources": {
+    "quiz_rules": {
+      "drive_file_id": "1PLq6xV5EC09cts7H8X_sworbW6wHoJgo",
+      "version": "H3-WRITTEN-RENDER-20260923-V13"
+    },
+    "listening_render": {
+      "drive_file_id": "16iG5UOvw1nbX7oxbyza3BXVxt5GKQ8v8",
+      "version": "H3-LISTENING-RENDER-RULES-20260920-V24"
+    },
+    "listening_visual": {
+      "drive_file_id": "1I-vZkwpOWqlFVt4580X7u0WyX8qf9O00",
+      "version": "H3-LISTENING-VISUAL-RULES-20260920-V7"
+    }
+  },
+  "boundaries": {
+    "learner_history_rewrite": false,
+    "score_rewrite": false,
+    "review_rewrite": false,
+    "counter_pointer_change": false,
+    "secondary_concept_backfill": false,
+    "historical_secondary_backfill": false,
+    "existing_committed_rt_history_rewrite": false,
+    "scheduler_forcing_for_rs13_data": false,
+    "no_auto_stage_advance": true
+  },
+  "closed_programs": {
+    "codex53": {
+      "status": "done",
+      "final_main_sha": "2ceac4530351f5a6ddf955fed10ef7cce2213cdc",
+      "do_not_rerun": true
+    },
+    "s4_r4": {
+      "status": "done",
+      "do_not_rerun": true
+    }
+  },
+  "migration": {
+    "id": "STATE-MIGRATION-V1",
+    "from": "google_drive_three_current_txt",
+    "source_drive_file_ids": {
+      "work_plan": "1hExK-pquX5PP6udLp43ghd_PWalkKqUM",
+      "active_work": "15iSmGWMOyaTXWxsKrNrYAheUJ84xEG3M",
+      "infra_status": "1mVvKCqMdjKB8l6akShRsI8WR8Quhufjp"
+    },
+    "source_sha256": {
+      "work_plan": "b07dd4f322e2eeed98487a407e4f4c4d63fd5f00476390f830e3a2c7179aa073",
+      "active_work": "3193c5dd1476e5f41bc97168a2e64bd5bd762a86c74b4f9a3e53a4b06b0a1741",
+      "infra_status": "b123ef81291aba00a66c73afeffeba37957fce479761f4b283957c34a667c08f"
+    },
+    "drive_current_role_after_cutover": "deprecated_redirect_stub",
+    "source_drive_revision_ids": {
+      "work_plan": "0B0lp2sKB8QikTGpmSEh6T2dxUW1NOW9YSjQ3MDdMUlI2VWVzPQ",
+      "active_work": "0B0lp2sKB8QikUldGM25JOTA0MzMvUDRiUmcwMHBXNTlqVjZnPQ",
+      "infra_status": "0B0lp2sKB8QikekF4bEtsaFY0R3F4emtBWUw0c2wxVG5aSWxrPQ"
+    },
+    "legacy_preservation": "exact_pre_migration_bytes_preserved_in_google_drive_revision_history"
+  }
+}

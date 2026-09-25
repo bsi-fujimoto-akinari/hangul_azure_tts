@@ -10157,6 +10157,9 @@ jobs:
           code = Path('Code.js').read_text(encoding='utf-8')
           web = Path('WebApp.js').read_text(encoding='utf-8')
           core = Path('WebAppReviewCore.js').read_text(encoding='utf-8')
+          persistence = Path('WebAppReviewPersistence.js').read_text(encoding='utf-8')
+          surface_bridge = Path('WebAppSurfaceReviewBridge.js').read_text(encoding='utf-8')
+          architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
           index = Path('Index.html').read_text(encoding='utf-8')
           client = Path('Client.html').read_text(encoding='utf-8')
           style = Path('Stylesheet.html').read_text(encoding='utf-8')
@@ -10184,8 +10187,12 @@ jobs:
               "'LISTENING',\n        'WRITTEN',\n        'REVIEW'",
               'review_kind:\n      reviewKind',
               'legacy_review_id:\n      legacyReviewId',
-              'function h3WebAttachDisplayIdentity_(',
-              'payload.display_set_no',
+              'function h3WebAttachSurfaceSetNo_(',
+              'payload.surface_set_no',
+              'function h3WebAttachPostSubmitReviewSurface_(',
+              "'H3_REVIEW_HOME_INDEX_SYNC_V1'",
+              "'POSTSUBMIT_REVIEW_5L_SET_NO_MISMATCH'",
+              "'POSTSUBMIT_REVIEW_ISSUE_NO_MISMATCH'",
           ]:
               if token not in web:
                   raise SystemExit(
@@ -10291,6 +10298,41 @@ jobs:
                       forbidden
                   )
 
+          if web.count(
+              'h3WebAttachPostSubmitReviewSurface_('
+          ) != 5:
+              raise SystemExit(
+                  'UXR-5 post-submit Review surface projection must have one helper + four family calls.'
+              )
+
+          for source, label in [
+              (persistence, 'WebAppReviewPersistence.js'),
+              (surface_bridge, 'WebAppSurfaceReviewBridge.js'),
+          ]:
+              if 'surface_set_no' in source:
+                  raise SystemExit(
+                      'UXR-5 surface_set_no leaked into persistent Review authority: ' +
+                      label
+                  )
+
+          for token in [
+              'The common learner-Web projection for the displayed set number is `surface_set_no`.',
+              '`5L -> LISTENING_SET_NO`',
+              '`5W -> review_home_index_v1.SET_NO`',
+              '`READING -> issue_no`',
+              '`TRANSLATION -> issue_no`',
+              'never persisted into canonical Review JSON or hash/binding authority',
+          ]:
+              if token not in architecture:
+                  raise SystemExit(
+                      f'UXR-5 surface_set_no architecture contract missing: {token}'
+                  )
+
+          if 'display_set_no' in web or 'display_set_no' in client:
+              raise SystemExit(
+                  'UXR-5 obsolete display_set_no projection remains.'
+              )
+
           for token in [
               '.surface-sticky {',
               '.surface-title-row {',
@@ -10326,10 +10368,30 @@ jobs:
             h3SystemTestSetIdAllowed_: value =>
               value ===
               'SYSTEM_TEST-H3-L5E2E-R3-06-20260919-01',
+            H3_WEB_RUNTIME_SPREADSHEET_ID:
+              'RUNTIME',
             SpreadsheetApp: {
               openById: () => ({})
             },
-            h3ReviewCurrentLearning_: () => null
+            h3ReviewCurrentLearning_: () => null,
+            h3ReviewSurfaceMetadata_:
+              (kind, family, level) => ({
+                learning_surface_schema:
+                  'H3_LEARNING_SURFACE_V1',
+                provider_kind: String(kind || ''),
+                surface_family: String(family || ''),
+                level: String(level || '')
+              }),
+            h3ReviewHomeIndexTable_: () => ({
+              map: {SET_NO: 0},
+              rows: []
+            }),
+            h3ReviewHomeIndexFind_:
+              (_table, _kind, setId) =>
+                setId === 'W-OLD'
+                  ? {row: [9]}
+                  : null,
+            h3ReviewHomeIndexNextSetNo_: () => 8
           });
 
           vm.runInContext(source, ctx, {
@@ -10441,8 +10503,225 @@ jobs:
             }
           }
 
+          const projectSurface = payload =>
+            vm.runInContext(
+              'h3WebAttachSurfaceSetNo_(' +
+                JSON.stringify(payload) +
+              ')',
+              ctx
+            );
+
+          const projected = [
+            [
+              {
+                mode:'LISTENING',
+                provider_kind:'LISTENING',
+                surface_family:'5L',
+                set_id:'L-12',
+                listening_set_no:12
+              },
+              12
+            ],
+            [
+              {
+                mode:'WRITTEN',
+                provider_kind:'WRITTEN',
+                surface_family:'5W',
+                set_id:'W-NEW'
+              },
+              8
+            ],
+            [
+              {
+                mode:'REVIEW',
+                kind:'WRITTEN',
+                surface_family:'5W',
+                set_id:'W-OLD'
+              },
+              9
+            ],
+            [
+              {
+                mode:'WRITTEN',
+                provider_kind:'WRITTEN',
+                surface_family:'READING',
+                set_id:'R-3',
+                issue_no:3
+              },
+              3
+            ],
+            [
+              {
+                mode:'WRITTEN',
+                provider_kind:'WRITTEN',
+                surface_family:'TRANSLATION',
+                set_id:'T-2',
+                issue_no:2
+              },
+              2
+            ]
+          ];
+
+          for (const [payload, expected] of projected) {
+            const actual = projectSurface(payload);
+            if (actual.surface_set_no !== expected) {
+              throw new Error(
+                'UXR-5 surface_set_no projection mismatch: ' +
+                JSON.stringify({payload, expected, actual})
+              );
+            }
+          }
+
+          const attachPostSubmit = (payload, sync) =>
+            vm.runInContext(
+              'h3WebAttachPostSubmitReviewSurface_(' +
+                JSON.stringify(payload) + ',' +
+                JSON.stringify(sync) +
+              ')',
+              ctx
+            );
+
+          const postSubmitCases = [
+            {
+              payload:{
+                mode:'REVIEW',
+                set_id:'L-12',
+                listening_set_no:12
+              },
+              sync:{
+                schema:'H3_REVIEW_HOME_INDEX_SYNC_V1',
+                status:'PASS',
+                kind:'LISTENING',
+                surface_family:'5L',
+                level:'3級',
+                set_id:'L-12',
+                set_no:12
+              },
+              family:'5L',
+              kind:'LISTENING',
+              setNo:12
+            },
+            {
+              payload:{
+                mode:'REVIEW',
+                kind:'WRITTEN',
+                set_id:'W-8'
+              },
+              sync:{
+                schema:'H3_REVIEW_HOME_INDEX_SYNC_V1',
+                status:'PASS',
+                kind:'WRITTEN',
+                surface_family:'5W',
+                level:'3級',
+                set_id:'W-8',
+                set_no:8
+              },
+              family:'5W',
+              kind:'WRITTEN',
+              setNo:8
+            },
+            {
+              payload:{
+                mode:'REVIEW',
+                kind:'WRITTEN',
+                provider_kind:'WRITTEN',
+                surface_family:'READING',
+                level:'3級',
+                set_id:'R-3',
+                issue_no:3
+              },
+              sync:{
+                schema:'H3_REVIEW_HOME_INDEX_SYNC_V1',
+                status:'PASS',
+                kind:'WRITTEN',
+                surface_family:'READING',
+                level:'3級',
+                set_id:'R-3',
+                set_no:3
+              },
+              family:'READING',
+              kind:'WRITTEN',
+              setNo:3
+            },
+            {
+              payload:{
+                mode:'REVIEW',
+                kind:'WRITTEN',
+                provider_kind:'WRITTEN',
+                surface_family:'TRANSLATION',
+                level:'3級',
+                set_id:'T-2',
+                issue_no:2
+              },
+              sync:{
+                schema:'H3_REVIEW_HOME_INDEX_SYNC_V1',
+                status:'PASS',
+                kind:'WRITTEN',
+                surface_family:'TRANSLATION',
+                level:'3級',
+                set_id:'T-2',
+                set_no:2
+              },
+              family:'TRANSLATION',
+              kind:'WRITTEN',
+              setNo:2
+            }
+          ];
+
+          for (const test of postSubmitCases) {
+            const actual =
+              attachPostSubmit(
+                test.payload,
+                test.sync
+              );
+            if (
+              actual.kind !== test.kind ||
+              actual.provider_kind !== test.kind ||
+              actual.surface_family !== test.family ||
+              actual.surface_set_no !== test.setNo ||
+              actual.learning_surface_schema !==
+                'H3_LEARNING_SURFACE_V1'
+            ) {
+              throw new Error(
+                'UXR-5 post-submit Review projection mismatch: ' +
+                JSON.stringify({test, actual})
+              );
+            }
+          }
+
+          let mismatchRejected = false;
+          try {
+            attachPostSubmit(
+              {
+                mode:'REVIEW',
+                set_id:'L-12',
+                listening_set_no:13
+              },
+              {
+                schema:'H3_REVIEW_HOME_INDEX_SYNC_V1',
+                status:'PASS',
+                kind:'LISTENING',
+                surface_family:'5L',
+                level:'3級',
+                set_id:'L-12',
+                set_no:12
+              }
+            );
+          } catch (err) {
+            mismatchRejected =
+              String(err && err.message || err)
+                .includes(
+                  'POSTSUBMIT_REVIEW_5L_SET_NO_MISMATCH'
+                );
+          }
+          if (!mismatchRejected) {
+            throw new Error(
+              'UXR-5 post-submit authority mismatch did not fail closed.'
+            );
+          }
+
           console.log(
-            'UXR-5 Review permalink boot audit: PASS'
+            'UXR-5 Review permalink/surface projection audit: PASS'
           );
           NODE
 

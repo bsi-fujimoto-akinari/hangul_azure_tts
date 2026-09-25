@@ -4480,6 +4480,8 @@ function h3ReviewResolvePermalinkRequest_(
     request.mode !== 'REVIEW' ||
     !request.set_id ||
     !request.review_kind ||
+    request.q_no === null ||
+    request.q_no === undefined ||
     request.txn_id ||
     request.legacy_review_id ||
     request.materialized_record

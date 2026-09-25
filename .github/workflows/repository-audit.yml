@@ -49,7 +49,6 @@ jobs:
               'WebApp.js',
               'WebAppObservability.js',
               'WebAppLiveSmoke.js',
-              'WebAppIncidentRecovery20260925.js',
               'WebAppFixture.js',
               'WebAppProduction.js',
               'WebAppTransactionCommon.js',
@@ -314,7 +313,6 @@ jobs:
                   ))
 
           binding_refs = 0
-          recovery_refs = 0
           automatic_refs = 0
           manual_refs = 0
 
@@ -355,18 +353,6 @@ jobs:
                           'Observability source binding must be gated by '
                           'source_binding_boundary ready=true.'
                       )
-                  continue
-
-              if 'h3RecoverWrittenIncident20260925' in line:
-                  recovery_refs += 1
-                  rb=contents.find('Validate bounded Written incident recovery boundary')
-                  if recovery_refs>1 or not (
-                      binding_boundary_pos<rb<pos<automatic_boundary_pos
-                  ):
-                      raise SystemExit('Bounded Written recovery boundary invalid.')
-                  prefix=contents[max(rb,pos-1200):pos]
-                  if "if: steps.written_recovery_boundary.outputs.ready == 'true'" not in prefix:
-                      raise SystemExit('Bounded Written recovery gate missing.')
                   continue
 
               if 'h3AutomaticLiveSmoke' in line:

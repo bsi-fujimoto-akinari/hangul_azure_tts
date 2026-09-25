@@ -6253,6 +6253,32 @@ function h3MonitoringObserverEmailRun() {
     var notification=h3MonitoringNotificationProcessUnlocked_(
       ss,snapshot,nowMs
     );
+    try {
+      if (
+        typeof h3ObservabilityPruneRuntimeErrorsUnlocked_ ===
+          'function'
+      ) {
+        h3ObservabilityPruneRuntimeErrorsUnlocked_(
+          ss,
+          nowMs
+        );
+      }
+    } catch (observabilityPruneError) {
+      try {
+        console.error(
+          JSON.stringify({
+            schema:
+              'H3_WEB_RUNTIME_ERROR_PRUNE_FAILURE_V1',
+            error:
+              String(
+                observabilityPruneError &&
+                observabilityPruneError.message ||
+                observabilityPruneError
+              ).slice(0, 1000)
+          })
+        );
+      } catch (_observabilityPruneConsoleError) {}
+    }
     return {
       schema:'H3_MONITOR_OBSERVER_EMAIL_RUN_V1',
       status:String(notification.status||''),

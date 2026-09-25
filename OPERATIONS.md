@@ -200,7 +200,83 @@ CODE_CHANGE_PHASE_COUNT=4
 CROSS_CHAT_HANDOFF=EXCEPTION_ONLY
 LEGACY_CODE_CHANGE_CONTRACT=H3_CODE_CHANGE_4CHAT_HANDOFF_V1
 LEGACY_CODE_CHANGE_CONTRACT_STATUS=SUPERSEDED_COMPATIBILITY_ONLY
+ACTIVE_REPO_ACCESS_FASTPATH_CONTRACT=H3_REPO_ACCESS_FASTPATH_V1
 ```
+
+### 2.3 Repository access fast path
+
+Contract: `H3_REPO_ACCESS_FASTPATH_V1`.
+
+The objective is to minimize repository/connector round trips without weakening exact-SHA, CI, source-attestation, smoke, or canonical-state guarantees.
+
+#### Initial authority read
+
+For a repo-dependent operation, read independent authorities in one parallel tool turn whenever available:
+
+```text
+application main HEAD
++ state main HEAD
++ current.json
++ current.schema.json
++ only the known canonical files needed by the current phase
+```
+
+Do not list or search a repository merely to rediscover a known canonical path. Prefer exact-path fetches when the path is known. Repository/code search is for unknown locations, not a prerequisite to known-file access.
+
+#### Immutable-SHA reuse
+
+Within one phase, an exact immutable commit SHA and file blob read from that SHA may be reused until a mutation/merge boundary that can invalidate it. Do not repeatedly re-fetch the same immutable file or schema merely for reconfirmation.
+
+Fresh-read mutable authority when required by a decision boundary, including:
+
+- before creating a branch from `main`;
+- before merge, to verify PR head/mergeability and current `main`;
+- after merge, to capture the exact new `main` SHA;
+- before a state write, to verify current state-main/current preconditions;
+- when resuming in another Chat or after an external dependency may have changed.
+
+#### Workflow aggregation
+
+After a merge, query workflow runs by the exact `head_sha` as one aggregate read per polling cycle. Evaluate all same-SHA audit conclusions from that aggregate result.
+
+Do not poll each successful workflow run individually. Fetch a job or job log only when:
+
+- a workflow failed or is unexpectedly skipped/cancelled;
+- exact evidence not present in the aggregate run metadata is required, such as Apps Script source digest/source-attestation/live-smoke output;
+- a recovery/diagnostic operation explicitly requires step-level evidence.
+
+The Apps Script `workflow_run` may appear after Repository audit completion; poll for that dependent run as one aggregate query rather than opening unrelated completed runs.
+
+#### Repository audit impact selection
+
+`.github/workflows/repository-audit.yml` computes the changed-file set once near the start of the job.
+
+Normal pull-request/push audits skip a feature audit step when none of the tracked files explicitly consumed by that step changed. The audit workflow itself is fail-safe:
+
+- a change to `.github/workflows/repository-audit.yml` forces `full=true` and runs the complete audit suite;
+- `workflow_dispatch` runs the complete audit suite;
+- inability to determine the changed-file set runs the complete audit suite;
+- tracked-file allowlist and credential/secret protections remain unconditional;
+- impact selection controls execution cost only; it must never change the semantics of an audit that does run.
+
+#### State transaction fast path
+
+A canonical state transaction reads state-main, `current.json`, `current.schema.json`, and required audit material in one parallel turn. If the schema blob is unchanged during that same indivisible state transaction, reuse it for validation.
+
+After commit, read back `current.json`, audit tail, state-main SHA, and commit identity in one parallel turn.
+
+PHASE-4 must write the already verified exact application-main/audit/Apps-Script evidence into `current.json.application_repository` before closing the work. Do not intentionally defer this synchronization to a later reconciliation task.
+
+#### Fast-path prohibitions
+
+Speed optimization must not:
+
+- replace an exact immutable SHA with a moving branch ref where exact identity is required;
+- skip a required fresh read across a mutation/merge boundary;
+- infer a workflow result that has not completed;
+- suppress failure logs needed for diagnosis;
+- relax Repository audit, Apps Script source-attestation, automatic live-smoke, or protected-runtime checks;
+- use cached Chat context as canonical authority.
 
 ## 3. Repository and Apps Script synchronization
 

@@ -498,6 +498,119 @@ jobs:
           )
           PY
 
+      - name: Validate bounded Written incident recovery boundary
+        id: written_recovery_boundary
+        if: steps.source_attestation.outputs.attested == 'true' && steps.source_binding_boundary.outputs.ready == 'true' && steps.auth.outputs.ready == 'true'
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "workflow_run" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${{ github.event.workflow_run.head_sha }}" != "$SOURCE_SHA" ] || \
+             [ "${{ github.event.workflow_run.event }}" != "push" ] || \
+             [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+            echo "::error::Written incident recovery trigger is not the successful exact-SHA Repository audit push run."
+            exit 1
+          fi
+          if [ ! -f WebAppIncidentRecovery20260925.js ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+
+          text = Path('WebAppIncidentRecovery20260925.js').read_text(encoding='utf-8')
+          required = [
+              "function h3RecoverWrittenIncident20260925()",
+              "'H3-20260925-01'",
+              "'H3TX-20260925-000001'",
+              "'STD-B002-S1'",
+              "h3FsWrittenGenerationInsert_(",
+              "h3WrittenAnswerSync_(",
+              "h3WrittenProductionReviewEnsure_(",
+              "h3ReviewHomeIndexUpsertAfterCommit_(",
+              "h3FamilySchedulerObserveAfterCommit_(",
+          ]
+          missing = [token for token in required if token not in text]
+          if missing:
+              raise SystemExit(
+                  'Bounded Written recovery source invariant missing: '
+                  + ', '.join(missing)
+              )
+          PY
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Execute bounded Written incident recovery
+        id: written_recovery
+        if: steps.written_recovery_boundary.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=/tmp/h3-written-recovery.out
+          err=/tmp/h3-written-recovery.err
+
+          set +e
+          npx -y @google/clasp@3.4.0 --json run-function h3RecoverWrittenIncident20260925 >"$out" 2>"$err"
+          status=$?
+          set -e
+
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Bounded Written incident recovery execution failed."
+            cat "$err"
+            cat "$out"
+            exit "$status"
+          fi
+
+          python3 - "$out" <<'PY'
+          import json
+          import sys
+
+          envelope = json.loads(open(sys.argv[1], encoding='utf-8').read())
+          if envelope.get('error'):
+              raise SystemExit(
+                  'Bounded Written recovery returned an Apps Script error envelope.'
+              )
+
+          result = envelope.get('response')
+          if not isinstance(result, dict):
+              raise SystemExit(
+                  'Bounded Written recovery response is not an object.'
+              )
+
+          expected_schema = 'H3_WRITTEN_INCIDENT_RECOVERY_20260925_V1'
+          if result.get('schema') != expected_schema:
+              raise SystemExit(
+                  f"Unexpected recovery schema: {result.get('schema')!r}"
+              )
+          if result.get('status') not in {
+              'PASS',
+              'PASS_WITH_KNOWN_5L_BLOCKER',
+          }:
+              raise SystemExit(
+                  f"Recovery status is not accepted: {result.get('status')!r}"
+              )
+          if result.get('set_id') != 'H3-20260925-01':
+              raise SystemExit('Recovery SET_ID mismatch.')
+          if result.get('txn_id') != 'H3TX-20260925-000001':
+              raise SystemExit('Recovery TXN_ID mismatch.')
+          if result.get('recovery_complete') is not True:
+              raise SystemExit('Recovery did not attest completion.')
+          if int(result.get('history_global_clock') or 0) != 28:
+              raise SystemExit(
+                  'Recovered global history clock is not 28.'
+              )
+
+          print(
+              'Bounded Written recovery PASS: '
+              + json.dumps(result, ensure_ascii=False, sort_keys=True)
+          )
+          PY
+          echo "status=pass" >> "$GITHUB_OUTPUT"
+
       - name: Validate automatic read-only live smoke boundary
         id: automatic_smoke_boundary
         if: steps.automatic_smoke_plan.outputs.requested == 'true' && steps.source_attestation.outputs.attested == 'true' && steps.source_binding_boundary.outputs.ready == 'true' && steps.auth.outputs.ready == 'true'

@@ -9929,6 +9929,154 @@ jobs:
           );
           NODE
 
+      - name: Audit UXR-4 question Review navigation media
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          client = Path('Client.html').read_text(encoding='utf-8')
+          style = Path('Stylesheet.html').read_text(encoding='utf-8')
+          listening = Path('WebAppProductionRender.js').read_text(encoding='utf-8')
+          written = Path('WebAppWrittenProduction.js').read_text(encoding='utf-8')
+          reading = Path('WebAppReadingPilot.js').read_text(encoding='utf-8')
+          translation = Path('WebAppTranslationV2.js').read_text(encoding='utf-8')
+
+          required_client = [
+              'function authoritativeQuestionOrdinal_(',
+              'function reviewQuestionOrdinal_(',
+              'button.dataset.questionOrdinal',
+              'buildMobileProgress(\n          payload.questions\n        );',
+              'function audioItemsForPayload_()',
+              'app.payload.questions',
+              'app.payload.sections',
+              'function scheduleInitialAudioPrefetch()',
+              'scheduleInitialAudioPrefetch();',
+              'question.q_no',
+          ]
+          for token in required_client:
+              if token not in client:
+                  raise SystemExit(
+                      f'UXR-4 client contract missing: {token}'
+                  )
+
+          set_active_start = client.index(
+              'function setActiveIndex('
+          )
+          set_active_end = client.index(
+              'function syncResponsiveState()',
+              set_active_start,
+          )
+          if 'scrollIntoView' not in client[
+              set_active_start:set_active_end
+          ]:
+              raise SystemExit(
+                  'UXR-4 must preserve learning-screen navigation scroll.'
+              )
+
+          review_start = client.index(
+              'function setReviewPage('
+          )
+          review_end = client.index(
+              'function writtenReviewDisplayLabel_(',
+              review_start,
+          )
+          if 'scrollIntoView' in client[
+              review_start:review_end
+          ]:
+              raise SystemExit(
+                  'UXR-4 Review paging must not auto-scroll.'
+              )
+
+          prefetch_start = client.index(
+              'function scheduleInitialAudioPrefetch()'
+          )
+          prefetch_end = client.index(
+              'function ensureAudioLoaded(',
+              prefetch_start,
+          )
+          prefetch = client[
+              prefetch_start:prefetch_end
+          ]
+          if 'keys.forEach(' not in prefetch:
+              raise SystemExit(
+                  'UXR-4 all-question audio prefetch loop missing.'
+              )
+          if 'keys[1]' in prefetch:
+              raise SystemExit(
+                  'UXR-4 old mobile two-question prefetch cap remains.'
+              )
+
+          mobile_style_start = style.index(
+              '.mobile-progress {',
+              style.index('@media (max-width: 619px)')
+          )
+          mobile_style_end = style.index(
+              '}',
+              mobile_style_start,
+          )
+          if 'position: sticky' not in style[
+              mobile_style_start:mobile_style_end
+          ]:
+              raise SystemExit(
+                  'UXR-4 mobile Q navigation is not sticky.'
+              )
+
+          review_style_start = style.index(
+              '.review-progress {'
+          )
+          review_style_end = style.index(
+              '}',
+              review_style_start,
+          )
+          if 'position: sticky' not in style[
+              review_style_start:review_style_end
+          ]:
+              raise SystemExit(
+                  'UXR-4 Review Q navigation is not sticky.'
+              )
+
+          for source, tokens, label in [
+              (
+                  listening,
+                  [
+                      'function (section, index)',
+                      'q_no:\n          index + 1',
+                  ],
+                  'Listening',
+              ),
+              (
+                  written,
+                  [
+                      'Number(q.q) !== i + 1',
+                      'q_no:\n          Number(q.q)',
+                  ],
+                  'Written',
+              ),
+              (
+                  reading,
+                  [
+                      'q_no:\n            item.q_no',
+                  ],
+                  'Reading',
+              ),
+              (
+                  translation,
+                  [
+                      'q_no:index+1',
+                  ],
+                  'Translation',
+              ),
+          ]:
+              for token in tokens:
+                  if token not in source:
+                      raise SystemExit(
+                          f'UXR-4 {label} authoritative ordinal missing: {token}'
+                      )
+
+          print('UXR-4 question/Review navigation/media audit: PASS')
+          PY
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

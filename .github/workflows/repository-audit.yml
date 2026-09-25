@@ -329,8 +329,9 @@ jobs:
 
           for token in [
               "'H3_WEB_RUNTIME_CLIENT_ERROR_V1'",
-              "window.addEventListener(\n    'error'",
-              "window.addEventListener(\n    'unhandledrejection'",
+              'window.addEventListener(',
+              "'error'",
+              "'unhandledrejection'",
               '.reportWebRuntimeClientError(',
           ]:
               if token not in client:

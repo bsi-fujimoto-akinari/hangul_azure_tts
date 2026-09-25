@@ -22,6 +22,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect repository audit impact
+        shell: bash
+        env:
+          EVENT_NAME: "${{ github.event_name }}"
+          PUSH_BEFORE: "${{ github.event.before }}"
+          PULL_BASE: "${{ github.event.pull_request.base.sha }}"
+          PULL_HEAD: "${{ github.event.pull_request.head.sha }}"
+        run: |
+          python3 .github/scripts/repository_audit_impact.py detect
 
       - name: Verify tracked-file allowlist
         shell: bash
@@ -119,6 +131,7 @@ jobs:
               'OPERATIONS.md',
               'RECOVERY.md',
               '.github/workflows/repository-audit.yml',
+              '.github/scripts/repository_audit_impact.py',
               '.github/workflows/apps-script-auto-sync.yml',
               '.github/workflows/rs10-soft-signal-audit.yml',
               '.github/workflows/rs12-prospective-evidence-audit.yml',
@@ -155,6 +168,7 @@ jobs:
       - name: Audit canonical four-Phase code-change workflow contract
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Audit canonical four-Phase code-change workflow contract')" != "SKIP" ] || { echo "Impact-skip: Audit canonical four-Phase code-change workflow contract"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -218,9 +232,15 @@ jobs:
           print('Canonical four-Phase one-Chat-default code-change workflow: PASS')
           PY
 
+      - name: Audit repository access fast-path contract
+        shell: bash
+        run: |
+          python3 .github/scripts/repository_audit_impact.py validate
+
       - name: Verify credentialed Apps Script execution boundaries
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Verify credentialed Apps Script execution boundaries')" != "SKIP" ] || { echo "Impact-skip: Verify credentialed Apps Script execution boundaries"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
           import re
@@ -389,6 +409,7 @@ jobs:
       - name: Audit automatic read-only live smoke contract
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Audit automatic read-only live smoke contract')" != "SKIP" ] || { echo "Impact-skip: Audit automatic read-only live smoke contract"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -479,6 +500,7 @@ jobs:
       - name: Audit structured Web runtime observability contract
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Audit structured Web runtime observability contract')" != "SKIP" ] || { echo "Impact-skip: Audit structured Web runtime observability contract"; exit 0; }
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -631,6 +653,7 @@ jobs:
       - name: Verify gitignore protections
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Verify gitignore protections')" != "SKIP" ] || { echo "Impact-skip: Verify gitignore protections"; exit 0; }
           python3 - <<'PY'
           import pathlib
           import sys
@@ -651,6 +674,7 @@ jobs:
       - name: Verify clasp target
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Verify clasp target')" != "SKIP" ] || { echo "Impact-skip: Verify clasp target"; exit 0; }
           python3 - <<'PY'
           import json
           import pathlib
@@ -675,6 +699,7 @@ jobs:
       - name: Verify Apps Script manifest policy
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Verify Apps Script manifest policy')" != "SKIP" ] || { echo "Impact-skip: Verify Apps Script manifest policy"; exit 0; }
           python3 - <<'PY'
           import json
           import pathlib
@@ -707,6 +732,7 @@ jobs:
       - name: Check SYSTEM_TEST transaction isolation
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check SYSTEM_TEST transaction isolation')" != "SKIP" ] || { echo "Impact-skip: Check SYSTEM_TEST transaction isolation"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -783,6 +809,7 @@ jobs:
       - name: Check production transaction and scheduler contract
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check production transaction and scheduler contract')" != "SKIP" ] || { echo "Impact-skip: Check production transaction and scheduler contract"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -962,6 +989,7 @@ jobs:
       - name: Check Web receipt and targeted dispatch
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check Web receipt and targeted dispatch')" != "SKIP" ] || { echo "Impact-skip: Check Web receipt and targeted dispatch"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -1062,6 +1090,7 @@ jobs:
       - name: Check production rendering and source-lock
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check production rendering and source-lock')" != "SKIP" ] || { echo "Impact-skip: Check production rendering and source-lock"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -1172,6 +1201,7 @@ jobs:
       - name: Check audio storage slim-down invariants
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check audio storage slim-down invariants')" != "SKIP" ] || { echo "Impact-skip: Check audio storage slim-down invariants"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
           code = Path('Code.js').read_text(encoding='utf-8')
@@ -1215,6 +1245,7 @@ jobs:
       - name: Check allowlisted SYSTEM_TEST fixture
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check allowlisted SYSTEM_TEST fixture')" != "SKIP" ] || { echo "Impact-skip: Check allowlisted SYSTEM_TEST fixture"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -1273,6 +1304,7 @@ jobs:
       - name: Check production preissue gate
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check production preissue gate')" != "SKIP" ] || { echo "Impact-skip: Check production preissue gate"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -1327,6 +1359,7 @@ jobs:
       - name: Check normal-live production gate
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check normal-live production gate')" != "SKIP" ] || { echo "Impact-skip: Check normal-live production gate"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -1380,6 +1413,7 @@ jobs:
       - name: Check production client mode routing
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check production client mode routing')" != "SKIP" ] || { echo "Impact-skip: Check production client mode routing"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -1413,6 +1447,7 @@ jobs:
       - name: Check transaction provenance binder
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check transaction provenance binder')" != "SKIP" ] || { echo "Impact-skip: Check transaction provenance binder"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -1470,6 +1505,7 @@ jobs:
       - name: Check persistent Review storage and source-lock
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check persistent Review storage and source-lock')" != "SKIP" ] || { echo "Impact-skip: Check persistent Review storage and source-lock"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -1551,6 +1587,7 @@ jobs:
       - name: Check Review HOME core extraction parity
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check Review HOME core extraction parity')" != "SKIP" ] || { echo "Impact-skip: Check Review HOME core extraction parity"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -2236,6 +2273,7 @@ jobs:
       - name: Check Written Review projection and provider routing
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check Written Review projection and provider routing')" != "SKIP" ] || { echo "Impact-skip: Check Written Review projection and provider routing"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -2554,6 +2592,7 @@ jobs:
       - name: Check production Written persistent Review loader
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check production Written persistent Review loader')" != "SKIP" ] || { echo "Impact-skip: Check production Written persistent Review loader"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -2860,6 +2899,7 @@ jobs:
       - name: Check production Written HOME and Review UI
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check production Written HOME and Review UI')" != "SKIP" ] || { echo "Impact-skip: Check production Written HOME and Review UI"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -3136,6 +3176,7 @@ jobs:
       - name: Check persistent Review routes and Web UI
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check persistent Review routes and Web UI')" != "SKIP" ] || { echo "Impact-skip: Check persistent Review routes and Web UI"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -3306,6 +3347,7 @@ jobs:
       - name: Check Review history index isolation
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check Review history index isolation')" != "SKIP" ] || { echo "Impact-skip: Check Review history index isolation"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -3363,6 +3405,7 @@ jobs:
       - name: Check UTF-8 Review hashing
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check UTF-8 Review hashing')" != "SKIP" ] || { echo "Impact-skip: Check UTF-8 Review hashing"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -3428,6 +3471,7 @@ jobs:
       - name: Check REVIEW_REPLAY retirement contract
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check REVIEW_REPLAY retirement contract')" != "SKIP" ] || { echo "Impact-skip: Check REVIEW_REPLAY retirement contract"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -3499,6 +3543,7 @@ jobs:
       - name: Check current Review learner UI
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check current Review learner UI')" != "SKIP" ] || { echo "Impact-skip: Check current Review learner UI"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -3975,6 +4020,7 @@ jobs:
       - name: Check Written 5W explanation overlay boundary
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check Written 5W explanation overlay boundary')" != "SKIP" ] || { echo "Impact-skip: Check Written 5W explanation overlay boundary"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -4211,6 +4257,7 @@ jobs:
       - name: Check Written 5W ANSWERED_AT backfill boundary
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check Written 5W ANSWERED_AT backfill boundary')" != "SKIP" ] || { echo "Impact-skip: Check Written 5W ANSWERED_AT backfill boundary"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -4346,6 +4393,7 @@ jobs:
       - name: Check scheduler overload V3 behavior
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check scheduler overload V3 behavior')" != "SKIP" ] || { echo "Impact-skip: Check scheduler overload V3 behavior"; exit 0; }
           node <<'NODE'
           const fs = require('fs');
           const vm = require('vm');
@@ -4443,6 +4491,7 @@ jobs:
       - name: Check learner URL authority
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check learner URL authority')" != "SKIP" ] || { echo "Impact-skip: Check learner URL authority"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -4739,6 +4788,7 @@ jobs:
       - name: Check parameterless direct boot
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check parameterless direct boot')" != "SKIP" ] || { echo "Impact-skip: Check parameterless direct boot"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -4860,6 +4910,7 @@ jobs:
       - name: Check Listening audio reliability V21
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check Listening audio reliability V21')" != "SKIP" ] || { echo "Impact-skip: Check Listening audio reliability V21"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -4984,6 +5035,7 @@ jobs:
       - name: Check official Listening audio parity V21
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check official Listening audio parity V21')" != "SKIP" ] || { echo "Impact-skip: Check official Listening audio parity V21"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -5157,6 +5209,7 @@ jobs:
       - name: Check durable legacy Review compatibility
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check durable legacy Review compatibility')" != "SKIP" ] || { echo "Impact-skip: Check durable legacy Review compatibility"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
           import re
@@ -5288,6 +5341,7 @@ jobs:
       - name: Check minimal learner-facing Chat output contract
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check minimal learner-facing Chat output contract')" != "SKIP" ] || { echo "Impact-skip: Check minimal learner-facing Chat output contract"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -5339,6 +5393,7 @@ jobs:
       - name: Check 5L audio set fast path
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check 5L audio set fast path')" != "SKIP" ] || { echo "Impact-skip: Check 5L audio set fast path"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -5835,6 +5890,7 @@ jobs:
       - name: Check H3 normal hot-path invariants
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check H3 normal hot-path invariants')" != "SKIP" ] || { echo "Impact-skip: Check H3 normal hot-path invariants"; exit 0; }
           python3 - <<'PY'
           import re
           from pathlib import Path
@@ -5952,6 +6008,7 @@ jobs:
       - name: Check production 5W current-learning render
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check production 5W current-learning render')" != "SKIP" ] || { echo "Impact-skip: Check production 5W current-learning render"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -6308,6 +6365,7 @@ jobs:
       - name: Check production 5W Web transaction D3
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check production 5W Web transaction D3')" != "SKIP" ] || { echo "Impact-skip: Check production 5W Web transaction D3"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
           import re
@@ -6679,6 +6737,7 @@ jobs:
       - name: Check 5W Answer Sync production
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check 5W Answer Sync production')" != "SKIP" ] || { echo "Impact-skip: Check 5W Answer Sync production"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -7019,6 +7078,7 @@ jobs:
       - name: Check Listening audio source attestation
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check Listening audio source attestation')" != "SKIP" ] || { echo "Impact-skip: Check Listening audio source attestation"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -7203,6 +7263,7 @@ jobs:
       - name: Check Listening backend orchestrator
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check Listening backend orchestrator')" != "SKIP" ] || { echo "Impact-skip: Check Listening backend orchestrator"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -7472,6 +7533,7 @@ jobs:
       - name: Check staged P8 Reading pilot
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check staged P8 Reading pilot')" != "SKIP" ] || { echo "Impact-skip: Check staged P8 Reading pilot"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -7841,6 +7903,7 @@ jobs:
       - name: Check staged P11/P12 Translation pilot
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check staged P11/P12 Translation pilot')" != "SKIP" ] || { echo "Impact-skip: Check staged P11/P12 Translation pilot"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -8164,6 +8227,7 @@ jobs:
       - name: Check F1 Reading Translation Review bridge
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check F1 Reading Translation Review bridge')" != "SKIP" ] || { echo "Impact-skip: Check F1 Reading Translation Review bridge"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -8309,6 +8373,7 @@ jobs:
       - name: Check independent level runtime boundary
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check independent level runtime boundary')" != "SKIP" ] || { echo "Impact-skip: Check independent level runtime boundary"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -8411,6 +8476,7 @@ jobs:
       - name: Check source-bound 準2級 taxonomy master
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check source-bound 準2級 taxonomy master')" != "SKIP" ] || { echo "Impact-skip: Check source-bound 準2級 taxonomy master"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -8518,6 +8584,7 @@ jobs:
       - name: Check source-bound 2026 new-format registry
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check source-bound 2026 new-format registry')" != "SKIP" ] || { echo "Impact-skip: Check source-bound 2026 new-format registry"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -8629,6 +8696,7 @@ jobs:
       - name: Check 3級 NEWFMT written runtime
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check 3級 NEWFMT written runtime')" != "SKIP" ] || { echo "Impact-skip: Check 3級 NEWFMT written runtime"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -8731,6 +8799,7 @@ jobs:
       - name: Audit E5-B Review audio binding contract
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Audit E5-B Review audio binding contract')" != "SKIP" ] || { echo "Impact-skip: Audit E5-B Review audio binding contract"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -8974,6 +9043,7 @@ jobs:
       - name: Audit E5-C 5W Review audio embedding
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Audit E5-C 5W Review audio embedding')" != "SKIP" ] || { echo "Impact-skip: Audit E5-C 5W Review audio embedding"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -9196,6 +9266,7 @@ jobs:
       - name: Audit E5-D 2R Review audio embedding
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Audit E5-D 2R Review audio embedding')" != "SKIP" ] || { echo "Impact-skip: Audit E5-D 2R Review audio embedding"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -9423,6 +9494,7 @@ jobs:
       - name: Audit E5-E 2T Review audio embedding
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Audit E5-E 2T Review audio embedding')" != "SKIP" ] || { echo "Impact-skip: Audit E5-E 2T Review audio embedding"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -9639,6 +9711,7 @@ jobs:
       - name: Audit T003 body_ja register parity
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Audit T003 body_ja register parity')" != "SKIP" ] || { echo "Impact-skip: Audit T003 body_ja register parity"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -9670,6 +9743,7 @@ jobs:
       - name: Audit learner-facing Japanese quality corrections
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Audit learner-facing Japanese quality corrections')" != "SKIP" ] || { echo "Impact-skip: Audit learner-facing Japanese quality corrections"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -9895,6 +9969,7 @@ jobs:
       - name: Audit D6 Japanese dialogue presentation
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Audit D6 Japanese dialogue presentation')" != "SKIP" ] || { echo "Impact-skip: Audit D6 Japanese dialogue presentation"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -10076,6 +10151,7 @@ jobs:
       - name: Audit E5-G Review audio close contract
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Audit E5-G Review audio close contract')" != "SKIP" ] || { echo "Impact-skip: Audit E5-G Review audio close contract"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -10127,6 +10203,7 @@ jobs:
       - name: Audit UXR-2B 5W Review content repair
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Audit UXR-2B 5W Review content repair')" != "SKIP" ] || { echo "Impact-skip: Audit UXR-2B 5W Review content repair"; exit 0; }
           node <<'NODE'
           const fs = require('fs');
           const vm = require('vm');
@@ -10505,6 +10582,7 @@ jobs:
       - name: Audit UXR-4 question Review navigation media
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Audit UXR-4 question Review navigation media')" != "SKIP" ] || { echo "Impact-skip: Audit UXR-4 question Review navigation media"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -10653,6 +10731,7 @@ jobs:
       - name: Audit UXR-5 shared navigation and Review permalinks
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Audit UXR-5 shared navigation and Review permalinks')" != "SKIP" ] || { echo "Impact-skip: Audit UXR-5 shared navigation and Review permalinks"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
 
@@ -11335,59 +11414,32 @@ jobs:
       - name: Check JavaScript syntax
         shell: bash
         run: |
-          node --check Code.js
-          node --check WebApp.js
-          node --check WebAppFixture.js
-          node --check WebAppProduction.js
-          node --check WebAppTransactionCommon.js
-          node --check WebAppSurfaceCommon.js
-          node --check WebAppSurfaceCommonAudit.js
-          node --check WebAppLevelCommon.js
-          node --check WebAppLevelCommonAudit.js
-          node --check WebAppJun2Taxonomy.js
-          node --check WebAppJun2TaxonomyAudit.js
-          node --check WebAppFormatCommon.js
-          node --check WebAppFormatCommonAudit.js
-          node --check WebAppWrittenNewfmt.js
-          node --check WebAppWrittenNewfmtAudit.js
-          node --check WebAppWrittenProduction.js
-          node --check ListeningBackendOrchestrator.js
-          node --check WebAppProductionRender.js
-          node --check WebAppReadingPilot.js
-          node --check WebAppReadingPilotAudit.js
-          node --check WebAppReadingActivation.js
-          node --check WebAppReadingActivationAudit.js
-          node --check WebAppReadingProduction.js
-          node --check WebAppTranslationPilot.js
-          node --check WebAppTranslationPilotAudit.js
-          node --check WebAppTranslationActivation.js
-          node --check WebAppTranslationActivationAudit.js
-          node --check WebAppTranslationProduction.js
-          node --check WebAppTranslationV2.js
-          node --check WebAppTranslationV2Audit.js
-          node --check WebAppTranslationV2Production.js
-          node --check WebAppPreissue.js
-          node --check WebAppReceipt.js
-          node --check WebAppReviewCore.js
-          node --check WebAppReviewListeningAdapter.js
-          node --check WebAppReviewPersistence.js
-          node --check WebAppReviewWrittenAdapter.js
-          node --check WebAppSurfaceReviewBridge.js
-          node --check WebAppSurfaceReviewBridgeAudit.js
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Check JavaScript syntax')" != "SKIP" ] || { echo "Impact-skip: Check JavaScript syntax"; exit 0; }
           python3 - <<'PY'
           from pathlib import Path
+          import subprocess
+
+          js_files = sorted(Path('.').glob('*.js'))
+          if not js_files:
+              raise SystemExit('No root JavaScript files found for syntax audit.')
+
+          for path in js_files:
+              subprocess.run(['node', '--check', str(path)], check=True)
+
           text = Path('Client.html').read_text(encoding='utf-8').strip()
           if not (text.startswith('<script>') and text.endswith('</script>')):
               raise SystemExit('Client.html must contain exactly one outer <script> wrapper')
           Path('/tmp/Client.js').write_text(
-              text[len('<script>'):-len('</script>')], encoding='utf-8'
+              text[len('<script>'):-len('</script>')],
+              encoding='utf-8',
           )
+          subprocess.run(['node', '--check', '/tmp/Client.js'], check=True)
+          print(f'JavaScript syntax: PASS; root_js_files={len(js_files)}; Client.html=PASS')
           PY
-          node --check /tmp/Client.js
-
       - name: Verify audio semantic invariants
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Verify audio semantic invariants')" != "SKIP" ] || { echo "Impact-skip: Verify audio semantic invariants"; exit 0; }
           node <<'NODE'
           const fs = require('fs');
           const vm = require('vm');
@@ -11865,6 +11917,7 @@ jobs:
       - name: Audit Review completion remediation contract
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Audit Review completion remediation contract')" != "SKIP" ] || { echo "Impact-skip: Audit Review completion remediation contract"; exit 0; }
           node <<'NODE'
           const fs = require('fs');
           const vm = require('vm');
@@ -12591,6 +12644,7 @@ jobs:
       - name: Verify Review explanation style contract
         shell: bash
         run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Verify Review explanation style contract')" != "SKIP" ] || { echo "Impact-skip: Verify Review explanation style contract"; exit 0; }
           node <<'NODE'
           const fs = require('fs');
           const vm = require('vm');

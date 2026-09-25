@@ -4478,7 +4478,11 @@ function h3ReviewResolvePermalinkRequest_(
   if (
     !request ||
     request.mode !== 'REVIEW' ||
-    !request.set_id
+    !request.set_id ||
+    !request.review_kind ||
+    request.txn_id ||
+    request.legacy_review_id ||
+    request.materialized_record
   ) {
     return request;
   }

@@ -287,7 +287,7 @@ Across learner Review surfaces (`5L | 5W | READING | TRANSLATION`), the learner 
 
 This visibility rule is presentation-only. It does not change scoring, learner history, provider routing, source authority, Review hashes, or active-learning answer behavior.
 
-Structured Written learning-block text must preserve stored newline boundaries. In particular, a Hanja network stored as target, `⇒` related examples, and `≠` homophone examples on separate lines must render as the same three visual lines. The renderer must not infer or synthesize line splits when the stored content itself is one line; such content corrections belong to the source/payload layer.
+Structured learning-block text across `5L | 5W | READING | TRANSLATION` must preserve stored newline boundaries. In particular, a Hanja network stored as target, `⇒` related examples, and `≠` homophone examples on separate lines must render as the same three visual lines. The renderer must not infer or synthesize line splits when the stored content itself is one line; such content corrections belong to the source/payload layer.
 
 ## 34. Written 5W approved explanation overlay
 

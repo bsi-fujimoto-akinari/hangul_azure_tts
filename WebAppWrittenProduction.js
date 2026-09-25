@@ -1440,6 +1440,8 @@ function h3WrittenRenderQuestions_(
       );
 
       return {
+        q_no:
+          Number(q.q),
         section:
           section,
         display:

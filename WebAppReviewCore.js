@@ -4515,10 +4515,24 @@ function h3ReviewResolvePermalinkRequest_(
     SpreadsheetApp.openById(
       H3_WEB_RUNTIME_SPREADSHEET_ID
     );
-  var table =
+  var indexed =
     h3ReviewHomeIndexTable_(
       spreadsheet
     );
+  var table =
+    indexed &&
+    indexed.table;
+
+  if (
+    !table ||
+    !Array.isArray(table.rows) ||
+    !table.map
+  ) {
+    throw new Error(
+      'REVIEW_PERMALINK_HOME_INDEX_TABLE_INVALID'
+    );
+  }
+
   var found =
     h3ReviewHomeIndexFind_(
       table,

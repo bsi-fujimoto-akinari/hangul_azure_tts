@@ -3550,6 +3550,7 @@ jobs:
               "monitor_notification_v1",
               "function h3MonitoringEmailConfigStatus()",
               "function h3MonitoringNotificationPlan_(",
+              "function h3MonitoringNotificationProcessUnlocked_(",
               "function h3MonitoringNotificationProcess_(",
               "function h3MonitoringNotificationHomeState_(",
               "function h3MonitoringNotificationCurrent()",
@@ -3641,8 +3642,9 @@ jobs:
           let sent = [];
           let sendCalls = 0;
           let failSend = false;
+          let dailyQuota = 100;
           global.MailApp = {
-            getRemainingDailyQuota:()=>100,
+            getRemainingDailyQuota:()=>dailyQuota,
             sendEmail:(to,subject,body)=>{
               sendCalls++;
               if (failSend) {
@@ -3895,6 +3897,51 @@ jobs:
             'F send failure not visible on HOME state'
           );
 
+          h3MonitoringNotificationProcess_(
+            fake,snapshot([],t0+840000),t0+840000
+          );
+          const Q = {
+            event_type:'QUOTA_TEST',
+            event_key:'TEST:QUOTA',
+            detail:'fixture'
+          };
+          dailyQuota=0;
+          const beforeQuotaCalls=sendCalls;
+          for(let i=0;i<3;i++){
+            result=h3MonitoringNotificationProcess_(
+              fake,snapshot([Q],t0+900000+i*60000),
+              t0+900000+i*60000
+            );
+            assert(
+              result.status==='QUOTA_DEFERRED' &&
+              result.retry_budget_consumed===false &&
+              sendCalls===beforeQuotaCalls,
+              'P09 quota block must defer without send'
+            );
+          }
+          states=h3MonitoringNotificationReadStates_(fake);
+          const quotaState=states.find(x=>x.event_key==='TEST:QUOTA');
+          assert(
+            quotaState &&
+            quotaState.status==='PENDING' &&
+            quotaState.attempt_count===0 &&
+            quotaState.last_attempt_at==='',
+            'P09 quota block consumed retry budget'
+          );
+          dailyQuota=100;
+          result=h3MonitoringNotificationProcess_(
+            fake,snapshot([Q],t0+1080000),t0+1080000
+          );
+          states=h3MonitoringNotificationReadStates_(fake);
+          const quotaSent=states.find(x=>x.event_key==='TEST:QUOTA');
+          assert(
+            result.status==='SENT' &&
+            sendCalls===beforeQuotaCalls+1 &&
+            quotaSent.status==='SENT' &&
+            quotaSent.attempt_count===1,
+            'P09 quota recovery did not send exactly once'
+          );
+
           const claimed={
             identity:'TEST_SOURCE|TEST:AMB',
             source_id:'TEST_SOURCE',
@@ -3933,6 +3980,68 @@ jobs:
             ),
             'F touched a protected sheet'
           );
+
+          const originalLockService=LockService;
+          const originalOpenById=SpreadsheetApp.openById;
+          const originalSourceSpecs=h3MonitoringObserverSourceSpecs_;
+          const originalSnapshotFn=h3MonitoringObserverSnapshot_;
+          const originalObserverWriteUnlocked=
+            h3MonitoringObserverWriteSnapshotUnlocked_;
+          const originalNotificationUnlocked=
+            h3MonitoringNotificationProcessUnlocked_;
+          const order=[];
+          let held=false;
+          let snapNow=null,notifyNow=null;
+          LockService={
+            getScriptLock:()=>({
+              tryLock:()=>{
+                assert(!held,'P09 email run nested/reentrant lock');
+                held=true;
+                order.push('lock');
+                return true;
+              },
+              releaseLock:()=>{
+                assert(held,'P09 email run released unheld lock');
+                order.push('unlock');
+                held=false;
+              }
+            })
+          };
+          SpreadsheetApp.openById=()=>({fixture:true});
+          h3MonitoringObserverSourceSpecs_=()=>[];
+          h3MonitoringObserverSnapshot_=(_level,_specs,nowMs)=>{
+            assert(held,'P09 snapshot captured outside notification lock');
+            snapNow=nowMs;
+            order.push('snapshot');
+            return {fixture:true};
+          };
+          h3MonitoringObserverWriteSnapshotUnlocked_=(_ss,_snapshot)=>{
+            assert(held,'P09 observer write outside notification lock');
+            order.push('observer');
+            return {status:'RECORDED'};
+          };
+          h3MonitoringNotificationProcessUnlocked_=(_ss,_snapshot,nowMs)=>{
+            assert(held,'P09 notification process outside shared lock');
+            notifyNow=nowMs;
+            order.push('notification');
+            return {status:'NO_EMAIL'};
+          };
+          const emailRun=h3MonitoringObserverEmailRun();
+          assert(
+            emailRun.status==='NO_EMAIL' &&
+            order.join(',')==='lock,snapshot,observer,notification,unlock' &&
+            snapNow===notifyNow &&
+            held===false,
+            'P09 snapshot/notification lock ordering mismatch'
+          );
+          LockService=originalLockService;
+          SpreadsheetApp.openById=originalOpenById;
+          h3MonitoringObserverSourceSpecs_=originalSourceSpecs;
+          h3MonitoringObserverSnapshot_=originalSnapshotFn;
+          h3MonitoringObserverWriteSnapshotUnlocked_=
+            originalObserverWriteUnlocked;
+          h3MonitoringNotificationProcessUnlocked_=
+            originalNotificationUnlocked;
 
           console.log('S4-R4-F deduplicated email fixture PASS');
           NODE

@@ -1885,6 +1885,7 @@ jobs:
             'pre-rollout stable target history must be reused'
           );
 
+          const realQueue=h3FsAuthoringQueue_;
           h3FsEvaluate_=()=>evalAt(28);
           h3FsReadiness_=()=>({W:{state:'PREPARE_REQUIRED',eligible:true}});
           h3FsAuthoringPreparationPreview_=()=>prep;
@@ -1906,6 +1907,7 @@ jobs:
             blockedPreview.action==='BLOCKED_HISTORY',
             'completed target history must block a new job'
           );
+          h3FsAuthoringQueue_=realQueue;
 
           class FakeSheet {
             constructor(statusAfterFlush){

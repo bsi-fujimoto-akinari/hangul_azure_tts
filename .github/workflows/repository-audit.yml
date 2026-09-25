@@ -11303,7 +11303,11 @@ jobs:
           );
           assert.strictEqual(
             selfCheck.known_example_fix_count,
-            6
+            8
+          );
+          assert.strictEqual(
+            selfCheck.known_meta_fix_count,
+            4
           );
 
           assert.strictEqual(
@@ -11653,6 +11657,187 @@ jobs:
                 '→ 週末に一緒に散歩しませんか？'
               )
           );
+
+          const d4HistoricalCases = [
+            {
+              set_id: 'H3-20260913-01',
+              source:
+                '이번 일은 제가 맡을게요.',
+              answer:
+                '담당할게요',
+              old_ko:
+                '이번 일은 제가 맡을게요.',
+              old_ja:
+                '今回の仕事は私が引き受けます。',
+              new_ko:
+                '회의 준비는 제가 맡을게요.'
+            },
+            {
+              set_id: 'H3-20260914-05',
+              source:
+                '그 소식을 듣고 마음이 놓였어요.',
+              answer:
+                '걱정이 줄어서 안심했어요.',
+              old_ko:
+                '그 소식을 듣고 마음이 놓였어요.',
+              old_ja:
+                'その知らせを聞いて、ほっとしました。',
+              new_ko:
+                '결과를 확인하고 마음이 놓였어요.'
+            }
+          ];
+
+          d4HistoricalCases.forEach(testCase => {
+            const payload = {
+              surface_family: '5W',
+              set_id: testCase.set_id,
+              sections: [
+                {
+                  section: 'D4',
+                  correct_answer_text:
+                    testCase.answer,
+                  script_text:
+                    testCase.source + '\n' +
+                    testCase.answer,
+                  explanation: {
+                    reason:
+                      '文脈上の意味関係を説明する。',
+                    learning_blocks: [
+                      {
+                        usage:
+                          '学習項目\n' +
+                          testCase.old_ko +
+                          '\n→ ' +
+                          testCase.old_ja
+                      }
+                    ]
+                  }
+                }
+              ]
+            };
+
+            assert.doesNotThrow(() =>
+              context
+                .h3ReviewExplanationStyleApplyPayload_(
+                  payload
+                )
+            );
+            assert(
+              payload.sections[0]
+                .explanation
+                .learning_blocks[0]
+                .usage
+                .includes(testCase.new_ko)
+            );
+            assert(
+              !payload.sections[0]
+                .explanation
+                .learning_blocks[0]
+                .usage
+                .includes(
+                  '\n' + testCase.old_ko + '\n'
+                )
+            );
+          });
+
+          const readingMetaCases = [
+            {
+              set_id: 'H3-20260921-R001',
+              item_id: 'OFF-H3-P8-001',
+              section: 'P8',
+              block_index: 0,
+              old_text:
+                '理由・原因を表す「～なので」。この設問では、後続の判断「마음의 여유를 가지고 … 견뎌 봅시다」の理由を作ります。',
+              expected:
+                '理由・原因を表す「～なので」。後続の判断「마음의 여유를 가지고 … 견뎌 봅시다」の理由を作る。'
+            },
+            {
+              set_id: 'H3-20260921-R001',
+              item_id: 'OFF-H3-P8-002',
+              section: 'P8',
+              block_index: 0,
+              old_text:
+                '本文では「月曜病」という一般的なイメージと、木曜日の疲労感を対比しています。タイトル選択ではこの対比が中心情報です。',
+              expected:
+                '本文では「月曜病」という一般的なイメージと、木曜日の疲労感を対比している。この対比が本文の中心情報。'
+            },
+            {
+              set_id: 'H3-20260921-R002',
+              item_id: 'OFF-H3-P9-002',
+              section: 'P9',
+              block_index: 2,
+              old_text:
+                '内容一致問題では、本文に明示された事実と選択肢を一つずつ照合します。',
+              expected:
+                '対話では、業務量が増えたため職員を追加で採用する方針に二人が合意している。'
+            },
+            {
+              set_id: 'H3-20260921-R003',
+              item_id: 'OFF-H3-P10-002',
+              section: 'P10',
+              block_index: 0,
+              old_text:
+                '「一昨年」。時間関係を問う内容一致問題では重要な手掛かりです。',
+              expected:
+                '「一昨年」。재작년 여름부터 は、エアコンの不調が一昨年の夏から続いていることを表す。'
+            }
+          ];
+
+          readingMetaCases.forEach(testCase => {
+            const blocks = [];
+            for (
+              let i = 0;
+              i <= testCase.block_index;
+              i += 1
+            ) {
+              blocks.push({
+                usage:
+                  i === testCase.block_index
+                    ? testCase.old_text
+                    : '語彙・文法の意味を説明する。'
+              });
+            }
+
+            const payload = {
+              surface_family: 'READING',
+              set_id: testCase.set_id,
+              sections: [
+                {
+                  section: testCase.section,
+                  item_id: testCase.item_id,
+                  correct_answer_text:
+                    '別の正答表面',
+                  explanation: {
+                    reason:
+                      '本文の意味関係を説明する。',
+                    learning_blocks: blocks
+                  }
+                }
+              ]
+            };
+
+            assert.doesNotThrow(() =>
+              context
+                .h3ReviewExplanationStyleApplyPayload_(
+                  payload
+                )
+            );
+            assert.strictEqual(
+              payload.sections[0]
+                .explanation
+                .learning_blocks[
+                  testCase.block_index
+                ].usage,
+              testCase.expected
+            );
+            assert.strictEqual(
+              context
+                .h3ReviewExplanationStyleHasGenericTestTakingMeta_(
+                  testCase.expected
+                ),
+              false
+            );
+          });
 
           console.log(
             'Review explanation style contract checks passed.'

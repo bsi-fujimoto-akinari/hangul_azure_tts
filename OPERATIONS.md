@@ -19,6 +19,145 @@ main -> feature branch -> pull request -> audit PASS -> squash merge -> main
 
 Direct pushes and force pushes to `main` are prohibited. Each pull request should contain one bounded change. Do not bypass the required `audit` check or auto-resolve conflicts.
 
+### 2.1 Four-Chat code-change handoff contract
+
+Contract: `H3_CODE_CHANGE_4CHAT_HANDOFF_V1`.
+
+When code-change work is intentionally split across Chat conversations, the canonical default is exactly four ordered Chat phases. The four phases are workflow boundaries, not permission to weaken repository, runtime, audit, release, or recovery contracts.
+
+```text
+CHAT-1 DESIGN
+-> CHAT-2 IMPLEMENT
+-> CHAT-3 INTEGRATE
+-> CHAT-4 ACCEPT_AND_CLOSE
+```
+
+#### CHAT-1 DESIGN
+
+Purpose: determine the cause, scope, authority, impact surface, implementation contract, and verification plan before product-code mutation.
+
+Normal behavior:
+
+- begin from fresh canonical state and exact current repository `main`;
+- identify the work ID and the authoritative files/data involved;
+- inspect existing contracts, runtime boundaries, CI, release, and recovery requirements;
+- define intended files, prohibited mutations, expected tests, post-merge verification, and any learner/device acceptance requirement;
+- remain READ_ONLY against product code and learner runtime; a canonical work-start checkpoint is permitted when durable coordination state is required.
+
+Exit only when the implementation scope and verification plan are fixed enough that CHAT-2 does not need to redesign the work.
+
+#### CHAT-2 IMPLEMENT
+
+Purpose: implement the bounded change in a feature branch and make the pull request green.
+
+Normal behavior:
+
+- branch from the exact main SHA recorded for the work;
+- modify only the authorized scope;
+- update canonical contract/audit files when the implementation changes a permanent rule;
+- run repository CI and correct implementation or test-fixture defects;
+- open or update one bounded pull request;
+- do not treat unmerged branch state as deployed or authoritative runtime state.
+
+Normal exit condition:
+
+```text
+PR=<number>
+PR_HEAD_SHA=<immutable handoff SHA>
+CI=PASS
+MERGED=false
+```
+
+After this handoff, CHAT-3 must fresh-read the PR/main state rather than relying on chat-local branch assumptions.
+
+#### CHAT-3 INTEGRATE
+
+Purpose: merge the verified PR and prove the exact resulting `main` in its execution environment.
+
+Normal behavior:
+
+- fresh-read PR mergeability/head SHA and current `main`;
+- squash-merge through the reviewed PR path;
+- record the exact merge/main SHA;
+- require exact-main Repository audit and all applicable same-SHA audits;
+- for Apps Script-impacting work, require exact target sync, source attestation, exact-source binding, and applicable automatic live smoke;
+- inspect exact logs/results for any post-merge failure; do not infer success from a merge alone;
+- do not advance unrelated work or stages.
+
+Normal exit condition is an exact-main PASS with all applicable synchronization/attestation/smoke evidence fixed to that SHA.
+
+If post-merge verification fails, checkpoint the exact failure and keep the work open. A corrective recovery/repair Chat may be inserted with a suffix such as `CHAT-3R`; it remains part of the INTEGRATE phase and does not redefine the canonical four-phase contract.
+
+#### CHAT-4 ACCEPT_AND_CLOSE
+
+Purpose: perform any remaining user/device acceptance, remove temporary diagnostics, and close durable coordination state.
+
+Normal behavior:
+
+- perform only acceptance that cannot be proven by CHAT-3 automation;
+- remove temporary smoke/diagnostic code through a reviewed cleanup PR when such artifacts exist;
+- require fresh exact-main audit/attestation after cleanup when applicable;
+- write the final canonical checkpoint/audit event;
+- schema-validate state, commit it, raw-read it back, and verify the commit SHA;
+- end with no unpersisted durable state.
+
+Normal exit condition:
+
+```text
+continuity.state=clean
+active_work_id=null
+protected_runtime_mutation=0
+next work/stage unchanged unless separately and explicitly authorized
+```
+
+#### Required handoff payload
+
+Every boundary between these Chat phases must persist or explicitly hand off, when applicable:
+
+```text
+WORK_ID
+PHASE
+PURPOSE
+APP_MAIN_SHA
+STATE_MAIN_SHA
+BRANCH
+PR
+PR_HEAD_SHA
+CHANGED_FILES
+CI_RUN_IDS_AND_RESULTS
+APPS_SCRIPT_SYNC_RUN_ID_AND_RESULT
+SOURCE_ATTESTATION
+LIVE_SMOKE_RESULT
+DEVICE_ACCEPTANCE_STATUS
+UNFINISHED_ITEMS
+NEXT_SINGLE_ACTION
+PROHIBITIONS
+UNRELATED_READY_WORK_STATUS
+```
+
+Unknown or inapplicable values must be marked explicitly; they must not be guessed.
+
+#### Valid Chat boundaries
+
+A Chat boundary should occur only at a durable, independently re-readable checkpoint. Preferred boundaries are:
+
+- design/contract fixed;
+- PR green with exact head SHA;
+- merge plus exact-main post-merge verification complete;
+- acceptance/cleanup/state close complete.
+
+Do not split an indivisible verification transaction across Chat boundaries. In particular, keep each of the following in one Chat transaction:
+
+- canonical state edit -> schema validation -> commit -> raw readback -> commit-SHA verification;
+- PR merge -> exact merge SHA capture;
+- Apps Script push -> source attestation;
+- live smoke -> exact result/log interpretation;
+- temporary diagnostic execution -> diagnosis of that result.
+
+At the start of CHAT-2, CHAT-3, and CHAT-4, fresh-read the authorities required by that phase. Prior Chat summaries are handoff aids, never substitutes for canonical readback.
+
+This four-Chat structure is the default whenever code-change work is deliberately divided across Chat conversations. Collapsing phases or using a different split requires an explicit reason and must not weaken any required verification. Recovery/repair suffix Chats are exception paths, not a new normal workflow.
+
 ## 3. Repository and Apps Script synchronization
 
 Normal direction is GitHub -> local -> Apps Script.

@@ -78,12 +78,14 @@ jobs:
           if [ "$full" = "false" ] && [ ! -s "$changed_file" ]; then
             full=true
           fi
+
           if grep -Fxq '.github/workflows/repository-audit.yml' "$changed_file" 2>/dev/null; then
             full=true
           fi
 
           files_marker="$(python3 - "$changed_file" <<'PY'
-          import pathlib, sys
+          import pathlib
+          import sys
           files = sorted({
               line.strip()
               for line in pathlib.Path(sys.argv[1]).read_text(encoding='utf-8').splitlines()
@@ -93,12 +95,21 @@ jobs:
           PY
           )"
 
-          {
-            echo "full=$full"
-            echo "files_marker=$files_marker"
-          } >> "$GITHUB_OUTPUT"
+          any_js="$(python3 - "$changed_file" <<'PY'
+          import pathlib
+          import sys
+          files = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8').splitlines()
+          print('true' if any(p.endswith('.js') or p == 'Client.html' for p in files) else 'false')
+          PY
+          )"
 
-          echo "Repository audit impact: full=$full files=$files_marker"
+          {
+            echo "H3_AUDIT_FULL=$full"
+            echo "H3_AUDIT_FILES_MARKER=$files_marker"
+            echo "H3_AUDIT_ANY_JS=$any_js"
+          } >> "$GITHUB_ENV"
+
+          echo "Repository audit impact: full=$full files=$files_marker any_js=$any_js"
 
       - name: Verify tracked-file allowlist
         shell: bash
@@ -232,6 +243,19 @@ jobs:
       - name: Audit canonical four-Phase code-change workflow contract
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'OPERATIONS.md'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Audit canonical four-Phase code-change workflow contract"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -295,9 +319,88 @@ jobs:
           print('Canonical four-Phase one-Chat-default code-change workflow: PASS')
           PY
 
+      - name: Audit repository access fast-path contract
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
+          workflow = Path('.github/workflows/repository-audit.yml').read_text(encoding='utf-8')
+
+          required_ops = [
+              'H3_REPO_ACCESS_FASTPATH_V1',
+              'read independent authorities in one parallel tool turn',
+              'Prefer exact-path fetches when the path is known.',
+              'Within one phase, an exact immutable commit SHA and file blob',
+              'query workflow runs by the exact `head_sha` as one aggregate read per polling cycle',
+              'Do not poll each successful workflow run individually.',
+              'Repository audit impact selection',
+              'forces `full=true`',
+              'PHASE-4 must write the already verified exact application-main',
+          ]
+          missing_ops = [token for token in required_ops if token not in ops]
+          if missing_ops:
+              raise SystemExit(
+                  'Repository access fast-path contract missing: '
+                  + ', '.join(missing_ops)
+              )
+
+          required_workflow = [
+              'Detect repository audit impact',
+              'H3_AUDIT_FULL=',
+              'H3_AUDIT_FILES_MARKER=',
+              'H3_AUDIT_ANY_JS=',
+              "grep -Fxq '.github/workflows/repository-audit.yml'",
+              'Impact-skip:',
+          ]
+          missing_workflow = [token for token in required_workflow if token not in workflow]
+          if missing_workflow:
+              raise SystemExit(
+                  'Repository impact selector missing: '
+                  + ', '.join(missing_workflow)
+              )
+
+          guarded = workflow.count('Impact-skip:')
+          if guarded < 55:
+              raise SystemExit(
+                  f'Impact guard coverage unexpectedly low: {guarded}'
+              )
+
+          for unconditional in [
+              'Verify tracked-file allowlist',
+              'Reject credential files and likely embedded secrets',
+          ]:
+              marker = f'- name: {unconditional}'
+              start = workflow.find(marker)
+              if start < 0:
+                  raise SystemExit(f'Missing unconditional safety step: {unconditional}')
+              next_step = workflow.find('\n      - name:', start + len(marker))
+              block = workflow[start: next_step if next_step >= 0 else len(workflow)]
+              if 'Impact-skip:' in block:
+                  raise SystemExit(
+                      f'Unconditional safety step became impact-skippable: {unconditional}'
+                  )
+
+          print('Repository access fast-path + impact selection contract: PASS')
+          PY
+
       - name: Verify credentialed Apps Script execution boundaries
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in '.github/workflows/apps-script-auto-sync.yml' 'OPERATIONS.md'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Verify credentialed Apps Script execution boundaries"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
           import re
@@ -466,6 +569,19 @@ jobs:
       - name: Audit automatic read-only live smoke contract
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in '.github/workflows/apps-script-auto-sync.yml' 'WebAppLiveSmoke.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Audit automatic read-only live smoke contract"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -556,6 +672,19 @@ jobs:
       - name: Audit structured Web runtime observability contract
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'WebApp.js' 'WebAppFamilyScheduler.js' 'WebAppObservability.js' 'appsscript.json'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Audit structured Web runtime observability contract"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           import json
           from pathlib import Path
@@ -708,6 +837,19 @@ jobs:
       - name: Verify gitignore protections
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in '.gitignore'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Verify gitignore protections"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           import pathlib
           import sys
@@ -728,6 +870,19 @@ jobs:
       - name: Verify clasp target
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in '.clasp.json'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Verify clasp target"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           import json
           import pathlib
@@ -752,6 +907,19 @@ jobs:
       - name: Verify Apps Script manifest policy
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'appsscript.json'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Verify Apps Script manifest policy"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           import json
           import pathlib
@@ -784,6 +952,19 @@ jobs:
       - name: Check SYSTEM_TEST transaction isolation
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'Index.html' 'WebApp.js' 'WebAppFixture.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check SYSTEM_TEST transaction isolation"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -860,6 +1041,19 @@ jobs:
       - name: Check production transaction and scheduler contract
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'WebApp.js' 'WebAppFixture.js' 'WebAppProduction.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check production transaction and scheduler contract"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -1039,6 +1233,19 @@ jobs:
       - name: Check Web receipt and targeted dispatch
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Code.js' 'H3_WEB_CHAT_CONTRACT.md' 'OPERATIONS.md' 'WebApp.js' 'WebAppProduction.js' 'WebAppReceipt.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check Web receipt and targeted dispatch"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -1139,6 +1346,19 @@ jobs:
       - name: Check production rendering and source-lock
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Code.js' 'WebApp.js' 'WebAppProduction.js' 'WebAppProductionRender.js' 'WebAppSurfaceCommon.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check production rendering and source-lock"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -1249,6 +1469,19 @@ jobs:
       - name: Check audio storage slim-down invariants
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Code.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check audio storage slim-down invariants"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
           code = Path('Code.js').read_text(encoding='utf-8')
@@ -1292,6 +1525,19 @@ jobs:
       - name: Check allowlisted SYSTEM_TEST fixture
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Code.js' 'WebApp.js' 'WebAppFixture.js' 'WebAppProduction.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check allowlisted SYSTEM_TEST fixture"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -1350,6 +1596,19 @@ jobs:
       - name: Check production preissue gate
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'WebApp.js' 'WebAppPreissue.js' 'WebAppProduction.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check production preissue gate"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -1404,6 +1663,19 @@ jobs:
       - name: Check normal-live production gate
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'WebAppPreissue.js' 'WebAppProduction.js' 'WebAppProductionRender.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check normal-live production gate"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -1457,6 +1729,19 @@ jobs:
       - name: Check production client mode routing
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check production client mode routing"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -1490,6 +1775,19 @@ jobs:
       - name: Check transaction provenance binder
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'WebAppProduction.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check transaction provenance binder"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -1547,6 +1845,19 @@ jobs:
       - name: Check persistent Review storage and source-lock
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'OPERATIONS.md' 'WebAppReviewCore.js' 'WebAppReviewListeningAdapter.js' 'WebAppReviewPersistence.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check persistent Review storage and source-lock"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -1628,6 +1939,19 @@ jobs:
       - name: Check Review HOME core extraction parity
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'WebApp.js' 'WebAppReviewCore.js' 'WebAppReviewListeningAdapter.js' 'WebAppReviewPersistence.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check Review HOME core extraction parity"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -2313,6 +2637,19 @@ jobs:
       - name: Check Written Review projection and provider routing
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'WebApp.js' 'WebAppReviewCore.js' 'WebAppReviewListeningAdapter.js' 'WebAppReviewWrittenAdapter.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check Written Review projection and provider routing"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -2631,6 +2968,19 @@ jobs:
       - name: Check production Written persistent Review loader
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'WebApp.js' 'WebAppReviewCore.js' 'WebAppReviewPersistence.js' 'WebAppReviewWrittenAdapter.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check production Written persistent Review loader"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -2937,6 +3287,19 @@ jobs:
       - name: Check production Written HOME and Review UI
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'Stylesheet.html' 'WebApp.js' 'WebAppReviewCore.js' 'WebAppReviewPersistence.js' 'WebAppReviewWrittenAdapter.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check production Written HOME and Review UI"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -3213,6 +3576,19 @@ jobs:
       - name: Check persistent Review routes and Web UI
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'H3_REVIEW_ARCHITECTURE.md' 'H3_WEB_CHAT_CONTRACT.md' 'Index.html' 'OPERATIONS.md' 'Stylesheet.html' 'WebApp.js' 'WebAppProductionRender.js' 'WebAppReviewCore.js' 'WebAppReviewListeningAdapter.js' 'WebAppReviewPersistence.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check persistent Review routes and Web UI"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -3383,6 +3759,19 @@ jobs:
       - name: Check Review history index isolation
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'WebAppReviewPersistence.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check Review history index isolation"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -3440,6 +3829,19 @@ jobs:
       - name: Check UTF-8 Review hashing
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Code.js' 'WebAppPreissue.js' 'WebAppReviewCore.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check UTF-8 Review hashing"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -3505,6 +3907,19 @@ jobs:
       - name: Check REVIEW_REPLAY retirement contract
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'H3_REVIEW_ARCHITECTURE.md' 'H3_WEB_CHAT_CONTRACT.md' 'OPERATIONS.md' 'WebApp.js' 'WebAppReviewListeningAdapter.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check REVIEW_REPLAY retirement contract"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -3576,6 +3991,19 @@ jobs:
       - name: Check current Review learner UI
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'H3_REVIEW_ARCHITECTURE.md' 'H3_WEB_CHAT_CONTRACT.md' 'Index.html' 'OPERATIONS.md' 'Stylesheet.html'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check current Review learner UI"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -4052,6 +4480,19 @@ jobs:
       - name: Check Written 5W explanation overlay boundary
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'H3_REVIEW_ARCHITECTURE.md' 'Stylesheet.html' 'WebAppReviewCore.js' 'WebAppReviewPersistence.js' 'WebAppReviewWrittenAdapter.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check Written 5W explanation overlay boundary"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -4288,6 +4729,19 @@ jobs:
       - name: Check Written 5W ANSWERED_AT backfill boundary
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'H3_REVIEW_ARCHITECTURE.md' 'WebAppReviewCore.js' 'WebAppReviewPersistence.js' 'WebAppReviewWrittenAdapter.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check Written 5W ANSWERED_AT backfill boundary"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -4423,6 +4877,19 @@ jobs:
       - name: Check scheduler overload V3 behavior
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'WebAppPreissue.js' 'WebAppProduction.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check scheduler overload V3 behavior"
+              exit 0
+            fi
+          fi
           node <<'NODE'
           const fs = require('fs');
           const vm = require('vm');
@@ -4520,6 +4987,19 @@ jobs:
       - name: Check learner URL authority
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'Code.js' 'H3_WEB_CHAT_CONTRACT.md' 'OPERATIONS.md' 'WebApp.js' 'WebAppReviewCore.js' 'WebAppReviewListeningAdapter.js' 'WebAppReviewPersistence.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check learner URL authority"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -4816,6 +5296,19 @@ jobs:
       - name: Check parameterless direct boot
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'H3_WEB_CHAT_CONTRACT.md' 'OPERATIONS.md' 'WebApp.js' 'WebAppReviewCore.js' 'WebAppReviewListeningAdapter.js' 'WebAppReviewPersistence.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check parameterless direct boot"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -4937,6 +5430,19 @@ jobs:
       - name: Check Listening audio reliability V21
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'H3_WEB_CHAT_CONTRACT.md' 'OPERATIONS.md' 'WebAppPreissue.js' 'WebAppProductionRender.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check Listening audio reliability V21"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -5061,6 +5567,19 @@ jobs:
       - name: Check official Listening audio parity V21
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Code.js' 'H3_WEB_CHAT_CONTRACT.md' 'OPERATIONS.md' 'WebAppPreissue.js' 'WebAppProductionRender.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check official Listening audio parity V21"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -5234,6 +5753,19 @@ jobs:
       - name: Check durable legacy Review compatibility
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'H3_REVIEW_ARCHITECTURE.md' 'OPERATIONS.md' 'WebApp.js' 'WebAppReviewCore.js' 'WebAppReviewListeningAdapter.js' 'WebAppReviewPersistence.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check durable legacy Review compatibility"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
           import re
@@ -5365,6 +5897,19 @@ jobs:
       - name: Check minimal learner-facing Chat output contract
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'H3_WEB_CHAT_CONTRACT.md' 'OPERATIONS.md'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check minimal learner-facing Chat output contract"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -5416,6 +5961,19 @@ jobs:
       - name: Check 5L audio set fast path
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Code.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check 5L audio set fast path"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -5912,6 +6470,19 @@ jobs:
       - name: Check H3 normal hot-path invariants
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Code.js' 'H3_WEB_CHAT_CONTRACT.md' 'OPERATIONS.md' 'WebAppPreissue.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check H3 normal hot-path invariants"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           import re
           from pathlib import Path
@@ -6029,6 +6600,19 @@ jobs:
       - name: Check production 5W current-learning render
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'H3_WEB_CHAT_CONTRACT.md' 'OPERATIONS.md' 'Stylesheet.html' 'WebApp.js' 'WebAppReviewCore.js' 'WebAppReviewWrittenAdapter.js' 'WebAppSurfaceCommon.js' 'WebAppWrittenProduction.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check production 5W current-learning render"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -6385,6 +6969,19 @@ jobs:
       - name: Check production 5W Web transaction D3
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'WebApp.js' 'WebAppProduction.js' 'WebAppReceipt.js' 'WebAppSurfaceCommon.js' 'WebAppTransactionCommon.js' 'WebAppWrittenProduction.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check production 5W Web transaction D3"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
           import re
@@ -6756,6 +7353,19 @@ jobs:
       - name: Check 5W Answer Sync production
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'WebApp.js' 'WebAppFormatCommon.js' 'WebAppLevelCommon.js' 'WebAppWrittenAnswerSync.js' 'WebAppWrittenNewfmt.js' 'WebAppWrittenProduction.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check 5W Answer Sync production"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -7096,6 +7706,19 @@ jobs:
       - name: Check Listening audio source attestation
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Code.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check Listening audio source attestation"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -7280,6 +7903,19 @@ jobs:
       - name: Check Listening backend orchestrator
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Code.js' 'ListeningBackendOrchestrator.js' 'WebAppPreissue.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check Listening backend orchestrator"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -7549,6 +8185,19 @@ jobs:
       - name: Check staged P8 Reading pilot
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'H3_READING_ACTIVATION_CONTRACT.md' 'H3_READING_P8_PILOT_CONTRACT.md' 'H3_READING_P9_P10_PILOT_CONTRACT.md' 'H3_READING_PRODUCTION_CONTRACT.md' 'Stylesheet.html' 'WebApp.js' 'WebAppReadingActivation.js' 'WebAppReadingActivationAudit.js' 'WebAppReadingPilot.js' 'WebAppReadingPilotAudit.js' 'WebAppReadingProduction.js' 'WebAppSurfaceCommon.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check staged P8 Reading pilot"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -7918,6 +8567,19 @@ jobs:
       - name: Check staged P11/P12 Translation pilot
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'H3_TRANSLATION_ACTIVATION_CONTRACT.md' 'H3_TRANSLATION_P11_P12_PILOT_CONTRACT.md' 'H3_TRANSLATION_PRODUCTION_CONTRACT.md' 'WebApp.js' 'WebAppSurfaceCommon.js' 'WebAppTranslationActivation.js' 'WebAppTranslationActivationAudit.js' 'WebAppTranslationPilot.js' 'WebAppTranslationPilotAudit.js' 'WebAppTranslationProduction.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check staged P11/P12 Translation pilot"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -8241,6 +8903,19 @@ jobs:
       - name: Check F1 Reading Translation Review bridge
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'H3_SURFACE_REVIEW_BRIDGE_CONTRACT.md' 'WebAppReadingPilot.js' 'WebAppReadingPilotAudit.js' 'WebAppReviewCore.js' 'WebAppReviewPersistence.js' 'WebAppReviewWrittenAdapter.js' 'WebAppSurfaceCommon.js' 'WebAppSurfaceReviewBridge.js' 'WebAppSurfaceReviewBridgeAudit.js' 'WebAppTranslationPilot.js' 'WebAppTranslationPilotAudit.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check F1 Reading Translation Review bridge"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -8386,6 +9061,19 @@ jobs:
       - name: Check independent level runtime boundary
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'H3_LEARNING_SURFACE_CONTRACT.md' 'H3_LEVEL_RUNTIME_CONTRACT.md' 'WebAppLevelCommon.js' 'WebAppLevelCommonAudit.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check independent level runtime boundary"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -8488,6 +9176,19 @@ jobs:
       - name: Check source-bound 準2級 taxonomy master
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'H3_JUN2_TAXONOMY_CONTRACT.md' 'H3_LEVEL_RUNTIME_CONTRACT.md' 'WebAppFormatCommon.js' 'WebAppJun2Taxonomy.js' 'WebAppJun2TaxonomyAudit.js' 'WebAppLevelCommon.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check source-bound 準2級 taxonomy master"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -8595,6 +9296,19 @@ jobs:
       - name: Check source-bound 2026 new-format registry
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'H3_2026_NEWFMT_SOURCE_CONTRACT.md' 'H3_NEWFMT_LEVEL_CONTRACT.md' 'WebAppFormatCommon.js' 'WebAppFormatCommonAudit.js' 'WebAppLevelCommon.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check source-bound 2026 new-format registry"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -8706,6 +9420,19 @@ jobs:
       - name: Check 3級 NEWFMT written runtime
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'H3_WRITTEN_NEWFMT_RUNTIME_CONTRACT.md' 'WebAppFormatCommon.js' 'WebAppLevelCommon.js' 'WebAppWrittenAnswerSync.js' 'WebAppWrittenNewfmt.js' 'WebAppWrittenNewfmtAudit.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Check 3級 NEWFMT written runtime"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -8808,6 +9535,19 @@ jobs:
       - name: Audit E5-B Review audio binding contract
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'H3_REVIEW_ARCHITECTURE.md' 'WebAppReviewCore.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Audit E5-B Review audio binding contract"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -9051,6 +9791,19 @@ jobs:
       - name: Audit E5-C 5W Review audio embedding
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'H3_REVIEW_ARCHITECTURE.md' 'WebAppReviewCore.js' 'WebAppReviewPersistence.js' 'WebAppReviewWrittenAdapter.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Audit E5-C 5W Review audio embedding"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -9273,6 +10026,19 @@ jobs:
       - name: Audit E5-D 2R Review audio embedding
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'H3_REVIEW_ARCHITECTURE.md' 'WebAppReviewCore.js' 'WebAppReviewWrittenAdapter.js' 'WebAppSurfaceReviewBridge.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Audit E5-D 2R Review audio embedding"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -9500,6 +10266,19 @@ jobs:
       - name: Audit E5-E 2T Review audio embedding
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'H3_REVIEW_ARCHITECTURE.md' 'WebAppReviewCore.js' 'WebAppReviewWrittenAdapter.js' 'WebAppSurfaceReviewBridge.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Audit E5-E 2T Review audio embedding"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -9716,6 +10495,19 @@ jobs:
       - name: Audit T003 body_ja register parity
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'WebAppSurfaceReviewBridge.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Audit T003 body_ja register parity"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -9747,6 +10539,19 @@ jobs:
       - name: Audit learner-facing Japanese quality corrections
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'H3_REVIEW_ARCHITECTURE.md' 'WebAppReviewPersistence.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Audit learner-facing Japanese quality corrections"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -9972,6 +10777,19 @@ jobs:
       - name: Audit D6 Japanese dialogue presentation
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'H3_REVIEW_ARCHITECTURE.md' 'WebAppReviewPersistence.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Audit D6 Japanese dialogue presentation"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -10153,6 +10971,19 @@ jobs:
       - name: Audit E5-G Review audio close contract
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'H3_REVIEW_ARCHITECTURE.md' 'WebAppReviewCore.js' 'WebAppReviewWrittenAdapter.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Audit E5-G Review audio close contract"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -10204,6 +11035,19 @@ jobs:
       - name: Audit UXR-2B 5W Review content repair
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'ReviewAudioBackfill.js' 'WebAppReviewPersistence.js' 'WebAppSurfaceCommon.js' 'WebAppWrittenProduction.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Audit UXR-2B 5W Review content repair"
+              exit 0
+            fi
+          fi
           node <<'NODE'
           const fs = require('fs');
           const vm = require('vm');
@@ -10582,6 +11426,19 @@ jobs:
       - name: Audit UXR-4 question Review navigation media
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'Stylesheet.html' 'WebAppProductionRender.js' 'WebAppReadingPilot.js' 'WebAppTranslationV2.js' 'WebAppWrittenProduction.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Audit UXR-4 question Review navigation media"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -10730,6 +11587,19 @@ jobs:
       - name: Audit UXR-5 shared navigation and Review permalinks
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'Code.js' 'H3_REVIEW_ARCHITECTURE.md' 'Index.html' 'Stylesheet.html' 'WebApp.js' 'WebAppReviewCore.js' 'WebAppReviewPersistence.js' 'WebAppSurfaceReviewBridge.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Audit UXR-5 shared navigation and Review permalinks"
+              exit 0
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
 
@@ -11412,59 +12282,47 @@ jobs:
       - name: Check JavaScript syntax
         shell: bash
         run: |
-          node --check Code.js
-          node --check WebApp.js
-          node --check WebAppFixture.js
-          node --check WebAppProduction.js
-          node --check WebAppTransactionCommon.js
-          node --check WebAppSurfaceCommon.js
-          node --check WebAppSurfaceCommonAudit.js
-          node --check WebAppLevelCommon.js
-          node --check WebAppLevelCommonAudit.js
-          node --check WebAppJun2Taxonomy.js
-          node --check WebAppJun2TaxonomyAudit.js
-          node --check WebAppFormatCommon.js
-          node --check WebAppFormatCommonAudit.js
-          node --check WebAppWrittenNewfmt.js
-          node --check WebAppWrittenNewfmtAudit.js
-          node --check WebAppWrittenProduction.js
-          node --check ListeningBackendOrchestrator.js
-          node --check WebAppProductionRender.js
-          node --check WebAppReadingPilot.js
-          node --check WebAppReadingPilotAudit.js
-          node --check WebAppReadingActivation.js
-          node --check WebAppReadingActivationAudit.js
-          node --check WebAppReadingProduction.js
-          node --check WebAppTranslationPilot.js
-          node --check WebAppTranslationPilotAudit.js
-          node --check WebAppTranslationActivation.js
-          node --check WebAppTranslationActivationAudit.js
-          node --check WebAppTranslationProduction.js
-          node --check WebAppTranslationV2.js
-          node --check WebAppTranslationV2Audit.js
-          node --check WebAppTranslationV2Production.js
-          node --check WebAppPreissue.js
-          node --check WebAppReceipt.js
-          node --check WebAppReviewCore.js
-          node --check WebAppReviewListeningAdapter.js
-          node --check WebAppReviewPersistence.js
-          node --check WebAppReviewWrittenAdapter.js
-          node --check WebAppSurfaceReviewBridge.js
-          node --check WebAppSurfaceReviewBridgeAudit.js
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ] && [ "${H3_AUDIT_ANY_JS:-false}" != "true" ]; then
+            echo "Impact-skip: Check JavaScript syntax"
+            exit 0
+          fi
           python3 - <<'PY'
           from pathlib import Path
+          import subprocess
+
+          js_files = sorted(Path('.').glob('*.js'))
+          if not js_files:
+              raise SystemExit('No root JavaScript files found for syntax audit.')
+
+          for path in js_files:
+              subprocess.run(['node', '--check', str(path)], check=True)
+
           text = Path('Client.html').read_text(encoding='utf-8').strip()
           if not (text.startswith('<script>') and text.endswith('</script>')):
               raise SystemExit('Client.html must contain exactly one outer <script> wrapper')
           Path('/tmp/Client.js').write_text(
-              text[len('<script>'):-len('</script>')], encoding='utf-8'
+              text[len('<script>'):-len('</script>')],
+              encoding='utf-8',
           )
+          subprocess.run(['node', '--check', '/tmp/Client.js'], check=True)
+          print(f'JavaScript syntax: PASS; root_js_files={len(js_files)}; Client.html=PASS')
           PY
-          node --check /tmp/Client.js
-
       - name: Verify audio semantic invariants
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Code.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Verify audio semantic invariants"
+              exit 0
+            fi
+          fi
           node <<'NODE'
           const fs = require('fs');
           const vm = require('vm');
@@ -11942,6 +12800,19 @@ jobs:
       - name: Audit Review completion remediation contract
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'Client.html' 'WebApp.js' 'WebAppReviewCore.js' 'WebAppReviewPersistence.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Audit Review completion remediation contract"
+              exit 0
+            fi
+          fi
           node <<'NODE'
           const fs = require('fs');
           const vm = require('vm');
@@ -12668,6 +13539,19 @@ jobs:
       - name: Verify Review explanation style contract
         shell: bash
         run: |
+          if [ "${H3_AUDIT_FULL:-true}" != "true" ]; then
+            h3_impact_match=false
+            for h3_dep in 'H3_REVIEW_ARCHITECTURE.md' 'H3_REVIEW_EXPLANATION_STYLE_CONTRACT.md' 'Stylesheet.html' 'WebAppReadingPilot.js' 'WebAppReviewCore.js' 'WebAppSurfaceCommon.js' 'WebAppSurfaceReviewBridge.js' 'WebAppWrittenProduction.js'; do
+              if [[ "${H3_AUDIT_FILES_MARKER:-}" == *"|${h3_dep}|"* ]]; then
+                h3_impact_match=true
+                break
+              fi
+            done
+            if [ "$h3_impact_match" != "true" ]; then
+              echo "Impact-skip: Verify Review explanation style contract"
+              exit 0
+            fi
+          fi
           node <<'NODE'
           const fs = require('fs');
           const vm = require('vm');

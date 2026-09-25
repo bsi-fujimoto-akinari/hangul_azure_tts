@@ -3363,9 +3363,10 @@ jobs:
           ]
           for needle in [
               "'Q' +",
-              "(index + 1) +",
+              "qNo +",
               "' ［' +",
               "'］ ' +",
+              'reviewQuestionOrdinal_(',
               'writtenReviewDisplayLabel_(',
           ]:
               if needle not in title_helper:

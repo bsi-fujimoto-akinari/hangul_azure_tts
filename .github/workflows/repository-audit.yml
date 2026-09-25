@@ -10130,6 +10130,8 @@ jobs:
 
           for token in [
               'function h3ReviewResolvePermalinkRequest_(',
+              'request.q_no === null ||',
+              'request.q_no === undefined ||',
               'h3ReviewHomeIndexFind_(',
               'h3ReviewHomeIndexRowEntry_(',
               'entry.txn_id || null',

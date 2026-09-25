@@ -1543,10 +1543,12 @@
       ];
     var percent =
       bucket &&
-      Number(bucket.percent);
+      typeof bucket.percent === 'number'
+        ? bucket.percent
+        : NaN;
 
     metric.textContent =
-      isFinite(percent)
+      Number.isFinite(percent)
         ? percent.toFixed(1) + '%'
         : '—';
     metric.setAttribute(

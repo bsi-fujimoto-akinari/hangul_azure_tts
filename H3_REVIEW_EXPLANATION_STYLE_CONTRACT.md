@@ -1,6 +1,6 @@
 # H3 Review Explanation Style Contract
 
-CONTRACT_ID=H3-REVIEW-EXPLANATION-STYLE-20260923-V3
+CONTRACT_ID=H3-REVIEW-EXPLANATION-STYLE-20260925-V4
 
 ## 1. Purpose
 
@@ -136,6 +136,79 @@ same grammar/vocabulary point in a different context or surface. It must preserv
 same learning point and must not introduce rare, archaic, dialectal, or technical
 language solely to avoid duplication.
 
+## 4.1 Representative-example context separation
+
+Changing only punctuation, politeness, a small adjunct, or one peripheral noun is not
+sufficient when the result still reproduces the same answer-bearing context. The
+representative example should normally move to a different ordinary situation while
+preserving the target grammar/vocabulary relation.
+
+The exact-surface duplicate gate is the deterministic minimum. Semantic/context
+separation remains an authoring requirement and must be checked in source review when
+it cannot be proven mechanically.
+
+## 4.2 Shared pronunciation blocks
+
+When a 3級 or 準2級 pronunciation point is genuinely useful, use the shared structured
+learning block:
+
+- `type: pronunciation`
+- `surface`: the exact useful surface form from the question/context
+- `actual`: the representative realized pronunciation
+
+Render it as `surface → [actual]`. Normally show one representative surface per
+pronunciation skill. Do not add unchanged pronunciation, lower-level mechanical
+changes, duplicate dictionary/inflected forms, or a broad rule dump.
+
+## 4.3 Shared Hanja network
+
+Hanja explanation is shared across all Review families when a common, learning-useful
+Sino-Korean word is present.
+
+Use `word（漢字）` for the target. Related examples must be modern common standalone
+words that share the relevant Hanja character; do not present a compound fragment,
+repeat only the same component, or invent a rare/technical word merely to complete a
+network.
+
+When a compact text network is used, preserve exactly three semantic lines when
+available:
+
+```text
+target（漢字）
+⇒ related examples
+≠ same-Hangul-syllable examples with different Hanja
+```
+
+Omit a related/homophone line when no safe modern-common example exists. The renderer
+must preserve stored newline boundaries for every Review family.
+
+## 4.4 Semantic relation symbols
+
+Relation symbols must match the relation actually being explained.
+
+- `⇒`: a directed related/example relation.
+- `≠`: explicit non-equivalence, including Hanja same-syllable/different-character
+  contrast.
+- `↔`: a genuine paired contrast/alternation such as transitive↔intransitive or
+  state↔change; do not use it for two expressions that are merely different in
+  strength or meaning.
+
+When a symbol would be ambiguous, use words instead of forcing a symbol.
+
+## 4.5 Learner-oriented Japanese and test meta
+
+Japanese source/body/choice/example translations are outside meta-style normalization
+but still must be natural in their actual context. Prefer ordinary contemporary
+Japanese over morpheme-by-morpheme literalism. When a materially ambiguous translation
+cannot be resolved from the locked source alone, use an authorized primary dictionary
+or reliable corpus as verification evidence rather than guessing.
+
+Generic test-taking commentary is not a learning block. Phrases such as
+`内容一致問題では…`, `タイトル選択では…`, or `この設問では…` must be
+replaced by an explanation of the actual word, grammar, discourse relation, or source
+meaning. Source-specific rationale may still compare numbered choices or explain why a
+particular source fact supports the answer.
+
 ## 5. Historical Review policy
 
 Locked or committed historical Review authorities remain immutable.
@@ -166,8 +239,14 @@ Future Review explanation authoring must satisfy all of the following before iss
    or universal noun-ending truncation.
 3. Answer-evaluation wording prefers `適切` over `合う` when that better expresses
    the judgment.
-4. Representative examples do not duplicate the exact correct answer surface.
-5. Text excluded by section 3.2 is not rewritten merely to satisfy meta-text style.
+4. Representative examples do not duplicate the exact correct answer surface and
+   normally use a meaningfully different ordinary context.
+5. Generic test-taking meta-text is rejected; explain the actual linguistic or source
+   relation instead.
+6. Pronunciation blocks follow section 4.2 and only surface 3級/準2級 learning value.
+7. Hanja networks follow section 4.3 and preserve stored line boundaries.
+8. Relation symbols follow section 4.4 and must not imply a relation the text denies.
+9. Text excluded by section 3.2 is not rewritten merely to satisfy meta-text style.
 
 A future authoring/audit gate may reject or regenerate violations before issue. The
 gate must inspect semantic roles, not blindly convert all Japanese strings.

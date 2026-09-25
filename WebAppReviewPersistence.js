@@ -1290,7 +1290,7 @@ function h3WrittenReviewApplyLearnerTextCorrections_(
         old:
           '・試験を控えて勉強に（　）を使っています。\n→ ・最近は健康にもっと（　）を使わなければなりません。',
         next:
-          '・試験を控えて勉強に気を配っています。\n・最近は健康にもっと気をつけなければなりません。'
+          '・試験を控えて勉強に力を入れています。\n・最近は健康にもっと気をつけなければなりません。'
       }
     },
     'H3-20260913-03': {
@@ -1493,7 +1493,7 @@ function h3WrittenReviewApplyLearnerTextCorrections_(
     out.technical || {};
   out.technical
     .learner_text_correction_id =
-      'H3-REVIEW-JA-QUALITY-20260925-V2';
+      'H3-REVIEW-JA-QUALITY-20260926-V3';
 
   return out;
 }
@@ -1531,6 +1531,16 @@ function h3WrittenReviewApplyD4CompletedSurfaceCorrection_(
     '빨간 우산은 멀리서도 [눈에 띄었어요].';
   var expectedCorrect =
     '멀리서도 쉽게 보였어요';
+  var projectedChoice =
+    '쉽게 보였어요';
+  var expectedChoiceJa =
+    '遠くからでもすぐ見えました';
+  var projectedChoiceJa =
+    'すぐ見えました';
+  var expectedReason =
+    '눈에 띄다 は周囲の中で「目につく・目立つ」という意味なので、멀리서도 쉽게 보였어요 が最も近いです。';
+  var projectedReason =
+    '눈에 띄다 は周囲の中で「目につく・目立つ」という意味なので、쉽게 보였어요 が最も近いです。';
   var expectedOld =
     'Q3 [D4][PARAPHRASE]\n' +
     '次の下線部と最も近い意味のものを選んでください。\n' +
@@ -1551,12 +1561,76 @@ function h3WrittenReviewApplyD4CompletedSurfaceCorrection_(
     ) !== expectedBody ||
     String(
       part.correct_answer_text || ''
-    ) !== expectedCorrect
+    ) !== expectedCorrect ||
+    Number(
+      part.correct_answer_position || 0
+    ) !== 1 ||
+    !Array.isArray(
+      part.question_surface.choices
+    ) ||
+    !part.question_surface.choices[0] ||
+    String(
+      part.question_surface.choices[0].text || ''
+    ) !== expectedCorrect ||
+    !part.explanation ||
+    !Array.isArray(
+      part.explanation.choices
+    ) ||
+    !part.explanation.choices[0] ||
+    String(
+      part.explanation.choices[0].ko || ''
+    ) !== expectedCorrect ||
+    String(
+      part.explanation.choices[0].ja || ''
+    ) !== expectedChoiceJa ||
+    String(
+      part.explanation.reason || ''
+    ) !== expectedReason
   ) {
     throw new Error(
       'WRITTEN_REVIEW_D4_COMPLETED_SURFACE_SOURCE_MISMATCH'
     );
   }
+
+  part.question_surface.choices[0].text =
+    projectedChoice;
+
+  if (
+    String(
+      part.question_surface.rendered || ''
+    )
+  ) {
+    var oldRenderedChoice =
+      '① ' + expectedCorrect;
+    var newRenderedChoice =
+      '① ' + projectedChoice;
+
+    if (
+      part.question_surface.rendered
+        .indexOf(oldRenderedChoice) >= 0
+    ) {
+      part.question_surface.rendered =
+        part.question_surface.rendered
+          .replace(
+            oldRenderedChoice,
+            newRenderedChoice
+          );
+    } else if (
+      part.question_surface.rendered
+        .indexOf(newRenderedChoice) < 0
+    ) {
+      throw new Error(
+        'WRITTEN_REVIEW_D4_CHOICE_RENDERED_MISMATCH'
+      );
+    }
+  }
+
+  part.explanation.choices[0].ko =
+    projectedChoice;
+  part.explanation.choices[0].ja =
+    projectedChoiceJa;
+  part.explanation.reason =
+    projectedReason;
 
   if (
     String(part.script_text || '') ===
@@ -1576,7 +1650,7 @@ function h3WrittenReviewApplyD4CompletedSurfaceCorrection_(
     out.technical || {};
   out.technical
     .d4_completed_surface_correction_id =
-      'H3-UXR-2B-D4-COMPLETED-20260925-V1';
+      'H3-UXR-2B-D4-COMPLETED-20260926-V2';
 
   return out;
 }

@@ -538,6 +538,8 @@
           return;
         }
 
+        var monitorRequestGeneration = 0;
+
         function monitorEl_(
           tag,
           className,
@@ -634,6 +636,16 @@
           return home.querySelector(
             '.monitoring-home-panel'
           );
+        }
+
+        function monitorRequestCurrent_(
+          panel,
+          requestGeneration
+        ) {
+          return !!panel &&
+            monitorPanel_() === panel &&
+            panel.dataset.monitorRequestGeneration ===
+              String(requestGeneration);
         }
 
         function placeMonitorPanel_(
@@ -1190,6 +1202,42 @@
             events.appendChild(
               list
             );
+            if (
+              model.recent_events_truncated ===
+                true
+            ) {
+              var totalEvents =
+                Number(
+                  model.observer_health &&
+                  model.observer_health
+                    .action_required_count ||
+                  0
+                );
+              totalEvents =
+                Math.max(
+                  rows.length,
+                  totalEvents
+                );
+              events.appendChild(
+                monitorEl_(
+                  'p',
+                  'monitor-home-event-summary',
+                  totalEvents > rows.length
+                    ? '全' +
+                      String(totalEvents) +
+                      '件中' +
+                      String(rows.length) +
+                      '件を表示（' +
+                      String(
+                        totalEvents -
+                        rows.length
+                      ) +
+                      '件省略）'
+                    : String(rows.length) +
+                      '件を表示（続きあり）'
+                )
+              );
+            }
           }
           details.appendChild(
             events
@@ -1279,23 +1327,54 @@
           ) {
             return;
           }
+          var requestGeneration =
+            ++monitorRequestGeneration;
           panel.dataset.monitorLoaded =
             'true';
+          panel.dataset.monitorRequestGeneration =
+            String(
+              requestGeneration
+            );
 
           google.script.run
             .withSuccessHandler(
               function (model) {
+                if (
+                  !monitorRequestCurrent_(
+                    panel,
+                    requestGeneration
+                  )
+                ) {
+                  return;
+                }
                 try {
                   renderMonitor_(
                     model
                   );
                 } catch (err) {
-                  renderMonitorError_();
+                  if (
+                    monitorRequestCurrent_(
+                      panel,
+                      requestGeneration
+                    )
+                  ) {
+                    renderMonitorError_();
+                  }
                 }
               }
             )
             .withFailureHandler(
-              renderMonitorError_
+              function () {
+                if (
+                  !monitorRequestCurrent_(
+                    panel,
+                    requestGeneration
+                  )
+                ) {
+                  return;
+                }
+                renderMonitorError_();
+              }
             )
             .h3MonitoringHomeReadModel();
         }

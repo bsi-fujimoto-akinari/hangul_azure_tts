@@ -2150,7 +2150,7 @@ jobs:
               "H3_MONITOR_OBSERVER_V1",
               "H3_MONITOR_OBSERVER_SNAPSHOT_V1",
               "monitor_observer_v1",
-              "function h3MonitoringObserverReadSource_(spec)",
+              "function h3MonitoringObserverReadSource_(spec,nowMs)",
               "function h3MonitoringObserverBuildSnapshot_(level,sourceSpecs,nowMs)",
               "function h3MonitoringObserverSnapshot_(level,sourceSpecs,nowMs)",
               "function h3MonitoringObserverWriteSnapshot_(ss,snapshot)",

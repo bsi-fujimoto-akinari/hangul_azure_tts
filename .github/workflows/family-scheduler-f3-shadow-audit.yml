@@ -1813,6 +1813,147 @@ jobs:
           console.log('Semantic authoring reconciliation fixture PASS');
           NODE
 
+      - name: P07 authoring idempotency deterministic fixture
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+          const crypto = require('crypto');
+          vm.runInThisContext(fs.readFileSync('WebAppFamilyScheduler.js','utf8'));
+
+          function assert(ok,msg){
+            if(!ok)throw new Error(msg);
+          }
+          hash_=(value)=>crypto
+            .createHash('sha256')
+            .update(String(value),'utf8')
+            .digest('hex');
+
+          const evalAt=(clock)=>({
+            next_action:'RECOMMEND_FAMILY',
+            recommended_family:'W',
+            global_set_clock:clock,
+            primary_reason:'FIXTURE',
+            family_metrics:{W:{readiness_state:'PREPARE_REQUIRED',clock}}
+          });
+          const prep={
+            status:'AUTHORING_REQUIRED',
+            family:'W',
+            stage_id:'STD-P07',
+            authoring_target:'WRITTEN_STAGE_AUTHORING:STD-P07',
+            authoring_request:{schema:'FIXTURE'}
+          };
+          const s1=h3FsAuthoringJobSpec_({},'3級',evalAt(27),prep);
+          const s2=h3FsAuthoringJobSpec_({},'3級',evalAt(28),prep);
+          assert(
+            s1.idempotency_key===s2.idempotency_key,
+            'same target changed clock must retain stable idempotency key'
+          );
+          assert(
+            s1.snapshot_sha256!==s2.snapshot_sha256,
+            'scheduler context should remain visible in snapshot'
+          );
+
+          const H=H3_FS_AUTHORING_QUEUE_HEADERS_;
+          function row(spec,status,keyOverride,snapshotOverride){
+            const r=new Array(H.length).fill('');
+            const set=(name,value)=>{r[H.indexOf(name)]=value;};
+            set('JOB_ID','JOB-'+status);
+            set('LEVEL','3級');
+            set('FAMILY','W');
+            set('TARGET_ID',spec.identity.target_id);
+            set('TARGET_KIND',spec.identity.target_kind);
+            set('STATUS',status);
+            set('SNAPSHOT_SHA256',snapshotOverride||spec.snapshot_sha256);
+            set('IDEMPOTENCY_KEY',keyOverride||spec.idempotency_key);
+            return r;
+          }
+          function table(rows){
+            const map={};
+            H.forEach((x,i)=>map[x]=i);
+            return {rows,map,headers:H};
+          }
+
+          const legacy=table([
+            row(s2,'OPEN','LEGACY-SNAPSHOT-KEY','LEGACY-SNAPSHOT')
+          ]);
+          let m=h3FsAuthoringQueueMatch_({table:legacy},'3級',s2);
+          assert(m.exact===null,'legacy rollout row should not fake exact key');
+          assert(
+            m.history.length===1 &&
+            m.representative.status==='OPEN',
+            'pre-rollout stable target history must be reused'
+          );
+
+          h3FsEvaluate_=()=>evalAt(28);
+          h3FsReadiness_=()=>({W:{state:'PREPARE_REQUIRED',eligible:true}});
+          h3FsAuthoringPreparationPreview_=()=>prep;
+          h3FsAuthoringQueue_=()=>({table:legacy});
+          const activePreview=
+            h3FsAuthoringReconciliationPreviewCore_({},'3級').public_result;
+          assert(
+            activePreview.action==='EXISTING_NO_DUPLICATE',
+            'legacy active target history must prevent duplicate enqueue'
+          );
+
+          const completed=table([
+            row(s2,'COMPLETED','OLD-COMPLETED-KEY','OLD-SNAPSHOT')
+          ]);
+          h3FsAuthoringQueue_=()=>({table:completed});
+          const blockedPreview=
+            h3FsAuthoringReconciliationPreviewCore_({},'3級').public_result;
+          assert(
+            blockedPreview.action==='BLOCKED_HISTORY',
+            'completed target history must block a new job'
+          );
+
+          class FakeSheet {
+            constructor(statusAfterFlush){
+              this.values=[H.slice()];
+              this.statusAfterFlush=statusAfterFlush;
+              this.appendCount=0;
+            }
+            getDataRange(){
+              return {getValues:()=>this.values.map(r=>r.slice())};
+            }
+            appendRow(r){
+              this.values.push(r.slice());
+              this.appendCount++;
+            }
+          }
+          function runForwardStatus(status){
+            const sh=new FakeSheet(status);
+            const ss={getSheetByName:()=>sh};
+            SpreadsheetApp={
+              flush:()=>{
+                const i=H.indexOf('STATUS');
+                sh.values[sh.values.length-1][i]=status;
+              }
+            };
+            const out=h3FsAuthoringUpsert_(ss,'3級',evalAt(27),prep);
+            assert(out.status==='OPEN_CREATED','new row was not acknowledged');
+            assert(out.job_status===status,'forward readback status not preserved');
+            assert(sh.appendCount===1,'unexpected append count');
+          }
+          ['OPEN','CLAIMED','COMPLETED'].forEach(runForwardStatus);
+
+          const legacySheet=new FakeSheet('OPEN');
+          legacySheet.values.push(
+            row(s1,'CLAIMED','PRE-ROLLOUT-KEY','PRE-ROLLOUT-SNAPSHOT')
+          );
+          SpreadsheetApp={flush:()=>{}};
+          const existing=h3FsAuthoringUpsert_(
+            {getSheetByName:()=>legacySheet},
+            '3級',
+            evalAt(28),
+            prep
+          );
+          assert(existing.status==='EXISTING','legacy target was duplicated');
+          assert(legacySheet.appendCount===0,'legacy target caused a new append');
+
+          console.log('P07 authoring idempotency deterministic fixture PASS');
+          NODE
+
       - name: Semantic authoring observability static contract
         run: |
           python - <<'PY'

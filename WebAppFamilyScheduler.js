@@ -57,6 +57,8 @@ var H3_FS_LOG_HEADERS_ = [
 var H3_FS_AUTHORING_QUEUE_SHEET_ = 'authoring_queue_v1';
 var H3_FS_AUTHORING_QUEUE_SCHEMA_ =
   'H3_FAMILY_SCHEDULER_AUTHORING_QUEUE_V1';
+var H3_FS_AUTHORING_TARGET_IDENTITY_SCHEMA_ =
+  'H3_FAMILY_SCHEDULER_AUTHORING_TARGET_IDENTITY_V1';
 var H3_FS_AUTHORING_CONTRACT_ID_ =
   'H3-SEMANTIC-AUTHORING-QUEUE-20260924-V1';
 var H3_FS_AUTHORING_REQUEST_SCHEMA_ =
@@ -1676,6 +1678,26 @@ function h3FsAuthoringTargetIdentity_(ss,family,prep) {
   throw new Error('FAMILY_SCHEDULER_AUTHORING_FAMILY_INVALID:'+family);
 }
 
+function h3FsAuthoringStableTargetIdentity_(level,family,identity) {
+  var stable={
+    schema:H3_FS_AUTHORING_TARGET_IDENTITY_SCHEMA_,
+    level:String(level||''),
+    family:String(family||''),
+    target_kind:String(identity&&identity.target_kind||''),
+    target_id:String(identity&&identity.target_id||'')
+  };
+  if(
+    !stable.level||
+    H3_FS_FAMILIES_.indexOf(stable.family)<0||
+    !stable.target_kind||
+    !stable.target_id
+  ){
+    throw new Error('FAMILY_SCHEDULER_AUTHORING_TARGET_IDENTITY_INVALID');
+  }
+  stable.idempotency_key='H3AQK-'+h3FsSha_(stable);
+  return stable;
+}
+
 function h3FsAuthoringJobSpec_(ss,level,evaluation,prep) {
   if(!prep||String(prep.status||'')!=='AUTHORING_REQUIRED'){
     throw new Error('FAMILY_SCHEDULER_AUTHORING_SPEC_NOT_REQUIRED');
@@ -1685,6 +1707,8 @@ function h3FsAuthoringJobSpec_(ss,level,evaluation,prep) {
     throw new Error('FAMILY_SCHEDULER_AUTHORING_FAMILY_INVALID:'+family);
   }
   var identity=h3FsAuthoringTargetIdentity_(ss,family,prep);
+  var stableIdentity=
+    h3FsAuthoringStableTargetIdentity_(level,family,identity);
   var metric=
     evaluation.family_metrics && evaluation.family_metrics[family]
       ? evaluation.family_metrics[family]
@@ -1742,13 +1766,8 @@ function h3FsAuthoringJobSpec_(ss,level,evaluation,prep) {
     source_constraint:sourceConstraint,
     authoring_request:authoringRequest,
     snapshot_sha256:snapshot,
-    idempotency_key:'H3AQK-'+h3FsSha_({
-      contract_id:H3_FS_AUTHORING_CONTRACT_ID_,
-      family:family,
-      target_id:identity.target_id,
-      target_kind:identity.target_kind,
-      snapshot_sha256:snapshot
-    })
+    target_identity:stableIdentity,
+    idempotency_key:stableIdentity.idempotency_key
   };
 }
 
@@ -1770,28 +1789,16 @@ function h3FsAuthoringUpsert_(ss,level,evaluation,prep) {
   var authoringRequest=spec.authoring_request;
   var snapshot=spec.snapshot_sha256;
   var idempotencyKey=spec.idempotency_key;
-  var existing=null;
-  q.table.rows.forEach(function(r,i){
-    if(String(r[q.table.map.IDEMPOTENCY_KEY]||'')!==idempotencyKey)return;
-    if(existing){
-      throw new Error(
-        'FAMILY_SCHEDULER_AUTHORING_DUPLICATE_IDEMPOTENCY_KEY:'+
-        idempotencyKey
-      );
-    }
-    existing={
-      row_number:i+2,
-      job_id:String(r[q.table.map.JOB_ID]||''),
-      status:String(r[q.table.map.STATUS]||'')
-    };
-  });
+  var match=h3FsAuthoringQueueMatch_(q,level,spec);
+  var existing=match.exact||match.representative;
   if(existing){
     return {
       status:'EXISTING',
       job_id:existing.job_id,
       job_status:existing.status,
       idempotency_key:idempotencyKey,
-      snapshot_sha256:snapshot
+      snapshot_sha256:snapshot,
+      target_history_count:match.history.length
     };
   }
 
@@ -1834,10 +1841,16 @@ function h3FsAuthoringUpsert_(ss,level,evaluation,prep) {
     );
   }
   var vr=matches[0].row,vm=verify.table.map;
+  var readbackStatus=String(vr[vm.STATUS]||'');
   if(
     String(vr[vm.JOB_ID]||'')!==jobId ||
-    String(vr[vm.STATUS]||'')!=='OPEN' ||
-    String(vr[vm.SNAPSHOT_SHA256]||'')!==snapshot
+    String(vr[vm.LEVEL]||'')!==String(level) ||
+    String(vr[vm.FAMILY]||'')!==family ||
+    String(vr[vm.TARGET_ID]||'')!==identity.target_id ||
+    String(vr[vm.TARGET_KIND]||'')!==identity.target_kind ||
+    String(vr[vm.IDEMPOTENCY_KEY]||'')!==idempotencyKey ||
+    String(vr[vm.SNAPSHOT_SHA256]||'')!==snapshot ||
+    ['OPEN','CLAIMED','COMPLETED'].indexOf(readbackStatus)<0
   ){
     throw new Error('FAMILY_SCHEDULER_AUTHORING_QUEUE_READBACK_FAIL');
   }
@@ -1845,7 +1858,7 @@ function h3FsAuthoringUpsert_(ss,level,evaluation,prep) {
   return {
     status:'OPEN_CREATED',
     job_id:jobId,
-    job_status:'OPEN',
+    job_status:readbackStatus,
     idempotency_key:idempotencyKey,
     snapshot_sha256:snapshot,
     target_id:identity.target_id,
@@ -1936,6 +1949,17 @@ function h3FsAuthoringPreparationPreview_(ss,family) {
   throw new Error('FAMILY_SCHEDULER_AUTHORING_FAMILY_INVALID:'+family);
 }
 
+function h3FsAuthoringHistoryRepresentative_(history) {
+  var rows=history||[],active=[];
+  rows.forEach(function(x){
+    if(['OPEN','CLAIMED','FAILED_RETRYABLE'].indexOf(String(x.status||''))>=0){
+      active.push(x);
+    }
+  });
+  if(active.length)return active[active.length-1];
+  return rows.length?rows[rows.length-1]:null;
+}
+
 function h3FsAuthoringQueueMatch_(q,level,spec) {
   var exact=[],history=[];
   q.table.rows.forEach(function(r,i){
@@ -1964,7 +1988,11 @@ function h3FsAuthoringQueueMatch_(q,level,spec) {
       spec.idempotency_key
     );
   }
-  return {exact:exact.length?exact[0]:null,history:history};
+  return {
+    exact:exact.length?exact[0]:null,
+    history:history,
+    representative:h3FsAuthoringHistoryRepresentative_(history)
+  };
 }
 
 function h3FsAuthoringReconciliationDecision_(
@@ -2062,11 +2090,11 @@ function h3FsAuthoringReconciliationPreviewCore_(ss,level) {
   var spec=h3FsAuthoringJobSpec_(ss,level,evaluation,prep);
   var q=h3FsAuthoringQueue_(ss);
   var match=h3FsAuthoringQueueMatch_(q,level,spec);
-  var exact=match.exact;
+  var existing=match.exact||match.representative;
   var decision=h3FsAuthoringReconciliationDecision_(
     out.readiness_state,
     out.preparation_status,
-    exact?exact.status:''
+    existing?existing.status:''
   );
   out.action=decision.action;
   out.reason=decision.reason;
@@ -2075,9 +2103,9 @@ function h3FsAuthoringReconciliationPreviewCore_(ss,level) {
   out.snapshot_sha256=spec.snapshot_sha256;
   out.idempotency_key=spec.idempotency_key;
   out.target_history_count=match.history.length;
-  if(exact){
-    out.existing_job_id=exact.job_id;
-    out.existing_job_status=exact.status;
+  if(existing){
+    out.existing_job_id=existing.job_id;
+    out.existing_job_status=existing.status;
   }
   return {public_result:out,evaluation:evaluation,prep:prep,spec:spec};
 }

@@ -2864,7 +2864,6 @@ jobs:
               'function buildPersistentReviewCard(',
               'function appendReviewTranslations(',
               'function buildLearningBlock(',
-              "'review-progress'",
               "'review-progress-button'",
               "app.payload.txn_id || null",
               "'ホーム'",
@@ -2877,6 +2876,16 @@ jobs:
 
           if '<section id="home" class="home hidden"></section>' not in index:
               raise SystemExit('R3-09D HOME root is missing from Index.html.')
+
+          for needle in [
+              'id="surface-sticky"',
+              'id="mobile-progress"',
+              'class="review-progress surface-progress"',
+          ]:
+              if needle not in index:
+                  raise SystemExit(
+                      f'R3-09D shared Review navigation root missing: {needle}'
+                  )
 
           if 'family-scheduler-next-caption' in index or 'nextCaption' in index:
               raise SystemExit('F5 NEXT caption returned; family-only display required.')
@@ -3153,6 +3162,7 @@ jobs:
           from pathlib import Path
 
           client = Path('Client.html').read_text(encoding='utf-8')
+          index = Path('Index.html').read_text(encoding='utf-8')
           style = Path('Stylesheet.html').read_text(encoding='utf-8')
           architecture = Path('H3_REVIEW_ARCHITECTURE.md').read_text(encoding='utf-8')
           operations = Path('OPERATIONS.md').read_text(encoding='utf-8')
@@ -3162,16 +3172,43 @@ jobs:
           review_end = client.index('function buildPersistentReviewCard(', review_start)
           review = client[review_start:review_end]
 
+          progress_start = client.index('function buildReviewProgress_(')
+          progress_end = client.index(
+              'function initialReviewIndexFromRequest_(',
+              progress_start,
+          )
+          progress = client[progress_start:progress_end]
+
           for needle in [
-              "'review-progress'",
-              "'review-progress-button'",
-              'part.result',
+              'configureSurfaceChrome_(',
+              'buildReviewProgress_(',
               'function setReviewPage(',
               "'ホーム'",
           ]:
               if needle not in review:
                   raise SystemExit(
                       f'R3-09E refined Review invariant missing: {needle}'
+                  )
+
+          for needle in [
+              "'mobile-progress'",
+              "'review-progress-button'",
+              'part.result',
+              'setReviewPage(',
+          ]:
+              if needle not in progress:
+                  raise SystemExit(
+                      f'R3-09E Review progress renderer invariant missing: {needle}'
+                  )
+
+          for needle in [
+              'id="surface-sticky"',
+              'id="mobile-progress"',
+              'class="review-progress surface-progress"',
+          ]:
+              if needle not in index:
+                  raise SystemExit(
+                      f'R3-09E shared Review navigation root missing: {needle}'
                   )
 
           for forbidden in [

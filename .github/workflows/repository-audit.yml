@@ -4768,8 +4768,34 @@ jobs:
           )
           if not boot:
               raise SystemExit('Could not isolate h3WebBootRequest_.')
-          if 'legacy_review_id' in boot.group('body'):
-              raise SystemExit('Legacy Review must not create a parameterized learner boot URL.')
+          for needle in [
+              'legacy_review_id',
+              'review_kind',
+              'set_id',
+              'q_no',
+          ]:
+              if needle not in boot.group('body'):
+                  raise SystemExit(
+                      f'Review boot parser lost compatibility field: {needle}'
+                  )
+
+          permalink_start = client.index(
+              'function reviewPermalinkForQuestion_('
+          )
+          permalink_end = client.index(
+              'function surfaceLinkIcon_(',
+              permalink_start,
+          )
+          permalink = client[permalink_start:permalink_end]
+          for forbidden in [
+              'legacy_review_id=',
+              'txn_id=',
+          ]:
+              if forbidden in permalink:
+                  raise SystemExit(
+                      'Learner Review permalink exposes internal identity: ' +
+                      forbidden
+                  )
 
           for needle in [
               "function loadLegacyReview(",

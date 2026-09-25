@@ -914,6 +914,10 @@
     gap: 12px;
   }
 
+  .monitor-home-head {
+    min-height: 23px;
+  }
+
   .monitor-home-details {
     display: grid;
     gap: 12px;
@@ -944,9 +948,11 @@
 
   .monitor-home-head-actions {
     display: flex;
+    flex: 0 0 auto;
     align-items: center;
     gap: 8px;
     margin-left: auto;
+    white-space: nowrap;
   }
 
   .monitor-home-chevron {
@@ -964,7 +970,8 @@
 
   .monitor-home-title {
     display: flex;
-    align-items: baseline;
+    flex: 0 1 auto;
+    align-items: center;
     gap: 8px;
     min-width: 0;
   }
@@ -984,7 +991,12 @@
   .monitor-home-time {
     color: #737373;
     font-size: 12px;
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
+  }
+
+  .monitor-home-placeholder-chevron {
+    visibility: hidden;
   }
 
   .monitor-home-overall,
@@ -1112,9 +1124,9 @@
   }
 
   body.mobile-device .monitor-home-title {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 2px;
+    align-items: center;
+    flex-direction: row;
+    gap: 8px;
   }
 
   body.mobile-device .monitor-home-event {
@@ -1130,9 +1142,9 @@
     }
 
     .monitor-home-title {
-      align-items: flex-start;
-      flex-direction: column;
-      gap: 2px;
+      align-items: center;
+      flex-direction: row;
+      gap: 8px;
     }
 
     .monitor-home-event {

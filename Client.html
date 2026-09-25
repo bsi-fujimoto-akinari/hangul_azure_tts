@@ -995,7 +995,7 @@
           surfaceFamily
         );
         buildMobileProgress(
-          payload.questions.length
+          payload.questions
         );
 
         document
@@ -1996,12 +1996,103 @@
     );
   }
 
+  function authoritativeQuestionOrdinal_(
+    item,
+    index,
+    referenceItems
+  ) {
+    var explicit =
+      Number(
+        item &&
+        item.q_no
+      );
+
+    if (
+      Number.isInteger(explicit) &&
+      explicit > 0
+    ) {
+      return explicit;
+    }
+
+    var reference =
+      Array.isArray(referenceItems)
+        ? referenceItems[index]
+        : null;
+    var referenceOrdinal =
+      Number(
+        reference &&
+        reference.q_no
+      );
+
+    if (
+      Number.isInteger(
+        referenceOrdinal
+      ) &&
+      referenceOrdinal > 0
+    ) {
+      return referenceOrdinal;
+    }
+
+    var section =
+      String(
+        item &&
+        item.section ||
+        ''
+      );
+    var listeningMatch =
+      /^K([1-5])$/.exec(
+        section
+      );
+
+    if (listeningMatch) {
+      return Number(
+        listeningMatch[1]
+      );
+    }
+
+    var writtenMatch =
+      /^D([2-6])$/.exec(
+        section
+      );
+
+    if (writtenMatch) {
+      return (
+        Number(
+          writtenMatch[1]
+        ) - 1
+      );
+    }
+
+    // Historical source-locked payloads may predate q_no.
+    // Their immutable question order remains the last compatibility authority.
+    return index + 1;
+  }
+
+  function reviewQuestionOrdinal_(
+    review,
+    part,
+    index
+  ) {
+    return authoritativeQuestionOrdinal_(
+      part,
+      index,
+      review &&
+      review.questions
+    );
+  }
+
+
   function renderQuestions(questions) {
     var root = document.getElementById('questions');
     root.textContent = '';
 
     questions.forEach(function (q, index) {
-      var qNo = index + 1;
+      var qNo =
+        authoritativeQuestionOrdinal_(
+          q,
+          index,
+          questions
+        );
       var questionKey =
         questionKeys[index];
       var card = el('section', 'question-card');
@@ -2597,54 +2688,84 @@
 
 
 
-  function scheduleInitialAudioPrefetch() {
+  function audioItemsForPayload_() {
+    if (!app.payload) {
+      return [];
+    }
+
+    var items = [];
+
     if (
-      !app.payload ||
-      !Array.isArray(
+      Array.isArray(
         app.payload.questions
       )
     ) {
-      return;
+      items = items.concat(
+        app.payload.questions
+      );
     }
 
+    if (
+      Array.isArray(
+        app.payload.sections
+      )
+    ) {
+      items = items.concat(
+        app.payload.sections
+      );
+    }
+
+    return items;
+  }
+
+  function scheduleInitialAudioPrefetch() {
+    var seen = {};
     var keys =
-      app.payload.questions
-        .map(function (question) {
+      audioItemsForPayload_()
+        .map(function (item) {
           return (
-            question.audio_asset_key ||
+            item &&
+            item.audio_asset_key ||
             null
           );
         })
-        .filter(Boolean);
-
-    if (!keys.length) {
-      return;
-    }
-
-    if (isMobileMode()) {
-      ensureAudioLoaded(
-        keys[0],
-        { background: false }
-      );
-      if (keys[1]) {
-        window.setTimeout(function () {
-          ensureAudioLoaded(
-            keys[1],
-            { background: true }
-          );
-        }, 500);
-      }
-      return;
-    }
-
-    keys.forEach(function (assetKey, index) {
-      window.setTimeout(function () {
-        ensureAudioLoaded(
-          assetKey,
-          { background: index !== 0 }
+        .filter(
+          function (assetKey) {
+            if (
+              !assetKey ||
+              seen[assetKey]
+            ) {
+              return false;
+            }
+            seen[assetKey] = true;
+            return true;
+          }
         );
-      }, index * 350);
-    });
+
+    keys.forEach(
+      function (
+        assetKey,
+        index
+      ) {
+        window.setTimeout(
+          function () {
+            ensureAudioLoaded(
+              assetKey,
+              {
+                background:
+                  index !== 0
+              }
+            );
+          },
+          index *
+            (
+              isMobileMode()
+                ? 350
+                : 300
+            )
+        );
+      }
+    );
   }
 
   function ensureAudioLoaded(
@@ -2901,22 +3022,61 @@
     );
   }
 
-  function buildMobileProgress(count) {
-    var root = document.getElementById('mobile-progress');
+  function buildMobileProgress(
+    questions
+  ) {
+    var root =
+      document.getElementById(
+        'mobile-progress'
+      );
     root.textContent = '';
 
-    for (var i = 0; i < count; i += 1) {
+    var items =
+      Array.isArray(questions)
+        ? questions
+        : [];
+
+    for (
+      var i = 0;
+      i < items.length;
+      i += 1
+    ) {
       (function (index) {
-        var button = el('button', 'progress-button');
+        var qNo =
+          authoritativeQuestionOrdinal_(
+            items[index],
+            index,
+            items
+          );
+        var button =
+          el(
+            'button',
+            'progress-button'
+          );
         button.type = 'button';
-        button.textContent = 'Q' + (index + 1);
-        button.dataset.index = String(index);
-        if (index === 0) button.classList.add('current');
-        button.addEventListener('click', function () {
-          setActiveIndex(index);
-        });
-        root.appendChild(button);
-      })(i);
+        button.textContent =
+          'Q' + qNo;
+        button.dataset.index =
+          String(index);
+        button.dataset.questionOrdinal =
+          String(qNo);
+        if (index === 0) {
+          button.classList.add(
+            'current'
+          );
+        }
+        button.addEventListener(
+          'click',
+          function () {
+            setActiveIndex(
+              index
+            );
+          }
+        );
+        root.appendChild(
+          button
+        );
+      }(i));
     }
   }
 
@@ -3474,6 +3634,11 @@
               : [];
 
           return {
+            q_no:
+              Number(
+                question.q_no ||
+                0
+              ),
             section: section,
             display:
               '筆' +
@@ -3868,6 +4033,12 @@
 
     review.sections.forEach(
       function (part, index) {
+        var qNo =
+          reviewQuestionOrdinal_(
+            review,
+            part,
+            index
+          );
         var button =
           el(
             'button',
@@ -3877,15 +4048,17 @@
         button.type = 'button';
         button.dataset.index =
           String(index);
+        button.dataset.questionOrdinal =
+          String(qNo);
         button.textContent =
           'Q' +
-          (index + 1) +
+          qNo +
           ' ' +
           part.result;
         button.setAttribute(
           'aria-label',
           'Q' +
-          (index + 1) +
+          qNo +
           ' ' +
           part.result
         );
@@ -4057,6 +4230,7 @@
       0,
       review
     );
+    scheduleInitialAudioPrefetch();
   }
 
   function setReviewPage(
@@ -4132,22 +4306,6 @@
       );
     }
 
-    if (isMobileMode()) {
-      var pager =
-        document.querySelector(
-          '.review-progress'
-        );
-
-      if (
-        pager &&
-        pager.scrollIntoView
-      ) {
-        pager.scrollIntoView({
-          block: 'start',
-          behavior: 'smooth'
-        });
-      }
-    }
   }
 
   function writtenReviewDisplayLabel_(
@@ -4185,6 +4343,12 @@
       String(
         payload.surface_family || ''
       );
+    var qNo =
+      reviewQuestionOrdinal_(
+        payload,
+        part,
+        index
+      );
 
     if (
       payload.kind === 'WRITTEN' &&
@@ -4195,7 +4359,7 @@
     ) {
       return (
         'Q' +
-        (index + 1) +
+        qNo +
         ' ［' +
         writtenReviewDisplayLabel_(
           part
@@ -4207,7 +4371,7 @@
 
     return (
       'Q' +
-      (index + 1) +
+      qNo +
       ' ' +
       questionDisplayLabel_(
         part.display,

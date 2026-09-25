@@ -1008,6 +1008,9 @@
               semantic.timestamp_finding_count || 0
             ) +
             Number(
+              semantic.attempt_counter_finding_count || 0
+            ) +
+            Number(
               semantic.missing_job_finding_count || 0
             );
           semanticCard.appendChild(
@@ -1058,9 +1061,13 @@
           var rs14 =
             monitorCard_(
               'RS14',
-              gate.rs14p_gate_pass
-                ? 'PASS'
-                : 'PENDING'
+              gate.status === 'ERROR'
+                ? 'ERROR'
+                : (
+                    gate.rs14p_gate_pass
+                      ? 'PASS'
+                      : 'PENDING'
+                  )
             );
           var progress =
             gate.progress || {};

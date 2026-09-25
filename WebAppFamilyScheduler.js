@@ -2163,8 +2163,8 @@ function h3FsAuthoringAgeMinutes_(value,nowMs) {
   var t=h3FsAuthoringTimestampMs_(value);
   if(t===null)return null;
   var age=(Number(nowMs)-t)/60000;
-  if(!isFinite(age))return null;
-  return Math.max(0,Math.floor(age));
+  if(!isFinite(age)||age<0)return null;
+  return Math.floor(age);
 }
 
 function h3FsAuthoringHealthFromTable_(table,nowMs) {
@@ -2178,7 +2178,7 @@ function h3FsAuthoringHealthFromTable_(table,nowMs) {
   var oldestOpen=null,oldestClaimed=null;
   var staleClaimed=0,retryDue=0,failedBlocked=0;
   var recentCompleted=0,superseded=0,retryExhaustedNotBlocked=0;
-  var timestampFindings=0;
+  var timestampFindings=0,attemptCounterFindings=0;
   var idempotencyCounts={};
 
   function bumpStatus_(status) {
@@ -2191,7 +2191,15 @@ function h3FsAuthoringHealthFromTable_(table,nowMs) {
 
   table.rows.forEach(function(r){
     var status=String(r[m.STATUS]||'');
-    var attempts=Number(r[m.ATTEMPT_COUNT]||0);
+    var attemptsRaw=r[m.ATTEMPT_COUNT];
+    var attempts=Number(attemptsRaw);
+    var attemptsValid=(
+      attemptsRaw!=='' &&
+      attemptsRaw!==null &&
+      attemptsRaw!==undefined &&
+      Number.isInteger(attempts) &&
+      attempts>=0
+    );
     var key=String(r[m.IDEMPOTENCY_KEY]||'');
     bumpStatus_(status);
 
@@ -2217,14 +2225,19 @@ function h3FsAuthoringHealthFromTable_(table,nowMs) {
     if(status==='FAILED_RETRYABLE'){
       var retryAge=h3FsAuthoringAgeMinutes_(r[m.UPDATED_AT],nowMs);
       if(retryAge===null)timestampFindings++;
-      else if(
-        attempts<H3_FS_AUTHORING_MAX_ATTEMPTS_ &&
-        retryAge>=H3_FS_AUTHORING_RETRY_BACKOFF_MINUTES_
-      ){
-        retryDue++;
-      }
-      if(attempts>=H3_FS_AUTHORING_MAX_ATTEMPTS_){
-        retryExhaustedNotBlocked++;
+      if(!attemptsValid){
+        attemptCounterFindings++;
+      } else {
+        if(
+          retryAge!==null &&
+          attempts<H3_FS_AUTHORING_MAX_ATTEMPTS_ &&
+          retryAge>=H3_FS_AUTHORING_RETRY_BACKOFF_MINUTES_
+        ){
+          retryDue++;
+        }
+        if(attempts>=H3_FS_AUTHORING_MAX_ATTEMPTS_){
+          retryExhaustedNotBlocked++;
+        }
       }
     }
 
@@ -2263,7 +2276,8 @@ function h3FsAuthoringHealthFromTable_(table,nowMs) {
     duplicate_idempotency_violation_count:duplicateKeys.length,
     duplicate_idempotency_keys:duplicateKeys,
     retry_exhausted_not_blocked_count:retryExhaustedNotBlocked,
-    timestamp_finding_count:timestampFindings
+    timestamp_finding_count:timestampFindings,
+    attempt_counter_finding_count:attemptCounterFindings
   };
 }
 
@@ -2317,6 +2331,7 @@ function h3FsAuthoringHealthCore_(ss,level,nowMs) {
     retry_exhausted_not_blocked_count:
       metrics.retry_exhausted_not_blocked_count,
     timestamp_finding_count:metrics.timestamp_finding_count,
+    attempt_counter_finding_count:metrics.attempt_counter_finding_count,
     missing_job_reconciliation_finding_count:missing.length,
     missing_job_reconciliation_findings:missing,
     reconciliation_status:
@@ -2332,6 +2347,7 @@ function h3FsAuthoringHealthCore_(ss,level,nowMs) {
       retry_exhausted_not_blocked:
         metrics.retry_exhausted_not_blocked_count>0,
       timestamp_finding:metrics.timestamp_finding_count>0,
+      attempt_counter_finding:metrics.attempt_counter_finding_count>0,
       missing_authoring_job:missing.length>0,
       reconciliation_error:!!reconciliationError
     },
@@ -4712,6 +4728,14 @@ function h3MonitoringObserverErrorText_(err) {
   return s.length>500 ? s.slice(0,500) : s;
 }
 
+function h3MonitoringObserverIsoTime_(value) {
+  var n=Number(value);
+  if(!isFinite(n))return '';
+  var d=new Date(n);
+  if(!isFinite(d.getTime()))return '';
+  try { return d.toISOString(); } catch(_ignore) { return ''; }
+}
+
 function h3MonitoringObserverNormalizeEvent_(sourceId,event,index) {
   event=event&&Object.prototype.toString.call(event)==='[object Object]'
     ? event : {detail:String(event||'')};
@@ -4729,7 +4753,7 @@ function h3MonitoringObserverNormalizeEvent_(sourceId,event,index) {
   };
 }
 
-function h3MonitoringObserverReadSource_(spec) {
+function h3MonitoringObserverReadSource_(spec,nowMs) {
   var sourceId=String(spec&&spec.source_id||'');
   if(!sourceId)throw new Error('MONITOR_OBSERVER_SOURCE_ID_REQUIRED');
   if(!spec||typeof spec.reader!=='function'){
@@ -4737,7 +4761,7 @@ function h3MonitoringObserverReadSource_(spec) {
   }
 
   try {
-    var raw=spec.reader();
+    var raw=spec.reader(nowMs);
     if(!raw||Object.prototype.toString.call(raw)!=='[object Object]'){
       throw new Error('MONITOR_OBSERVER_SOURCE_RESULT_INVALID:'+sourceId);
     }
@@ -4813,7 +4837,8 @@ function h3MonitoringObserverBuildSnapshot_(level,sourceSpecs,nowMs) {
   if(!Array.isArray(sourceSpecs)){
     throw new Error('MONITOR_OBSERVER_SOURCE_SPECS_REQUIRED');
   }
-  if(!isFinite(Number(nowMs))){
+  var nowIso=h3MonitoringObserverIsoTime_(nowMs);
+  if(!nowIso){
     throw new Error('MONITOR_OBSERVER_TIME_INVALID');
   }
 
@@ -4830,7 +4855,9 @@ function h3MonitoringObserverBuildSnapshot_(level,sourceSpecs,nowMs) {
     seen[id]=true;
   });
 
-  var sources=specs.map(h3MonitoringObserverReadSource_);
+  var sources=specs.map(function(spec){
+    return h3MonitoringObserverReadSource_(spec,Number(nowMs));
+  });
   var events=[];
   var errorCount=0,warningCount=0;
   sources.forEach(function(source){
@@ -4855,7 +4882,7 @@ function h3MonitoringObserverBuildSnapshot_(level,sourceSpecs,nowMs) {
   var snapshot={
     schema:H3_MONITOR_OBSERVER_SNAPSHOT_SCHEMA_,
     level:level,
-    last_checked_at:new Date(Number(nowMs)).toISOString(),
+    last_checked_at:nowIso,
     status:status,
     health:{
       source_count:sources.length,
@@ -4874,10 +4901,14 @@ function h3MonitoringObserverBuildSnapshot_(level,sourceSpecs,nowMs) {
 
 function h3MonitoringObserverFatalSnapshot_(level,nowMs,err) {
   var error=h3MonitoringObserverErrorText_(err);
+  var fallbackIso=
+    h3MonitoringObserverIsoTime_(nowMs) ||
+    h3MonitoringObserverIsoTime_(Date.now()) ||
+    '1970-01-01T00:00:00.000Z';
   var snapshot={
     schema:H3_MONITOR_OBSERVER_SNAPSHOT_SCHEMA_,
     level:String(level||''),
-    last_checked_at:new Date(Number(nowMs)).toISOString(),
+    last_checked_at:fallbackIso,
     status:'ERROR',
     health:{
       source_count:1,
@@ -4941,7 +4972,7 @@ function h3MonitoringObserverTelemetrySheet_(ss) {
   return {sheet:sh,table:t};
 }
 
-function h3MonitoringObserverWriteSnapshot_(ss,snapshot) {
+function h3MonitoringObserverWriteSnapshotUnlocked_(ss,snapshot) {
   if(
     !snapshot ||
     String(snapshot.schema||'')!==H3_MONITOR_OBSERVER_SNAPSHOT_SCHEMA_
@@ -5020,6 +5051,18 @@ function h3MonitoringObserverWriteSnapshot_(ss,snapshot) {
   };
 }
 
+function h3MonitoringObserverWriteSnapshot_(ss,snapshot) {
+  var lock=LockService.getScriptLock();
+  if(!lock.tryLock(30000)){
+    throw new Error('MONITOR_OBSERVER_LOCK_BUSY');
+  }
+  try {
+    return h3MonitoringObserverWriteSnapshotUnlocked_(ss,snapshot);
+  } finally {
+    try{lock.releaseLock();}catch(_ignore){}
+  }
+}
+
 function h3MonitoringObserverStoredSnapshot_(ss,level) {
   var sh=ss.getSheetByName(H3_MONITOR_OBSERVER_SHEET_);
   if(!sh)return null;
@@ -5044,6 +5087,8 @@ function h3MonitoringObserverStoredSnapshot_(ss,level) {
     !snapshot ||
     String(snapshot.schema||'')!==H3_MONITOR_OBSERVER_SNAPSHOT_SCHEMA_ ||
     String(r[m.SCHEMA_VERSION]||'')!==H3_MONITOR_OBSERVER_SCHEMA_ ||
+    String(snapshot.level||'')!==String(level||'') ||
+    String(r[m.LEVEL]||'')!==String(level||'') ||
     String(snapshot.snapshot_sha256||'')!==expectedHash ||
     String(r[m.SNAPSHOT_SHA256]||'')!==expectedHash
   ){
@@ -5072,9 +5117,9 @@ function h3MonitoringObserverSourceSpecs_(ss) {
     }
   },{
     source_id:H3_MONITOR_SEMANTIC_AUTHORING_SOURCE_ID_,
-    reader:function(){
+    reader:function(observedAtMs){
       return h3MonitoringSemanticAuthoringSource_(
-        ss,'3級',Date.now()
+        ss,'3級',Number(observedAtMs)
       );
     }
   },{
@@ -5198,6 +5243,7 @@ function h3MonitoringSemanticAuthoringFromHealth_(health) {
     alerts.duplicate_idempotency===true ||
     alerts.retry_exhausted_not_blocked===true ||
     alerts.timestamp_finding===true ||
+    alerts.attempt_counter_finding===true ||
     alerts.missing_authoring_job===true
   );
 
@@ -5225,6 +5271,7 @@ function h3MonitoringSemanticAuthoringSource_(ss,level,nowMs) {
     var error=h3MonitoringObserverErrorText_(err);
     return {
       status:'ERROR',
+      error:error,
       data:{
         schema:H3_MONITOR_SEMANTIC_AUTHORING_SCHEMA_,
         monitor_contract:'S4-R4-C',
@@ -5310,15 +5357,29 @@ function h3MonitoringRs13Rs14ValidateReport_(report) {
     throw new Error('MONITOR_RS13_RS14_THRESHOLD_DRIFT');
   }
 
-  if(
-    Number(metrics.distinct_event_count||0)<0 ||
-    Number(metrics.concept_count||0)<0 ||
-    Number(metrics.source_family_count||0)<0 ||
-    Number(metrics.noncorrect_count||0)<0 ||
-    Number(metrics.unsafe_rows||0)<0 ||
-    Number(metrics.scheduler_applied_true||0)<0
-  ){
-    throw new Error('MONITOR_RS13_RS14_METRICS_INVALID');
+  var metricKeys=[
+    'distinct_event_count','concept_count','source_family_count',
+    'noncorrect_count','unsafe_rows','scheduler_applied_true'
+  ];
+  var normalizedMetrics={};
+  metricKeys.forEach(function(key){
+    var value=Number(metrics[key]);
+    if(!Number.isInteger(value)||value<0){
+      throw new Error('MONITOR_RS13_RS14_METRICS_INVALID');
+    }
+    normalizedMetrics[key]=value;
+  });
+  var frozenGatePass=(
+    normalizedMetrics.distinct_event_count>=thresholds.distinct_events &&
+    normalizedMetrics.concept_count>=thresholds.concepts &&
+    normalizedMetrics.source_family_count>=thresholds.source_families &&
+    normalizedMetrics.noncorrect_count>=thresholds.require_noncorrect &&
+    normalizedMetrics.unsafe_rows===thresholds.unsafe_rows &&
+    normalizedMetrics.scheduler_applied_true===
+      thresholds.scheduler_applied_true
+  );
+  if(gate.gate_pass!==frozenGatePass){
+    throw new Error('MONITOR_RS13_RS14_GATE_PREDICATE_DRIFT');
   }
 
   return report;
@@ -5367,6 +5428,83 @@ function h3MonitoringRs13Rs14K1AuthorityHealth_(ss) {
     skill_level_concept_inference:false,
     historical_backfill:false,
     state_transfer:false
+  };
+}
+
+function h3MonitoringRs13Rs14BoundedList_(values) {
+  values=Array.isArray(values)?values:[];
+  return {
+    count:values.length,
+    values:values.slice(0,10).map(function(value){
+      return String(value||'').slice(0,256);
+    }),
+    truncated:values.length>10
+  };
+}
+function h3MonitoringRs13Rs14BoundedReport_(report) {
+  var evidence=report.evidence||{},reconciliation=report.reconciliation||{};
+  var rs13=report.rs13||{},rs14p=report.rs14p||{};
+  var gate=rs14p.activation_gate||{},metrics=gate.metrics||{},progress=rs14p.progress||{};
+  var missing=h3MonitoringRs13Rs14BoundedList_(reconciliation.missing_observation_ids);
+  var conflict=h3MonitoringRs13Rs14BoundedList_(reconciliation.conflict_observation_ids);
+  var orphan=h3MonitoringRs13Rs14BoundedList_(reconciliation.orphan_observation_ids);
+  var reasons=h3MonitoringRs13Rs14BoundedList_(gate.reasons);
+  function n_(value){var n=Number(value);return isFinite(n)?n:0;}
+  function p_(value){
+    value=value||{};
+    return {
+      current:n_(value.current),
+      required:value.required===undefined?null:n_(value.required),
+      remaining:value.remaining===undefined?null:n_(value.remaining),
+      satisfied:typeof value.satisfied==='boolean'?value.satisfied:undefined
+    };
+  }
+  return {
+    schema:String(report.schema||''),contract_id:String(report.contract_id||''),
+    read_only:report.read_only===true,writes_performed:n_(report.writes_performed),
+    evidence:{
+      committed_rows:n_(evidence.committed_rows),distinct_event_count:n_(evidence.distinct_event_count),
+      source_family_count:n_(evidence.source_family_count),concept_count:n_(evidence.concept_count),
+      contributory_rows:n_(evidence.contributory_rows),incidental_rows:n_(evidence.incidental_rows),
+      correct_rows:n_(evidence.correct_rows),triangle_rows:n_(evidence.triangle_rows),wrong_rows:n_(evidence.wrong_rows)
+    },
+    reconciliation:{
+      expected_observation_rows:n_(reconciliation.expected_observation_rows),
+      actual_observation_rows:n_(reconciliation.actual_observation_rows),
+      exact_match_rows:n_(reconciliation.exact_match_rows),
+      missing_observation_ids:missing.values,missing_observation_count:missing.count,
+      missing_observation_ids_truncated:missing.truncated,
+      conflict_observation_ids:conflict.values,conflict_observation_count:conflict.count,
+      conflict_observation_ids_truncated:conflict.truncated,
+      orphan_observation_ids:orphan.values,orphan_observation_count:orphan.count,
+      orphan_observation_ids_truncated:orphan.truncated,exact:reconciliation.exact===true
+    },
+    rs13:{
+      state:String(rs13.state||'').slice(0,100),
+      explicit_review_ready:rs13.explicit_review_ready===true,
+      close_automatic:rs13.close_automatic===true
+    },
+    rs14p:{
+      activation_gate:{
+        schema:String(gate.schema||'').slice(0,100),
+        contract_id:String(gate.contract_id||'').slice(0,200),
+        gate_pass:gate.gate_pass===true,
+        metrics:{
+          observed_rows:n_(metrics.observed_rows),distinct_event_count:n_(metrics.distinct_event_count),
+          concept_count:n_(metrics.concept_count),source_family_count:n_(metrics.source_family_count),
+          noncorrect_count:n_(metrics.noncorrect_count),unsafe_rows:n_(metrics.unsafe_rows),
+          scheduler_applied_true:n_(metrics.scheduler_applied_true)
+        },
+        reasons:reasons.values,reason_count:reasons.count,reasons_truncated:reasons.truncated
+      },
+      progress:{
+        distinct_events:p_(progress.distinct_events),concepts:p_(progress.concepts),
+        source_families:p_(progress.source_families),require_noncorrect:p_(progress.require_noncorrect),
+        unsafe_rows:p_(progress.unsafe_rows),scheduler_applied_true:p_(progress.scheduler_applied_true)
+      },
+      live_activation_automatic:rs14p.live_activation_automatic===true
+    },
+    next_advisory:String(report.next_advisory||'').slice(0,500)
   };
 }
 
@@ -5456,7 +5594,7 @@ function h3MonitoringRs13Rs14FromReport_(report,k1Health) {
       frozen_report_contract:
         H3_MONITOR_RS13_RS14_REPORT_CONTRACT_,
       frozen_thresholds:H3_MONITOR_RS13_RS14_THRESHOLDS_,
-      report:report,
+      report:h3MonitoringRs13Rs14BoundedReport_(report),
       k1_authority:k1Health,
       observer_write_performed:false,
       reconciliation_write_performed:false,
@@ -5481,6 +5619,7 @@ function h3MonitoringRs13Rs14Source_(ss) {
     var error=h3MonitoringObserverErrorText_(err);
     return {
       status:'ERROR',
+      error:error,
       data:{
         schema:H3_MONITOR_RS13_RS14_SCHEMA_,
         monitor_contract:'S4-R4-D',
@@ -6403,6 +6542,10 @@ function h3MonitoringHomeProgress_(raw,required) {
   };
 }
 
+function h3MonitoringHomeUnavailableProgress_(required) {
+  return {current:0,required:Number(required||0),satisfied:false,available:false};
+}
+
 function h3MonitoringHomeReadModelFromSnapshot_(snapshot) {
   if(
     !snapshot ||
@@ -6416,6 +6559,51 @@ function h3MonitoringHomeReadModelFromSnapshot_(snapshot) {
       h3MonitoringObserverSnapshotHash_(snapshot)
   ){
     throw new Error('MONITOR_HOME_SNAPSHOT_HASH_MISMATCH');
+  }
+
+  var fatalSources=(snapshot.sources||[]).filter(function(source){
+    return String(source&&source.source_id||'')==='OBSERVER_CONFIG';
+  });
+  if(String(snapshot.status||'')==='ERROR'&&(snapshot.sources||[]).length===1&&fatalSources.length===1){
+    var fatal=fatalSources[0]||{};
+    var fatalError=String(fatal.error||fatal.action_required_events&&fatal.action_required_events[0]&&fatal.action_required_events[0].detail||'OBSERVER_CONFIG_ERROR');
+    var fatalRecent=(snapshot.action_required_events||[]).slice(0,H3_MONITOR_HOME_EVENT_LIMIT_).map(function(event){
+      return {source_id:String(event&&event.source_id||''),event_type:String(event&&event.event_type||''),detail:String(event&&event.detail||'')};
+    });
+    var ft=H3_MONITOR_RS13_RS14_THRESHOLDS_;
+    return {
+      schema:H3_MONITOR_HOME_READ_MODEL_SCHEMA_,level:String(snapshot.level||''),status:'ERROR',
+      last_checked_at:String(snapshot.last_checked_at||''),
+      observer_health:{
+        source_count:Number(snapshot.health&&snapshot.health.source_count||0),
+        ok_count:Number(snapshot.health&&snapshot.health.ok_count||0),
+        warning_count:Number(snapshot.health&&snapshot.health.warning_count||0),
+        error_count:Number(snapshot.health&&snapshot.health.error_count||0),
+        action_required_count:Number(snapshot.health&&snapshot.health.action_required_count||0)
+      },
+      runtime_authority:{status:'ERROR',spreadsheet_id:'',error:fatalError},
+      semantic_authoring:{
+        status:'ERROR',queue_total_rows:0,open_count:0,claimed_count:0,retry_due_count:0,
+        stale_claimed_count:0,failed_blocked_count:0,duplicate_idempotency_count:0,
+        retry_exhausted_not_blocked_count:0,timestamp_finding_count:0,
+        attempt_counter_finding_count:0,missing_job_finding_count:0,
+        reconciliation_status:'ERROR',error:fatalError
+      },
+      rs13_rs14:{
+        status:'ERROR',rs13_state:'ERROR',genuine_secondary_rows:0,reconciliation_exact:false,
+        k1_authority_rows:0,rs14p_gate_pass:false,error:fatalError,
+        progress:{
+          distinct_events:h3MonitoringHomeUnavailableProgress_(ft.distinct_events),
+          concepts:h3MonitoringHomeUnavailableProgress_(ft.concepts),
+          source_families:h3MonitoringHomeUnavailableProgress_(ft.source_families),
+          noncorrect:h3MonitoringHomeUnavailableProgress_(ft.require_noncorrect),
+          unsafe_rows:h3MonitoringHomeUnavailableProgress_(ft.unsafe_rows),
+          scheduler_applied_true:h3MonitoringHomeUnavailableProgress_(ft.scheduler_applied_true)
+        }
+      },
+      recent_events:fatalRecent,recent_events_truncated:(snapshot.action_required_events||[]).length>fatalRecent.length,
+      fatal_observer_error:fatalError,read_only:true,write_performed:false
+    };
   }
 
   var semantic=h3MonitoringHomeSource_(
@@ -6494,12 +6682,16 @@ function h3MonitoringHomeReadModelFromSnapshot_(snapshot) {
       timestamp_finding_count:Number(
         semanticHealth.timestamp_finding_count||0
       ),
+      attempt_counter_finding_count:Number(
+        semanticHealth.attempt_counter_finding_count||0
+      ),
       missing_job_finding_count:Number(
         semanticHealth.missing_job_reconciliation_finding_count||0
       ),
       reconciliation_status:String(
         semanticHealth.reconciliation_status||''
-      )
+      ),
+      error:String(semantic.error||semanticData.error||'')
     },
     rs13_rs14:{
       status:String(gate.status||''),
@@ -6510,6 +6702,7 @@ function h3MonitoringHomeReadModelFromSnapshot_(snapshot) {
       reconciliation_exact:reconciliation.exact===true,
       k1_authority_rows:Number(k1.row_count||0),
       rs14p_gate_pass:activation.gate_pass===true,
+      error:String(gate.error||gateData.error||''),
       progress:{
         distinct_events:h3MonitoringHomeProgress_(
           progress.distinct_events,thresholds.distinct_events

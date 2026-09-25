@@ -2150,7 +2150,7 @@ jobs:
               "H3_MONITOR_OBSERVER_V1",
               "H3_MONITOR_OBSERVER_SNAPSHOT_V1",
               "monitor_observer_v1",
-              "function h3MonitoringObserverReadSource_(spec)",
+              "function h3MonitoringObserverReadSource_(spec,nowMs)",
               "function h3MonitoringObserverBuildSnapshot_(level,sourceSpecs,nowMs)",
               "function h3MonitoringObserverSnapshot_(level,sourceSpecs,nowMs)",
               "function h3MonitoringObserverWriteSnapshot_(ss,snapshot)",
@@ -2215,6 +2215,14 @@ jobs:
           global.hash_ = value =>
             crypto.createHash('sha256').update(String(value)).digest('hex');
           global.SpreadsheetApp = {flush:()=>{}};
+          let observerLockAcquireCount=0;
+          let observerLockReleaseCount=0;
+          global.LockService = {
+            getScriptLock:()=>({
+              tryLock:()=>{observerLockAcquireCount++;return true;},
+              releaseLock:()=>{observerLockReleaseCount++;}
+            })
+          };
 
           vm.runInThisContext(
             fs.readFileSync('WebAppFamilyScheduler.js','utf8')
@@ -2403,6 +2411,9 @@ jobs:
             throw new Error(
               'S4-R4-B fixture accessed non-telemetry sheet'
             );
+          }
+          if(observerLockAcquireCount!==2||observerLockReleaseCount!==2){
+            throw new Error('S4-R4-B observer write lock mismatch');
           }
 
           console.log('Common monitoring observer foundation fixture PASS');
@@ -3458,6 +3469,68 @@ jobs:
           );
 
           console.log('S4-R4-E HOME monitor fixture PASS');
+          NODE
+
+      - name: P08 observer correctness regression
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          server=Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
+          index=Path("Index.html").read_text(encoding="utf-8")
+          for token in [
+              "attempt_counter_finding_count","attempt_counter_finding:",
+              "function h3MonitoringObserverIsoTime_(value)",
+              "function h3MonitoringObserverWriteSnapshotUnlocked_(ss,snapshot)",
+              "MONITOR_OBSERVER_LOCK_BUSY","MONITOR_RS13_RS14_GATE_PREDICATE_DRIFT",
+              "function h3MonitoringRs13Rs14BoundedReport_(report)",
+              "function h3MonitoringHomeUnavailableProgress_(required)","fatal_observer_error",
+          ]:
+              if token not in server:
+                  raise SystemExit(f"missing P08 observer token: {token}")
+          if "gate.status === 'ERROR'" not in index:
+              raise SystemExit("P08 RS14 ERROR badge propagation missing")
+          print("P08 observer correctness static contract PASS")
+          PY
+          node <<'NODE'
+          const fs=require('fs'),vm=require('vm'),crypto=require('crypto');
+          global.hash_=value=>crypto.createHash('sha256').update(String(value)).digest('hex');
+          global.H3_WEB_RUNTIME_SPREADSHEET_ID='fixture-runtime';
+          global.SpreadsheetApp={flush:()=>{}};
+          vm.runInThisContext(fs.readFileSync('WebAppFamilyScheduler.js','utf8'));
+          function assert(ok,msg){if(!ok)throw new Error(msg);}
+          const now=Date.parse('2026-09-24T12:00:00Z');
+          assert(h3FsAuthoringAgeMinutes_('2026-09-24T12:00:01Z',now)===null,'future timestamp');
+          const headers=H3_FS_AUTHORING_QUEUE_HEADERS_,map={};headers.forEach((x,i)=>map[x]=i);
+          const row=new Array(headers.length).fill('');row[map.STATUS]='FAILED_RETRYABLE';row[map.UPDATED_AT]='2026-09-24T10:00:00Z';row[map.ATTEMPT_COUNT]='bad';
+          const health=h3FsAuthoringHealthFromTable_({headers,map,rows:[row]},now);
+          assert(health.attempt_counter_finding_count===1&&health.FAILED_RETRYABLE_due_count===0,'invalid retry counter');
+          const fatal=h3MonitoringObserverSnapshot_('3級',[],Number.NaN);
+          assert(fatal.status==='ERROR'&&!Number.isNaN(Date.parse(fatal.last_checked_at)),'fatal timestamp fallback');
+          const fatalHome=h3MonitoringHomeReadModelFromSnapshot_(fatal);
+          assert(fatalHome.status==='ERROR'&&fatalHome.rs13_rs14.status==='ERROR'&&fatalHome.recent_events[0].event_type==='OBSERVER_CONFIG_ERROR','fatal HOME');
+          let semanticNow=null;const oldHealth=h3FsAuthoringHealthCore_;
+          h3FsAuthoringHealthCore_=(_ss,_level,t)=>{semanticNow=t;throw new Error('fixture semantic failure');};
+          const semanticSpec=h3MonitoringObserverSourceSpecs_({getId:()=>H3_WEB_RUNTIME_SPREADSHEET_ID}).find(x=>x.source_id===H3_MONITOR_SEMANTIC_AUTHORING_SOURCE_ID_);
+          const semanticRead=h3MonitoringObserverReadSource_(semanticSpec,now);
+          assert(semanticNow===now&&semanticRead.status==='ERROR'&&semanticRead.error.includes('fixture semantic failure'),'semantic time/error');
+          h3FsAuthoringHealthCore_=oldHealth;
+          function baseReport(){return {
+            schema:'H3_RS13G_GATE_REPORT_V1',contract_id:'H3-RS13G-GATE-REPORTER-20260922-V1',read_only:true,writes_performed:0,
+            evidence:{committed_rows:0,distinct_event_count:0,source_family_count:0,concept_count:0,contributory_rows:0,incidental_rows:0,correct_rows:0,triangle_rows:0,wrong_rows:0},
+            reconciliation:{expected_observation_rows:0,actual_observation_rows:0,exact_match_rows:0,missing_observation_ids:[],conflict_observation_ids:[],orphan_observation_ids:[],exact:true},
+            rs13:{state:'AWAIT_REAL_DATA',explicit_review_ready:false,close_automatic:false},
+            rs14p:{activation_gate:{schema:'H3_RS14P_ACTIVATION_GATE_V1',contract_id:'H3-RS14P-LIMITED-LIVE-PREFLIGHT-20260922-V1',gate_pass:false,metrics:{observed_rows:0,distinct_event_count:0,concept_count:0,source_family_count:0,noncorrect_count:0,unsafe_rows:0,scheduler_applied_true:0},reasons:[]},
+              progress:{distinct_events:{current:0,required:6,remaining:6},concepts:{current:0,required:2,remaining:2},source_families:{current:0,required:2,remaining:2},require_noncorrect:{current:0,satisfied:false},unsafe_rows:{current:0,required:0,satisfied:true},scheduler_applied_true:{current:0,required:0,satisfied:true}},live_activation_automatic:false},
+            next_advisory:'FIXTURE'};}
+          const invalidGate=baseReport();invalidGate.rs14p.activation_gate.gate_pass=true;let drift=false;
+          try{h3MonitoringRs13Rs14ValidateReport_(invalidGate);}catch(err){drift=String(err.message||err).includes('MONITOR_RS13_RS14_GATE_PREDICATE_DRIFT');}
+          assert(drift,'gate predicate drift');
+          const large=baseReport();large.reconciliation.exact=false;large.rs13.state='RECONCILIATION_REQUIRED';large.reconciliation.expected_observation_rows=1000;
+          large.reconciliation.missing_observation_ids=Array.from({length:1000},(_,i)=>'MISSING-'+i+'-'+'x'.repeat(300));
+          const k1={contract_id:H3_MONITOR_RS13_RS14_K1_CONTRACT_,sheet:'listening_k1_secondary_authority_v1',row_count:0,skill_level_concept_inference:false,historical_backfill:false,state_transfer:false};
+          const bounded=h3MonitoringRs13Rs14FromReport_(large,k1),br=bounded.data.report.reconciliation;
+          assert(br.missing_observation_ids.length===10&&br.missing_observation_count===1000&&br.missing_observation_ids_truncated===true&&h3FsCanonical_(bounded.data.report).length<20000,'bounded report');
+          console.log('P08 observer correctness regression PASS');
           NODE
 
       - name: S4-R4-F deduplicated action-required email contract

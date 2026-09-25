@@ -3184,12 +3184,30 @@ jobs:
               "'false'",
               "monitor-home-details",
               "monitor-home-chevron",
+              "var monitorRequestGeneration = 0;",
+              "function monitorRequestCurrent_(",
+              "monitorPanel_() === panel",
+              "panel.dataset.monitorRequestGeneration",
+              "model.recent_events_truncated ===",
+              "monitor-home-event-summary",
           ]
           for token in required_index:
               if token not in index:
                   raise SystemExit(
                       f"missing S4-R4-E HOME token: {token}"
                   )
+          if index.count("!monitorRequestCurrent_(") < 2:
+              raise SystemExit(
+                  "P11 stale callback guard missing from success/failure paths"
+              )
+          if (
+              "全' +" not in index
+              or "'件中' +" not in index
+              or "'件省略）'" not in index
+          ):
+              raise SystemExit(
+                  "P11 truncated event count indicator missing"
+              )
           for token in [
               "h3MonitoringObserverRun(",
               "h3MonitoringObserverWriteSnapshot_(",

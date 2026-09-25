@@ -35,7 +35,7 @@ This workflow changes neither versioned `/exec` deployments, Drive assets, Azure
 
 ### Exact-main observability source binding
 
-After authenticated Apps Script HEAD source attestation succeeds for the exact current audited `main` SHA, `.github/workflows/apps-script-auto-sync.yml` may execute exactly one permanent credentialed binding call: `h3ObservabilityBindSource`. The call must be gated by `steps.source_binding_boundary.outputs.ready == 'true'`, must occur after source attestation and before the manual smoke boundary, and may write only the following Script Properties:
+After authenticated Apps Script HEAD source attestation succeeds for the exact current audited `main` SHA, `.github/workflows/apps-script-auto-sync.yml` may execute exactly one permanent credentialed binding call: `h3ObservabilityBindSource`. The call must be gated by `steps.source_binding_boundary.outputs.ready == 'true'`, must occur after source attestation and before the automatic smoke boundary, and may write only the following Script Properties:
 
 - `H3_OBSERVABILITY_SOURCE_SCHEMA`
 - `H3_OBSERVABILITY_SOURCE_SHA`
@@ -51,9 +51,39 @@ The runtime error contract is `H3_WEB_RUNTIME_ERROR_V1`, stored append-only in t
 
 Retention is 90 days with a hard cap of 5000 events. The existing production monitoring cadence performs at most one prune per 24 hours; prune failure must not interrupt the monitoring observer. Error logging itself is best-effort: logging failure must never replace the original learner-facing exception. The learner-facing diagnostic handle is `H3ERR-...`; stack details remain in the observability log/console rather than the UI.
 
-### Authorized read-only Apps Script live smoke
+### Automatic live smoke
 
-For an explicitly authorized read-only smoke of a function already present in Apps Script HEAD, the verified path is:
+Normal audited `main` changes may run a permanent impact-selected read-only live smoke without `workflow_dispatch`. The permanent contract is `H3_AUTOMATIC_LIVE_SMOKE_REQUEST_V1` -> `H3_AUTOMATIC_LIVE_SMOKE_RESULT_V1`.
+
+The verified automatic path is:
+
+```text
+GitHub exact current main SHA
+-> Repository audit push PASS for the same exact SHA
+-> automatic workflow_run in apps-script-auto-sync.yml
+-> exact .clasp.json target verification
+-> GitHub -> Apps Script HEAD sync when Apps Script source changed
+-> authenticated source_attestation for that exact SHA
+-> exact-main observability source binding/readback
+-> impact-selected smoke plan
+-> automatic_smoke_boundary ready=true
+-> if: steps.automatic_smoke_boundary.outputs.ready == 'true'
+-> clasp run-function h3AutomaticLiveSmoke --json
+-> exact returned-suite/schema/no-write validation
+```
+
+The automatic surface accepts only fixed allowlisted suites and never an arbitrary function name or request route:
+
+- `REVIEW_5W` — runs the persistent Written Review path for immutable historical set `H3-20260914-03` and requires `5W #6`, five sections, `read_only=true`, and the persistent Written Review schema.
+- `SYSTEM_TEST_RENDER` — runs the frozen allowlisted SYSTEM_TEST render path and requires `H3_WEB_SET_V1`, `mode=SYSTEM_TEST`, five questions, and `nonlearning=true`.
+
+Shared Web entrypoint/client/observability changes select both suites. Review/Written changes select `REVIEW_5W`. Other `WebApp*.js`, Index/Stylesheet, fixture/render, or manifest changes select `SYSTEM_TEST_RENDER`. Backend-only source changes do not run an unrelated Web smoke.
+
+The automatic smoke source must contain no Sheet/Script-Property/Drive/mail/network/trigger mutation primitive and returns `write_performed=false`. Repository audit must enforce exactly one permanent automatic `clasp run-function h3AutomaticLiveSmoke` command, positioned after the automatic boundary and before the manual smoke boundary. Automatic smoke is allowed only on the successful exact-SHA Repository audit `workflow_run` path after immediate source attestation and source binding.
+
+### Ad hoc manual read-only Apps Script live smoke
+
+For an explicitly authorized one-off read-only smoke of a function already present in Apps Script HEAD, the verified path is:
 
 ```text
 GitHub exact current main SHA

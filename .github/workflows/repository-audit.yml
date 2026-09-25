@@ -2818,7 +2818,8 @@ jobs:
           required_web = [
               "var mode = 'HOME';",
               "params.mode === 'REVIEW'",
-              "txnId = String(",
+              "params.txn_id",
+              "String(params.txn_id)",
               "h3ReviewRenderRequest_(",
               "h3ReviewMediaRequest_(",
               "h3ReviewSubmitRequest_(",

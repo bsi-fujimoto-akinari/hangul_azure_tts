@@ -228,7 +228,7 @@ function buildProductionRenderPayload_(request) {
   );
 
   var questions = H3_WEB_PROD_SECTIONS.map(
-    function (section) {
+    function (section, index) {
       var visibleChoices = null;
 
       if (section === 'K4') {
@@ -240,6 +240,8 @@ function buildProductionRenderPayload_(request) {
       }
 
       return {
+        q_no:
+          index + 1,
         section: section,
         display:
           H3_R3_SECTION_DISPLAY[section],

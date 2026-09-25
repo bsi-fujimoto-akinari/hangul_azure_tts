@@ -10283,6 +10283,256 @@ jobs:
           );
           NODE
 
+      - name: Audit UXR-5 Review technical question deep links
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          client = Path('Client.html').read_text(encoding='utf-8')
+          index = Path('Index.html').read_text(encoding='utf-8')
+          web = Path('WebApp.js').read_text(encoding='utf-8')
+
+          required_client = [
+              'function technicalQuestionDeepLink_(',
+              'function reviewQuestionDeepLink_(',
+              'function initialQuestionIndexFromRequest_(',
+              'function scrollToQuestionDeepLinkTarget_(',
+              "'review-technical-question-links'",
+              "'review-technical-question-link'",
+              "'Q' +",
+              "'_URL='",
+              "'問題を開く'",
+              'reviewQuestionOrdinal_(',
+          ]
+          for token in required_client:
+              if token not in client:
+                  raise SystemExit(
+                      f'UXR-5 client contract missing: {token}'
+                  )
+
+          render_start = client.index(
+              'function renderQuestions(questions)'
+          )
+          render_end = client.index(
+              'function buildAudioBlock(',
+              render_start,
+          )
+          render = client[render_start:render_end]
+          for forbidden in [
+              'technicalQuestionDeepLink_(',
+              'question-deep-link',
+              "'問題を開く'",
+          ]:
+              if forbidden in render:
+                  raise SystemExit(
+                      'UXR-5 deep link leaked onto the learning question header: ' +
+                      forbidden
+                  )
+
+          tech_start = client.index(
+              "var technical =",
+              client.index(
+                  'function renderPersistentReview('
+              ),
+          )
+          tech_end = client.index(
+              'var actions =',
+              tech_start,
+          )
+          tech = client[tech_start:tech_end]
+          for token in [
+              'reviewQuestionDeepLink_(',
+              "'review-technical-question-links'",
+              "'_URL='",
+              "'問題を開く'",
+          ]:
+              if token not in tech:
+                  raise SystemExit(
+                      'UXR-5 Review technical-info link contract missing: ' +
+                      token
+                  )
+
+          builder_start = client.index(
+              'function technicalQuestionDeepLink_('
+          )
+          builder_end = client.index(
+              'function reviewQuestionDeepLink_(',
+              builder_start,
+          )
+          builder = client[
+              builder_start:builder_end
+          ]
+          for required in [
+              "'mode='",
+              "'surface_family='",
+              "'set_id='",
+              "'q_no='",
+          ]:
+              if required not in builder:
+                  raise SystemExit(
+                      'UXR-5 technical URL identity missing: ' +
+                      required
+                  )
+          for forbidden in [
+              'visible_choices',
+              'choice_ids',
+              'correct_answer',
+              'user_answer',
+              'question_text',
+              'question_key',
+              'item_id',
+              'txn_id',
+              'receipt',
+          ]:
+              if forbidden in builder:
+                  raise SystemExit(
+                      'UXR-5 technical URL leaks content identity: ' +
+                      forbidden
+                  )
+
+          if (
+              'window.H3_TECHNICAL_LINK_BASE' not in index
+              or 'technicalLinkBaseJson' not in index
+          ):
+              raise SystemExit(
+                  'UXR-5 canonical technical-link base is not injected.'
+              )
+
+          for token in [
+              'template.technicalLinkBaseJson',
+              'var questionNo = null;',
+              "'QUESTION_DEEP_LINK_Q_NO_INVALID'",
+              'q_no: questionNo',
+          ]:
+              if token not in web:
+                  raise SystemExit(
+                      'UXR-5 Web boot contract missing: ' +
+                      token
+                  )
+
+          print('UXR-5 Review technical deep-link static audit: PASS')
+          PY
+
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          const source = fs.readFileSync(
+            'WebApp.js',
+            'utf8'
+          );
+          const ctx = vm.createContext({
+            console,
+            H3_WEB_SYSTEM_TEST_R3_06_SET_ID:
+              'SYSTEM_TEST-H3-L5E2E-R3-06-20260919-01',
+            h3SystemTestSetIdAllowed_: value =>
+              value ===
+              'SYSTEM_TEST-H3-L5E2E-R3-06-20260919-01',
+            SpreadsheetApp: {
+              openById: () => ({})
+            },
+            h3ReviewCurrentLearning_: () => null
+          });
+
+          vm.runInContext(source, ctx, {
+            filename: 'WebApp.js'
+          });
+
+          const boot = params =>
+            vm.runInContext(
+              'h3WebBootRequest_(' +
+                JSON.stringify({
+                  parameter: params
+                }) +
+              ')',
+              ctx
+            );
+
+          const listening = boot({
+            mode: 'LISTENING',
+            set_id: 'H3-20260920-L04',
+            q_no: '3'
+          });
+          if (
+            listening.mode !== 'LISTENING' ||
+            listening.set_id !==
+              'H3-20260920-L04' ||
+            listening.q_no !== 3
+          ) {
+            throw new Error(
+              'UXR-5 listening q_no boot mismatch.'
+            );
+          }
+
+          const reading = boot({
+            mode: 'WRITTEN',
+            surface_family: 'READING',
+            set_id: 'H3-20260921-R001',
+            q_no: '2'
+          });
+          if (
+            reading.mode !== 'WRITTEN' ||
+            reading.surface_family !==
+              'READING' ||
+            reading.set_id !==
+              'H3-20260921-R001' ||
+            reading.q_no !== 2
+          ) {
+            throw new Error(
+              'UXR-5 Reading q_no boot mismatch.'
+            );
+          }
+
+          for (const params of [
+            {
+              mode: 'LISTENING',
+              set_id: 'H3-20260920-L04',
+              q_no: '0'
+            },
+            {
+              mode: 'LISTENING',
+              set_id: 'H3-20260920-L04',
+              q_no: '6'
+            },
+            {
+              mode: 'LISTENING',
+              set_id: 'H3-20260920-L04',
+              q_no: 'abc'
+            },
+            {
+              mode: 'REVIEW',
+              txn_id:
+                'H3TX-20260919-000005',
+              q_no: '1'
+            }
+          ]) {
+            let rejected = false;
+            try {
+              boot(params);
+            } catch (err) {
+              rejected =
+                String(
+                  err &&
+                  err.message ||
+                  err
+                ).includes(
+                  'QUESTION_DEEP_LINK_Q_NO_INVALID'
+                );
+            }
+            if (!rejected) {
+              throw new Error(
+                'UXR-5 invalid q_no route was accepted: ' +
+                JSON.stringify(params)
+              );
+            }
+          }
+
+          console.log(
+            'UXR-5 Review technical deep-link boot audit: PASS'
+          );
+          NODE
+
       - name: Check JavaScript syntax
         shell: bash
         run: |

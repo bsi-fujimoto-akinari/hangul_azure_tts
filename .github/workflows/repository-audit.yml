@@ -29,10 +29,10 @@ jobs:
         id: repo_impact
         shell: bash
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          PUSH_BEFORE: ${{ github.event.before || '' }}
-          PULL_BASE: ${{ github.event.pull_request.base.sha || '' }}
-          PULL_HEAD: ${{ github.event.pull_request.head.sha || '' }}
+          EVENT_NAME: "${{ github.event_name }}"
+          PUSH_BEFORE: "${{ github.event.before }}"
+          PULL_BASE: "${{ github.event.pull_request.base.sha }}"
+          PULL_HEAD: "${{ github.event.pull_request.head.sha }}"
         run: |
           set -euo pipefail
 
@@ -102,6 +102,19 @@ jobs:
           PY
           )"
 
+          files_marker="$(python3 - "$changed_file" <<'PY'
+          import pathlib
+          import sys
+
+          files = sorted({
+              line.strip()
+              for line in pathlib.Path(sys.argv[1]).read_text(encoding='utf-8').splitlines()
+              if line.strip()
+          })
+          print('|' + '|'.join(files) + '|')
+          PY
+          )"
+
           any_js="$(python3 - "$changed_file" <<'PY'
           import pathlib
           import sys
@@ -118,6 +131,7 @@ jobs:
           {
             echo "full=$full"
             echo "files_json=$files_json"
+            echo "files_marker=$files_marker"
             echo "any_js=$any_js"
           } >> "$GITHUB_OUTPUT"
 
@@ -255,7 +269,7 @@ jobs:
       - name: Audit canonical four-Phase code-change workflow contract
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'OPERATIONS.md')
+          contains(steps.repo_impact.outputs.files_marker, '|OPERATIONS.md|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -324,7 +338,7 @@ jobs:
       - name: Audit repository access fast-path contract
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'OPERATIONS.md')
+          contains(steps.repo_impact.outputs.files_marker, '|OPERATIONS.md|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -354,11 +368,11 @@ jobs:
           required_workflow = [
               'Detect repository audit impact',
               'id: repo_impact',
-              'files_json=',
+              'files_marker=',
               'any_js=',
               "grep -Fxq '.github/workflows/repository-audit.yml'",
               "steps.repo_impact.outputs.full == 'true'",
-              'contains(fromJSON(steps.repo_impact.outputs.files_json)',
+              'contains(steps.repo_impact.outputs.files_marker',
           ]
           missing_workflow = [token for token in required_workflow if token not in workflow]
           if missing_workflow:
@@ -396,8 +410,8 @@ jobs:
       - name: Verify credentialed Apps Script execution boundaries
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), '.github/workflows/apps-script-auto-sync.yml') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'OPERATIONS.md')
+          contains(steps.repo_impact.outputs.files_marker, '|.github/workflows/apps-script-auto-sync.yml|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|OPERATIONS.md|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -568,8 +582,8 @@ jobs:
       - name: Audit automatic read-only live smoke contract
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), '.github/workflows/apps-script-auto-sync.yml') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppLiveSmoke.js')
+          contains(steps.repo_impact.outputs.files_marker, '|.github/workflows/apps-script-auto-sync.yml|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppLiveSmoke.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -662,11 +676,11 @@ jobs:
       - name: Audit structured Web runtime observability contract
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppFamilyScheduler.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppObservability.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'appsscript.json')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppFamilyScheduler.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppObservability.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|appsscript.json|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -821,7 +835,7 @@ jobs:
       - name: Verify gitignore protections
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), '.gitignore')
+          contains(steps.repo_impact.outputs.files_marker, '|.gitignore|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -844,7 +858,7 @@ jobs:
       - name: Verify clasp target
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), '.clasp.json')
+          contains(steps.repo_impact.outputs.files_marker, '|.clasp.json|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -871,7 +885,7 @@ jobs:
       - name: Verify Apps Script manifest policy
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'appsscript.json')
+          contains(steps.repo_impact.outputs.files_marker, '|appsscript.json|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -906,10 +920,10 @@ jobs:
       - name: Check SYSTEM_TEST transaction isolation
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Index.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppFixture.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|Index.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppFixture.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -988,10 +1002,10 @@ jobs:
       - name: Check production transaction and scheduler contract
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppFixture.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppProduction.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppFixture.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppProduction.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1173,12 +1187,12 @@ jobs:
       - name: Check Web receipt and targeted dispatch
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Code.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_WEB_CHAT_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'OPERATIONS.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppProduction.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReceipt.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Code.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_WEB_CHAT_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|OPERATIONS.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppProduction.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReceipt.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1281,11 +1295,11 @@ jobs:
       - name: Check production rendering and source-lock
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Code.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppProduction.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppProductionRender.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppSurfaceCommon.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Code.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppProduction.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppProductionRender.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppSurfaceCommon.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1398,7 +1412,7 @@ jobs:
       - name: Check audio storage slim-down invariants
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Code.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Code.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1444,10 +1458,10 @@ jobs:
       - name: Check allowlisted SYSTEM_TEST fixture
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Code.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppFixture.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppProduction.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Code.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppFixture.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppProduction.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1508,9 +1522,9 @@ jobs:
       - name: Check production preissue gate
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppPreissue.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppProduction.js')
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppPreissue.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppProduction.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1567,9 +1581,9 @@ jobs:
       - name: Check normal-live production gate
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppPreissue.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppProduction.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppProductionRender.js')
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppPreissue.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppProduction.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppProductionRender.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1625,7 +1639,7 @@ jobs:
       - name: Check production client mode routing
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1661,7 +1675,7 @@ jobs:
       - name: Check transaction provenance binder
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppProduction.js')
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppProduction.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1721,10 +1735,10 @@ jobs:
       - name: Check persistent Review storage and source-lock
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'OPERATIONS.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewListeningAdapter.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewPersistence.js')
+          contains(steps.repo_impact.outputs.files_marker, '|OPERATIONS.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewListeningAdapter.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewPersistence.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -1808,10 +1822,10 @@ jobs:
       - name: Check Review HOME core extraction parity
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewListeningAdapter.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewPersistence.js')
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewListeningAdapter.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewPersistence.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -2499,10 +2513,10 @@ jobs:
       - name: Check Written Review projection and provider routing
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewListeningAdapter.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewWrittenAdapter.js')
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewListeningAdapter.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewWrittenAdapter.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -2823,10 +2837,10 @@ jobs:
       - name: Check production Written persistent Review loader
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewPersistence.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewWrittenAdapter.js')
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewPersistence.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewWrittenAdapter.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -3135,12 +3149,12 @@ jobs:
       - name: Check production Written HOME and Review UI
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Stylesheet.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewPersistence.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewWrittenAdapter.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|Stylesheet.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewPersistence.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewWrittenAdapter.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -3419,17 +3433,17 @@ jobs:
       - name: Check persistent Review routes and Web UI
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_REVIEW_ARCHITECTURE.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_WEB_CHAT_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Index.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'OPERATIONS.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Stylesheet.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppProductionRender.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewListeningAdapter.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewPersistence.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_REVIEW_ARCHITECTURE.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_WEB_CHAT_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|Index.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|OPERATIONS.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|Stylesheet.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppProductionRender.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewListeningAdapter.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewPersistence.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -3602,7 +3616,7 @@ jobs:
       - name: Check Review history index isolation
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewPersistence.js')
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewPersistence.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -3662,9 +3676,9 @@ jobs:
       - name: Check UTF-8 Review hashing
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Code.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppPreissue.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Code.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppPreissue.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -3732,12 +3746,12 @@ jobs:
       - name: Check REVIEW_REPLAY retirement contract
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_REVIEW_ARCHITECTURE.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_WEB_CHAT_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'OPERATIONS.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewListeningAdapter.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_REVIEW_ARCHITECTURE.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_WEB_CHAT_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|OPERATIONS.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewListeningAdapter.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -3811,12 +3825,12 @@ jobs:
       - name: Check current Review learner UI
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_REVIEW_ARCHITECTURE.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_WEB_CHAT_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Index.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'OPERATIONS.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Stylesheet.html')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_REVIEW_ARCHITECTURE.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_WEB_CHAT_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|Index.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|OPERATIONS.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|Stylesheet.html|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -4295,12 +4309,12 @@ jobs:
       - name: Check Written 5W explanation overlay boundary
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_REVIEW_ARCHITECTURE.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Stylesheet.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewPersistence.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewWrittenAdapter.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_REVIEW_ARCHITECTURE.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|Stylesheet.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewPersistence.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewWrittenAdapter.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -4539,10 +4553,10 @@ jobs:
       - name: Check Written 5W ANSWERED_AT backfill boundary
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_REVIEW_ARCHITECTURE.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewPersistence.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewWrittenAdapter.js')
+          contains(steps.repo_impact.outputs.files_marker, '|H3_REVIEW_ARCHITECTURE.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewPersistence.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewWrittenAdapter.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -4680,8 +4694,8 @@ jobs:
       - name: Check scheduler overload V3 behavior
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppPreissue.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppProduction.js')
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppPreissue.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppProduction.js|')
         shell: bash
         run: |
           node <<'NODE'
@@ -4781,14 +4795,14 @@ jobs:
       - name: Check learner URL authority
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Code.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_WEB_CHAT_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'OPERATIONS.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewListeningAdapter.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewPersistence.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|Code.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_WEB_CHAT_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|OPERATIONS.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewListeningAdapter.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewPersistence.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -5087,12 +5101,12 @@ jobs:
       - name: Check parameterless direct boot
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_WEB_CHAT_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'OPERATIONS.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewListeningAdapter.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewPersistence.js')
+          contains(steps.repo_impact.outputs.files_marker, '|H3_WEB_CHAT_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|OPERATIONS.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewListeningAdapter.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewPersistence.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -5216,11 +5230,11 @@ jobs:
       - name: Check Listening audio reliability V21
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_WEB_CHAT_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'OPERATIONS.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppPreissue.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppProductionRender.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_WEB_CHAT_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|OPERATIONS.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppPreissue.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppProductionRender.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -5347,11 +5361,11 @@ jobs:
       - name: Check official Listening audio parity V21
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Code.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_WEB_CHAT_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'OPERATIONS.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppPreissue.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppProductionRender.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Code.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_WEB_CHAT_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|OPERATIONS.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppPreissue.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppProductionRender.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -5527,13 +5541,13 @@ jobs:
       - name: Check durable legacy Review compatibility
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_REVIEW_ARCHITECTURE.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'OPERATIONS.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewListeningAdapter.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewPersistence.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_REVIEW_ARCHITECTURE.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|OPERATIONS.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewListeningAdapter.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewPersistence.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -5667,8 +5681,8 @@ jobs:
       - name: Check minimal learner-facing Chat output contract
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_WEB_CHAT_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'OPERATIONS.md')
+          contains(steps.repo_impact.outputs.files_marker, '|H3_WEB_CHAT_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|OPERATIONS.md|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -5722,7 +5736,7 @@ jobs:
       - name: Check 5L audio set fast path
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Code.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Code.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -6221,10 +6235,10 @@ jobs:
       - name: Check H3 normal hot-path invariants
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Code.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_WEB_CHAT_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'OPERATIONS.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppPreissue.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Code.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_WEB_CHAT_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|OPERATIONS.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppPreissue.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -6344,15 +6358,15 @@ jobs:
       - name: Check production 5W current-learning render
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_WEB_CHAT_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'OPERATIONS.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Stylesheet.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewWrittenAdapter.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppSurfaceCommon.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppWrittenProduction.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_WEB_CHAT_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|OPERATIONS.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|Stylesheet.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewWrittenAdapter.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppSurfaceCommon.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppWrittenProduction.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -6711,13 +6725,13 @@ jobs:
       - name: Check production 5W Web transaction D3
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppProduction.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReceipt.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppSurfaceCommon.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppTransactionCommon.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppWrittenProduction.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppProduction.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReceipt.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppSurfaceCommon.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppTransactionCommon.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppWrittenProduction.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -7091,12 +7105,12 @@ jobs:
       - name: Check 5W Answer Sync production
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppFormatCommon.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppLevelCommon.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppWrittenAnswerSync.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppWrittenNewfmt.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppWrittenProduction.js')
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppFormatCommon.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppLevelCommon.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppWrittenAnswerSync.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppWrittenNewfmt.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppWrittenProduction.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -7439,7 +7453,7 @@ jobs:
       - name: Check Listening audio source attestation
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Code.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Code.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -7626,9 +7640,9 @@ jobs:
       - name: Check Listening backend orchestrator
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Code.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'ListeningBackendOrchestrator.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppPreissue.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Code.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|ListeningBackendOrchestrator.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppPreissue.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -7900,19 +7914,19 @@ jobs:
       - name: Check staged P8 Reading pilot
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_READING_ACTIVATION_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_READING_P8_PILOT_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_READING_P9_P10_PILOT_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_READING_PRODUCTION_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Stylesheet.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReadingActivation.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReadingActivationAudit.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReadingPilot.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReadingPilotAudit.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReadingProduction.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppSurfaceCommon.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_READING_ACTIVATION_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_READING_P8_PILOT_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_READING_P9_P10_PILOT_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_READING_PRODUCTION_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|Stylesheet.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReadingActivation.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReadingActivationAudit.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReadingPilot.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReadingPilotAudit.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReadingProduction.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppSurfaceCommon.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -8284,17 +8298,17 @@ jobs:
       - name: Check staged P11/P12 Translation pilot
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_TRANSLATION_ACTIVATION_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_TRANSLATION_P11_P12_PILOT_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_TRANSLATION_PRODUCTION_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppSurfaceCommon.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppTranslationActivation.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppTranslationActivationAudit.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppTranslationPilot.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppTranslationPilotAudit.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppTranslationProduction.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_TRANSLATION_ACTIVATION_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_TRANSLATION_P11_P12_PILOT_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_TRANSLATION_PRODUCTION_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppSurfaceCommon.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppTranslationActivation.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppTranslationActivationAudit.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppTranslationPilot.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppTranslationPilotAudit.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppTranslationProduction.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -8620,18 +8634,18 @@ jobs:
       - name: Check F1 Reading Translation Review bridge
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_SURFACE_REVIEW_BRIDGE_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReadingPilot.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReadingPilotAudit.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewPersistence.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewWrittenAdapter.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppSurfaceCommon.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppSurfaceReviewBridge.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppSurfaceReviewBridgeAudit.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppTranslationPilot.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppTranslationPilotAudit.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_SURFACE_REVIEW_BRIDGE_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReadingPilot.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReadingPilotAudit.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewPersistence.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewWrittenAdapter.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppSurfaceCommon.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppSurfaceReviewBridge.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppSurfaceReviewBridgeAudit.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppTranslationPilot.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppTranslationPilotAudit.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -8779,10 +8793,10 @@ jobs:
       - name: Check independent level runtime boundary
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_LEARNING_SURFACE_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_LEVEL_RUNTIME_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppLevelCommon.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppLevelCommonAudit.js')
+          contains(steps.repo_impact.outputs.files_marker, '|H3_LEARNING_SURFACE_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_LEVEL_RUNTIME_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppLevelCommon.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppLevelCommonAudit.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -8887,12 +8901,12 @@ jobs:
       - name: Check source-bound 準2級 taxonomy master
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_JUN2_TAXONOMY_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_LEVEL_RUNTIME_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppFormatCommon.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppJun2Taxonomy.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppJun2TaxonomyAudit.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppLevelCommon.js')
+          contains(steps.repo_impact.outputs.files_marker, '|H3_JUN2_TAXONOMY_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_LEVEL_RUNTIME_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppFormatCommon.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppJun2Taxonomy.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppJun2TaxonomyAudit.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppLevelCommon.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -9002,11 +9016,11 @@ jobs:
       - name: Check source-bound 2026 new-format registry
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_2026_NEWFMT_SOURCE_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_NEWFMT_LEVEL_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppFormatCommon.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppFormatCommonAudit.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppLevelCommon.js')
+          contains(steps.repo_impact.outputs.files_marker, '|H3_2026_NEWFMT_SOURCE_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_NEWFMT_LEVEL_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppFormatCommon.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppFormatCommonAudit.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppLevelCommon.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -9120,12 +9134,12 @@ jobs:
       - name: Check 3級 NEWFMT written runtime
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_WRITTEN_NEWFMT_RUNTIME_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppFormatCommon.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppLevelCommon.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppWrittenAnswerSync.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppWrittenNewfmt.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppWrittenNewfmtAudit.js')
+          contains(steps.repo_impact.outputs.files_marker, '|H3_WRITTEN_NEWFMT_RUNTIME_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppFormatCommon.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppLevelCommon.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppWrittenAnswerSync.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppWrittenNewfmt.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppWrittenNewfmtAudit.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -9230,8 +9244,8 @@ jobs:
       - name: Audit E5-B Review audio binding contract
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_REVIEW_ARCHITECTURE.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js')
+          contains(steps.repo_impact.outputs.files_marker, '|H3_REVIEW_ARCHITECTURE.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -9477,11 +9491,11 @@ jobs:
       - name: Audit E5-C 5W Review audio embedding
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_REVIEW_ARCHITECTURE.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewPersistence.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewWrittenAdapter.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_REVIEW_ARCHITECTURE.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewPersistence.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewWrittenAdapter.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -9706,11 +9720,11 @@ jobs:
       - name: Audit E5-D 2R Review audio embedding
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_REVIEW_ARCHITECTURE.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewWrittenAdapter.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppSurfaceReviewBridge.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_REVIEW_ARCHITECTURE.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewWrittenAdapter.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppSurfaceReviewBridge.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -9940,11 +9954,11 @@ jobs:
       - name: Audit E5-E 2T Review audio embedding
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_REVIEW_ARCHITECTURE.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewWrittenAdapter.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppSurfaceReviewBridge.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_REVIEW_ARCHITECTURE.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewWrittenAdapter.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppSurfaceReviewBridge.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -10163,7 +10177,7 @@ jobs:
       - name: Audit T003 body_ja register parity
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppSurfaceReviewBridge.js')
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppSurfaceReviewBridge.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -10197,8 +10211,8 @@ jobs:
       - name: Audit learner-facing Japanese quality corrections
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_REVIEW_ARCHITECTURE.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewPersistence.js')
+          contains(steps.repo_impact.outputs.files_marker, '|H3_REVIEW_ARCHITECTURE.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewPersistence.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -10426,8 +10440,8 @@ jobs:
       - name: Audit D6 Japanese dialogue presentation
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_REVIEW_ARCHITECTURE.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewPersistence.js')
+          contains(steps.repo_impact.outputs.files_marker, '|H3_REVIEW_ARCHITECTURE.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewPersistence.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -10611,9 +10625,9 @@ jobs:
       - name: Audit E5-G Review audio close contract
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_REVIEW_ARCHITECTURE.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewWrittenAdapter.js')
+          contains(steps.repo_impact.outputs.files_marker, '|H3_REVIEW_ARCHITECTURE.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewWrittenAdapter.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -10667,10 +10681,10 @@ jobs:
       - name: Audit UXR-2B 5W Review content repair
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'ReviewAudioBackfill.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewPersistence.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppSurfaceCommon.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppWrittenProduction.js')
+          contains(steps.repo_impact.outputs.files_marker, '|ReviewAudioBackfill.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewPersistence.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppSurfaceCommon.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppWrittenProduction.js|')
         shell: bash
         run: |
           node <<'NODE'
@@ -11051,12 +11065,12 @@ jobs:
       - name: Audit UXR-4 question Review navigation media
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Stylesheet.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppProductionRender.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReadingPilot.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppTranslationV2.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppWrittenProduction.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|Stylesheet.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppProductionRender.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReadingPilot.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppTranslationV2.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppWrittenProduction.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -11207,15 +11221,15 @@ jobs:
       - name: Audit UXR-5 shared navigation and Review permalinks
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Code.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_REVIEW_ARCHITECTURE.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Index.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Stylesheet.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewPersistence.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppSurfaceReviewBridge.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|Code.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_REVIEW_ARCHITECTURE.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|Index.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|Stylesheet.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewPersistence.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppSurfaceReviewBridge.js|')
         shell: bash
         run: |
           python3 - <<'PY'
@@ -11912,10 +11926,7 @@ jobs:
               raise SystemExit('No root JavaScript files found for syntax audit.')
 
           for path in js_files:
-              subprocess.run(
-                  ['node', '--check', str(path)],
-                  check=True,
-              )
+              subprocess.run(['node', '--check', str(path)], check=True)
 
           text = Path('Client.html').read_text(encoding='utf-8').strip()
           if not (text.startswith('<script>') and text.endswith('</script>')):
@@ -11924,18 +11935,13 @@ jobs:
               text[len('<script>'):-len('</script>')],
               encoding='utf-8',
           )
-          subprocess.run(
-              ['node', '--check', '/tmp/Client.js'],
-              check=True,
-          )
-          print(
-              f'JavaScript syntax: PASS; root_js_files={len(js_files)}; Client.html=PASS'
-          )
+          subprocess.run(['node', '--check', '/tmp/Client.js'], check=True)
+          print(f'JavaScript syntax: PASS; root_js_files={len(js_files)}; Client.html=PASS')
           PY
       - name: Verify audio semantic invariants
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Code.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Code.js|')
         shell: bash
         run: |
           node <<'NODE'
@@ -12415,10 +12421,10 @@ jobs:
       - name: Audit Review completion remediation contract
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Client.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebApp.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewPersistence.js')
+          contains(steps.repo_impact.outputs.files_marker, '|Client.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebApp.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewPersistence.js|')
         shell: bash
         run: |
           node <<'NODE'
@@ -13147,14 +13153,14 @@ jobs:
       - name: Verify Review explanation style contract
         if: >-
           steps.repo_impact.outputs.full == 'true' ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_REVIEW_ARCHITECTURE.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'H3_REVIEW_EXPLANATION_STYLE_CONTRACT.md') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'Stylesheet.html') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReadingPilot.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppReviewCore.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppSurfaceCommon.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppSurfaceReviewBridge.js') ||
-          contains(fromJSON(steps.repo_impact.outputs.files_json), 'WebAppWrittenProduction.js')
+          contains(steps.repo_impact.outputs.files_marker, '|H3_REVIEW_ARCHITECTURE.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|H3_REVIEW_EXPLANATION_STYLE_CONTRACT.md|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|Stylesheet.html|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReadingPilot.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppReviewCore.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppSurfaceCommon.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppSurfaceReviewBridge.js|') ||
+          contains(steps.repo_impact.outputs.files_marker, '|WebAppWrittenProduction.js|')
         shell: bash
         run: |
           node <<'NODE'

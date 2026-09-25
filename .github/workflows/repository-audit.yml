@@ -10798,6 +10798,14 @@ jobs:
                 'WebAppReviewCore.js'
             }
           );
+          reviewCtx.h3ReviewHomeIndexTable_ =
+            () => wrappedHomeIndex;
+          reviewCtx.h3ReviewHomeIndexRowEntry_ =
+            () => ({
+              surface_family: '5W',
+              txn_id: null,
+              legacy_review_id: null
+            });
           const resolvedPermalink =
             vm.runInContext(
               "h3ReviewResolvePermalinkRequest_({mode:'REVIEW',review_kind:'WRITTEN',surface_family:'5W',set_id:'W-OLD',q_no:1})",

@@ -6454,43 +6454,76 @@ function h3MonitoringProductionTriggerEnsure() {
       throw new Error('MONITOR_PRODUCTION_TRIGGER_NOT_ABSENT');
     }
 
+    // Resolve the metadata store before trigger creation so a
+    // PropertiesService acquisition failure cannot orphan a live trigger.
+    var props=PropertiesService.getScriptProperties();
     var created=ScriptApp
       .newTrigger(H3_MONITOR_PRODUCTION_TRIGGER_HANDLER_)
       .timeBased()
       .everyHours(H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_)
       .create();
-    var props=PropertiesService.getScriptProperties();
-    props.setProperty(
-      H3_MONITOR_PRODUCTION_TRIGGER_ID_KEY_,
-      String(created.getUniqueId()||'')
-    );
-    props.setProperty(
-      H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_KEY_,
-      String(H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_)
-    );
-    props.setProperty(
-      H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_KEY_,
-      H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_
-    );
-
-    var after=h3MonitoringProductionTriggerStatus_();
-    if(
-      after.status!=='READY' ||
-      Number(after.matching_trigger_count)!==1
-    ){
-      try { ScriptApp.deleteTrigger(created); } catch(ignore) {}
-      h3MonitoringProductionTriggerClearMetadata_();
-      throw new Error(
-        'MONITOR_PRODUCTION_TRIGGER_READBACK_MISMATCH'
+    try {
+      props.setProperty(
+        H3_MONITOR_PRODUCTION_TRIGGER_ID_KEY_,
+        String(created.getUniqueId()||'')
       );
+      props.setProperty(
+        H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_KEY_,
+        String(H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_)
+      );
+      props.setProperty(
+        H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_KEY_,
+        H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_
+      );
+
+      var after=h3MonitoringProductionTriggerStatus_();
+      if(
+        after.status!=='READY' ||
+        Number(after.matching_trigger_count)!==1
+      ){
+        throw new Error(
+          'MONITOR_PRODUCTION_TRIGGER_READBACK_MISMATCH'
+        );
+      }
+      return {
+        schema:H3_MONITOR_PRODUCTION_TRIGGER_SCHEMA_,
+        status:'READY',
+        created:true,
+        trigger:after,
+        write_performed:true
+      };
+    } catch(err) {
+      var cleanupErrors=[];
+      try {
+        ScriptApp.deleteTrigger(created);
+      } catch(deleteErr) {
+        cleanupErrors.push(
+          'trigger:'+String(deleteErr&&deleteErr.message||deleteErr)
+        );
+      }
+      [
+        H3_MONITOR_PRODUCTION_TRIGGER_ID_KEY_,
+        H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_KEY_,
+        H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_KEY_
+      ].forEach(function(key){
+        try {
+          props.deleteProperty(key);
+        } catch(metadataErr) {
+          cleanupErrors.push(
+            'metadata:'+String(key)+':'+
+            String(metadataErr&&metadataErr.message||metadataErr)
+          );
+        }
+      });
+      if(cleanupErrors.length>0){
+        throw new Error(
+          'MONITOR_PRODUCTION_TRIGGER_CREATE_CLEANUP_FAILED:'+
+          cleanupErrors.join('|')+
+          ':CAUSE:'+String(err&&err.message||err)
+        );
+      }
+      throw err;
     }
-    return {
-      schema:H3_MONITOR_PRODUCTION_TRIGGER_SCHEMA_,
-      status:'READY',
-      created:true,
-      trigger:after,
-      write_performed:true
-    };
   } finally {
     lock.releaseLock();
   }

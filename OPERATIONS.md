@@ -31,7 +31,25 @@ Every credentialed clasp operation in GitHub Actions must be bound to the exact 
 
 For source attestation only, `clasp pull` is permitted in an isolated temporary directory that contains the verified canonical `.clasp.json`. The pulled files are comparison evidence only: never pull into the tracked worktree, never treat the readback as a replacement source, never commit pulled output, and always discard the temporary directory after comparison. This exception does not authorize reverse synchronization. Recovery-oriented reverse synchronization remains separately authorized work and must return through a reviewed branch and pull request.
 
-This workflow changes neither versioned `/exec` deployments nor Script Properties, Sheets, Drive assets, Azure configuration, or learner state. Deployment promotion is a separate, explicitly authorized operation.
+This workflow changes neither versioned `/exec` deployments, Drive assets, Azure configuration, nor learner state. The sole standing exceptions are the exact-main observability source binding in the allowlisted `H3_OBSERVABILITY_SOURCE_*` Script Properties and initialization/maintenance of the dedicated `web_runtime_error_log_v1` observability sheet. These are non-authoritative observability metadata and must never be used as learner score, history, queue, scheduler, pointer, or counter authority. Deployment promotion remains a separate, explicitly authorized operation.
+
+### Exact-main observability source binding
+
+After authenticated Apps Script HEAD source attestation succeeds for the exact current audited `main` SHA, `.github/workflows/apps-script-auto-sync.yml` may execute exactly one permanent credentialed binding call: `h3ObservabilityBindSource`. The call must be gated by `steps.source_binding_boundary.outputs.ready == 'true'`, must occur after source attestation and before the manual smoke boundary, and may write only the following Script Properties:
+
+- `H3_OBSERVABILITY_SOURCE_SCHEMA`
+- `H3_OBSERVABILITY_SOURCE_SHA`
+- `H3_OBSERVABILITY_SOURCE_DIGEST`
+- `H3_OBSERVABILITY_SOURCE_FILE_COUNT`
+- `H3_OBSERVABILITY_SOURCE_BOUND_AT`
+
+The binding request must contain the exact immutable GitHub `main` SHA, the authenticated aggregate Apps Script source digest, and the attested Apps Script file count from the same job. The Apps Script function validates those shapes, writes the observability-only properties under ScriptLock, and returns exact readback; the workflow must fail on any mismatch. `appsscript.json` must retain both `executionApi.access=MYSELF` and `webapp.access=MYSELF`. No browser request value, learner payload, moving branch ref, or unaudited SHA may become `SOURCE_SHA` authority.
+
+### Structured Web runtime error log
+
+The runtime error contract is `H3_WEB_RUNTIME_ERROR_V1`, stored append-only in the dedicated `web_runtime_error_log_v1` sheet. Server learner RPC exceptions and browser `error` / `unhandledrejection` events record only whitelisted routing/context fields, sanitized message/stack, error fingerprint, and the current exact-main observability source binding. Raw request serialization, answers, answer keys, problem text, credentials, cookies, headers, or full query URLs are prohibited.
+
+Retention is 90 days with a hard cap of 5000 events. The existing production monitoring cadence performs at most one prune per 24 hours; prune failure must not interrupt the monitoring observer. Error logging itself is best-effort: logging failure must never replace the original learner-facing exception. The learner-facing diagnostic handle is `H3ERR-...`; stack details remain in the observability log/console rather than the UI.
 
 ### Authorized read-only Apps Script live smoke
 

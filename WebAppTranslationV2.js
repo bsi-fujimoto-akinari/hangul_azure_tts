@@ -169,7 +169,8 @@ function h3TranslationV2ValidateRetestSurface_(
   skillId,
   direction,
   priorSurfaceKeys,
-  priorItemIds
+  priorItemIds,
+  priorQuestionKeys
 ) {
   var x = h3TranslationV2ValidateItem_(item,0);
   if (x.skill_id !== String(skillId || '') ||
@@ -182,11 +183,17 @@ function h3TranslationV2ValidateRetestSurface_(
   var priorItems = (priorItemIds || []).map(function (value) {
     return String(value || '');
   });
+  var priorQuestions = (priorQuestionKeys || []).map(function (value) {
+    return String(value || '');
+  });
   if (prior.indexOf(x.surface_key) >= 0) {
     throw new Error('TRANSLATION_V2_RETEST_SURFACE_REUSED');
   }
   if (priorItems.indexOf(x.item_id) >= 0) {
     throw new Error('TRANSLATION_V2_RETEST_ITEM_REUSED');
+  }
+  if (priorQuestions.indexOf(x.question_key) >= 0) {
+    throw new Error('TRANSLATION_V2_RETEST_QUESTION_REUSED');
   }
   return true;
 }

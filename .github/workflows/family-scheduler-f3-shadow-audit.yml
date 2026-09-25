@@ -1392,6 +1392,97 @@ jobs:
           );
           NODE
 
+      - name: P06 Translation identity deterministic fixture
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          vm.runInThisContext(fs.readFileSync('WebAppTranslationV2.js','utf8'));
+          vm.runInThisContext(fs.readFileSync('WebAppTranslationV2Production.js','utf8'));
+          vm.runInThisContext(fs.readFileSync('WebAppFamilyScheduler.js','utf8'));
+          vm.runInThisContext(fs.readFileSync('WebAppFamilySchedulerPreparation.js','utf8'));
+
+          function assert(condition,message){
+            if(!condition)throw new Error(message);
+          }
+          function fakeSheet(headers,rows){
+            return {getDataRange(){return {getValues(){return [headers].concat(rows||[]);}};}};
+          }
+          function fakeSpreadsheet(tables){
+            return {getSheetByName(name){return tables[name]||null;}};
+          }
+
+          const goodLaneHeaders=H3_RT_LANE_STATE_HEADERS_.slice();
+          const oneLane=new Array(goodLaneHeaders.length).fill('');
+          oneLane[goodLaneHeaders.indexOf('LEVEL')]='3級';
+          assert(h3FsRtLaneReadiness_(fakeSpreadsheet({
+            rt_lane_state_v1:fakeSheet(goodLaneHeaders,[oneLane])
+          })).ok===true,'valid RT lane must be ready');
+          assert(h3FsRtLaneReadiness_(fakeSpreadsheet({
+            rt_lane_state_v1:fakeSheet(goodLaneHeaders,[])
+          })).ok===false,'header-only RT lane must fail closed');
+          const badHeaders=goodLaneHeaders.slice();
+          badHeaders[0]='BROKEN_LEVEL';
+          assert(h3FsRtLaneReadiness_(fakeSpreadsheet({
+            rt_lane_state_v1:fakeSheet(badHeaders,[oneLane])
+          })).ok===false,'malformed RT lane schema must fail closed');
+
+          Utilities={formatDate(){return '20260925';}};
+          const stageHeaders=['ISSUE_NO','SET_ID'];
+          let identity=h3FsTranslationIdentity_(fakeSpreadsheet({
+            translation_stage_v1:fakeSheet(stageHeaders,[[999,'H3-20260924-T999']]),
+            translation_stage_v2:fakeSheet(stageHeaders,[])
+          }));
+          assert(identity.issue_no===1000,'lifetime ISSUE_NO must continue independently');
+          assert(identity.set_id==='H3-20260925-T001','fresh date must restart at T001');
+          identity=h3FsTranslationIdentity_(fakeSpreadsheet({
+            translation_stage_v1:fakeSheet(stageHeaders,[[2,'H3-20260924-T002']]),
+            translation_stage_v2:fakeSheet(stageHeaders,[[3,'H3-20260925-T001']])
+          }));
+          assert(identity.issue_no===4,'lifetime ISSUE_NO max must be preserved');
+          assert(identity.set_id==='H3-20260925-T002','date-local serial must increment');
+
+          const makeOb=(direction,dueMax,result,dueMin,origin,skill)=>({
+            direction,due_max:dueMax,latest_result:result,due_min:dueMin,
+            strict_origin_clock:origin,skill_id:skill
+          });
+          h3FsRtNextClock_=()=>10;
+          const kr=[
+            makeOb('KR_TO_JP',5,'×',4,1,'KR-A'),
+            makeOb('KR_TO_JP',6,'×',4,1,'KR-B')
+          ];
+          const jp=[
+            makeOb('JP_TO_KR',4,'△',3,1,'JP-A'),
+            makeOb('JP_TO_KR',4,'△',3,2,'JP-B')
+          ];
+          h3FsRtDueObligations_=(_ss,_family,direction)=>direction==='KR_TO_JP'?kr:jp;
+          assert(h3FsTranslationSelection_({}).profile==='EDF_JP_TO_KR_2',
+            'competing critical pairs must use EDF ranking, not KR-first bias');
+
+          h3TranslationV2ValidateItem_=(item)=>item;
+          let reusedQuestion=false;
+          try{
+            h3TranslationV2ValidateRetestSurface_({
+              skill_id:'SK1',translation_direction:'JP_TO_KR',
+              surface_key:'NEW-SURFACE',item_id:'NEW-ITEM',question_key:'OLD-QUESTION'
+            },'SK1','JP_TO_KR',[],[],['OLD-QUESTION']);
+          }catch(err){
+            reusedQuestion=String(err&&err.message||err)==='TRANSLATION_V2_RETEST_QUESTION_REUSED';
+          }
+          assert(reusedQuestion,'historical QUESTION_KEY reuse must be rejected');
+
+          const used=h3FsTranslationUsed_(fakeSpreadsheet({
+            translation_log_v1:fakeSheet(['ITEM_ID','QUESTION_KEY'],[['ITEM-OLD','Q-OLD']]),
+            translation_log_v2:fakeSheet(['ITEM_ID','QUESTION_KEY'],[]),
+            rt_evidence_v1:fakeSheet(H3_RT_EVIDENCE_HEADERS_,[])
+          }));
+          assert(used.item_map['ITEM-OLD']===true,'historical ITEM_ID missing');
+          assert(used.question_key_map['Q-OLD']===true,'historical QUESTION_KEY missing');
+
+          console.log('P06 Translation identity deterministic fixture PASS');
+          NODE
+
       - name: W/R/T preparation contract
         run: |
           python - <<'PY'

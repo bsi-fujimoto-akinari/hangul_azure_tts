@@ -2169,6 +2169,55 @@
     );
   }
 
+  function reviewQuestionDeepLink_(
+    review,
+    part,
+    index
+  ) {
+    if (
+      !review ||
+      !String(
+        review.set_id || ''
+      )
+    ) {
+      return '';
+    }
+
+    var family =
+      String(
+        review.surface_family ||
+        ''
+      );
+    var mode =
+      (
+        review.kind ===
+          'WRITTEN' ||
+        [
+          '5W',
+          'READING',
+          'TRANSLATION'
+        ].indexOf(family) >= 0
+      )
+        ? 'WRITTEN'
+        : 'LISTENING';
+
+    return technicalQuestionDeepLink_(
+      {
+        mode: mode,
+        surface_family:
+          family,
+        set_id:
+          String(review.set_id)
+      },
+      reviewQuestionOrdinal_(
+        review,
+        part,
+        index
+      )
+    );
+  }
+
+
   function initialQuestionIndexFromRequest_(
     request,
     payload
@@ -2347,41 +2396,6 @@
       });
 
       head.appendChild(title);
-
-      var technicalLinkUrl =
-        technicalQuestionDeepLink_(
-          app.payload,
-          qNo
-        );
-
-      if (technicalLinkUrl) {
-        var technicalLink =
-          document.createElement('a');
-        technicalLink.className =
-          'question-deep-link';
-        technicalLink.href =
-          technicalLinkUrl;
-        technicalLink.target =
-          '_blank';
-        technicalLink.rel =
-          'noopener';
-        technicalLink.textContent =
-          'URL';
-        technicalLink.setAttribute(
-          'aria-label',
-          'Q' +
-            qNo +
-            ' 技術リンク'
-        );
-        technicalLink.title =
-          'Q' +
-          qNo +
-          ' 技術リンク';
-        head.appendChild(
-          technicalLink
-        );
-      }
-
       head.appendChild(uncertain);
       card.appendChild(head);
 
@@ -4377,28 +4391,108 @@
 
     var ids =
       document.createElement('p');
-    ids.textContent =
+    var technicalLines = [
       'SET_ID=' +
-      review.set_id +
-      (
-        review.kind ===
-          'WRITTEN'
-          ? '\nREVIEW_KIND=WRITTEN'
-          : (
-              review.legacy_review_id
-                ? (
-                    '\nLEGACY_REVIEW_ID=' +
-                    review.legacy_review_id
-                  )
-                : (
-                    '\nTXN_ID=' +
-                    review.txn_id
-                  )
-            )
+        review.set_id +
+        (
+          review.kind ===
+            'WRITTEN'
+            ? '\nREVIEW_KIND=WRITTEN'
+            : (
+                review.legacy_review_id
+                  ? (
+                      '\nLEGACY_REVIEW_ID=' +
+                      review.legacy_review_id
+                    )
+                  : (
+                      '\nTXN_ID=' +
+                      review.txn_id
+                    )
+              )
+        )
+    ];
+
+    var questionLinks =
+      el(
+        'div',
+        'review-technical-question-links'
       );
+
+    review.sections.forEach(
+      function (part, index) {
+        var qNo =
+          reviewQuestionOrdinal_(
+            review,
+            part,
+            index
+          );
+        var url =
+          reviewQuestionDeepLink_(
+            review,
+            part,
+            index
+          );
+
+        if (!url) {
+          return;
+        }
+
+        technicalLines.push(
+          'Q' +
+            qNo +
+            '_URL=' +
+            url
+        );
+
+        var row =
+          document.createElement('p');
+        row.className =
+          'review-technical-question-link';
+
+        var label =
+          document.createElement('span');
+        label.textContent =
+          'Q' +
+          qNo +
+          '　';
+        row.appendChild(label);
+
+        var link =
+          document.createElement('a');
+        link.href = url;
+        link.target =
+          '_blank';
+        link.rel =
+          'noopener';
+        link.textContent =
+          '問題を開く';
+        link.setAttribute(
+          'aria-label',
+          'Q' +
+            qNo +
+            ' 技術リンクを開く'
+        );
+        row.appendChild(link);
+
+        questionLinks.appendChild(
+          row
+        );
+      }
+    );
+
+    ids.textContent =
+      technicalLines.join('\n');
     ids.className =
       'review-technical-ids';
     technical.appendChild(ids);
+
+    if (
+      questionLinks.childNodes.length
+    ) {
+      technical.appendChild(
+        questionLinks
+      );
+    }
 
     var copyIds =
       el(

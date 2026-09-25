@@ -4472,7 +4472,120 @@ function buildReviewHomePayload_() {
 }
 
 
+function h3ReviewResolvePermalinkRequest_(
+  request
+) {
+  if (
+    !request ||
+    request.mode !== 'REVIEW' ||
+    !request.set_id
+  ) {
+    return request;
+  }
+
+  var kind =
+    String(
+      request.review_kind || ''
+    );
+  var setId =
+    String(
+      request.set_id || ''
+    );
+  var requestedFamily =
+    String(
+      request.surface_family || ''
+    );
+
+  if (
+    ['LISTENING', 'WRITTEN']
+      .indexOf(kind) < 0
+  ) {
+    throw new Error(
+      'REVIEW_PERMALINK_KIND_INVALID'
+    );
+  }
+
+  var spreadsheet =
+    SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+  var table =
+    h3ReviewHomeIndexTable_(
+      spreadsheet
+    );
+  var found =
+    h3ReviewHomeIndexFind_(
+      table,
+      kind,
+      setId
+    );
+
+  if (!found) {
+    throw new Error(
+      'REVIEW_PERMALINK_SET_NOT_FOUND:' +
+        kind +
+        ':' +
+        setId
+    );
+  }
+
+  var entry =
+    h3ReviewHomeIndexRowEntry_(
+      found.row,
+      table.map
+    );
+
+  if (
+    requestedFamily &&
+    requestedFamily !==
+      entry.surface_family
+  ) {
+    throw new Error(
+      'REVIEW_PERMALINK_FAMILY_MISMATCH'
+    );
+  }
+
+  var resolved = {};
+  Object.keys(request).forEach(
+    function (key) {
+      resolved[key] = request[key];
+    }
+  );
+
+  resolved.review_kind =
+    kind;
+  resolved.surface_family =
+    entry.surface_family;
+
+  if (kind === 'LISTENING') {
+    resolved.txn_id =
+      entry.txn_id || null;
+    resolved.legacy_review_id =
+      entry.legacy_review_id || null;
+
+    if (
+      !resolved.txn_id &&
+      !resolved.legacy_review_id
+    ) {
+      throw new Error(
+        'REVIEW_PERMALINK_LISTENING_IDENTITY_MISSING'
+      );
+    }
+  } else {
+    resolved.txn_id = null;
+    resolved.legacy_review_id = null;
+  }
+
+  return resolved;
+}
+
+
 function h3ReviewRenderRequest_(request) {
+  request =
+    h3ReviewResolvePermalinkRequest_(
+      request
+    );
+
   if (
     request &&
     request.mode === 'HOME'

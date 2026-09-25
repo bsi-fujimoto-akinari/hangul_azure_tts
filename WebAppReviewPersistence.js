@@ -1258,7 +1258,7 @@ function h3ReviewApplyListeningLearnerTextCorrections_(
     out.technical || {};
   out.technical
     .learner_text_correction_id =
-      'H3-REVIEW-JA-QUALITY-20260923-V1';
+      'H3-REVIEW-JA-QUALITY-20260925-V2';
 
   return out;
 }
@@ -1277,12 +1277,36 @@ function h3WrittenReviewApplyLearnerTextCorrections_(
   }
 
   var corrections = {
+    'H3-20260913-01': {
+      4: {
+        old:
+          '・久しぶりに友達の（　）を聞きました。\\n→ ・海外にいる家族から良い（　）が来ました。',
+        next:
+          '・久しぶりに友達の近況を聞きました。\\n・海外にいる家族から良い知らせが届きました。'
+      }
+    },
+    'H3-20260913-02': {
+      4: {
+        old:
+          '・試験を控えて勉強に（　）を使っています。\\n→ ・最近は健康にもっと（　）を使わなければなりません。',
+        next:
+          '・試験を控えて勉強に気を配っています。\\n・最近は健康にもっと気をつけなければなりません。'
+      }
+    },
+    'H3-20260913-03': {
+      4: {
+        old:
+          '・最近、健康にかなり（　）を使っています。\\n→ ・その人の言葉はあまり（　）を使わないでください。',
+        next:
+          '・最近は健康にかなり気を配っています。\\n・その人の言葉はあまり気にしないでください。'
+      }
+    },
     'H3-20260914-01': {
       4: {
         old:
-          '・友達とした約束は必ず（　）なければなりません。\n→ ・人の秘密はきちんと（　）なければなりません。',
+          '・友達とした約束は必ず（　）なければなりません。\\n→ ・人の秘密はきちんと（　）なければなりません。',
         next:
-          '・友達との約束は必ず（　）なければなりません。\n→ ・人の秘密はきちんと（　）なければなりません。'
+          '・友達との約束は必ず守らなければなりません。\\n・人の秘密はきちんと守らなければなりません。'
       }
     },
     'H3-20260914-02': {
@@ -1294,9 +1318,65 @@ function h3WrittenReviewApplyLearnerTextCorrections_(
       },
       4: {
         old:
-          '・韓国文化に（　）が多いです。\n→ ・その問題にはあまり（　）がありません。',
+          '・韓国文化に（　）が多いです。\\n→ ・その問題にはあまり（　）がありません。',
         next:
-          '・韓国文化への（　）が高いです。\n→ ・その問題にはあまり（　）がありません。'
+          '・韓国文化にとても関心があります。\\n・その問題にはあまり関心がありません。'
+      }
+    },
+    'H3-20260914-03': {
+      4: {
+        old:
+          '・友達に旅行の写真を（　）。\\n→ ・週末は家族と一緒に楽しく（　）。',
+        next:
+          '・友達に旅行の写真を送りました。\\n・週末は家族と一緒に楽しく過ごしました。'
+      }
+    },
+    'H3-20260914-04': {
+      4: {
+        old:
+          '・難しい数学の問題を（　）。\\n→ ・互いに話して誤解を（　）。',
+        next:
+          '・難しい数学の問題を解きました。\\n・互いに話して誤解を解きました。'
+      }
+    },
+    'H3-20260914-05': {
+      4: {
+        old:
+          '・忙しいのに時間を（　）。\\n→ ・発表しようと勇気を（　）。',
+        next:
+          '・忙しいのに時間を作りました。\\n・発表しようと勇気を出しました。'
+      }
+    },
+    'H3-20260914-06': {
+      4: {
+        old:
+          '・旅行の計画を（　）。\\n→ ・今年の目標を（　）。',
+        next:
+          '・旅行の計画を立てました。\\n・今年の目標を立てました。'
+      }
+    },
+    'H3-20260915-01': {
+      4: {
+        old:
+          '・明日から実践するために勉強の計画をあらかじめ（　　　）。\\n→ ・会議を始める前に今月の販売目標を具体的に（　　　）。',
+        next:
+          '・明日から実践するために勉強の計画をあらかじめ立てました。\\n・会議を始める前に今月の販売目標を具体的に立てました。'
+      }
+    },
+    'H3-20260916-01': {
+      4: {
+        old:
+          '・忙しいのに私に会うために時間を（　　　）。\\n→ ・知らない人に先に話しかけるために勇気を（　　　）。',
+        next:
+          '・忙しいのに私に会うために時間を作りました。\\n・知らない人に先に話しかけようと勇気を出しました。'
+      }
+    },
+    'H3-20260916-02': {
+      4: {
+        old:
+          '・複雑な問題を一つずつ（　　　）。\\n→ ・友達と率直に話して誤解を（　　　）。',
+        next:
+          '・複雑な問題を一つずつ解きました。\\n・友達と率直に話して誤解を解きました。'
       }
     },
     'H3-20260917-01': {
@@ -1305,6 +1385,52 @@ function h3WrittenReviewApplyLearnerTextCorrections_(
           '祭りの入口に立てた大きな案内板は、遠くからでも［一目で目に入りました］。',
         next:
           '祭りの入口に立てた大きな案内板は、遠くからでも［ぱっと目に入りました］。'
+      },
+      4: {
+        old:
+          '・お客さんが来る前に夕食の膳を（　　　）。\\n→ ・とても驚きましたが、すぐに気を（　　　）。',
+        next:
+          '・お客さんが来る前に夕食の膳を整えました。\\n・とても驚きましたが、すぐに気を取り直しました。'
+      }
+    },
+    'H3-20260917-02': {
+      4: {
+        old:
+          '・チゲを小さな（　　　）に取り分けて食べました。\\n→ ・その友達は人をうまく導けるので、大きな（　　　）になりそうです。',
+        next:
+          '・チゲを小さな器に取り分けて食べました。\\n・その友達は人をうまく導けるので、大きな器の人物になりそうです。'
+      }
+    },
+    'H3-20260918-01': {
+      4: {
+        old:
+          '・交通事故の衝撃で、しばらく（　　　）を失いました。\\n→ ・最初はとても慌てましたが、すぐに（　　　）を取り戻して警察に連絡しました。',
+        next:
+          '・交通事故の衝撃で、しばらく意識を失いました。\\n・最初はとても慌てましたが、すぐに気を取り直して警察に連絡しました。'
+      }
+    },
+    'H3-20260918-02': {
+      4: {
+        old:
+          '・電話が来て、しばらく画面から目を（　　　）。\\n→ ・引っ越しながら、壁に貼っておいた写真を（　　　）。',
+        next:
+          '・電話が来て、しばらく画面から目を離しました。\\n・引っ越しの際、壁に貼っておいた写真を剥がしました。'
+      }
+    },
+    'H3-20260918-03': {
+      4: {
+        old:
+          '・通知音を聞いて、しばらく画面から目を（　　　）。\\n→ ・ノートに間違って貼ったラベルをもう一度（　　　）。',
+        next:
+          '・通知音を聞いて、しばらく画面から目を離しました。\\n・ノートに間違って貼ったラベルをもう一度剥がしました。'
+      }
+    },
+    'H3-20260920-01': {
+      4: {
+        old:
+          '・旅行の前に全体の日程をあらかじめ（　　　）。\\n→ ・新年になると一年の目標を（　　　）。',
+        next:
+          '・旅行の前に全体の日程をあらかじめ立てます。\\n・新年になると一年の目標を立てます。'
       }
     }
   };
@@ -1368,6 +1494,89 @@ function h3WrittenReviewApplyLearnerTextCorrections_(
   out.technical
     .learner_text_correction_id =
       'H3-REVIEW-JA-QUALITY-20260923-V1';
+
+  return out;
+}
+
+
+function h3WrittenReviewApplyD4CompletedSurfaceCorrection_(
+  payload
+) {
+  if (
+    !payload ||
+    payload.mode !== 'REVIEW' ||
+    String(payload.set_id || '') !==
+      'H3-20260915-01' ||
+    !Array.isArray(payload.sections)
+  ) {
+    return payload;
+  }
+
+  var out =
+    JSON.parse(
+      JSON.stringify(payload)
+    );
+  var part =
+    out.sections.filter(
+      function (item) {
+        return (
+          item &&
+          item.section === 'D4'
+        );
+      }
+    )[0];
+
+  var expectedBody =
+    '次の下線部と最も近い意味のものを選んでください。\\n' +
+    '빨간 우산은 멀리서도 [눈에 띄었어요].';
+  var expectedCorrect =
+    '멀리서도 쉽게 보였어요';
+  var expectedOld =
+    'Q3 [D4][PARAPHRASE]\\n' +
+    '次の下線部と最も近い意味のものを選んでください。\\n' +
+    '빨간 우산은 멀리서도 [눈에 띄었어요].\\n' +
+    '① 멀리서도 쉽게 보였어요\\n' +
+    '② 눈이 아파서 보기 힘들었어요\\n' +
+    '③ 비를 맞아 금방 젖었어요\\n' +
+    '④ 사람들 사이에서 곧 사라졌어요';
+  var next =
+    '빨간 우산은 멀리서도 눈에 띄었어요.\\n' +
+    '빨간 우산은 멀리서도 쉽게 보였어요.';
+
+  if (
+    !part ||
+    !part.question_surface ||
+    String(
+      part.question_surface.body || ''
+    ) !== expectedBody ||
+    String(
+      part.correct_answer_text || ''
+    ) !== expectedCorrect
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_D4_COMPLETED_SURFACE_SOURCE_MISMATCH'
+    );
+  }
+
+  if (
+    String(part.script_text || '') ===
+      expectedOld
+  ) {
+    part.script_text = next;
+  } else if (
+    String(part.script_text || '') !==
+      next
+  ) {
+    throw new Error(
+      'WRITTEN_REVIEW_D4_COMPLETED_SURFACE_SCRIPT_MISMATCH'
+    );
+  }
+
+  out.technical =
+    out.technical || {};
+  out.technical
+    .d4_completed_surface_correction_id =
+      'H3-UXR-2B-D4-COMPLETED-20260925-V1';
 
   return out;
 }
@@ -1586,8 +1795,10 @@ function h3WrittenReviewApplyLearnerProjection_(
   payload
 ) {
   return h3WrittenReviewApplyDialogueTranslationPresentation_(
-    h3WrittenReviewApplyLearnerTextCorrections_(
-      payload
+    h3WrittenReviewApplyD4CompletedSurfaceCorrection_(
+      h3WrittenReviewApplyLearnerTextCorrections_(
+        payload
+      )
     )
   );
 }

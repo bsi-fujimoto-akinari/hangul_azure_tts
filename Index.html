@@ -7,13 +7,14 @@
     <style>
       .family-scheduler-launcher {
         padding: 10px;
+        min-height: 60px;
       }
 
       .family-scheduler-actions {
         display: grid;
         grid-template-columns:
-          minmax(0, 2fr)
-          minmax(0, 4fr);
+          minmax(0, 4fr)
+          minmax(0, 2fr);
         gap: 10px;
         width: 100%;
         min-width: 0;
@@ -112,6 +113,7 @@
       @media (max-width: 619px) {
         .family-scheduler-launcher {
           padding: 9px;
+          min-height: 58px;
         }
       }
     </style>
@@ -120,7 +122,19 @@
     <main class="shell">
       <h1 class="sr-only">H3</h1>
 
-      <nav id="mobile-progress" class="mobile-progress hidden" aria-label="問題進捗"></nav>
+      <section id="surface-sticky" class="surface-sticky hidden" aria-label="問題ナビゲーション">
+        <div class="surface-title-row">
+          <strong id="surface-title" class="surface-title"></strong>
+          <button
+            id="surface-link-copy"
+            class="surface-link-copy hidden"
+            type="button"
+            aria-label="この復習問題へのリンクをコピー"
+            title="この復習問題へのリンクをコピー"
+          ></button>
+        </div>
+        <nav id="mobile-progress" class="review-progress surface-progress" aria-label="問題進捗"></nav>
+      </section>
 
       <section id="loading" class="status compact-status">読み込み中…</section>
       <section id="error" class="panel error hidden" role="alert"></section>
@@ -263,10 +277,10 @@
           );
 
           actions.appendChild(
-            nextWrap
+            familyGroup
           );
           actions.appendChild(
-            familyGroup
+            nextWrap
           );
           launcher.appendChild(
             actions

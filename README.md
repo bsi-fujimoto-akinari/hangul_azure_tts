@@ -1,12 +1,12 @@
-# HANGUL canonical state
+# HANGUL legacy state bridge
 
-This dedicated state-only branch is the machine-readable continuity authority for the HANGUL_EXAM project.
+This branch is deprecated and is no longer the continuity authority.
 
-- `current.json`: sole hot-state authority.
-- `current.schema.json`: strict JSON Schema for `current.json`.
-- `audit/state-events.jsonl`: append-only state transition summary.
-- Exact pre-migration Drive CURRENT bytes remain preserved by Drive revision IDs recorded in `current.json`.
+Canonical machine-readable state:
+- repository: `bsi-fujimoto-akinari/hangul_state`
+- ref: `refs/heads/main`
+- path: `current.json`
+- schema: `current.schema.json`
 
-Application code remains on `main`. Do not merge `state-current` into `main`. State commits must update only this branch.
-
-Update protocol: read branch head -> read and validate `current.json` -> produce desired state -> validate against schema -> create one commit -> fast-forward `state-current` with `force=false` -> read back and validate.
+Do not write new state here. Historical commits remain for migration provenance only.
+Application code remains on `bsi-fujimoto-akinari/hangul_azure_tts@main`.

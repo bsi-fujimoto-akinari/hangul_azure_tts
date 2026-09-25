@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "state_format": "hangul_current_v1",
-  "updated_at": "2026-09-25T14:44:04+09:00",
+  "updated_at": "2026-09-25T15:25:48+09:00",
   "authority": {
     "kind": "git_branch_json",
-    "repository": "bsi-fujimoto-akinari/hangul_azure_tts",
-    "ref": "refs/heads/state-current",
+    "repository": "bsi-fujimoto-akinari/hangul_state",
+    "ref": "refs/heads/main",
     "path": "current.json",
     "application_code_ref": "refs/heads/main"
   },

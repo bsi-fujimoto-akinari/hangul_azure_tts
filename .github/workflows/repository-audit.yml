@@ -2584,8 +2584,9 @@ jobs:
           # Production Written provider is active; WebApp keeps using common Review dispatch.
           if "var H3_REVIEW_WRITTEN_PROVIDER_FACTORY_ =\n  h3ReviewWrittenProviderFactory_;" not in core:
               raise SystemExit('Written provider is not active in production.')
+          # Review permalinks legitimately carry review_kind through
+          # WebApp.js. Keep only the direct Written Review helper guard.
           for forbidden in [
-              'review_kind',
               'h3WrittenReview',
           ]:
               if forbidden in web:
@@ -2865,7 +2866,6 @@ jobs:
               "'review-progress'",
               "'review-progress-button'",
               "app.payload.txn_id || null",
-              "'技術情報'",
               "'ホーム'",
               "'review-controls-sticky'",
               "復習優先度",
@@ -2885,7 +2885,6 @@ jobs:
               '.review-filter-button',
               '.review-history-item',
               '.review-priority-track',
-              '.review-technical',
           ]:
               if needle not in style:
                   raise SystemExit(f'R3-09D Review CSS invariant missing: {needle}')
@@ -3545,15 +3544,19 @@ jobs:
                   'Shared Review learning-block newlines are not preserved.'
               )
 
-          # Technical information remains the independent disclosure.
-          if "document.createElement(\n        'details'\n      )" not in review:
-              raise SystemExit(
-                  'Review technical information is no longer a DETAILS disclosure.'
-              )
-          if "'review-technical'" not in review or "'技術情報'" not in review:
-              raise SystemExit(
-                  'Review technical disclosure contract changed.'
-              )
+          # UXR-5 retires the learner-facing technical-information
+          # disclosure in favor of the sticky Review permalink copy control.
+          for forbidden in [
+              "'review-technical'",
+              "'review-technical-question-links'",
+              "'技術情報'",
+              "'技術情報をコピー'",
+          ]:
+              if forbidden in review:
+                  raise SystemExit(
+                      'Legacy Review technical disclosure returned: ' +
+                      forbidden
+                  )
 
           # Active learning does not inherit Review-only structured style.
           if 'review-explanation-written' in questions:
@@ -3566,7 +3569,7 @@ jobs:
               '## 33. Review explanation visibility and structured text',
               '5L | 5W | READING | TRANSLATION',
               'structurally always visible',
-              'technical-information block remains the Review disclosure',
+              'legacy technical-information disclosure is removed',
               'does not change scoring',
               'must preserve stored newline boundaries',
           ]:
@@ -10207,6 +10210,18 @@ jobs:
               if forbidden in review:
                   raise SystemExit(
                       'UXR-5 legacy technical block remains: ' +
+                      forbidden
+                  )
+
+          for forbidden in [
+              '.review-technical {',
+              '.review-technical-question-links {',
+              '.review-technical-question-link {',
+              '.review-technical-ids {',
+          ]:
+              if forbidden in style:
+                  raise SystemExit(
+                      'UXR-5 legacy technical CSS remains: ' +
                       forbidden
                   )
 

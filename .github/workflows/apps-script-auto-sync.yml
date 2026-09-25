@@ -163,6 +163,49 @@ jobs:
 
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
+      - name: Detect automatic live smoke plan
+        id: automatic_smoke_plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          review_5w=false
+          system_test_render=false
+
+          if [ "${{ github.event_name }}" != "workflow_run" ]; then
+            {
+              echo "requested=false"
+              echo "review_5w=false"
+              echo "system_test_render=false"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          while IFS= read -r path; do
+            case "$path" in
+              WebApp.js|Client.html|WebAppObservability.js|WebAppLiveSmoke.js|appsscript.json)
+                review_5w=true
+                system_test_render=true
+                ;;
+              WebAppReview*.js|WebAppSurfaceReviewBridge*.js|WebAppWritten*.js)
+                review_5w=true
+                ;;
+              WebApp*.js|Index.html|Stylesheet.html)
+                system_test_render=true
+                ;;
+            esac
+          done < <(git diff --name-only HEAD^ HEAD)
+
+          requested=false
+          if [ "$review_5w" = "true" ] || [ "$system_test_render" = "true" ]; then
+            requested=true
+          fi
+
+          {
+            echo "requested=$requested"
+            echo "review_5w=$review_5w"
+            echo "system_test_render=$system_test_render"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Detect synchronization-policy change
         id: policy_change
         shell: bash
@@ -455,6 +498,185 @@ jobs:
           )
           PY
 
+      - name: Validate automatic read-only live smoke boundary
+        id: automatic_smoke_boundary
+        if: steps.automatic_smoke_plan.outputs.requested == 'true' && steps.source_attestation.outputs.attested == 'true' && steps.source_binding_boundary.outputs.ready == 'true' && steps.auth.outputs.ready == 'true'
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          SOURCE_DIGEST: ${{ steps.source_attestation.outputs.source_digest || '' }}
+          SOURCE_ATTESTED: ${{ steps.source_attestation.outputs.attested || '' }}
+          REVIEW_5W: ${{ steps.automatic_smoke_plan.outputs.review_5w || 'false' }}
+          SYSTEM_TEST_RENDER: ${{ steps.automatic_smoke_plan.outputs.system_test_render || 'false' }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "workflow_run" ]; then
+            echo "::error::Automatic live smoke is restricted to the audited workflow_run path."
+            exit 1
+          fi
+          if [ "$SOURCE_ATTESTED" != "true" ]; then
+            echo "::error::Automatic live smoke requires immediate successful Apps Script source attestation."
+            exit 1
+          fi
+          if [ "${{ github.event.workflow_run.head_sha }}" != "$SOURCE_SHA" ] || \
+             [ "${{ github.event.workflow_run.event }}" != "push" ] || \
+             [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+            echo "::error::Automatic live smoke trigger is not the successful exact-SHA Repository audit push run."
+            exit 1
+          fi
+          python3 - "$SOURCE_SHA" "$SOURCE_DIGEST" "$REVIEW_5W" "$SYSTEM_TEST_RENDER" <<'PY'
+          import re
+          import sys
+
+          source_sha, source_digest, review_5w, system_test = sys.argv[1:5]
+          if re.fullmatch(r'[0-9a-f]{40}', source_sha) is None:
+              raise SystemExit('Automatic live smoke source SHA is invalid.')
+          if re.fullmatch(r'[0-9a-f]{64}', source_digest) is None:
+              raise SystemExit('Automatic live smoke source digest is invalid.')
+          if review_5w not in {'true', 'false'} or system_test not in {'true', 'false'}:
+              raise SystemExit('Automatic live smoke plan booleans are invalid.')
+          if review_5w != 'true' and system_test != 'true':
+              raise SystemExit('Automatic live smoke boundary received an empty plan.')
+          PY
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Run impact-selected automatic live smoke
+        id: automatic_live_smoke
+        if: steps.automatic_smoke_boundary.outputs.ready == 'true'
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          SOURCE_DIGEST: ${{ steps.source_attestation.outputs.source_digest }}
+          REVIEW_5W: ${{ steps.automatic_smoke_plan.outputs.review_5w }}
+          SYSTEM_TEST_RENDER: ${{ steps.automatic_smoke_plan.outputs.system_test_render }}
+        run: |
+          set -euo pipefail
+          params="$(python3 - "$SOURCE_SHA" "$SOURCE_DIGEST" "$REVIEW_5W" "$SYSTEM_TEST_RENDER" <<'PY'
+          import json
+          import sys
+
+          source_sha, source_digest, review_5w, system_test = sys.argv[1:5]
+          suites = []
+          if review_5w == 'true':
+              suites.append('REVIEW_5W')
+          if system_test == 'true':
+              suites.append('SYSTEM_TEST_RENDER')
+          print(json.dumps([{
+              'schema': 'H3_AUTOMATIC_LIVE_SMOKE_REQUEST_V1',
+              'source_sha': source_sha,
+              'source_digest': source_digest,
+              'suites': suites,
+          }], separators=(',', ':')))
+          PY
+          )"
+
+          out=/tmp/h3-automatic-live-smoke.out
+          err=/tmp/h3-automatic-live-smoke.err
+          set +e
+          npx -y @google/clasp@3.4.0 --json run-function h3AutomaticLiveSmoke --params "$params" >"$out" 2>"$err"
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Automatic live smoke execution failed."
+            cat "$err"
+            cat "$out"
+            exit "$status"
+          fi
+
+          python3 - "$out" "$SOURCE_SHA" "$SOURCE_DIGEST" "$REVIEW_5W" "$SYSTEM_TEST_RENDER" <<'PY'
+          import json
+          import sys
+
+          envelope = json.loads(open(sys.argv[1], encoding='utf-8').read())
+          if envelope.get('error'):
+              raise SystemExit('Automatic live smoke returned an Apps Script error envelope.')
+
+          result = envelope.get('response')
+          if not isinstance(result, dict):
+              raise SystemExit('Automatic live smoke response is not an object.')
+          if result.get('schema') != 'H3_AUTOMATIC_LIVE_SMOKE_RESULT_V1':
+              raise SystemExit(f"Unexpected automatic smoke schema: {result.get('schema')!r}")
+          if result.get('status') != 'PASS':
+              raise SystemExit(f"Automatic live smoke status is not PASS: {result.get('status')!r}")
+          if result.get('write_performed') is not False:
+              raise SystemExit('Automatic live smoke did not attest write_performed=false.')
+          if result.get('source_sha') != sys.argv[2]:
+              raise SystemExit('Automatic live smoke source SHA mismatch.')
+          if result.get('source_digest') != sys.argv[3]:
+              raise SystemExit('Automatic live smoke source digest mismatch.')
+
+          expected = []
+          if sys.argv[4] == 'true':
+              expected.append('REVIEW_5W')
+          if sys.argv[5] == 'true':
+              expected.append('SYSTEM_TEST_RENDER')
+
+          suites = result.get('suites')
+          if not isinstance(suites, list):
+              raise SystemExit('Automatic live smoke suites is not an array.')
+          by_name = {
+              item.get('suite'): item
+              for item in suites
+              if isinstance(item, dict)
+          }
+          if set(by_name) != set(expected):
+              raise SystemExit(
+                  f'Automatic live smoke suite set mismatch: {sorted(by_name)} != {sorted(expected)}'
+              )
+
+          if 'REVIEW_5W' in expected:
+              item = by_name['REVIEW_5W']
+              required = {
+                  'status': 'PASS',
+                  'schema': 'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1',
+                  'mode': 'REVIEW',
+                  'kind': 'WRITTEN',
+                  'provider_kind': 'WRITTEN',
+                  'surface_family': '5W',
+                  'surface_set_no': 6,
+                  'sections_len': 5,
+                  'read_only': True,
+              }
+              for key, value in required.items():
+                  if item.get(key) != value:
+                      raise SystemExit(
+                          f'REVIEW_5W smoke mismatch for {key}: {item.get(key)!r} != {value!r}'
+                      )
+
+          if 'SYSTEM_TEST_RENDER' in expected:
+              item = by_name['SYSTEM_TEST_RENDER']
+              required = {
+                  'status': 'PASS',
+                  'schema': 'H3_WEB_SET_V1',
+                  'mode': 'SYSTEM_TEST',
+                  'nonlearning': True,
+                  'questions_len': 5,
+                  'read_only': True,
+              }
+              for key, value in required.items():
+                  if item.get(key) != value:
+                      raise SystemExit(
+                          f'SYSTEM_TEST_RENDER smoke mismatch for {key}: {item.get(key)!r} != {value!r}'
+                      )
+
+          print(
+              'Automatic live smoke PASS: ' +
+              ','.join(expected)
+          )
+          PY
+
+          echo "status=pass" >> "$GITHUB_OUTPUT"
+          echo "suites=$(python3 - "$REVIEW_5W" "$SYSTEM_TEST_RENDER" <<'PY'
+          import sys
+          suites = []
+          if sys.argv[1] == 'true':
+              suites.append('REVIEW_5W')
+          if sys.argv[2] == 'true':
+              suites.append('SYSTEM_TEST_RENDER')
+          print(','.join(suites))
+          PY
+          )" >> "$GITHUB_OUTPUT"
+
       - name: Validate one-revision read-only smoke boundary
         id: smoke_boundary
         if: steps.smoke_request.outputs.requested == 'true' && steps.auth.outputs.ready == 'true'
@@ -517,6 +739,9 @@ jobs:
             echo "- source attestation: ${{ steps.source_attestation.outputs.attested || 'not-run' }}"
             echo "- attested file count: ${{ steps.source_attestation.outputs.file_count || 'not-run' }}"
             echo "- source digest: ${{ steps.source_attestation.outputs.source_digest || 'not-run' }}"
+            echo "- automatic live smoke requested: ${{ steps.automatic_smoke_plan.outputs.requested || 'false' }}"
+            echo "- automatic live smoke suites: ${{ steps.automatic_live_smoke.outputs.suites || 'not-run' }}"
+            echo "- automatic live smoke status: ${{ steps.automatic_live_smoke.outputs.status || 'not-run' }}"
             echo "- target script ID: 1p_e1jKICTZXHpCrQ7rwU9HilloZdkFBpHry_lCq5YgXpaiU4FNEQlDa-"
             echo '- manifest overwrite mode: audited CI only (clasp push --force)'
             echo '- versioned /exec deployment: not changed by this workflow'

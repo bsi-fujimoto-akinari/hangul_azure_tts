@@ -162,7 +162,6 @@ jobs:
           sync = sync_path.read_text(encoding='utf-8')
           ops = ops_path.read_text(encoding='utf-8')
           github_attempt_token = '$' + '{{ github.run_attempt }}'
-          github_event_token = '$' + '{{ github.event_name }}'
           command = 'run-' + 'function'
 
           required_sync = [
@@ -172,8 +171,6 @@ jobs:
               github_attempt_token,
               'steps.source_attestation.outputs.attested',
               'steps.smoke_boundary.outputs.ready',
-              'uxr2b_one_shot_push',
-              '7bf95428859bedf071c3cd58b0a03421d6fe4b69',
           ]
           missing_sync = [token for token in required_sync if token not in sync]
           if missing_sync:
@@ -187,8 +184,6 @@ jobs:
               'run_attempt=1',
               'authenticated source_attestation',
               "if: steps.smoke_boundary.outputs.ready == 'true'",
-              'UXR-2B one-shot exception',
-              '7bf95428859bedf071c3cd58b0a03421d6fe4b69',
           ]
           missing_ops = [token for token in required_ops if token not in ops]
           if missing_ops:
@@ -220,19 +215,6 @@ jobs:
               if "if: steps.smoke_boundary.outputs.ready == 'true'" not in prefix:
                   raise SystemExit(
                       'Credentialed clasp execution must be gated by smoke_boundary ready=true.'
-                  )
-
-          if 'uxr2b_one_shot_push' in sync:
-              expected_event_gate = (
-                  f'if [ "{github_event_token}" = "workflow_run" ]; then'
-              )
-              if expected_event_gate not in sync:
-                  raise SystemExit(
-                      'UXR-2B one-shot push exception must remain workflow_run-bound.'
-                  )
-              if 'git rev-parse HEAD^' not in sync:
-                  raise SystemExit(
-                      'UXR-2B one-shot push exception must verify the immediate parent SHA.'
                   )
 
           print(
@@ -9919,14 +9901,26 @@ jobs:
               'utf8'
             );
           for (const needle of [
+            "String(setId||'')==='H3-20260915-01'",
+            'REVIEW_AUDIO_UXR2B_D4_SOURCE_MISMATCH',
+            '빨간 우산은 멀리서도 쉽게 보였어요.'
+          ]) {
+            assert(
+              audioSource.includes(needle),
+              'Missing durable D4 canonicalization contract: ' +
+                needle
+            );
+          }
+          for (const forbidden of [
             'H3_REVIEW_AUDIO_STALE_REPLACED_FOLDER_ID_',
             'REVIEW_AUDIO_UXR2B_D4_MIGRATION_SOURCE_MISMATCH',
             'STALE_REPLACED_ARCHIVE',
             'runUxr2bReviewAudioRepair'
           ]) {
             assert(
-              audioSource.includes(needle),
-              'Missing audio repair contract: ' + needle
+              !audioSource.includes(forbidden),
+              'Temporary UXR-2B audio migration plumbing remains: ' +
+                forbidden
             );
           }
 

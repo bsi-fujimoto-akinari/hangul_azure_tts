@@ -103,6 +103,8 @@ allowed = {
     '.github/scripts/repository_audit_impact.py',
     '.github/scripts/drive_raw_text_replace_helper.py',
     '.github/scripts/d5_context_quality_audit.cjs',
+    '.github/scripts/written_explanation_static_qa.cjs',
+    '.github/scripts/written_explanation_static_qa_fixtures.json',
     '.github/scripts/error_state_contract_audit.py',
     '.github/scripts/review_audio_lifecycle_contract_audit.cjs',
     '.github/scripts/production_trigger_alignment.py',

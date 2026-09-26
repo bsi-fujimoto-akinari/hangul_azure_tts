@@ -170,7 +170,7 @@ function h3FsPrepareWritten_(ss) {
         ],
         required_pronunciation_coverage:{
           min_blocks:1,
-          level_bands:['3級','준2급'],
+          level_bands:['3급','준2급'],
           fields:['skill_id','level_band','surface','actual']
         },
         structured_hanja_network:{

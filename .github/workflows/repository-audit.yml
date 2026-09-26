@@ -132,6 +132,7 @@ jobs:
               'RECOVERY.md',
               '.github/workflows/repository-audit.yml',
               '.github/scripts/repository_audit_impact.py',
+              '.github/scripts/drive_raw_text_replace_helper.py',
               '.github/workflows/apps-script-auto-sync.yml',
               '.github/workflows/rs10-soft-signal-audit.yml',
               '.github/workflows/rs12-prospective-evidence-audit.yml',
@@ -236,6 +237,62 @@ jobs:
         shell: bash
         run: |
           python3 .github/scripts/repository_audit_impact.py validate
+
+      - name: Audit Drive raw TXT replace helper contract
+        shell: bash
+        run: |
+          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Audit Drive raw TXT replace helper contract')" != "SKIP" ] || { echo "Impact-skip: Audit Drive raw TXT replace helper contract"; exit 0; }
+          python3 .github/scripts/drive_raw_text_replace_helper.py self-test
+          python3 - <<'PY'
+          from pathlib import Path
+
+          ops = Path('OPERATIONS.md').read_text(encoding='utf-8')
+          helper = Path(
+              '.github/scripts/drive_raw_text_replace_helper.py'
+          ).read_text(encoding='utf-8')
+
+          required_ops = [
+              'H3_DRIVE_RAW_TEXT_REPLACE_V1',
+              'DRIVE_RAW_TEXT_REPLACE_HELPER=.github/scripts/drive_raw_text_replace_helper.py',
+              'temporary native Google Doc',
+              'export_result.file_uri.file_id',
+              'never pass the whole `file_uri` object',
+              'CRLF/CR -> LF normalization',
+              'BOM presence is exactly equal',
+              'not byte-preserving',
+              'preserve the existing Drive file ID',
+          ]
+          missing_ops = [
+              token for token in required_ops
+              if token not in ops
+          ]
+          if missing_ops:
+              raise SystemExit(
+                  'Drive raw TXT replacement Operations contract missing: '
+                  + ', '.join(missing_ops)
+              )
+
+          required_helper = [
+              'CONTRACT_ID = "H3_DRIVE_RAW_TEXT_REPLACE_V1"',
+              'def unwrap_update_file_uri(',
+              'def normalize_text_plain(',
+              'def verify_text_plain_readback(',
+              '"file_id"',
+              'replace("\\r\\n", "\\n").replace("\\r", "\\n")',
+              'expected_bom == actual_bom',
+          ]
+          missing_helper = [
+              token for token in required_helper
+              if token not in helper
+          ]
+          if missing_helper:
+              raise SystemExit(
+                  'Drive raw TXT replacement helper missing: '
+                  + ', '.join(missing_helper)
+              )
+
+          print('Drive raw TXT replacement contract: PASS')
+          PY
 
       - name: Verify credentialed Apps Script execution boundaries
         shell: bash

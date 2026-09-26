@@ -74,10 +74,14 @@ var H3_FS_AUTHORING_CLAIM_STALE_MINUTES_ = 120;
 var H3_FS_AUTHORING_RETRY_BACKOFF_MINUTES_ = 60;
 var H3_FS_AUTHORING_MAX_ATTEMPTS_ = 3;
 var H3_FS_AUTHORING_GENERATION_CONTRACT_ID_ =
-  'H3-FAMILY-SCHEDULER-AUTHORING-GENERATION-20260926-V1';
+  'H3-FAMILY-SCHEDULER-AUTHORING-GENERATION-20260926-V2';
 var H3_FS_W_D5_CONTEXT_POLICY_ID_ =
   'H3-D5-CONTEXT-QUALITY-20260926-V1';
 var H3_FS_W_D5_CONTEXT_ACTIVATION_STAGE_ =
+  'STD-B002-S2';
+var H3_FS_W_EXPL_QA_CONTRACT_ID_ =
+  'H3-WRITTEN-EXPLANATION-STATIC-QA-20260926-V1';
+var H3_FS_W_EXPL_QA_ACTIVATION_STAGE_ =
   'STD-B002-S2';
 var H3_FS_W_D5_CONTEXT_RATIONALE_CODES_ = [
   'TWO_DISTINCT_CONTEXTS',
@@ -681,6 +685,10 @@ function h3FsFindPreparedWritten_(ss) {
     meta.planned_slots
   );
   h3FsWrittenD5ContextValidatePrepared_(
+    stageId,
+    meta
+  );
+  h3FsWrittenExplanationStaticQaValidatePrepared_(
     stageId,
     meta
   );
@@ -1882,17 +1890,20 @@ function h3FsAuthoringGeneration_(family,prep) {
   if(!request)return '';
   if(
     String(request.contract_id||'')!==
-      'H3-FAMILY-SCHEDULER-W-PREP-20260926-V2' ||
+      'H3-FAMILY-SCHEDULER-W-PREP-20260926-V3' ||
     String(request.schema||'')!==
-      'H3_FAMILY_SCHEDULER_WRITTEN_AUTHORING_REQUEST_V2'
+      'H3_FAMILY_SCHEDULER_WRITTEN_AUTHORING_REQUEST_V3'
   ){
     return '';
   }
   var constraints=request.authoring_constraints||{};
   var d5=constraints.d5_context||{};
+  var explanationQa=constraints.explanation_static_qa||{};
   if(
     String(d5.policy_id||'')!==
-      H3_FS_W_D5_CONTEXT_POLICY_ID_
+      H3_FS_W_D5_CONTEXT_POLICY_ID_ ||
+    String(explanationQa.contract_id||'')!==
+      H3_FS_W_EXPL_QA_CONTRACT_ID_
   ){
     return '';
   }
@@ -1900,7 +1911,8 @@ function h3FsAuthoringGeneration_(family,prep) {
     H3_FS_AUTHORING_GENERATION_CONTRACT_ID_,
     String(request.contract_id),
     String(request.schema),
-    String(d5.policy_id)
+    String(d5.policy_id),
+    String(explanationQa.contract_id)
   ].join(':');
 }
 
@@ -2617,7 +2629,7 @@ function h3FsAuthoringRebindPreviousGeneration_(
   };
 }
 
-function h3FamilySchedulerD5AuthoringGenerationRebind() {
+function h3FamilySchedulerWrittenAuthoringGenerationRebind() {
   var lock=LockService.getScriptLock();
   lock.waitLock(30000);
   try {
@@ -2660,6 +2672,10 @@ function h3FamilySchedulerD5AuthoringGenerationRebind() {
   } finally {
     try{lock.releaseLock();}catch(_ignore){}
   }
+}
+
+function h3FamilySchedulerD5AuthoringGenerationRebind() {
+  return h3FamilySchedulerWrittenAuthoringGenerationRebind();
 }
 
 function h3FsAuthoringTimestampMs_(value) {
@@ -3737,14 +3753,19 @@ function h3FsIssueWritten_(ss) {
   var prepared=h3FsFindPreparedWritten_(ss);
   if(!prepared)throw new Error('FAMILY_SCHEDULER_WRITTEN_NOT_PREPARED');
 
+  var preparedMeta=h3FsJson_(
+    prepared.row[
+      prepared.map.QUESTION_META_JSON
+    ],
+    null
+  );
   h3FsWrittenD5ContextValidatePrepared_(
     prepared.stage_id,
-    h3FsJson_(
-      prepared.row[
-        prepared.map.QUESTION_META_JSON
-      ],
-      null
-    )
+    preparedMeta
+  );
+  h3FsWrittenExplanationStaticQaValidatePrepared_(
+    prepared.stage_id,
+    preparedMeta
   );
 
   var stageSheet=prepared.sheet;

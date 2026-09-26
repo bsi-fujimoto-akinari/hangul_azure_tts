@@ -317,3 +317,96 @@ function h3AutomaticLiveSmoke(request) {
       false
   };
 }
+
+function runReviewAudioIncidentPhase4AcceptanceH3ERR202609260854458149B965(){
+  var setId='H3-20260925-01';
+  var expectedSlots=['D2','D3','D4','D5','D6'];
+  var review=getListeningWebSet({
+    schema:'H3_WEB_RENDER_REQUEST_V1',
+    mode:'REVIEW',
+    review_kind:'WRITTEN',
+    surface_family:'5W',
+    set_id:setId,
+    q_no:1,
+    txn_id:null,
+    legacy_review_id:null
+  });
+
+  if(
+    !review ||
+    review.schema!=='H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1' ||
+    review.mode!=='REVIEW' ||
+    review.provider_kind!=='WRITTEN' ||
+    review.surface_family!=='5W' ||
+    review.set_id!==setId ||
+    !Array.isArray(review.sections) ||
+    review.sections.length!==5 ||
+    review.read_only!==true ||
+    review.persisted!==true
+  ){
+    throw new Error('PHASE4_REVIEW_RENDER_INVALID');
+  }
+
+  var mediaResults=review.sections.map(function(section,index){
+    var expected=expectedSlots[index];
+    if(
+      !section ||
+      String(section.audio_asset_key||'')!==expected ||
+      !section.audio_fallback_url
+    ){
+      throw new Error(
+        'PHASE4_REVIEW_BINDING_INVALID:'+expected
+      );
+    }
+
+    var media=getListeningWebMedia({
+      schema:'H3_WEB_MEDIA_REQUEST_V1',
+      mode:'REVIEW',
+      review_kind:'WRITTEN',
+      surface_family:'5W',
+      set_id:setId,
+      asset_key:expected,
+      txn_id:null,
+      legacy_review_id:null
+    });
+
+    if(
+      !media ||
+      media.schema!=='H3_WEB_MEDIA_V1' ||
+      media.mode!=='REVIEW' ||
+      media.read_only!==true ||
+      media.provider_kind!=='WRITTEN' ||
+      media.surface_family!=='5W' ||
+      media.set_id!==setId ||
+      media.asset_key!==expected ||
+      media.mime_type!=='audio/mpeg' ||
+      !Number.isFinite(Number(media.size_bytes)) ||
+      Number(media.size_bytes)<=0 ||
+      String(media.data_uri||'').indexOf('data:audio/mpeg;base64,')!==0 ||
+      !media.fallback_url
+    ){
+      throw new Error(
+        'PHASE4_REVIEW_MEDIA_INVALID:'+expected
+      );
+    }
+
+    return{
+      slot:expected,
+      status:'PASS',
+      size_bytes:Number(media.size_bytes),
+      fallback_url:String(media.fallback_url)
+    };
+  });
+
+  return{
+    schema:'H3_REVIEW_AUDIO_PHASE4_ACCEPTANCE_V1',
+    status:'PASS',
+    set_id:setId,
+    surface_set_no:Number(review.surface_set_no||0),
+    sections_len:review.sections.length,
+    media_count:mediaResults.length,
+    media:mediaResults,
+    write_performed:false
+  };
+}
+

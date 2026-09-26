@@ -42,6 +42,7 @@ DEPENDENCIES = json.loads(r'''{
     ".github/workflows/family-scheduler-f3-shadow-audit.yml",
     ".github/workflows/repository-audit.yml",
     ".github/scripts/drive_raw_text_replace_helper.py",
+    ".github/scripts/d5_context_quality_audit.js",
     ".github/workflows/rs10-soft-signal-audit.yml",
     ".github/workflows/rs12-prospective-evidence-audit.yml",
     ".github/workflows/rs13-real-data-shadow-audit.yml",
@@ -534,6 +535,7 @@ DEPENDENCIES = json.loads(r'''{
     "WebAppSurfaceReviewBridge.js"
   ],
   "Check JavaScript syntax": [
+    ".github/scripts/d5_context_quality_audit.js",
     "Client.html",
     "Code.js",
     "ListeningBackendOrchestrator.js",

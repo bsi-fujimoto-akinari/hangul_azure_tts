@@ -8,6 +8,7 @@ on:
 
 jobs:
   audit:
+    name: rs12-prospective-evidence-audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

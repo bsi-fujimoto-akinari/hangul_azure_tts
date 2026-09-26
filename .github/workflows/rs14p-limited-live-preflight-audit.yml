@@ -8,6 +8,7 @@ on:
 
 jobs:
   audit:
+    name: rs14p-limited-live-preflight-audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

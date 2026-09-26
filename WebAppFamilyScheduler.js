@@ -73,6 +73,8 @@ var H3_FS_AUTHORING_RECOVERY_POLICY_ID_ =
 var H3_FS_AUTHORING_CLAIM_STALE_MINUTES_ = 120;
 var H3_FS_AUTHORING_RETRY_BACKOFF_MINUTES_ = 60;
 var H3_FS_AUTHORING_MAX_ATTEMPTS_ = 3;
+var H3_FS_AUTHORING_GENERATION_CONTRACT_ID_ =
+  'H3-FAMILY-SCHEDULER-AUTHORING-GENERATION-20260926-V1';
 var H3_FS_W_D5_CONTEXT_POLICY_ID_ =
   'H3-D5-CONTEXT-QUALITY-20260926-V1';
 var H3_FS_W_D5_CONTEXT_ACTIVATION_STAGE_ =
@@ -1866,7 +1868,41 @@ function h3FsAuthoringTargetIdentity_(ss,family,prep) {
   throw new Error('FAMILY_SCHEDULER_AUTHORING_FAMILY_INVALID:'+family);
 }
 
-function h3FsAuthoringStableTargetIdentity_(level,family,identity) {
+function h3FsAuthoringGeneration_(family,prep) {
+  family=String(family||'');
+  if(family!=='W')return '';
+  var request=prep&&prep.authoring_request;
+  if(!request)return '';
+  if(
+    String(request.contract_id||'')!==
+      'H3-FAMILY-SCHEDULER-W-PREP-20260926-V2' ||
+    String(request.schema||'')!==
+      'H3_FAMILY_SCHEDULER_WRITTEN_AUTHORING_REQUEST_V2'
+  ){
+    return '';
+  }
+  var constraints=request.authoring_constraints||{};
+  var d5=constraints.d5_context||{};
+  if(
+    String(d5.policy_id||'')!==
+      H3_FS_W_D5_CONTEXT_POLICY_ID_
+  ){
+    return '';
+  }
+  return [
+    H3_FS_AUTHORING_GENERATION_CONTRACT_ID_,
+    String(request.contract_id),
+    String(request.schema),
+    String(d5.policy_id)
+  ].join(':');
+}
+
+function h3FsAuthoringStableTargetIdentity_(
+  level,
+  family,
+  identity,
+  authoringGeneration
+) {
   var stable={
     schema:H3_FS_AUTHORING_TARGET_IDENTITY_SCHEMA_,
     level:String(level||''),
@@ -1882,7 +1918,24 @@ function h3FsAuthoringStableTargetIdentity_(level,family,identity) {
   ){
     throw new Error('FAMILY_SCHEDULER_AUTHORING_TARGET_IDENTITY_INVALID');
   }
-  stable.idempotency_key='H3AQK-'+h3FsSha_(stable);
+
+  var generation=String(authoringGeneration||'');
+  if(generation){
+    stable.authoring_generation=generation;
+    stable.idempotency_key='H3AQK-'+h3FsSha_({
+      schema:'H3_FAMILY_SCHEDULER_AUTHORING_GENERATION_IDENTITY_V1',
+      target:{
+        schema:H3_FS_AUTHORING_TARGET_IDENTITY_SCHEMA_,
+        level:stable.level,
+        family:stable.family,
+        target_kind:stable.target_kind,
+        target_id:stable.target_id
+      },
+      authoring_generation:generation
+    });
+  } else {
+    stable.idempotency_key='H3AQK-'+h3FsSha_(stable);
+  }
   return stable;
 }
 
@@ -1895,8 +1948,15 @@ function h3FsAuthoringJobSpec_(ss,level,evaluation,prep) {
     throw new Error('FAMILY_SCHEDULER_AUTHORING_FAMILY_INVALID:'+family);
   }
   var identity=h3FsAuthoringTargetIdentity_(ss,family,prep);
+  var authoringGeneration=
+    h3FsAuthoringGeneration_(family,prep);
   var stableIdentity=
-    h3FsAuthoringStableTargetIdentity_(level,family,identity);
+    h3FsAuthoringStableTargetIdentity_(
+      level,
+      family,
+      identity,
+      authoringGeneration
+    );
   var metric=
     evaluation.family_metrics && evaluation.family_metrics[family]
       ? evaluation.family_metrics[family]
@@ -1926,6 +1986,7 @@ function h3FsAuthoringJobSpec_(ss,level,evaluation,prep) {
     target_id:identity.target_id,
     target_kind:identity.target_kind,
     authoring_target:String(prep.authoring_target||''),
+    authoring_generation:authoringGeneration,
     preparation_request:prep.authoring_request||null,
     preparation_context:prep,
     boundary:{
@@ -1943,6 +2004,7 @@ function h3FsAuthoringJobSpec_(ss,level,evaluation,prep) {
     target_id:identity.target_id,
     target_kind:identity.target_kind,
     authoring_target:String(prep.authoring_target||''),
+    authoring_generation:authoringGeneration,
     scheduler_context:schedulerContext,
     source_constraint:sourceConstraint,
     authoring_request:authoringRequest
@@ -1953,6 +2015,7 @@ function h3FsAuthoringJobSpec_(ss,level,evaluation,prep) {
     scheduler_context:schedulerContext,
     source_constraint:sourceConstraint,
     authoring_request:authoringRequest,
+    authoring_generation:authoringGeneration,
     snapshot_sha256:snapshot,
     target_identity:stableIdentity,
     idempotency_key:stableIdentity.idempotency_key
@@ -1978,12 +2041,32 @@ function h3FsAuthoringUpsert_(ss,level,evaluation,prep) {
   var snapshot=spec.snapshot_sha256;
   var idempotencyKey=spec.idempotency_key;
   var match=h3FsAuthoringQueueMatch_(q,level,spec);
-  var existing=match.exact||match.representative;
-  if(existing){
+  if(match.exact){
     return {
       status:'EXISTING',
-      job_id:existing.job_id,
-      job_status:existing.status,
+      job_id:match.exact.job_id,
+      job_status:match.exact.status,
+      idempotency_key:idempotencyKey,
+      snapshot_sha256:snapshot,
+      target_history_count:match.history.length
+    };
+  }
+  if(h3FsAuthoringNeedsGenerationRebind_(spec,match)){
+    throw new Error(
+      'FAMILY_SCHEDULER_AUTHORING_PREVIOUS_GENERATION_ACTIVE:'+
+      String(match.representative.job_id||'')
+    );
+  }
+  if(
+    match.representative &&
+    ['OPEN','CLAIMED','FAILED_RETRYABLE'].indexOf(
+      String(match.representative.status||'')
+    )>=0
+  ){
+    return {
+      status:'EXISTING',
+      job_id:match.representative.job_id,
+      job_status:match.representative.status,
       idempotency_key:idempotencyKey,
       snapshot_sha256:snapshot,
       target_history_count:match.history.length
@@ -2151,6 +2234,10 @@ function h3FsAuthoringHistoryRepresentative_(history) {
 function h3FsAuthoringQueueMatch_(q,level,spec) {
   var exact=[],history=[];
   q.table.rows.forEach(function(r,i){
+    var request=h3FsJson_(
+      r[q.table.map.AUTHORING_REQUEST_JSON],
+      null
+    )||{};
     var x={
       row_number:i+2,
       job_id:String(r[q.table.map.JOB_ID]||''),
@@ -2159,8 +2246,27 @@ function h3FsAuthoringQueueMatch_(q,level,spec) {
       target_id:String(r[q.table.map.TARGET_ID]||''),
       target_kind:String(r[q.table.map.TARGET_KIND]||''),
       status:String(r[q.table.map.STATUS]||''),
-      snapshot_sha256:String(r[q.table.map.SNAPSHOT_SHA256]||''),
-      idempotency_key:String(r[q.table.map.IDEMPOTENCY_KEY]||'')
+      snapshot_sha256:String(
+        r[q.table.map.SNAPSHOT_SHA256]||''
+      ),
+      idempotency_key:String(
+        r[q.table.map.IDEMPOTENCY_KEY]||''
+      ),
+      authoring_generation:String(
+        request.authoring_generation||''
+      ),
+      attempt_count:Number(
+        r[q.table.map.ATTEMPT_COUNT]||0
+      ),
+      result_ref:String(r[q.table.map.RESULT_REF]||''),
+      result_sha256:String(
+        r[q.table.map.RESULT_SHA256]||''
+      ),
+      error:String(r[q.table.map.ERROR]||''),
+      claimed_at:String(r[q.table.map.CLAIMED_AT]||''),
+      completed_at:String(
+        r[q.table.map.COMPLETED_AT]||''
+      )
     };
     if(
       x.level===String(level) &&
@@ -2181,6 +2287,40 @@ function h3FsAuthoringQueueMatch_(q,level,spec) {
     history:history,
     representative:h3FsAuthoringHistoryRepresentative_(history)
   };
+}
+
+function h3FsAuthoringNeedsGenerationRebind_(spec,match) {
+  var representative=match&&match.representative;
+  if(!spec||!match||match.exact||!representative)return false;
+  if(
+    ['OPEN','CLAIMED','FAILED_RETRYABLE'].indexOf(
+      String(representative.status||'')
+    )<0
+  ){
+    return false;
+  }
+  var nextGeneration=String(
+    spec.authoring_generation||''
+  );
+  if(!nextGeneration)return false;
+  return (
+    String(
+      representative.authoring_generation||''
+    )!==nextGeneration
+  );
+}
+
+function h3FsAuthoringSafeOpenSupersedeCandidate_(candidate) {
+  candidate=candidate||{};
+  return (
+    String(candidate.status||'')==='OPEN' &&
+    Number(candidate.attempt_count||0)===0 &&
+    !String(candidate.result_ref||'') &&
+    !String(candidate.result_sha256||'') &&
+    !String(candidate.error||'') &&
+    !String(candidate.claimed_at||'') &&
+    !String(candidate.completed_at||'')
+  );
 }
 
 function h3FsAuthoringReconciliationDecision_(
@@ -2236,8 +2376,10 @@ function h3FsAuthoringReconciliationPreviewCore_(ss,level) {
     target_kind:'',
     snapshot_sha256:'',
     idempotency_key:'',
+    authoring_generation:'',
     existing_job_id:'',
     existing_job_status:'',
+    existing_authoring_generation:'',
     target_history_count:0,
     write_performed:false
   };
@@ -2279,21 +2421,37 @@ function h3FsAuthoringReconciliationPreviewCore_(ss,level) {
   var q=h3FsAuthoringQueue_(ss);
   var match=h3FsAuthoringQueueMatch_(q,level,spec);
   var existing=match.exact||match.representative;
-  var decision=h3FsAuthoringReconciliationDecision_(
-    out.readiness_state,
-    out.preparation_status,
-    existing?existing.status:''
-  );
+  var decision;
+  if(h3FsAuthoringNeedsGenerationRebind_(spec,match)){
+    decision={
+      action:'SUPERSEDE_REBIND',
+      reason:
+        'ACTIVE_PREVIOUS_GENERATION_'+
+        String(match.representative.status||'UNKNOWN')
+    };
+  } else {
+    decision=h3FsAuthoringReconciliationDecision_(
+      out.readiness_state,
+      out.preparation_status,
+      existing?existing.status:''
+    );
+  }
   out.action=decision.action;
   out.reason=decision.reason;
   out.target_id=spec.identity.target_id;
   out.target_kind=spec.identity.target_kind;
   out.snapshot_sha256=spec.snapshot_sha256;
   out.idempotency_key=spec.idempotency_key;
+  out.authoring_generation=String(
+    spec.authoring_generation||''
+  );
   out.target_history_count=match.history.length;
   if(existing){
     out.existing_job_id=existing.job_id;
     out.existing_job_status=existing.status;
+    out.existing_authoring_generation=String(
+      existing.authoring_generation||''
+    );
   }
   return {public_result:out,evaluation:evaluation,prep:prep,spec:spec};
 }
@@ -2331,6 +2489,167 @@ function h3FamilySchedulerAuthoringReconciliationEnsure() {
     out.action='EXISTING_NO_DUPLICATE';
     out.reason=out.write_performed?'OPEN_ENSURED':'ACTIVE_JOB_OPEN';
     return out;
+  } finally {
+    try{lock.releaseLock();}catch(_ignore){}
+  }
+}
+
+function h3FsAuthoringRebindPreviousGeneration_(
+  ss,
+  level,
+  evaluation,
+  prep
+) {
+  var q=h3FsAuthoringQueue_(ss);
+  var spec=h3FsAuthoringJobSpec_(
+    ss,
+    level,
+    evaluation,
+    prep
+  );
+  var match=h3FsAuthoringQueueMatch_(
+    q,
+    level,
+    spec
+  );
+
+  if(match.exact){
+    return {
+      status:'ALREADY_REBOUND',
+      write_performed:false,
+      job_id:match.exact.job_id,
+      job_status:match.exact.status,
+      idempotency_key:spec.idempotency_key,
+      authoring_generation:
+        String(spec.authoring_generation||'')
+    };
+  }
+  if(!h3FsAuthoringNeedsGenerationRebind_(spec,match)){
+    throw new Error(
+      'FAMILY_SCHEDULER_AUTHORING_REBIND_NOT_REQUIRED'
+    );
+  }
+
+  var oldJob=match.representative;
+  if(!h3FsAuthoringSafeOpenSupersedeCandidate_(oldJob)){
+    throw new Error(
+      'FAMILY_SCHEDULER_AUTHORING_REBIND_UNSAFE_OLD_JOB:'+
+      String(oldJob&&oldJob.job_id||'')
+    );
+  }
+
+  var now=new Date().toISOString();
+  var statusCell=q.sheet.getRange(
+    oldJob.row_number,
+    q.table.map.STATUS+1
+  );
+  var updatedCell=q.sheet.getRange(
+    oldJob.row_number,
+    q.table.map.UPDATED_AT+1
+  );
+
+  statusCell.setValue('SUPERSEDED');
+  updatedCell.setValue(now);
+  SpreadsheetApp.flush();
+
+  var ensured;
+  try {
+    ensured=h3FsAuthoringUpsert_(
+      ss,
+      level,
+      evaluation,
+      prep
+    );
+  } catch(err) {
+    var afterSupersede=h3FsAuthoringQueue_(ss);
+    var recoveryMatch=h3FsAuthoringQueueMatch_(
+      afterSupersede,
+      level,
+      spec
+    );
+    if(!recoveryMatch.exact){
+      throw err;
+    }
+    ensured={
+      status:'EXISTING',
+      job_id:recoveryMatch.exact.job_id,
+      job_status:recoveryMatch.exact.status
+    };
+  }
+
+  var verify=h3FsAuthoringQueue_(ss);
+  var verifiedMatch=h3FsAuthoringQueueMatch_(
+    verify,
+    level,
+    spec
+  );
+  var oldVerified=null;
+  verifiedMatch.history.forEach(function(x){
+    if(x.job_id===oldJob.job_id)oldVerified=x;
+  });
+  if(
+    !oldVerified ||
+    oldVerified.status!=='SUPERSEDED' ||
+    !verifiedMatch.exact ||
+    verifiedMatch.exact.status!=='OPEN'
+  ){
+    throw new Error(
+      'FAMILY_SCHEDULER_AUTHORING_REBIND_READBACK_FAIL'
+    );
+  }
+
+  return {
+    status:'SUPERSEDED_REBOUND',
+    write_performed:true,
+    superseded_job_id:oldJob.job_id,
+    successor_job_id:verifiedMatch.exact.job_id,
+    idempotency_key:spec.idempotency_key,
+    authoring_generation:
+      String(spec.authoring_generation||''),
+    target_history_count:verifiedMatch.history.length
+  };
+}
+
+function h3FamilySchedulerD5AuthoringGenerationRebind() {
+  var lock=LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var ss=SpreadsheetApp.openById(
+      H3_WEB_RUNTIME_SPREADSHEET_ID
+    );
+    var evaluation=h3FsEvaluate_(ss,'3級');
+    if(
+      String(evaluation.recommended_family||'')!=='W'
+    ){
+      throw new Error(
+        'FAMILY_SCHEDULER_D5_REBIND_RECOMMENDATION_DRIFT'
+      );
+    }
+    var prep=h3FsPrepareWritten_(ss);
+    if(
+      String(prep.status||'')!=='AUTHORING_REQUIRED' ||
+      String(prep.stage_id||'')!==
+        H3_FS_W_D5_CONTEXT_ACTIVATION_STAGE_
+    ){
+      throw new Error(
+        'FAMILY_SCHEDULER_D5_REBIND_STAGE_DRIFT'
+      );
+    }
+    var generation=h3FsAuthoringGeneration_(
+      'W',
+      prep
+    );
+    if(!generation){
+      throw new Error(
+        'FAMILY_SCHEDULER_D5_REBIND_GENERATION_MISSING'
+      );
+    }
+    return h3FsAuthoringRebindPreviousGeneration_(
+      ss,
+      '3級',
+      evaluation,
+      prep
+    );
   } finally {
     try{lock.releaseLock();}catch(_ignore){}
   }

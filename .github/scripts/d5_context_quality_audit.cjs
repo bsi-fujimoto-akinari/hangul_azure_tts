@@ -3,6 +3,7 @@
 
 const fs = require('fs');
 const vm = require('vm');
+const crypto = require('crypto');
 
 const schedulerSource = fs.readFileSync(
   'WebAppFamilyScheduler.js',
@@ -22,7 +23,11 @@ const context = vm.createContext({
   Number,
   Math,
   RegExp,
-  Error
+  Error,
+  hash_: text => crypto
+    .createHash('sha256')
+    .update(String(text), 'utf8')
+    .digest('hex')
 });
 vm.runInContext(
   schedulerSource,
@@ -219,6 +224,138 @@ assert(
     'Written preparation contract missing: ' + token
   );
 });
+
+const legacyIdentity =
+  context.h3FsAuthoringStableTargetIdentity_(
+    '3級',
+    'W',
+    {
+      target_kind: 'WRITTEN_STAGE',
+      target_id: 'STD-B002-S2'
+    },
+    ''
+  );
+assert(
+  legacyIdentity.idempotency_key ===
+    'H3AQK-aec46f2fa2e87012d81dc793514c15d5366ddc0f37de18a99ed7ee2de213314e',
+  'Legacy authoring idempotency key changed.'
+);
+
+const generation =
+  context.h3FsAuthoringGeneration_(
+    'W',
+    {
+      authoring_request: {
+        contract_id:
+          'H3-FAMILY-SCHEDULER-W-PREP-20260926-V2',
+        schema:
+          'H3_FAMILY_SCHEDULER_WRITTEN_AUTHORING_REQUEST_V2',
+        authoring_constraints: {
+          d5_context: {
+            policy_id:
+              'H3-D5-CONTEXT-QUALITY-20260926-V1'
+          }
+        }
+      }
+    }
+  );
+assert(
+  generation.includes(
+    'H3-FAMILY-SCHEDULER-AUTHORING-GENERATION-20260926-V1'
+  ),
+  'D5 V2 authoring generation missing.'
+);
+
+const v2Identity =
+  context.h3FsAuthoringStableTargetIdentity_(
+    '3級',
+    'W',
+    {
+      target_kind: 'WRITTEN_STAGE',
+      target_id: 'STD-B002-S2'
+    },
+    generation
+  );
+assert(
+  v2Identity.idempotency_key !==
+    legacyIdentity.idempotency_key,
+  'Generation-aware key did not rotate.'
+);
+assert(
+  v2Identity.authoring_generation === generation,
+  'Generation not carried by stable identity.'
+);
+
+assert(
+  context.h3FsAuthoringNeedsGenerationRebind_(
+    {
+      authoring_generation: generation
+    },
+    {
+      exact: null,
+      representative: {
+        status: 'OPEN',
+        authoring_generation: ''
+      }
+    }
+  ) === true,
+  'Previous-generation OPEN job did not require rebind.'
+);
+assert(
+  context.h3FsAuthoringNeedsGenerationRebind_(
+    {
+      authoring_generation: generation
+    },
+    {
+      exact: {
+        status: 'OPEN',
+        authoring_generation: generation
+      },
+      representative: {
+        status: 'OPEN',
+        authoring_generation: generation
+      }
+    }
+  ) === false,
+  'Exact V2 job incorrectly requires rebind.'
+);
+
+assert(
+  context.h3FsAuthoringSafeOpenSupersedeCandidate_({
+    status: 'OPEN',
+    attempt_count: 0,
+    result_ref: '',
+    result_sha256: '',
+    error: '',
+    claimed_at: '',
+    completed_at: ''
+  }) === true,
+  'Safe untouched OPEN candidate rejected.'
+);
+assert(
+  context.h3FsAuthoringSafeOpenSupersedeCandidate_({
+    status: 'OPEN',
+    attempt_count: 1,
+    result_ref: '',
+    result_sha256: '',
+    error: '',
+    claimed_at: '',
+    completed_at: ''
+  }) === false,
+  'Attempted OPEN candidate incorrectly accepted.'
+);
+assert(
+  schedulerSource.includes(
+    'function h3FamilySchedulerD5AuthoringGenerationRebind()'
+  ) &&
+  schedulerSource.includes(
+    "statusCell.setValue('SUPERSEDED')"
+  ) &&
+  schedulerSource.includes(
+    'FAMILY_SCHEDULER_AUTHORING_REBIND_READBACK_FAIL'
+  ),
+  'D5 rebind transaction contract missing.'
+);
 
 const validatorCalls = (
   schedulerSource.match(

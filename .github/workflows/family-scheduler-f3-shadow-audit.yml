@@ -2001,6 +2001,10 @@ jobs:
               "function h3FsAuthoringReconciliationPreviewCore_(ss,level)",
               "function h3FamilySchedulerAuthoringReconciliationPreview()",
               "function h3FamilySchedulerAuthoringReconciliationEnsure()",
+              "function h3FsAuthoringRebindPreviousGeneration_(",
+              "function h3FamilySchedulerD5AuthoringGenerationRebind()",
+              "H3-FAMILY-SCHEDULER-AUTHORING-GENERATION-20260926-V1",
+              "SUPERSEDE_REBIND",
               "MISSING_AUTHORING_JOB",
               "EXISTING_NO_DUPLICATE",
               "BLOCKED_HISTORY",
@@ -2048,7 +2052,7 @@ jobs:
               "function h3FamilySchedulerAuthoringReconciliationEnsure()"
           )
           ensure_end = fs.index(
-              "function h3FsSemanticAuthoringBridge_", ensure_start
+              "function h3FsAuthoringRebindPreviousGeneration_", ensure_start
           )
           ensure = fs[ensure_start:ensure_end]
           if ensure.count("h3FsAuthoringUpsert_(") != 1:

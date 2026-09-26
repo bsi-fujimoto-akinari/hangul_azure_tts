@@ -8,7 +8,8 @@ import re
 import subprocess
 import sys
 
-STATUS_FUNCTION = "h3MonitoringProductionTriggerAlignmentStatus"\nFUNCTION = "h3MonitoringProductionTriggerRealignToHour"
+STATUS_FUNCTION = "h3MonitoringProductionTriggerAlignmentStatus"
+FUNCTION = "h3MonitoringProductionTriggerRealignToHour"
 
 def fail(message):
     raise SystemExit(message)

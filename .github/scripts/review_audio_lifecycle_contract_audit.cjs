@@ -62,14 +62,28 @@ function assertOrder(label, segment, orderedTokens) {
   }
 }
 
-const readingStart = web.indexOf("if (\n      request.surface_family ===\n        'READING'");
-const translationStart = web.indexOf("if (\n      request.surface_family ===\n        'TRANSLATION'");
-const writtenStart = web.indexOf('    var writtenResult =');
-assert(readingStart >= 0 && translationStart > readingStart && writtenStart > translationStart);
+const submitStart = web.indexOf(
+  'function h3SubmitListeningWebAnswersCore_('
+);
+assert(submitStart >= 0, 'Submit core missing.');
 
-const reading = web.slice(readingStart, translationStart);
-const translation = web.slice(translationStart, writtenStart);
-const written = web.slice(writtenStart, web.indexOf('\n    return writtenResult;', writtenStart) + 30);
+const submit = web.slice(submitStart);
+const readingStart = submit.indexOf('      var readingResult =');
+const translationStart = submit.indexOf('      var translationResult =');
+const writtenStart = submit.indexOf('    var writtenResult =');
+assert(
+  readingStart >= 0 &&
+  translationStart > readingStart &&
+  writtenStart > translationStart,
+  'Submit family boundaries are missing or reordered.'
+);
+
+const reading = submit.slice(readingStart, translationStart);
+const translation = submit.slice(translationStart, writtenStart);
+const written = submit.slice(
+  writtenStart,
+  submit.indexOf('\n    return writtenResult;', writtenStart) + 30
+);
 
 assertOrder('READING', reading, [
   "h3SurfaceReviewEnsure_( 'READING'",

@@ -964,19 +964,28 @@ The target schedule is `nearMinute(0).everyHours(1)` in `Asia/Tokyo`.
 Apps Script treats `nearMinute(0)` as an approximate minute target, so an
 hourly execution may occur within roughly +/-15 minutes of the top of the hour.
 
-The exact-main Apps Script auto-sync performs the migration only after source
-push, source attestation, and observability source binding have succeeded.
-The boundary step is `Validate production trigger alignment boundary`; the
-mutation step is gated by
-`if: steps.trigger_alignment_boundary.outputs.ready == 'true'` and invokes
-`h3MonitoringProductionTriggerRealignToHour` through
-`.github/scripts/production_trigger_alignment.py`.
+The existing production hourly trigger performs the migration from its own
+authorized installable-trigger execution context. At the start of
+`h3MonitoringObserverEmailRun`, before the normal observer lock is acquired,
+`h3MonitoringProductionTriggerAutoAlignIfLegacy_()` checks the verified
+trigger identity. A verified legacy `everyHours(1)` trigger is migrated with
+`h3MonitoringProductionTriggerRealignToHour()`; an already aligned trigger
+is a no-op.
 
-The migration is idempotent: an already aligned trigger is a no-op; an absent
-trigger remains absent; an unverified or duplicate legacy state fails closed.
-The CI readback requires one READY trigger with cadence=1,
-`configured_near_minute=0`, timezone=`Asia/Tokyo`, matching metadata, and
-no duplicate trigger.
+The migration is idempotent and preserves monitoring coverage: the new aligned
+trigger is created and its metadata is written before the verified legacy
+trigger is removed. An unverified or duplicate state is never modified.
+Alignment failure is logged and does not prevent the current observer/email run
+from continuing.
+
+The GitHub/CLASP execution token is not trigger-mutation authority:
+`clasp run-function` may lack the separately granted
+`script.scriptapp` OAuth scope even when the Apps Script manifest declares it.
+Therefore production auto-sync pushes and attests exact-main source but does not
+create, delete, or realign installable triggers. The
+`.github/scripts/production_trigger_alignment.py` helper is retained for
+diagnostics/manual execution only when its caller has the required Google OAuth
+authorization.
 
 The production trigger may update only monitoring-owned persistence
 (`monitor_observer_v1` and, only when an action-required event exists or an

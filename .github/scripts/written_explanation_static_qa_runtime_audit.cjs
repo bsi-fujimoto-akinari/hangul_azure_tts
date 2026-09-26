@@ -60,6 +60,30 @@ const futureCases = fixtures.cases.filter(
 );
 let compared = 0;
 
+function runtimePayload(payload) {
+  const copy = JSON.parse(JSON.stringify(payload));
+  copy.questions = Array.isArray(copy.questions) ? copy.questions : [];
+  while (copy.questions.length < 5) {
+    const qNo = copy.questions.length + 1;
+    copy.questions.push({
+      q_no:qNo,
+      qa_meta:{
+        correct_choice_surface:'중립',
+        completed_answer_surface:'중립 문장을 확인해요.'
+      },
+      explanation:{
+        reason:'중립적인 설명을 제공한다.',
+        learning_blocks:[{
+          form:'중립',
+          usage:'意味関係を簡潔に整理する。',
+          example_ko:'다른 예문을 사용해요.'
+        }]
+      }
+    });
+  }
+  return copy;
+}
+
 futureCases.forEach(caseDef => {
   const stageId =
     caseDef.payload.stage_id || 'STD-B999-S1';
@@ -70,7 +94,7 @@ futureCases.forEach(caseDef => {
   const runtimeResult =
     context.h3FsWrittenExplanationStaticQaEvaluatePrepared_(
       stageId,
-      caseDef.payload
+      runtimePayload(caseDef.payload)
     );
 
   assert(

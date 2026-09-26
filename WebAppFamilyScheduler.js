@@ -8275,6 +8275,26 @@ function h3MonitoringProductionTriggerEnsure() {
   }
 }
 
+function h3MonitoringProductionTriggerAlignmentStatus() {
+  var status=h3MonitoringProductionTriggerStatus_();
+  var legacy=h3MonitoringProductionTriggerLegacyReady_();
+  return {
+    schema:'H3_MONITOR_PRODUCTION_TRIGGER_ALIGNMENT_STATUS_V1',
+    status:String(status.status||''),
+    legacy_ready:legacy.ready===true,
+    matching_trigger_count:Number(status.matching_trigger_count||0),
+    metadata_present:status.metadata_present===true,
+    metadata_match:status.metadata_match===true,
+    configured_cadence_hours:Number(status.configured_cadence_hours||0),
+    configured_near_minute:Number(status.configured_near_minute),
+    configured_timezone:String(status.configured_timezone||''),
+    metadata_near_minute:String(status.metadata_near_minute||''),
+    metadata_timezone:String(status.metadata_timezone||''),
+    duplicate_trigger:status.duplicate_trigger===true,
+    write_performed:false
+  };
+}
+
 function h3MonitoringProductionTriggerRealignToHour() {
   h3MonitoringProductionRequireScopes_();
   var lock=LockService.getScriptLock();

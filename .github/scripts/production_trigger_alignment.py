@@ -8,10 +8,49 @@ import re
 import subprocess
 import sys
 
-FUNCTION = "h3MonitoringProductionTriggerRealignToHour"
+STATUS_FUNCTION = "h3MonitoringProductionTriggerAlignmentStatus"\nFUNCTION = "h3MonitoringProductionTriggerRealignToHour"
 
 def fail(message):
     raise SystemExit(message)
+
+def sanitized_error(envelope):
+    error = envelope.get("error")
+    if not isinstance(error, dict):
+        return "unknown"
+    safe = {}
+    for key in ("status", "code", "message"):
+        value = error.get(key)
+        if value is not None:
+            safe[key] = str(value)[:500]
+    return json.dumps(safe, sort_keys=True, separators=(",", ":"))
+
+def call_function(function):
+    completed = subprocess.run(
+        [
+            "npx", "-y", "@google/clasp@3.4.0", "--json",
+            "run-function", function,
+        ],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if completed.returncode != 0:
+        sys.stderr.write(completed.stderr)
+        sys.stderr.write(completed.stdout)
+        fail("Apps Script function execution failed: " + function)
+    try:
+        envelope = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        fail("Apps Script function returned invalid JSON: " + function)
+    if envelope.get("error"):
+        fail(
+            "Apps Script error: "
+            + function
+            + ":"
+            + sanitized_error(envelope)
+        )
+    return envelope.get("response")
 
 def boundary():
     source_sha = os.environ.get("SOURCE_SHA", "")
@@ -30,24 +69,19 @@ def boundary():
     print("ready=true")
 
 def execute():
-    completed = subprocess.run(
-        [
-            "npx", "-y", "@google/clasp@3.4.0", "--json",
-            "run-function", FUNCTION,
-        ],
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
+    preflight = call_function(STATUS_FUNCTION)
+    if not isinstance(preflight, dict):
+        fail("alignment status response is not an object")
+    if preflight.get("schema") != "H3_MONITOR_PRODUCTION_TRIGGER_ALIGNMENT_STATUS_V1":
+        fail("alignment status schema mismatch")
+    if preflight.get("write_performed") is not False:
+        fail("alignment status was not read-only")
+    print(
+        "TRIGGER_ALIGNMENT_PREFLIGHT="
+        + json.dumps(preflight, sort_keys=True, separators=(",", ":"))
     )
-    if completed.returncode != 0:
-        sys.stderr.write(completed.stderr)
-        sys.stderr.write(completed.stdout)
-        fail("Apps Script alignment execution failed")
-    envelope = json.loads(completed.stdout)
-    if envelope.get("error"):
-        fail("Apps Script alignment returned error envelope")
-    result = envelope.get("response")
+
+    result = call_function(FUNCTION)
     if not isinstance(result, dict):
         fail("alignment response is not an object")
     if result.get("schema") != "H3_MONITOR_PRODUCTION_TRIGGER_V1":

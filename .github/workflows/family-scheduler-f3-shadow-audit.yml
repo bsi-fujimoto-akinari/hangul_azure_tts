@@ -3426,7 +3426,7 @@ jobs:
             write_performed:false
           });
           global.h3Rs13gGateReport_ = () => baseReport();
-          const fakeSs={getId:()=>H3_WEB_RUNTIME_SPREADSHEET_ID};
+          h3MonitoringErrorStateSource_=()=>({status:'OK',data:{error_state_write_performed:false},action_required_events:[]}); const fakeSs={getId:()=>H3_WEB_RUNTIME_SPREADSHEET_ID};
           const snapshot=h3MonitoringObserverSnapshot_(
             '3級',
             h3MonitoringObserverSourceSpecs_(fakeSs),
@@ -3435,7 +3435,7 @@ jobs:
           assert(
             snapshot.status==='HEALTHY' &&
             snapshot.sources.map(x=>x.source_id).join(',')===
-              'RS13_RS14_GATE,RUNTIME_AUTHORITY,SEMANTIC_AUTHORING_QUEUE' &&
+              'ERROR_STATE,RS13_RS14_GATE,RUNTIME_AUTHORITY,SEMANTIC_AUTHORING_QUEUE' &&
             snapshot.sources.find(
               x=>x.source_id==='RS13_RS14_GATE'
             ).data.observer_write_performed===false,

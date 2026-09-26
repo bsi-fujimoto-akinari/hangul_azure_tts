@@ -8,6 +8,7 @@ on:
 
 jobs:
   audit:
+    name: rs13g-gate-reporter-audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

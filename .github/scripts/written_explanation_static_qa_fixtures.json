@@ -1,0 +1,962 @@
+{
+  "schema": "H3_WRITTEN_EXPLANATION_STATIC_QA_FIXTURES_V1",
+  "contract_id": "H3-WRITTEN-EXPLANATION-STATIC-QA-20260926-V1",
+  "mode": "REPORT_ONLY_S2",
+  "source_note": "Historical #19 cases are reduced exact-field fixtures derived from locked review row 3 and approved overlay row 20; synthetic cases isolate deterministic contract checks.",
+  "cases": [
+    {
+      "id": "historical_5w19_original_locked",
+      "mode": "historical",
+      "payload": {
+        "set_id": "H3-20260925-01",
+        "stage_id": "STD-B002-S1",
+        "questions": [
+          {
+            "q_no": 1,
+            "correct_answer_text": "가치",
+            "question_surface": {
+              "body": "할아버지에게 물려받은 시계라서 저에게는 돈으로 따질 수 없는 (　　　)가 있어요."
+            },
+            "script_text": "할아버지에게 물려받은 시계라서 저에게는 돈으로 따질 수 없는 가치가 있어요.",
+            "qa_meta": {
+              "target_expressions": [
+                "가치"
+              ]
+            },
+            "explanation": {
+              "reason": "「お金では測れない」と、金額を超えた重要性・意味を述べているため 가치 が適切。가격 は金額そのもの、기능 は働き・機能、기회 は機会を表す。",
+              "learning_blocks": [
+                {
+                  "form": "가치",
+                  "usage": "物・行為などの「価値」。重要性・有用性・意味の大きさを表す。",
+                  "example_ko": "오래된 사진이지만 저에게는 큰 가치가 있어요."
+                },
+                {
+                  "form": "가치 / 가격",
+                  "usage": "同じ物について、가치 は「どれほど大切・有用か」、가격 は「いくらか」という金額に焦点がある。"
+                },
+                {
+                  "form": "가치（價値）",
+                  "usage": "価値。",
+                  "note": "⇒ 가치관（價値觀）"
+                }
+              ]
+            }
+          },
+          {
+            "q_no": 2,
+            "correct_answer_text": "려면",
+            "question_surface": {
+              "body": "한국 회사에 취직하(　　　) 면접에서 자연스럽게 말할 수 있도록 연습해야 해요."
+            },
+            "script_text": "한국 회사에 취직하려면 면접에서 자연스럽게 말할 수 있도록 연습해야 해요.",
+            "qa_meta": {
+              "target_expressions": [
+                "-(으)려면",
+                "려면"
+              ]
+            },
+            "explanation": {
+              "reason": "就職するために必要な条件・準備として面接練習を述べているため -(으)려면 が適切。취직하다 の 하다 に続いて 취직하려면 となる。",
+              "learning_blocks": [
+                {
+                  "form": "-(으)려면",
+                  "usage": "「～しようとするなら／～するつもりなら」。後件に必要条件・準備・助言が続きやすい。",
+                  "example_ko": "여행하려면 미리 표를 예약해야 해요."
+                },
+                {
+                  "form": "-(으)려면 / -자마자",
+                  "usage": "同じ行動を扱っても、-(으)려면 は実現の条件、-자마자 は「～するとすぐ」という時間的な連続を表す。"
+                }
+              ]
+            }
+          },
+          {
+            "q_no": 3,
+            "correct_answer_text": "다른 옷보다 훨씬 돋보였어요",
+            "question_surface": {
+              "body": "검은색 옷이 많은 매장에서 노란 재킷이 특히 [눈에 띄었어요]."
+            },
+            "script_text": "검은색 옷이 많은 매장에서 노란 재킷이 특히 눈에 띄었어요.\n검은색 옷이 많은 매장에서 노란 재킷이 다른 옷보다 훨씬 돋보였어요.",
+            "qa_meta": {
+              "target_expressions": [
+                "눈에 띄다",
+                "돋보이다"
+              ]
+            },
+            "explanation": {
+              "reason": "눈에 띄다 は周囲と比べて目につく・目立つこと。この場面では、黄色いジャケットがほかの服より 돋보이다 と言い換える①が適切。",
+              "learning_blocks": [
+                {
+                  "form": "눈에 띄다",
+                  "usage": "「目につく、目立つ」。周囲と比べて視覚的・印象的に気づきやすい状態を表す。",
+                  "example_ko": "새 포스터가 멀리서도 눈에 띄어요."
+                },
+                {
+                  "form": "눈에 띄다 / 돋보이다",
+                  "usage": "同じ見た目の場面では、눈에 띄다 は「目につく」こと、돋보이다 は周囲より際立って見えることに重点がある。"
+                }
+              ]
+            }
+          },
+          {
+            "q_no": 4,
+            "correct_answer_text": "정신",
+            "question_surface": {
+              "body": "・등산 중 탈진해서 잠깐 (　　　)을 잃고 병원으로 옮겨졌어요.\n・갑자기 정전이 돼서 놀랐지만 곧 (　　　)을 차리고 휴대전화를 찾았어요."
+            },
+            "script_text": "등산 중 탈진해서 잠깐 정신을 잃고 병원으로 옮겨졌어요. 갑자기 정전이 돼서 놀랐지만 곧 정신을 차리고 휴대전화를 찾았어요.",
+            "qa_meta": {
+              "target_expressions": [
+                "정신"
+              ]
+            },
+            "explanation": {
+              "reason": "정신을 잃다 は「意識を失う」、정신을 차리다 は「気を取り直す・しっかりする」。二つの文の両方に入って自然な慣用表現を作れるのは 정신 だけなので④が適切。",
+              "learning_blocks": [
+                {
+                  "form": "정신을 잃다 ↔ 정신을 차리다",
+                  "usage": "정신을 잃다 は「意識を失う」、정신을 차리다 は「気を取り直す、しっかりする」。状態の喪失と回復の対照。",
+                  "example_ko": "너무 놀랐지만 곧 정신을 차렸어요."
+                },
+                {
+                  "form": "기억을 잃다 / 정신을 잃다",
+                  "usage": "기억을 잃다 は「記憶を失う」、정신을 잃다 は「意識を失う」。同じ 잃다 でも失われるものが異なる。"
+                },
+                {
+                  "form": "정신（精神）",
+                  "usage": "精神、意識。慣用表現では「意識」や「平静さ」に近い意味でも使う。"
+                }
+              ]
+            }
+          },
+          {
+            "q_no": 5,
+            "correct_answer_text": "입구에 안내문이 붙어 있었어요. 정기 점검 중이었나 봐요.",
+            "question_surface": {
+              "body": "A：오늘 아침에 회사 엘리베이터가 움직이지 않았어요.\nB：(　　　　　　　　　　)\nA：아, 그래서 계단을 이용하라고 안내했군요."
+            },
+            "script_text": "오늘 아침에 회사 엘리베이터가 움직이지 않았어요.\n입구에 안내문이 붙어 있었어요. 정기 점검 중이었나 봐요.\n아, 그래서 계단을 이용하라고 안내했군요.",
+            "qa_meta": {
+              "target_expressions": [
+                "-나 보다",
+                "안내문"
+              ]
+            },
+            "explanation": {
+              "reason": "入口の案内を根拠に、エレベーターが動かなかった原因を「定期点検中だったようだ」と推測する③が適切。後続の「だから階段を使うよう案内していたのか」という理解にも自然につながる。",
+              "learning_blocks": [
+                {
+                  "form": "-나 보다",
+                  "usage": "見聞きした根拠から「～ようだ、～みたいだ」と推測するときに使う。",
+                  "example_ko": "불이 꺼진 걸 보니 가게가 문을 닫았나 봐요."
+                },
+                {
+                  "form": "근거 → 원인 추정",
+                  "usage": "この応答型では、見えている事実・情報を根拠に原因を推測し、その推測が次の発話で確認・展開される。"
+                },
+                {
+                  "form": "안내문",
+                  "usage": "案内文、掲示。붙어 있다 とともに「案内が貼ってある」を表す。"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "source": {
+        "kind": "locked_review",
+        "review_sha256": "59b257852e87e97026fcdb32a0a0c17f0fabd143e510aedbda7dd07b594171a9",
+        "source_binding_sha256": "8d06905a56047c1c6efea190a9857795c4c4ba3484168a6665f0fe01cdbdf6de"
+      },
+      "expect": {
+        "result": "PASS",
+        "hard_codes": [
+          "EXPL_PRON_COVERAGE_MISSING"
+        ]
+      }
+    },
+    {
+      "id": "historical_5w19_approved_overlay",
+      "mode": "historical",
+      "payload": {
+        "set_id": "H3-20260925-01",
+        "stage_id": "STD-B002-S1",
+        "questions": [
+          {
+            "q_no": 1,
+            "source_gate": {
+              "body_ko": "할아버지에게 물려받은 시계라서 저에게는 돈으로 따질 수 없는 (　　　)가 있어요.",
+              "choices_ko": [
+                "가격",
+                "가치",
+                "기능",
+                "기회"
+              ],
+              "correct_position": 2
+            },
+            "qa_meta": {
+              "target_expressions": [
+                "가치",
+                "가격"
+              ]
+            },
+            "explanation": {
+              "reason": "「돈으로 따질 수 없는」は金額ではなく、その物が持つ重要性・意味を述べているため 가치 が適切。가격 は金額そのものに焦点がある。",
+              "learning_blocks": [
+                {
+                  "form": "가치 / 가격",
+                  "usage": "同じ物について、가치 は「どれほど大切・有用か」、가격 は「いくらか」に焦点がある。",
+                  "example_ko": "이 책은 제게 큰 가치가 있어요.\n이 책의 가격은 2만 원이에요."
+                },
+                {
+                  "form": "가치（價値）",
+                  "note": "⇒ 가격（價格）, 수치（數値）\n≠ 가족（家族）, 치료（治療）"
+                },
+                {
+                  "form": "가격（價格）",
+                  "note": "⇒ 가치（價値）, 자격（資格）\n≠ 가족（家族）, 격리（隔離）"
+                }
+              ]
+            }
+          },
+          {
+            "q_no": 2,
+            "source_gate": {
+              "body_ko": "한국 회사에 취직하(　　　) 면접에서 자연스럽게 말할 수 있도록 연습해야 해요.",
+              "choices_ko": [
+                "자마자",
+                "지만",
+                "려면",
+                "니까"
+              ],
+              "correct_position": 3
+            },
+            "qa_meta": {
+              "target_expressions": [
+                "-(으)려면",
+                "려면"
+              ]
+            },
+            "explanation": {
+              "reason": "就職という目標を実現するための必要条件・準備を述べているため -(으)려면 が適切。취직하- + -려면 → 취직하려면 となる。",
+              "learning_blocks": [
+                {
+                  "form": "-(으)려면",
+                  "usage": "「～するなら・～するには」。ある意図や目標を実現するための条件・準備を述べる。",
+                  "example_ko": "이 약을 사려면 처방전이 필요해요."
+                },
+                {
+                  "form": "-(으)려면 / -니까",
+                  "usage": "-(으)려면 は未実現の目標に対する条件、-니까 は成立している事実を原因・理由として示す。",
+                  "example_ko": "한국 회사에 취직하려면 면접 연습을 해야 해요.\n한국 회사에 취직했으니까 동료들에게 인사했어요."
+                },
+                {
+                  "form": "-자마자 / -지만",
+                  "usage": "-자마자 は時間的な直後、-지만 は逆接を表す。"
+                },
+                {
+                  "form": "취직（就職）",
+                  "note": "⇒ 취업（就業）, 직장（職場）\n≠ 취미（趣味）, 직접（直接）"
+                }
+              ]
+            }
+          },
+          {
+            "q_no": 3,
+            "source_gate": {
+              "body_ko": "검은색 옷이 많은 매장에서 노란 재킷이 특히 [눈에 띄었어요].",
+              "choices_ko": [
+                "다른 옷보다 훨씬 돋보였어요",
+                "색이 비슷해서 구별하기 어려웠어요",
+                "손님들이 자주 입어 보지 않았어요",
+                "가격이 생각보다 많이 올랐어요"
+              ],
+              "correct_position": 1
+            },
+            "qa_meta": {
+              "target_expressions": [
+                "눈에 띄다",
+                "돋보이다"
+              ]
+            },
+            "explanation": {
+              "reason": "눈에 띄다 は周囲の中で自然に目につくこと。この場面では、周囲より際立って見える 돋보이다 が最も近い。",
+              "learning_blocks": [
+                {
+                  "form": "눈에 띄다 / 돋보이다",
+                  "usage": "눈에 띄다 は「目に入りやすい」、돋보이다 は「周囲と比べて際立つ」ことに焦点がある。",
+                  "example_ko": "노란 간판이 멀리서도 눈에 띄어요.\n노란 간판이 주변 간판보다 더 돋보여요."
+                }
+              ]
+            }
+          },
+          {
+            "q_no": 4,
+            "source_gate": {
+              "body_ko": "・등산 중 탈진해서 잠깐 (　　　)을 잃고 병원으로 옮겨졌어요.\n・갑자기 정전이 돼서 놀랐지만 곧 (　　　)을 차리고 휴대전화를 찾았어요.",
+              "choices_ko": [
+                "기억",
+                "방향",
+                "균형",
+                "정신"
+              ],
+              "correct_position": 4
+            },
+            "qa_meta": {
+              "target_expressions": [
+                "정신",
+                "기억"
+              ]
+            },
+            "explanation": {
+              "reason": "정신을 잃다 は「意識を失う」、정신을 차리다 は「我に返る・気を取り直す」。両方の表現を自然に作れるのは 정신。기억을 잃다、방향을 잃다、균형을 잃다 は可能だが、기억/방향/균형을 차리다 とは言わない。",
+              "learning_blocks": [
+                {
+                  "form": "정신을 잃다 ↔ 정신을 차리다",
+                  "usage": "意識・平静さの喪失と回復を表す対照的な組み合わせ。"
+                },
+                {
+                  "form": "기억을 잃다 / 정신을 잃다",
+                  "usage": "同じ 잃다 でも、기억 は記憶、정신 は意識が失われる。",
+                  "example_ko": "사고 직후 정신을 잃었어요.\n사고 전후의 기억을 잃었어요."
+                },
+                {
+                  "form": "정신（精神）",
+                  "note": "⇒ 정성（精誠）, 신경（神經）\n≠ 감정（感情）, 신문（新聞）"
+                },
+                {
+                  "form": "기억（記憶）",
+                  "note": "⇒ 기록（記錄）, 추억（追憶）\n≠ 기간（期間）, 억원（億元）"
+                }
+              ]
+            }
+          },
+          {
+            "q_no": 5,
+            "source_gate": {
+              "body_ko": "A：오늘 아침에 회사 엘리베이터가 움직이지 않았어요.\nB：(　　　　　　　　　　)\nA：아, 그래서 계단을 이용하라고 안내했군요.",
+              "choices_ko": [
+                "엘리베이터보다 계단을 이용하는 게 더 건강해요.",
+                "저도 오늘 회사에 조금 일찍 도착했어요.",
+                "입구에 안내문이 붙어 있었어요. 정기 점검 중이었나 봐요.",
+                "새 엘리베이터를 설치하면 더 빠르겠네요."
+              ],
+              "correct_position": 3
+            },
+            "qa_meta": {
+              "target_expressions": [
+                "-나 보다",
+                "안내문이 붙어 있다",
+                "안내문을 붙이다"
+              ]
+            },
+            "explanation": {
+              "reason": "入口にある案内を根拠に「定期点検中だったようだ」と原因を推測する③なら、後続の「それで階段を使うよう案内していたのか」という理解につながる。",
+              "learning_blocks": [
+                {
+                  "form": "-나 보다",
+                  "usage": "見たり聞いたりした情報を根拠に「～ようだ・～みたいだ」と推測する。",
+                  "example_ko": "우산을 들고 오는 걸 보니 밖에 비가 오나 봐요."
+                },
+                {
+                  "form": "-나 보다 / -는 것 같다",
+                  "usage": "-나 보다 は観察した根拠からの推測を示しやすく、-는 것 같다 はより広く判断・推測に使える。",
+                  "example_ko": "불이 모두 꺼진 걸 보니 오늘은 쉬나 봐요.\n오늘은 쉬는 것 같아요."
+                },
+                {
+                  "form": "안내문이 붙어 있다 / 안내문을 붙이다",
+                  "usage": "안내문이 붙어 있다 は「案内文が貼ってある」という状態、안내문을 붙이다 は「案内文を貼る」という動作を表す。"
+                },
+                {
+                  "form": "안내문（案內文）",
+                  "note": "⇒ 안건（案件）, 국내（國內）, 문서（文書）\n≠ 안전（安全）, 내일（來日）, 문제（問題）"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "source": {
+        "kind": "approved_overlay",
+        "approved_text_sha256": "9b13effe68f565a1ef1fea5c13441dddf7ef3bed5296050c3e62931db48a670f",
+        "display_sha256": "289bba113e8881a6da2c7022cff205cef97d35ea143232794028a0bf9041fc42"
+      },
+      "expect": {
+        "result": "PASS",
+        "hard_codes": [
+          "EXPL_PRON_COVERAGE_MISSING"
+        ]
+      }
+    },
+    {
+      "id": "future_valid_structured_hanja_pron",
+      "mode": "future",
+      "payload": {
+        "set_id": "TEST-S2",
+        "stage_id": "STD-B999-S1",
+        "questions": [
+          {
+            "q_no": 1,
+            "qa_meta": {
+              "source_context": "원래 문맥에서 표현을 확인해요.",
+              "correct_choice_surface": "정답",
+              "completed_answer_surface": "원래 문맥에서 정답을 확인해요.",
+              "target_expressions": [
+                "정답"
+              ]
+            },
+            "explanation": {
+              "reason": "語彙の意味関係を説明する。",
+              "learning_blocks": [
+                {
+                  "form": "표현",
+                  "usage": "同じ場面で意味の差を示す。",
+                  "example_ko": "새 예문을 만들어요."
+                },
+                {
+                  "type": "hanja_network",
+                  "target": {
+                    "word": "출장",
+                    "hanja": "出張"
+                  },
+                  "related": [
+                    {
+                      "word": "출발",
+                      "hanja": "出發",
+                      "target_char_index": 0,
+                      "example_char_index": 0
+                    },
+                    {
+                      "word": "주장",
+                      "hanja": "主張",
+                      "target_char_index": 1,
+                      "example_char_index": 1
+                    }
+                  ],
+                  "homophone": [
+                    {
+                      "word": "장소",
+                      "hanja": "場所",
+                      "target_syllable_index": 1,
+                      "example_syllable_index": 0
+                    }
+                  ]
+                },
+                {
+                  "type": "pronunciation",
+                  "skill_id": "H3-PRON-SAMPLE",
+                  "level_band": "3급",
+                  "surface": "국립",
+                  "actual": "궁닙"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "expect": {
+        "result": "PASS",
+        "hard_codes": []
+      }
+    },
+    {
+      "id": "future_exact_example_answer_duplicate",
+      "mode": "future",
+      "payload": {
+        "set_id": "TEST-S2",
+        "stage_id": "STD-B999-S1",
+        "questions": [
+          {
+            "q_no": 1,
+            "qa_meta": {
+              "source_context": "원래 문맥에서 표현을 확인해요.",
+              "correct_choice_surface": "정답",
+              "completed_answer_surface": "원래 문맥에서 정답을 확인해요.",
+              "target_expressions": [
+                "정답"
+              ]
+            },
+            "explanation": {
+              "reason": "語彙の意味関係を説明する。",
+              "learning_blocks": [
+                {
+                  "form": "표현",
+                  "usage": "同じ場面で意味の差を示す。",
+                  "example_ko": "원래 문맥에서 정답을 확인해요."
+                },
+                {
+                  "type": "pronunciation",
+                  "skill_id": "H3-PRON-SAMPLE",
+                  "level_band": "3급",
+                  "surface": "국립",
+                  "actual": "궁닙"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "expect": {
+        "result": "HARD_FAIL",
+        "hard_codes": [
+          "EXPL_EXAMPLE_EXACT_ANSWER_DUPLICATE"
+        ]
+      }
+    },
+    {
+      "id": "future_learner_answer_meta",
+      "mode": "future",
+      "payload": {
+        "set_id": "TEST-S2",
+        "stage_id": "STD-B999-S1",
+        "questions": [
+          {
+            "q_no": 1,
+            "qa_meta": {
+              "source_context": "원래 문맥에서 표현을 확인해요.",
+              "correct_choice_surface": "정답",
+              "completed_answer_surface": "원래 문맥에서 정답을 확인해요.",
+              "target_expressions": [
+                "정답"
+              ]
+            },
+            "explanation": {
+              "reason": "あなたの回答は誤答した。語彙の意味関係を確認する。",
+              "learning_blocks": [
+                {
+                  "form": "표현",
+                  "usage": "同じ場面で意味の差を示す。",
+                  "example_ko": "새 예문을 만들어요."
+                },
+                {
+                  "type": "pronunciation",
+                  "skill_id": "H3-PRON-SAMPLE",
+                  "level_band": "3급",
+                  "surface": "국립",
+                  "actual": "궁닙"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "expect": {
+        "result": "HARD_FAIL",
+        "hard_codes": [
+          "EXPL_LEARNER_ANSWER_META_FORBIDDEN"
+        ]
+      }
+    },
+    {
+      "id": "future_generic_test_meta",
+      "mode": "future",
+      "payload": {
+        "set_id": "TEST-S2",
+        "stage_id": "STD-B999-S1",
+        "questions": [
+          {
+            "q_no": 1,
+            "qa_meta": {
+              "source_context": "원래 문맥에서 표현을 확인해요.",
+              "correct_choice_surface": "정답",
+              "completed_answer_surface": "원래 문맥에서 정답을 확인해요.",
+              "target_expressions": [
+                "정답"
+              ]
+            },
+            "explanation": {
+              "reason": "この設問では語彙の意味関係を確認する。",
+              "learning_blocks": [
+                {
+                  "form": "표현",
+                  "usage": "同じ場面で意味の差を示す。",
+                  "example_ko": "새 예문을 만들어요."
+                },
+                {
+                  "type": "pronunciation",
+                  "skill_id": "H3-PRON-SAMPLE",
+                  "level_band": "3급",
+                  "surface": "국립",
+                  "actual": "궁닙"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "expect": {
+        "result": "HARD_FAIL",
+        "hard_codes": [
+          "EXPL_GENERIC_TEST_META_FORBIDDEN"
+        ]
+      }
+    },
+    {
+      "id": "future_polite_meta",
+      "mode": "future",
+      "payload": {
+        "set_id": "TEST-S2",
+        "stage_id": "STD-B999-S1",
+        "questions": [
+          {
+            "q_no": 1,
+            "qa_meta": {
+              "source_context": "원래 문맥에서 표현을 확인해요.",
+              "correct_choice_surface": "정답",
+              "completed_answer_surface": "원래 문맥에서 정답을 확인해요.",
+              "target_expressions": [
+                "정답"
+              ]
+            },
+            "explanation": {
+              "reason": "語彙の意味関係を説明します。",
+              "learning_blocks": [
+                {
+                  "form": "표현",
+                  "usage": "同じ場面で意味の差を示す。",
+                  "example_ko": "새 예문을 만들어요."
+                },
+                {
+                  "type": "pronunciation",
+                  "skill_id": "H3-PRON-SAMPLE",
+                  "level_band": "3급",
+                  "surface": "국립",
+                  "actual": "궁닙"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "expect": {
+        "result": "HARD_FAIL",
+        "hard_codes": [
+          "EXPL_META_POLITE_REGISTER"
+        ]
+      }
+    },
+    {
+      "id": "future_hanja_target_containing_related",
+      "mode": "future",
+      "payload": {
+        "set_id": "TEST-S2",
+        "stage_id": "STD-B999-S1",
+        "questions": [
+          {
+            "q_no": 1,
+            "qa_meta": {
+              "source_context": "원래 문맥에서 표현을 확인해요.",
+              "correct_choice_surface": "정답",
+              "completed_answer_surface": "원래 문맥에서 정답을 확인해요.",
+              "target_expressions": [
+                "정답"
+              ]
+            },
+            "explanation": {
+              "reason": "語彙の意味関係を説明する。",
+              "learning_blocks": [
+                {
+                  "form": "표현",
+                  "usage": "同じ場面で意味の差を示す。",
+                  "example_ko": "새 예문을 만들어요."
+                },
+                {
+                  "type": "hanja_network",
+                  "target": {
+                    "word": "가치",
+                    "hanja": "價値"
+                  },
+                  "related": [
+                    {
+                      "word": "가치관",
+                      "hanja": "價値觀",
+                      "target_char_index": 0,
+                      "example_char_index": 0
+                    }
+                  ],
+                  "homophone": []
+                },
+                {
+                  "type": "pronunciation",
+                  "skill_id": "H3-PRON-SAMPLE",
+                  "level_band": "3급",
+                  "surface": "국립",
+                  "actual": "궁닙"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "expect": {
+        "result": "HARD_FAIL",
+        "hard_codes": [
+          "EXPL_HANJA_TARGET_CONTAINING_RELATED"
+        ]
+      }
+    },
+    {
+      "id": "future_hanja_invalid_homophone",
+      "mode": "future",
+      "payload": {
+        "set_id": "TEST-S2",
+        "stage_id": "STD-B999-S1",
+        "questions": [
+          {
+            "q_no": 1,
+            "qa_meta": {
+              "source_context": "원래 문맥에서 표현을 확인해요.",
+              "correct_choice_surface": "정답",
+              "completed_answer_surface": "원래 문맥에서 정답을 확인해요.",
+              "target_expressions": [
+                "정답"
+              ]
+            },
+            "explanation": {
+              "reason": "語彙の意味関係を説明する。",
+              "learning_blocks": [
+                {
+                  "form": "표현",
+                  "usage": "同じ場面で意味の差を示す。",
+                  "example_ko": "새 예문을 만들어요."
+                },
+                {
+                  "type": "hanja_network",
+                  "target": {
+                    "word": "출장",
+                    "hanja": "出張"
+                  },
+                  "related": [],
+                  "homophone": [
+                    {
+                      "word": "장소",
+                      "hanja": "張所",
+                      "target_syllable_index": 1,
+                      "example_syllable_index": 0
+                    }
+                  ]
+                },
+                {
+                  "type": "pronunciation",
+                  "skill_id": "H3-PRON-SAMPLE",
+                  "level_band": "3급",
+                  "surface": "국립",
+                  "actual": "궁닙"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "expect": {
+        "result": "HARD_FAIL",
+        "hard_codes": [
+          "EXPL_HANJA_HOMOPHONE_RELATION_INVALID"
+        ]
+      }
+    },
+    {
+      "id": "future_hanja_invalid_structure",
+      "mode": "future",
+      "payload": {
+        "set_id": "TEST-S2",
+        "stage_id": "STD-B999-S1",
+        "questions": [
+          {
+            "q_no": 1,
+            "qa_meta": {
+              "source_context": "원래 문맥에서 표현을 확인해요.",
+              "correct_choice_surface": "정답",
+              "completed_answer_surface": "원래 문맥에서 정답을 확인해요.",
+              "target_expressions": [
+                "정답"
+              ]
+            },
+            "explanation": {
+              "reason": "語彙の意味関係を説明する。",
+              "learning_blocks": [
+                {
+                  "form": "표현",
+                  "usage": "同じ場面で意味の差を示す。",
+                  "example_ko": "새 예문을 만들어요."
+                },
+                {
+                  "type": "hanja_network",
+                  "target": {
+                    "word": "출장",
+                    "hanja": "出張"
+                  },
+                  "related": [
+                    {
+                      "word": "출발",
+                      "hanja": "出發",
+                      "target_char_index": 99,
+                      "example_char_index": 0
+                    }
+                  ],
+                  "homophone": []
+                },
+                {
+                  "type": "pronunciation",
+                  "skill_id": "H3-PRON-SAMPLE",
+                  "level_band": "3급",
+                  "surface": "국립",
+                  "actual": "궁닙"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "expect": {
+        "result": "HARD_FAIL",
+        "hard_codes": [
+          "EXPL_HANJA_STRUCTURE_INVALID"
+        ]
+      }
+    },
+    {
+      "id": "future_hanja_invalid_related_relation",
+      "mode": "future",
+      "payload": {
+        "set_id": "TEST-S2",
+        "stage_id": "STD-B999-S1",
+        "questions": [
+          {
+            "q_no": 1,
+            "qa_meta": {
+              "source_context": "원래 문맥에서 표현을 확인해요.",
+              "correct_choice_surface": "정답",
+              "completed_answer_surface": "원래 문맥에서 정답을 확인해요.",
+              "target_expressions": [
+                "정답"
+              ]
+            },
+            "explanation": {
+              "reason": "語彙の意味関係を説明する。",
+              "learning_blocks": [
+                {
+                  "form": "표현",
+                  "usage": "同じ場面で意味の差を示す。",
+                  "example_ko": "새 예문을 만들어요."
+                },
+                {
+                  "type": "hanja_network",
+                  "target": {
+                    "word": "출장",
+                    "hanja": "出張"
+                  },
+                  "related": [
+                    {
+                      "word": "주장",
+                      "hanja": "主張",
+                      "target_char_index": 0,
+                      "example_char_index": 0
+                    }
+                  ],
+                  "homophone": []
+                },
+                {
+                  "type": "pronunciation",
+                  "skill_id": "H3-PRON-SAMPLE",
+                  "level_band": "3급",
+                  "surface": "국립",
+                  "actual": "궁닙"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "expect": {
+        "result": "HARD_FAIL",
+        "hard_codes": [
+          "EXPL_HANJA_RELATED_RELATION_INVALID"
+        ]
+      }
+    },
+    {
+      "id": "future_pron_invalid_structure",
+      "mode": "future",
+      "payload": {
+        "set_id": "TEST-S2",
+        "stage_id": "STD-B999-S1",
+        "questions": [
+          {
+            "q_no": 1,
+            "qa_meta": {
+              "source_context": "원래 문맥에서 표현을 확인해요.",
+              "correct_choice_surface": "정답",
+              "completed_answer_surface": "원래 문맥에서 정답을 확인해요.",
+              "target_expressions": [
+                "정답"
+              ]
+            },
+            "explanation": {
+              "reason": "語彙の意味関係を説明する。",
+              "learning_blocks": [
+                {
+                  "form": "표현",
+                  "usage": "同じ場面で意味の差を示す。",
+                  "example_ko": "새 예문을 만들어요."
+                },
+                {
+                  "type": "pronunciation",
+                  "skill_id": "H3-PRON-SAMPLE",
+                  "level_band": "4급",
+                  "surface": "국립",
+                  "actual": "궁닙"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "expect": {
+        "result": "HARD_FAIL",
+        "hard_codes": [
+          "EXPL_PRON_COVERAGE_MISSING",
+          "EXPL_PRON_STRUCTURE_INVALID"
+        ]
+      }
+    },
+    {
+      "id": "future_pron_coverage_missing",
+      "mode": "future",
+      "payload": {
+        "set_id": "TEST-S2",
+        "stage_id": "STD-B999-S1",
+        "questions": [
+          {
+            "q_no": 1,
+            "qa_meta": {
+              "source_context": "원래 문맥에서 표현을 확인해요.",
+              "correct_choice_surface": "정답",
+              "completed_answer_surface": "원래 문맥에서 정답을 확인해요.",
+              "target_expressions": [
+                "정답"
+              ]
+            },
+            "explanation": {
+              "reason": "語彙の意味関係を説明する。",
+              "learning_blocks": [
+                {
+                  "form": "표현",
+                  "usage": "同じ場面で意味の差を示す。",
+                  "example_ko": "새 예문을 만들어요."
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "expect": {
+        "result": "HARD_FAIL",
+        "hard_codes": [
+          "EXPL_PRON_COVERAGE_MISSING"
+        ]
+      }
+    }
+  ]
+}

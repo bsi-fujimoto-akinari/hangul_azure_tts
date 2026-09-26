@@ -529,7 +529,8 @@ jobs:
               "function h3FsResumableListeningPrepare_(ss,nextSetNo)",
               "var resume=h3FsResumableListeningPrepare_(ss,next);",
               "FAMILY_SCHEDULER_K1_READY_AMBIGUOUS",
-              "lt.map.PARENT_SET_ID+1",
+              "function h3FsListeningIssueRollback_(",
+              "FAMILY_SCHEDULER_LISTENING_ISSUE_RECOVERY_REQUIRED:",
           ]
           for token in required_fs:
               if token not in fs:

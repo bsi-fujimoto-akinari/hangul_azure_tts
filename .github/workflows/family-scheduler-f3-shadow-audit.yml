@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   audit:
+    name: family-scheduler-f3-shadow-audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

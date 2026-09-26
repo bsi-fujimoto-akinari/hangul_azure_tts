@@ -8,6 +8,7 @@ on:
 
 jobs:
   audit:
+    name: rs13k1-k1-secondary-authority-audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

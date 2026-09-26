@@ -8,6 +8,7 @@ on:
 
 jobs:
   audit:
+    name: rs10-soft-signal-audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

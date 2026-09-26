@@ -226,13 +226,13 @@ if not (
     < automatic_boundary_pos
 ):
     raise SystemExit('Production trigger alignment step order invalid.')
-alignment_prefix = sync[
-    alignment_boundary_pos:
-    alignment_execute_pos
+alignment_block = sync[
+    alignment_execute_pos:
+    automatic_boundary_pos
 ]
 if (
     "if: steps.trigger_alignment_boundary.outputs.ready == 'true'"
-    not in alignment_prefix
+    not in alignment_block
 ):
     raise SystemExit(
         'Production trigger alignment execution must be gated by '

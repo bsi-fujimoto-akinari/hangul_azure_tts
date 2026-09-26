@@ -388,3 +388,127 @@ function h3ErrorStateReadCurrent() {
     };
   }
 }
+
+
+function h3ErrorStatePhase1SelfTest_() {
+  var cases = [
+    {
+      name: 'EMPTY_PRIMARY_LOG',
+      actual:
+        h3ErrorStateClassify_(
+          'OK',
+          0
+        ),
+      expected: 'NONE'
+    },
+    {
+      name: 'UNRESOLVED_PRESENT',
+      actual:
+        h3ErrorStateClassify_(
+          'OK',
+          1
+        ),
+      expected: 'PRESENT'
+    },
+    {
+      name: 'PRIMARY_SOURCE_UNKNOWN',
+      actual:
+        h3ErrorStateClassify_(
+          'UNKNOWN',
+          0
+        ),
+      expected: 'UNKNOWN'
+    },
+    {
+      name: 'PRIMARY_SOURCE_READ_ERROR',
+      actual:
+        h3ErrorStateClassify_(
+          'READ_ERROR',
+          0
+        ),
+      expected: 'UNKNOWN'
+    },
+    {
+      name: 'INVALID_COUNT',
+      actual:
+        h3ErrorStateClassify_(
+          'OK',
+          -1
+        ),
+      expected: 'UNKNOWN'
+    }
+  ];
+
+  cases.forEach(
+    function (testCase) {
+      if (
+        testCase.actual !==
+        testCase.expected
+      ) {
+        throw new Error(
+          'ERROR_STATE_PHASE1_SELF_TEST_FAIL:' +
+          testCase.name +
+          ':' +
+          testCase.actual
+        );
+      }
+    }
+  );
+
+  var present =
+    h3ErrorStateBuild_({
+      source_status: 'OK',
+      unresolved_count: 1,
+      latest_unresolved_id:
+        'H3ERR-SELFTEST',
+      last_log_row: 2
+    });
+
+  if (
+    present.status !== 'PRESENT'
+  ) {
+    throw new Error(
+      'ERROR_STATE_PHASE1_BUILD_FAIL'
+    );
+  }
+
+  var rejected = false;
+  try {
+    h3ErrorStateBuild_({
+      source_status: 'OK',
+      unresolved_count: 1,
+      last_log_row: 2
+    });
+  } catch (error) {
+    rejected =
+      String(
+        error &&
+        error.message
+          ? error.message
+          : error
+      ).indexOf(
+        'ERROR_STATE_PRESENT_REQUIRES_UNRESOLVED_ID'
+      ) >= 0;
+  }
+
+  if (!rejected) {
+    throw new Error(
+      'ERROR_STATE_PHASE1_MISSING_ID_NOT_REJECTED'
+    );
+  }
+
+  return {
+    schema:
+      'H3_ERROR_STATE_PHASE1_SELF_TEST_V1',
+    status:
+      'PASS',
+    primary_source:
+      H3_ERROR_STATE_PRIMARY_SOURCE_,
+    fail_closed:
+      true,
+    cases:
+      cases.length,
+    write_performed:
+      false
+  };
+}

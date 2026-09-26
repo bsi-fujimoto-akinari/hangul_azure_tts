@@ -15,6 +15,7 @@ for (const token of [
   'H3_MONITOR_PRODUCTION_TRIGGER_NEAR_MINUTE_ = 0',
   "'Asia/Tokyo'",
   'function h3MonitoringProductionTriggerAlignmentStatus()',
+  'function h3MonitoringProductionTriggerAutoAlignIfLegacy_()',
   'function h3MonitoringProductionTriggerRealignToHour()',
   '.nearMinute(H3_MONITOR_PRODUCTION_TRIGGER_NEAR_MINUTE_)',
   '.everyHours(H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_)',
@@ -22,6 +23,21 @@ for (const token of [
 ]) {
   assert(server.includes(token), 'missing trigger token: ' + token);
 }
+const handlerStart = server.indexOf(
+  'function h3MonitoringObserverEmailRun()'
+);
+const handlerEnd = server.indexOf(
+  '// S4-R4-F DEDUPLICATED ACTION-REQUIRED EMAIL END',
+  handlerStart
+);
+const handlerSection = server.slice(handlerStart, handlerEnd);
+assert(
+  handlerSection.indexOf('h3MonitoringProductionTriggerAutoAlignIfLegacy_()') >= 0 &&
+  handlerSection.indexOf('h3MonitoringProductionTriggerAutoAlignIfLegacy_()') <
+    handlerSection.indexOf('LockService.getScriptLock()'),
+  'natural handler must self-align before observer lock'
+);
+
 for (const scope of [
   'https://www.googleapis.com/auth/script.scriptapp',
 ]) {
@@ -122,8 +138,8 @@ props.delete(H3_MONITOR_PRODUCTION_TRIGGER_NEAR_MINUTE_KEY_);
 props.delete(H3_MONITOR_PRODUCTION_TRIGGER_TIMEZONE_KEY_);
 
 assert(h3MonitoringProductionTriggerLegacyReady_().ready===true,'legacy identity not recognized');
-const migrated=h3MonitoringProductionTriggerRealignToHour();
-assert(migrated.status==='READY' && migrated.migrated===true,'migration failed');
+const migrated=h3MonitoringProductionTriggerAutoAlignIfLegacy_();
+assert(migrated.status==='READY' && migrated.migrated===true,'natural self-alignment failed');
 assert(triggers.length===1,'migration trigger count mismatch');
 status=h3MonitoringProductionTriggerStatus();
 assert(status.status==='READY','migrated trigger not READY');

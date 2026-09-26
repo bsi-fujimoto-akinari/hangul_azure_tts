@@ -6,6 +6,7 @@ from pathlib import Path
 error_state = Path("WebAppErrorState.js").read_text(encoding="utf-8")
 live_smoke = Path("WebAppLiveSmoke.js").read_text(encoding="utf-8")
 ops = Path("OPERATIONS.md").read_text(encoding="utf-8")
+family_scheduler = Path("WebAppFamilyScheduler.js").read_text(encoding="utf-8")
 
 required_error_state = [
     "'H3_ERROR_INCIDENT_LIFECYCLE_V1'",
@@ -50,6 +51,28 @@ if missing:
         "Error State Phase 3 implementation missing: " + ", ".join(missing)
     )
 
+required_phase4 = [
+    "H3_MONITOR_ERROR_STATE_SOURCE_V1",
+    "H3_ERROR_STATE_MONITOR_V1",
+    "function h3MonitoringErrorStateFromBoot_(",
+    "function h3MonitoringErrorStateSource_(",
+    "function h3MonitoringErrorStatePhase4SelfTest_()",
+    "UNRESOLVED_ERROR_PRESENT",
+    "PRIMARY_SOURCE_UNKNOWN",
+    "ERROR_STATE_STALE",
+    "ERROR_STATE_NEW_UNRESOLVED",
+    "ERROR_STATE_PRIMARY_SOURCE_UNKNOWN",
+    "ERROR_STATE_RAW_WATERMARK_DRIFT",
+    "lifecycle_only_semantic_drift_email:",
+    "false",
+]
+missing = [token for token in required_phase4 if token not in family_scheduler]
+if missing:
+    raise SystemExit(
+        "Error State Phase 4 observer implementation missing: "
+        + ", ".join(missing)
+    )
+
 required_smoke = [
     "h3ErrorStatePhase1SelfTest_()",
     "h3ErrorStatePhase2SelfTest_()",
@@ -57,6 +80,9 @@ required_smoke = [
     "error_state_phase2:",
     "h3ErrorStatePhase3SelfTest_()",
     "error_state_phase3:",
+    "h3MonitoringErrorStatePhase4SelfTest_()",
+    "error_state_phase4:",
+    "error_state_observer:",
     "write_performed:",
     "false",
 ]
@@ -81,6 +107,14 @@ required_ops = [
     "DRIFT=PRESENT",
     "ERROR=UNKNOWN",
     "DRIFT=UNKNOWN",
+    "H3_ERROR_STATE_MONITOR_V1",
+    "UNRESOLVED_ERROR_PRESENT",
+    "PRIMARY_SOURCE_UNKNOWN",
+    "ERROR_STATE_STALE",
+    "ERROR_STATE_NEW_UNRESOLVED",
+    "ERROR_STATE_PRIMARY_SOURCE_UNKNOWN",
+    "ERROR_STATE_RAW_WATERMARK_DRIFT",
+    "Lifecycle-only semantic drift",
 ]
 missing = [token for token in required_ops if token not in ops]
 if missing:
@@ -99,4 +133,4 @@ for forbidden in [
             f"Error State implementation crosses protected runtime boundary: {forbidden}"
         )
 
-print("Error State Phases 2-3 static contract: PASS")
+print("Error State Phases 2-4 static contract: PASS")

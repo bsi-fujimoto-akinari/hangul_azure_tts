@@ -243,6 +243,15 @@ function h3AutomaticLiveSmoke(request) {
     h3ErrorStatePhase2SelfTest_();
   var errorStatePhase3 =
     h3ErrorStatePhase3SelfTest_();
+  var errorStatePhase4 =
+    h3MonitoringErrorStatePhase4SelfTest_();
+  var errorStateObserver =
+    h3MonitoringErrorStateSource_(
+      SpreadsheetApp.openById(
+        H3_WEB_RUNTIME_SPREADSHEET_ID
+      ),
+      Date.now()
+    );
   var source =
     h3AutomaticLiveSmokeRequireSource_(
       request
@@ -298,6 +307,10 @@ function h3AutomaticLiveSmoke(request) {
       errorStatePhase2,
     error_state_phase3:
       errorStatePhase3,
+    error_state_phase4:
+      errorStatePhase4,
+    error_state_observer:
+      errorStateObserver,
     suites:
       results,
     write_performed:

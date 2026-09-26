@@ -106,6 +106,7 @@ allowed = {
     '.github/scripts/error_state_contract_audit.py',
     '.github/scripts/production_trigger_alignment.py',
     '.github/scripts/apps_script_execution_boundary_audit.py',
+    '.github/scripts/production_trigger_contract_audit.cjs',
     '.github/workflows/apps-script-auto-sync.yml',
     '.github/workflows/rs10-soft-signal-audit.yml',
     '.github/workflows/rs12-prospective-evidence-audit.yml',

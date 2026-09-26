@@ -21,6 +21,9 @@ jobs:
           node --check WebAppFamilyScheduler.js
           node --check WebAppFamilySchedulerPreparation.js
 
+      - name: Written explanation static QA runtime parity
+        run: node .github/scripts/written_explanation_static_qa_runtime_audit.cjs
+
       - name: Contract audit
         run: |
           python - <<'PY'
@@ -1815,10 +1818,14 @@ jobs:
           prep = Path("WebAppFamilySchedulerPreparation.js").read_text(encoding="utf-8")
 
           required_prep = [
-              "H3-FAMILY-SCHEDULER-W-PREP-20260926-V2",
-              "H3_FAMILY_SCHEDULER_WRITTEN_AUTHORING_REQUEST_V2",
+              "H3-FAMILY-SCHEDULER-W-PREP-20260926-V3",
+              "H3_FAMILY_SCHEDULER_WRITTEN_AUTHORING_REQUEST_V3",
               "H3-D5-CONTEXT-QUALITY-20260926-V1",
+              "H3-WRITTEN-EXPLANATION-STATIC-QA-20260926-V1",
               "authoring_constraints",
+              "explanation_static_qa",
+              "hard_fail_blocking:true",
+              "heuristic_warnings_blocking:false",
               "reject_both_bare_object_blank:true",
               "echo_required_in_question_meta",
               "function h3FsPrepareWritten_(ss)",
@@ -2003,8 +2010,9 @@ jobs:
               "function h3FamilySchedulerAuthoringReconciliationPreview()",
               "function h3FamilySchedulerAuthoringReconciliationEnsure()",
               "function h3FsAuthoringRebindPreviousGeneration_(",
+              "function h3FamilySchedulerWrittenAuthoringGenerationRebind()",
               "function h3FamilySchedulerD5AuthoringGenerationRebind()",
-              "H3-FAMILY-SCHEDULER-AUTHORING-GENERATION-20260926-V1",
+              "H3-FAMILY-SCHEDULER-AUTHORING-GENERATION-20260926-V2",
               "SUPERSEDE_REBIND",
               "MISSING_AUTHORING_JOB",
               "EXISTING_NO_DUPLICATE",

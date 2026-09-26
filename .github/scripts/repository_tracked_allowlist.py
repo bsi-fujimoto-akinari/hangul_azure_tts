@@ -103,6 +103,7 @@ allowed = {
     '.github/scripts/repository_audit_impact.py',
     '.github/scripts/drive_raw_text_replace_helper.py',
     '.github/scripts/d5_context_quality_audit.cjs',
+    '.github/scripts/error_state_contract_audit.py',
     '.github/workflows/apps-script-auto-sync.yml',
     '.github/workflows/rs10-soft-signal-audit.yml',
     '.github/workflows/rs12-prospective-evidence-audit.yml',

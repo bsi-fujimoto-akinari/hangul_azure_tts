@@ -474,6 +474,9 @@ jobs:
           print('Structured Web runtime observability contract: PASS')
           PY
 
+      - name: Audit error-state lifecycle reconciliation contract
+        run: python3 .github/scripts/error_state_contract_audit.py
+
       - name: Reject credential files and likely embedded secrets
         shell: bash
         run: |

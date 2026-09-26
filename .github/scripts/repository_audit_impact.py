@@ -36,6 +36,7 @@ UNCONDITIONAL_STEPS = {
     "Checkout",
     "Detect repository audit impact",
     "Verify workflow YAML",
+    "Audit error-state lifecycle reconciliation contract",
     "Verify tracked-file allowlist",
     "Reject credential files and likely embedded secrets",
     "Audit repository access fast-path contract",
@@ -179,7 +180,14 @@ DEPENDENCIES = json.loads(r'''{
     "WebApp.js",
     "WebAppFamilyScheduler.js",
     "WebAppObservability.js",
-    "appsscript.json"
+    "appsscript.json",
+    "WebAppErrorState.js"
+  ],
+  "Audit error-state lifecycle reconciliation contract": [
+    ".github/scripts/error_state_contract_audit.py",
+    "OPERATIONS.md",
+    "WebAppErrorState.js",
+    "WebAppLiveSmoke.js"
   ],
   "Reject credential files and likely embedded secrets": [
     ".github/workflows/repository-audit.yml"
@@ -614,7 +622,8 @@ DEPENDENCIES = json.loads(r'''{
     "WebAppWrittenAnswerSync.js",
     "WebAppWrittenNewfmt.js",
     "WebAppWrittenNewfmtAudit.js",
-    "WebAppWrittenProduction.js"
+    "WebAppWrittenProduction.js",
+    "WebAppErrorState.js"
   ],
   "Verify audio semantic invariants": [
     "Code.js"

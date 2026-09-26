@@ -2063,10 +2063,14 @@ function h3FsAuthoringUpsert_(ss,level,evaluation,prep) {
       String(match.representative.status||'')
     )>=0
   ){
-    throw new Error(
-      'FAMILY_SCHEDULER_AUTHORING_ACTIVE_TARGET_WITHOUT_EXACT_KEY:'+
-      String(match.representative.job_id||'')
-    );
+    return {
+      status:'EXISTING',
+      job_id:match.representative.job_id,
+      job_status:match.representative.status,
+      idempotency_key:idempotencyKey,
+      snapshot_sha256:snapshot,
+      target_history_count:match.history.length
+    };
   }
 
   var now=new Date().toISOString();

@@ -46,9 +46,10 @@ assert.strictEqual(
 );
 
 function assertOrder(label, segment, orderedTokens) {
+  const normalized = segment.replace(/\s+/g, ' ');
   let cursor = -1;
   for (const token of orderedTokens) {
-    const next = segment.indexOf(token, cursor + 1);
+    const next = normalized.indexOf(token, cursor + 1);
     assert(
       next >= 0,
       label + ' missing token: ' + token
@@ -71,15 +72,15 @@ const translation = web.slice(translationStart, writtenStart);
 const written = web.slice(writtenStart, web.indexOf('\n    return writtenResult;', writtenStart) + 30);
 
 assertOrder('READING', reading, [
-  "h3SurfaceReviewEnsure_(\n          'READING'",
-  "h3ReviewAudioEnsureForLockedReview_(\n        'READING'",
+  "h3SurfaceReviewEnsure_( 'READING'",
+  "h3ReviewAudioEnsureForLockedReview_( 'READING'",
   'h3ReviewHomeIndexUpsertAfterCommit_',
   'h3SurfaceReviewOpen_'
 ]);
 
 assertOrder('TRANSLATION', translation, [
-  "h3SurfaceReviewEnsure_(\n            'TRANSLATION'",
-  "h3ReviewAudioEnsureForLockedReview_(\n        'TRANSLATION'",
+  "h3SurfaceReviewEnsure_( 'TRANSLATION'",
+  "h3ReviewAudioEnsureForLockedReview_( 'TRANSLATION'",
   'h3ReviewHomeIndexUpsertAfterCommit_',
   'h3SurfaceReviewOpen_'
 ]);
@@ -87,7 +88,7 @@ assertOrder('TRANSLATION', translation, [
 assertOrder('5W', written, [
   'h3WrittenAnswerSync_(',
   'h3WrittenProductionReviewEnsure_(',
-  "h3ReviewAudioEnsureForLockedReview_(\n      '5W'",
+  "h3ReviewAudioEnsureForLockedReview_( '5W'",
   'getWrittenProductionPersistentReviewPayload_(',
   'h3ReviewHomeIndexUpsertAfterCommit_('
 ]);

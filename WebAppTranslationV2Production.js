@@ -199,6 +199,62 @@ function h3TranslationV2MarkRecovery_(journal,rowNumber,message) {
   SpreadsheetApp.flush();
 }
 
+function h3FsTranslationProjectionRecoveryGate_(ss) {
+  var sh=ss.getSheetByName(H3_TRANSLATION_V2_TXN_SHEET_);
+  if (!sh) {
+    throw new Error(
+      'FAMILY_SCHEDULER_TRANSLATION_TXN_MISSING'
+    );
+  }
+  var t=h3TranslationV2ProdTable_(
+    sh,
+    H3_TRANSLATION_V2_TXN_HEADERS_,
+    'TRANSLATION_V2_TXN'
+  );
+  var blocked=t.rows.filter(function (row) {
+    return (
+      String(row[t.map.STATUS] || '') === 'COMMITTED' &&
+      String(row[t.map.ERROR] || '')
+        .indexOf('POSTCOMMIT_PROJECTION:') === 0
+    );
+  });
+  if (blocked.length) {
+    throw new Error(
+      'FAMILY_SCHEDULER_TRANSLATION_PROJECTION_RECOVERY_REQUIRED:' +
+      blocked.length
+    );
+  }
+  return true;
+}
+
+function h3TranslationV2RequireCommittedReplay_(
+  context,
+  record
+) {
+  var row=record && record.row;
+  var map=context && context.txnTable &&
+    context.txnTable.map;
+  if (
+    !context ||
+    !context.stage ||
+    !row ||
+    !map ||
+    context.stage.status !== 'COMMITTED' ||
+    !context.stage.issued_at ||
+    !context.stage.committed_at ||
+    String(row[map.SET_ID] || '') !==
+      String(context.stage.set_id || '') ||
+    String(row[map.STATUS] || '') !==
+      'COMMITTED' ||
+    !String(row[map.COMMITTED_AT] || '')
+  ) {
+    throw new Error(
+      'TRANSLATION_V2_COMMITTED_REPLAY_STAGE_INVALID'
+    );
+  }
+  return true;
+}
+
 function h3TranslationV2VerifyLogRows_(context,txnId,expectedCount) {
   var sheet=context.logTable.sheet, last=sheet.getLastRow();
   if (last < 2) throw new Error('TRANSLATION_V2_LOG_READBACK_EMPTY');
@@ -497,6 +553,21 @@ function h3TranslationV2AttachSchedulerSync_(
         txnId,
         committedAt
       );
+    if (journal && txnRow) {
+      var errorCell=
+        journal.getRange(txnRow,16);
+      var prior=String(
+        errorCell.getDisplayValue() || ''
+      );
+      if (
+        prior.indexOf(
+          'POSTCOMMIT_PROJECTION:'
+        ) === 0
+      ) {
+        errorCell.setValue('');
+        SpreadsheetApp.flush();
+      }
+    }
   } catch (err) {
     var message =
       String(err && err.message || err);
@@ -532,10 +603,6 @@ function h3TranslationV2Submit_(request) {
   try {
     var spreadsheet=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
     var context=h3TranslationV2ProdReadContext_(spreadsheet,request && request.set_id);
-    if (context.stage.status !== 'ISSUED' || !context.stage.issued_at || context.stage.committed_at) {
-      throw new Error('TRANSLATION_V2_SUBMIT_STAGE_NOT_ISSUED');
-    }
-    h3MultiSkillTranslationV2Preflight_(spreadsheet,context);
     var normalized=h3TranslationV2NormalizeSubmission_(request,context.locked);
     if (normalized.set_id !== context.stage.set_id) {
       throw new Error('TRANSLATION_V2_SUBMIT_SET_ID_MISMATCH');
@@ -543,6 +610,10 @@ function h3TranslationV2Submit_(request) {
     var fingerprint=h3TranslationV2RequestFingerprint_(normalized);
     var existing=h3TranslationV2ClassifyExistingTxn_(context,fingerprint);
     if (existing.action === 'RETURN_COMMITTED') {
+      h3TranslationV2RequireCommittedReplay_(
+        context,
+        existing.record
+      );
       var stored=h3TranslationV2StoredResult_(context,existing.record);
       var storedGrade=h3TranslationV2Grade_(context.locked,normalized.answers);
       return h3TranslationV2AttachSchedulerSync_(
@@ -561,6 +632,19 @@ function h3TranslationV2Submit_(request) {
         existing.record.rowNumber
       );
     }
+    if (
+      context.stage.status !== 'ISSUED' ||
+      !context.stage.issued_at ||
+      context.stage.committed_at
+    ) {
+      throw new Error(
+        'TRANSLATION_V2_SUBMIT_STAGE_NOT_ISSUED'
+      );
+    }
+    h3MultiSkillTranslationV2Preflight_(
+      spreadsheet,
+      context
+    );
 
     var txnId=h3NextWebTxnId_(spreadsheet);
     var grade=h3TranslationV2Grade_(context.locked,normalized.answers);

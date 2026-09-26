@@ -529,7 +529,8 @@ jobs:
               "function h3FsResumableListeningPrepare_(ss,nextSetNo)",
               "var resume=h3FsResumableListeningPrepare_(ss,next);",
               "FAMILY_SCHEDULER_K1_READY_AMBIGUOUS",
-              "lt.map.PARENT_SET_ID+1",
+              "function h3FsListeningIssueRollback_(",
+              "FAMILY_SCHEDULER_LISTENING_ISSUE_RECOVERY_REQUIRED:",
           ]
           for token in required_fs:
               if token not in fs:
@@ -1495,6 +1496,313 @@ jobs:
           assert(used.question_key_map['Q-OLD']===true,'historical QUESTION_KEY missing');
 
           console.log('P06 Translation identity deterministic fixture PASS');
+          NODE
+
+      - name: P06B 5L and Translation recovery hardening fixture
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const vm = require('vm');
+
+          vm.runInThisContext(
+            fs.readFileSync('WebAppTranslationV2.js','utf8')
+          );
+          vm.runInThisContext(
+            fs.readFileSync('WebAppTranslationV2Production.js','utf8')
+          );
+          vm.runInThisContext(
+            fs.readFileSync('WebAppFamilyScheduler.js','utf8')
+          );
+          vm.runInThisContext(
+            fs.readFileSync('WebAppFamilySchedulerPreparation.js','utf8')
+          );
+
+          function assert(condition,message){
+            if(!condition)throw new Error(message);
+          }
+
+          const headers=['ID','STATUS','ISSUED_AT','HASH'];
+          assert(
+            h3FsAssertRollbackSnapshotIdentity_(
+              ['SET','ISSUED','now','abc'],
+              ['SET','AUDIO_BOUND','','abc'],
+              headers,
+              ['STATUS','ISSUED_AT'],
+              'TEST'
+            ) === true,
+            '5L rollback mutable-field exclusion failed'
+          );
+          let identityRejected=false;
+          try {
+            h3FsAssertRollbackSnapshotIdentity_(
+              ['OTHER','ISSUED','now','abc'],
+              ['SET','AUDIO_BOUND','','abc'],
+              headers,
+              ['STATUS','ISSUED_AT'],
+              'TEST'
+            );
+          } catch (err) {
+            identityRejected=
+              String(err&&err.message||err)
+                .indexOf('TEST:ID') === 0;
+          }
+          assert(
+            identityRejected,
+            '5L rollback immutable identity drift must fail closed'
+          );
+
+          const familySource=
+            fs.readFileSync(
+              'WebAppFamilyScheduler.js','utf8'
+            );
+          const listenStart=
+            familySource.indexOf(
+              'function h3FsIssueListening_('
+            );
+          const listenEnd=
+            familySource.indexOf(
+              'function h3FsIssuePreparedFamily_(',
+              listenStart
+            );
+          const listenFn=
+            familySource.slice(
+              listenStart,
+              listenEnd
+            );
+          assert(
+            listenFn.includes(
+              'h3FsListeningIssueRollback_('
+            ),
+            '5L issue must use identity-guarded rollback helper'
+          );
+          assert(
+            listenFn.includes(
+              'FAMILY_SCHEDULER_LISTENING_ISSUE_RECOVERY_REQUIRED:'
+            ),
+            '5L rollback failure must escalate to recovery required'
+          );
+          assert(
+            !listenFn.includes(
+              'catch(_rollbackErr) {}'
+            ),
+            '5L issue must not swallow rollback failures'
+          );
+
+          const originalTable=
+            h3TranslationV2ProdTable_;
+          let gateRows=[];
+          h3TranslationV2ProdTable_=()=>({
+            rows:gateRows,
+            map:{STATUS:0,ERROR:1}
+          });
+          const gateSpreadsheet={
+            getSheetByName(name){
+              return name===
+                H3_TRANSLATION_V2_TXN_SHEET_
+                ? {}
+                : null;
+            }
+          };
+          assert(
+            h3FsTranslationProjectionRecoveryGate_(
+              gateSpreadsheet
+            ) === true,
+            '2T recovery gate must pass with no unresolved projection'
+          );
+          gateRows=[[
+            'COMMITTED',
+            'POSTCOMMIT_PROJECTION:fixture'
+          ]];
+          let gateBlocked=false;
+          try {
+            h3FsTranslationProjectionRecoveryGate_(
+              gateSpreadsheet
+            );
+          } catch (err) {
+            gateBlocked=
+              String(err&&err.message||err) ===
+              'FAMILY_SCHEDULER_TRANSLATION_PROJECTION_RECOVERY_REQUIRED:1';
+          }
+          assert(
+            gateBlocked,
+            '2T unresolved postcommit projection must block scheduler'
+          );
+          h3TranslationV2ProdTable_=originalTable;
+
+          const replayContext={
+            stage:{
+              status:'COMMITTED',
+              issued_at:'issued',
+              committed_at:'committed',
+              set_id:'SET'
+            },
+            txnTable:{
+              map:{
+                SET_ID:0,
+                STATUS:1,
+                COMMITTED_AT:2
+              }
+            }
+          };
+          assert(
+            h3TranslationV2RequireCommittedReplay_(
+              replayContext,
+              {row:['SET','COMMITTED','committed']}
+            ) === true,
+            '2T committed replay identity must be accepted'
+          );
+          let replayRejected=false;
+          try {
+            h3TranslationV2RequireCommittedReplay_(
+              replayContext,
+              {row:['OTHER','COMMITTED','committed']}
+            );
+          } catch (err) {
+            replayRejected=
+              String(err&&err.message||err) ===
+              'TRANSLATION_V2_COMMITTED_REPLAY_STAGE_INVALID';
+          }
+          assert(
+            replayRejected,
+            '2T committed replay identity drift must fail closed'
+          );
+
+          let storedError=
+            'POSTCOMMIT_PROJECTION:old';
+          let flushCount=0;
+          SpreadsheetApp={
+            flush(){flushCount+=1;}
+          };
+          const originalProject=
+            h3TranslationV2ProjectSchedulerAfterCommit_;
+          h3TranslationV2ProjectSchedulerAfterCommit_=
+            ()=>({
+              schema:'H3_TRANSLATION_V2_SCHEDULER_SYNC_V1',
+              status:'PASS'
+            });
+          const journal={
+            getRange(){
+              return {
+                getDisplayValue(){
+                  return storedError;
+                },
+                setValue(value){
+                  storedError=String(value);
+                }
+              };
+            }
+          };
+          const recovered=
+            h3TranslationV2AttachSchedulerSync_(
+              {},
+              {},
+              {stage:{set_id:'SET'}},
+              {},
+              'TXN',
+              'committed',
+              journal,
+              2
+            );
+          assert(
+            recovered.scheduler_sync.status==='PASS',
+            '2T committed replay projection must pass'
+          );
+          assert(
+            storedError==='' &&
+            flushCount===1,
+            '2T successful re-projection must clear POSTCOMMIT_PROJECTION error'
+          );
+          h3TranslationV2ProjectSchedulerAfterCommit_=
+            originalProject;
+
+          const prepSource=
+            fs.readFileSync(
+              'WebAppFamilySchedulerPreparation.js',
+              'utf8'
+            );
+          const prepStart=
+            prepSource.indexOf(
+              'function h3FsPrepareTranslation_('
+            );
+          const prepEnd=
+            prepSource.indexOf(
+              '/**\n * S3 PREP final read-only normalization.',
+              prepStart
+            );
+          const prepFn=
+            prepSource.slice(prepStart,prepEnd);
+          assert(
+            prepFn.indexOf(
+              'h3FsTranslationProjectionRecoveryGate_(ss);'
+            ) >= 0 &&
+            prepFn.indexOf(
+              'h3FsTranslationProjectionRecoveryGate_(ss);'
+            ) <
+            prepFn.indexOf(
+              'h3FsFindPreparedTranslation_(ss)'
+            ),
+            '2T prepare must gate before prepared-stage reuse'
+          );
+
+          const issueStart=
+            familySource.indexOf(
+              'function h3FsIssueTranslation_('
+            );
+          const issueEnd=
+            familySource.indexOf(
+              'function h3FsComparableCell_(',
+              issueStart
+            );
+          const issueFn=
+            familySource.slice(
+              issueStart,
+              issueEnd
+            );
+          assert(
+            issueFn.indexOf(
+              'h3FsTranslationProjectionRecoveryGate_(ss);'
+            ) >= 0 &&
+            issueFn.indexOf(
+              'h3FsTranslationProjectionRecoveryGate_(ss);'
+            ) <
+            issueFn.indexOf(
+              'h3FsFindPreparedTranslation_(ss)'
+            ),
+            '2T issue must gate before prepared-stage issue'
+          );
+
+          const productionSource=
+            fs.readFileSync(
+              'WebAppTranslationV2Production.js',
+              'utf8'
+            );
+          const submitStart=
+            productionSource.indexOf(
+              'function h3TranslationV2Submit_('
+            );
+          const submitEnd=
+            productionSource.indexOf(
+              'function h3TranslationV2CurrentLearning_(',
+              submitStart
+            );
+          const submitFn=
+            productionSource.slice(
+              submitStart,
+              submitEnd
+            );
+          assert(
+            submitFn.indexOf(
+              'h3TranslationV2ClassifyExistingTxn_'
+            ) <
+            submitFn.indexOf(
+              'TRANSLATION_V2_SUBMIT_STAGE_NOT_ISSUED'
+            ),
+            '2T committed replay must classify before new-submit stage gate'
+          );
+
+          console.log(
+            'P06B 5L/2T recovery hardening fixture PASS'
+          );
           NODE
 
       - name: W/R/T preparation contract

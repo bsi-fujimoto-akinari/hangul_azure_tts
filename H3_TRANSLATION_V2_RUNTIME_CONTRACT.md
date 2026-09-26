@@ -1,6 +1,6 @@
 # H3 Translation V2 Mixed Runtime Contract
 
-Version: 2026-09-22 V1
+Version: 2026-09-26 V2
 Status: RS-07 activation candidate / V2 routing integrated / issue remains transaction-gated
 
 ## Purpose
@@ -39,3 +39,21 @@ LOCKED/PREISSUE/ISSUED alone never advances Translation family clock or consumes
 5W-derived R/T opportunity. Those scheduler sidecars advance only after COMMITTED.
 RS-07 first activation is limited to one audited MIXED_1_1 set; recurring automatic
 materialization is outside this initial activation transaction.
+
+
+## Post-COMMIT projection recovery hardening
+A COMMITTED `translation_web_txn_v2` row whose `ERROR` begins with
+`POSTCOMMIT_PROJECTION:` is an unresolved scheduler-sidecar recovery obligation.
+
+- Family Scheduler Translation preparation and issue must fail closed while any
+  such row exists.
+- The authoritative learner result remains COMMITTED; recovery must not rewrite
+  the learner answer, score, Translation log, stage identity, or family clock by
+  inference.
+- Recovery is performed only by replaying the same COMMITTED transaction
+  identity and request fingerprint through the idempotent scheduler projection.
+- A replay is valid only when the Translation stage and transaction are both
+  COMMITTED and retain the same SET_ID authority.
+- `POSTCOMMIT_PROJECTION:` is cleared only after the same transaction projects
+  successfully. A failed replay retains/replaces the recovery error and remains
+  scheduler-blocking.

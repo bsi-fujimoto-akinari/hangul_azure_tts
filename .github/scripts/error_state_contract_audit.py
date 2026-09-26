@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static contract audit for Error State Phase 2."""
+"""Static contract audit for Error State Phases 2-3."""
 
 from pathlib import Path
 
@@ -28,11 +28,35 @@ if missing:
         "Error State Phase 2 implementation missing: " + ", ".join(missing)
     )
 
+required_phase3 = [
+    "'H3_ERROR_STATE_BOOT_SNAPSHOT_V1'",
+    "function h3ErrorStateReadProjectionReadOnly_(",
+    "function h3ErrorStateSemanticEqual_(",
+    "function h3ErrorStateBootEvaluateData_(",
+    "function h3ErrorStateBootSnapshot()",
+    "function h3ErrorStatePhase3SelfTest_()",
+    "'RAW_WATERMARK_MISMATCH'",
+    "'PROJECTION_SEMANTIC_MISMATCH'",
+    "'PROJECTION_UNAVAILABLE'",
+    "'FRESH_SOURCE_READ_FAILED'",
+    "current_summary_role:",
+    "'DISPLAY_ONLY'",
+    "write_performed:",
+    "false",
+]
+missing = [token for token in required_phase3 if token not in error_state]
+if missing:
+    raise SystemExit(
+        "Error State Phase 3 implementation missing: " + ", ".join(missing)
+    )
+
 required_smoke = [
     "h3ErrorStatePhase1SelfTest_()",
     "h3ErrorStatePhase2SelfTest_()",
     "error_state_phase1:",
     "error_state_phase2:",
+    "h3ErrorStatePhase3SelfTest_()",
+    "error_state_phase3:",
     "write_performed:",
     "false",
 ]
@@ -50,6 +74,13 @@ required_ops = [
     "implicitly `OPEN`",
     "STATUS=UNKNOWN",
     "UNRESOLVED_COUNT",
+    "H3_ERROR_STATE_BOOT_V1",
+    "h3ErrorStateBootSnapshot",
+    "current.json.error_summary",
+    "display-only cache",
+    "DRIFT=PRESENT",
+    "ERROR=UNKNOWN",
+    "DRIFT=UNKNOWN",
 ]
 missing = [token for token in required_ops if token not in ops]
 if missing:
@@ -68,4 +99,4 @@ for forbidden in [
             f"Error State implementation crosses protected runtime boundary: {forbidden}"
         )
 
-print("Error State Phase 2 static contract: PASS")
+print("Error State Phases 2-3 static contract: PASS")

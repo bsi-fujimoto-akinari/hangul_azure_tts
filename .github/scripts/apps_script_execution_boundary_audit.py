@@ -71,8 +71,8 @@ required_alignment_helper = [
     '"@google/clasp@3.4.0"',
     '"configured_near_minute": 0',
     '"configured_timezone": "Asia/Tokyo"',
-    'trigger_name != "workflow_run"',
-    'audit_sha != source_sha',
+    'os.environ.get("TRIGGER_NAME", "") != "workflow_run"',
+    'os.environ.get("TRIGGER_AUDIT_SHA", "") != source_sha',
 ]
 missing_alignment_helper = [
     token for token in required_alignment_helper

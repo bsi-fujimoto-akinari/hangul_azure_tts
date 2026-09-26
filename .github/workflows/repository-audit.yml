@@ -300,6 +300,9 @@ jobs:
       - name: Audit error-state lifecycle reconciliation contract
         run: python3 .github/scripts/error_state_contract_audit.py
 
+      - name: Audit prospective Review audio lifecycle contract
+        run: node .github/scripts/review_audio_lifecycle_contract_audit.cjs
+
       - name: Reject credential files and likely embedded secrets
         shell: bash
         run: |

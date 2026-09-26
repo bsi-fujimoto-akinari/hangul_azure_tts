@@ -26,6 +26,7 @@ TRACKED_ALLOWLIST_HELPER_PATH = ".github/scripts/repository_tracked_allowlist.py
 APPS_SCRIPT_EXECUTION_BOUNDARY_AUDIT_PATH = ".github/scripts/apps_script_execution_boundary_audit.py"
 PRODUCTION_TRIGGER_ALIGNMENT_HELPER_PATH = ".github/scripts/production_trigger_alignment.py"
 PRODUCTION_TRIGGER_CONTRACT_AUDIT_PATH = ".github/scripts/production_trigger_contract_audit.cjs"
+REVIEW_AUDIO_LIFECYCLE_AUDIT_PATH = ".github/scripts/review_audio_lifecycle_contract_audit.cjs"
 
 FORCE_FULL_FILES = {
     WORKFLOW_PATH,
@@ -36,6 +37,7 @@ FORCE_FULL_FILES = {
     APPS_SCRIPT_EXECUTION_BOUNDARY_AUDIT_PATH,
     PRODUCTION_TRIGGER_ALIGNMENT_HELPER_PATH,
     PRODUCTION_TRIGGER_CONTRACT_AUDIT_PATH,
+    REVIEW_AUDIO_LIFECYCLE_AUDIT_PATH,
 }
 
 UNCONDITIONAL_STEPS = {
@@ -44,6 +46,7 @@ UNCONDITIONAL_STEPS = {
     "Verify workflow YAML",
     "Verify credentialed Apps Script execution boundaries",
     "Audit error-state lifecycle reconciliation contract",
+    "Audit prospective Review audio lifecycle contract",
     "Verify tracked-file allowlist",
     "Reject credential files and likely embedded secrets",
     "Audit repository access fast-path contract",
@@ -172,7 +175,8 @@ DEPENDENCIES = json.loads(r'''{
     "appsscript.json",
     ".github/scripts/apps_script_execution_boundary_audit.py",
     ".github/scripts/production_trigger_alignment.py",
-    ".github/scripts/production_trigger_contract_audit.cjs"
+    ".github/scripts/production_trigger_contract_audit.cjs",
+    ".github/scripts/review_audio_lifecycle_contract_audit.cjs"
   ],
   "Audit canonical four-Phase code-change workflow contract": [
     "OPERATIONS.md"
@@ -203,6 +207,12 @@ DEPENDENCIES = json.loads(r'''{
     "WebAppLiveSmoke.js",
     "WebAppFamilyScheduler.js",
     ".github/workflows/family-scheduler-f3-shadow-audit.yml"
+  ],
+  "Audit prospective Review audio lifecycle contract": [
+    ".github/scripts/review_audio_lifecycle_contract_audit.cjs",
+    "H3_REVIEW_ARCHITECTURE.md",
+    "ReviewAudioBackfill.js",
+    "WebApp.js"
   ],
   "Reject credential files and likely embedded secrets": [
     ".github/workflows/repository-audit.yml"

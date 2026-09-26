@@ -784,6 +784,182 @@ function h3ReviewAudioGeneratePlannedAsset_(ss,plan){
   }
 }
 
+
+var H3_REVIEW_AUDIO_PROSPECTIVE_ENSURE_CONTRACT_ =
+  'H3-REVIEW-AUDIO-PROSPECTIVE-ENSURE-20260926-V1';
+
+function h3ReviewAudioLifecycleFamily_(surfaceFamily){
+  var value=String(surfaceFamily||'').trim();
+  var map={
+    '5W':'5W',
+    'READING':'2R',
+    'TRANSLATION':'2T'
+  };
+  var family=map[value];
+  if(!family){
+    throw new Error('REVIEW_AUDIO_ENSURE_SURFACE_UNSUPPORTED:'+value);
+  }
+  return family;
+}
+
+function h3ReviewAudioExpectedAssetCount_(family){
+  var counts={'5W':5,'2R':3,'2T':2};
+  var count=counts[String(family||'')];
+  if(!count){
+    throw new Error('REVIEW_AUDIO_ENSURE_FAMILY_INVALID:'+family);
+  }
+  return count;
+}
+
+function h3ReviewAudioAssertSetReady_(ss,family,setId,plan){
+  var expected=h3ReviewAudioExpectedAssetCount_(family);
+  if(!Array.isArray(plan)||plan.length!==expected){
+    throw new Error(
+      'REVIEW_AUDIO_ENSURE_PLAN_COUNT:'+
+      family+':'+setId+':'+
+      (Array.isArray(plan)?plan.length:'INVALID')
+    );
+  }
+
+  var sheet=h3ReviewAudioAssetSheet_(ss);
+  var table=h3ReviewAudioTable_(sheet);
+  var fi=table.map.SURFACE_FAMILY;
+  var si=table.map.SET_ID;
+  var ki=table.map.SLOT_KEY;
+  var rows=table.rows.filter(function(row){
+    return String(row[fi]||'')===family &&
+      String(row[si]||'')===String(setId||'');
+  });
+
+  if(rows.length!==expected){
+    throw new Error(
+      'REVIEW_AUDIO_ENSURE_SET_COUNT:'+
+      family+':'+setId+':'+rows.length
+    );
+  }
+
+  var seen={};
+  plan.forEach(function(item){
+    var matches=rows.filter(function(row){
+      return String(row[ki]||'')===item.slot_key;
+    });
+    if(matches.length!==1){
+      throw new Error(
+        'REVIEW_AUDIO_ENSURE_SLOT_COUNT:'+
+        family+':'+setId+':'+
+        item.slot_key+':'+matches.length
+      );
+    }
+    if(seen[item.slot_key]){
+      throw new Error(
+        'REVIEW_AUDIO_ENSURE_DUPLICATE_PLAN_SLOT:'+
+        family+':'+setId+':'+item.slot_key
+      );
+    }
+    seen[item.slot_key]=true;
+
+    var row=matches[0];
+    var get=function(name){
+      return String(row[table.map[name]]||'');
+    };
+    if(
+      get('SCHEMA')!==H3_REVIEW_AUDIO_SCHEMA_ ||
+      get('STATUS')!=='DONE' ||
+      get('ERROR') ||
+      get('GENERATOR_VERSION')!==
+        H3_REVIEW_AUDIO_GENERATOR_VERSION_ ||
+      get('DRIVE_FOLDER_ID')!==item.drive_folder_id ||
+      get('AUDIO_TEXT_SHA256')!==
+        item.audio_text_sha256 ||
+      !get('AUDIO_FILE_ID') ||
+      !get('AUDIO_URL')
+    ){
+      throw new Error(
+        'REVIEW_AUDIO_ENSURE_ROW_INVALID:'+
+        family+':'+setId+':'+item.slot_key
+      );
+    }
+  });
+
+  return{
+    schema:'H3_REVIEW_AUDIO_ENSURE_READBACK_V1',
+    family:family,
+    set_id:String(setId),
+    asset_count:rows.length,
+    slots:plan.map(function(item){
+      return item.slot_key;
+    })
+  };
+}
+
+function h3ReviewAudioEnsureForLockedReview_(surfaceFamily,setId){
+  var normalizedSetId=String(setId||'').trim();
+  if(!normalizedSetId){
+    throw new Error('REVIEW_AUDIO_ENSURE_SET_ID_MISSING');
+  }
+
+  var family=
+    h3ReviewAudioLifecycleFamily_(surfaceFamily);
+  var lock=LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try{
+    var ss=h3ReviewAudioRuntimeSpreadsheet_();
+    var plan=
+      h3ReviewAudioPlanForSet_(
+        ss,
+        family,
+        normalizedSetId
+      );
+
+    if(
+      plan.length!==
+        h3ReviewAudioExpectedAssetCount_(family)
+    ){
+      throw new Error(
+        'REVIEW_AUDIO_ENSURE_PLAN_COUNT:'+
+        family+':'+normalizedSetId+':'+
+        plan.length
+      );
+    }
+
+    var results=plan.map(function(item){
+      return h3ReviewAudioGeneratePlannedAsset_(
+        ss,
+        item
+      );
+    });
+    var readback=
+      h3ReviewAudioAssertSetReady_(
+        ss,
+        family,
+        normalizedSetId,
+        plan
+      );
+
+    return{
+      schema:
+        'H3_REVIEW_AUDIO_PROSPECTIVE_ENSURE_RESULT_V1',
+      contract_id:
+        H3_REVIEW_AUDIO_PROSPECTIVE_ENSURE_CONTRACT_,
+      surface_family:
+        String(surfaceFamily),
+      sidecar_family:
+        family,
+      set_id:
+        normalizedSetId,
+      asset_count:
+        readback.asset_count,
+      results:
+        results,
+      readback:
+        readback
+    };
+  }finally{
+    lock.releaseLock();
+  }
+}
+
 function h3ReviewAudioGenerateSet_(family,setId){
   var ss=h3ReviewAudioRuntimeSpreadsheet_();
   return h3ReviewAudioPlanForSet_(ss,family,setId).map(function(p){

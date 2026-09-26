@@ -603,7 +603,6 @@ function h3TranslationV2Submit_(request) {
   try {
     var spreadsheet=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
     var context=h3TranslationV2ProdReadContext_(spreadsheet,request && request.set_id);
-    h3MultiSkillTranslationV2Preflight_(spreadsheet,context);
     var normalized=h3TranslationV2NormalizeSubmission_(request,context.locked);
     if (normalized.set_id !== context.stage.set_id) {
       throw new Error('TRANSLATION_V2_SUBMIT_SET_ID_MISMATCH');
@@ -642,6 +641,10 @@ function h3TranslationV2Submit_(request) {
         'TRANSLATION_V2_SUBMIT_STAGE_NOT_ISSUED'
       );
     }
+    h3MultiSkillTranslationV2Preflight_(
+      spreadsheet,
+      context
+    );
 
     var txnId=h3NextWebTxnId_(spreadsheet);
     var grade=h3TranslationV2Grade_(context.locked,normalized.answers);

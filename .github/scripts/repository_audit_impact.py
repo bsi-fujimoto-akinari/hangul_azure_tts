@@ -19,6 +19,7 @@ import sys
 WORKFLOW_PATH = ".github/workflows/repository-audit.yml"
 HELPER_PATH = ".github/scripts/repository_audit_impact.py"
 OPERATIONS_PATH = "OPERATIONS.md"
+DRIVE_TEXT_HELPER_PATH = ".github/scripts/drive_raw_text_replace_helper.py"
 
 FORCE_FULL_FILES = {
     WORKFLOW_PATH,
@@ -40,6 +41,7 @@ DEPENDENCIES = json.loads(r'''{
     ".github/workflows/apps-script-auto-sync.yml",
     ".github/workflows/family-scheduler-f3-shadow-audit.yml",
     ".github/workflows/repository-audit.yml",
+    ".github/scripts/drive_raw_text_replace_helper.py",
     ".github/workflows/rs10-soft-signal-audit.yml",
     ".github/workflows/rs12-prospective-evidence-audit.yml",
     ".github/workflows/rs13-real-data-shadow-audit.yml",
@@ -729,12 +731,40 @@ def validate() -> int:
         "Repository audit impact selection",
         "PHASE-4 must write the already verified exact application-main",
         "REPOSITORY_AUDIT_IMPACT_HELPER=.github/scripts/repository_audit_impact.py",
+        "H3_DRIVE_RAW_TEXT_REPLACE_V1",
+        "DRIVE_RAW_TEXT_REPLACE_HELPER=.github/scripts/drive_raw_text_replace_helper.py",
     ]
     missing = [token for token in required_ops if token not in operations]
     if missing:
         raise SystemExit(
             "Repository access fast-path contract missing: " + ", ".join(missing)
         )
+
+    helper_path = Path(DRIVE_TEXT_HELPER_PATH)
+    if not helper_path.is_file():
+        raise SystemExit(
+            f"Drive raw TXT replacement helper missing: {DRIVE_TEXT_HELPER_PATH}"
+        )
+    helper = helper_path.read_text(encoding="utf-8")
+    required_helper = [
+        'CONTRACT_ID = "H3_DRIVE_RAW_TEXT_REPLACE_V1"',
+        "def unwrap_update_file_uri(",
+        "def normalize_text_plain(",
+        "def verify_text_plain_readback(",
+        '"file_id"',
+        'replace("\\r\\n", "\\n").replace("\\r", "\\n")',
+        "expected_bom == actual_bom",
+    ]
+    missing_helper = [token for token in required_helper if token not in helper]
+    if missing_helper:
+        raise SystemExit(
+            "Drive raw TXT replacement helper contract missing: "
+            + ", ".join(missing_helper)
+        )
+    subprocess.run(
+        [sys.executable, DRIVE_TEXT_HELPER_PATH, "self-test"],
+        check=True,
+    )
 
     step_names = re.findall(r"^      - name:\s*(.+)$", workflow, flags=re.MULTILINE)
     missing_map = sorted(

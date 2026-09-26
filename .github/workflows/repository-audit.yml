@@ -132,6 +132,7 @@ jobs:
               'RECOVERY.md',
               '.github/workflows/repository-audit.yml',
               '.github/scripts/repository_audit_impact.py',
+              '.github/scripts/drive_raw_text_replace_helper.py',
               '.github/workflows/apps-script-auto-sync.yml',
               '.github/workflows/rs10-soft-signal-audit.yml',
               '.github/workflows/rs12-prospective-evidence-audit.yml',

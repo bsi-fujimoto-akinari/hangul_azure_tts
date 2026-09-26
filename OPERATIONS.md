@@ -201,6 +201,8 @@ CROSS_CHAT_HANDOFF=EXCEPTION_ONLY
 LEGACY_CODE_CHANGE_CONTRACT=H3_CODE_CHANGE_4CHAT_HANDOFF_V1
 LEGACY_CODE_CHANGE_CONTRACT_STATUS=SUPERSEDED_COMPATIBILITY_ONLY
 ACTIVE_REPO_ACCESS_FASTPATH_CONTRACT=H3_REPO_ACCESS_FASTPATH_V1
+ACTIVE_DRIVE_RAW_TEXT_REPLACE_CONTRACT=H3_DRIVE_RAW_TEXT_REPLACE_V1
+DRIVE_RAW_TEXT_REPLACE_HELPER=.github/scripts/drive_raw_text_replace_helper.py
 REPOSITORY_AUDIT_IMPACT_HELPER=.github/scripts/repository_audit_impact.py
 ```
 
@@ -278,6 +280,57 @@ Speed optimization must not:
 - suppress failure logs needed for diagnosis;
 - relax Repository audit, Apps Script source-attestation, automatic live-smoke, or protected-runtime checks;
 - use cached Chat context as canonical authority.
+
+### 2.4 Google Drive raw TXT replacement
+
+Contract: `H3_DRIVE_RAW_TEXT_REPLACE_V1`.
+
+Use this contract when replacing the complete content of an existing non-Google-native Drive text file while preserving its Drive file ID. This is the canonical path for maintenance of Drive-hosted `.txt` rule/configuration artifacts when connector-native direct text editing is unavailable.
+
+Canonical transaction:
+
+```text
+fresh target fetch + revision baseline
+-> create temporary native Google Doc
+-> write the complete intended text to the temporary Doc
+-> export_file(..., mime_type="text/plain")
+-> unwrap export_result.file_uri.file_id
+-> update_file(target_file_id, file_uri=<unwrapped string>, mime_type="text/plain")
+-> fresh target fetch
+-> compare after CRLF/LF normalization + explicit BOM parity
+-> list revision history and confirm one intended replacement
+-> delete temporary Doc in finally/cleanup
+```
+
+The connector handoff is intentionally asymmetric. `export_file` may return `file_uri` as an object containing `download_url`, `file_id`, `mime_type`, and `file_name`, while `update_file.file_uri` accepts the connector-local reference string. Therefore, when the export result is object-shaped, pass **only** `export_result.file_uri.file_id`; never pass the whole `file_uri` object to `update_file`.
+
+Use `.github/scripts/drive_raw_text_replace_helper.py` to normalize this handoff:
+
+```text
+python3 .github/scripts/drive_raw_text_replace_helper.py unwrap < export-result.json
+```
+
+The helper accepts either the current object form or a direct string form and returns the exact string intended for `update_file.file_uri`. Do not substitute `download_url`, a local path, base64 content, or a synthesized reference.
+
+Google Docs `text/plain` export may convert LF line endings to CRLF. For this path, readback success means:
+
+- text is exactly equal after CRLF/CR -> LF normalization;
+- BOM presence is exactly equal;
+- required semantic invariants such as revision string, policy ID, or expected section count still match;
+- no other content difference exists.
+
+The helper command `verify EXPECTED ACTUAL` applies the normalized text comparison plus BOM parity. This contract is **not byte-preserving**. If exact byte identity, exact original line endings, or other binary-preservation semantics are required, do not route through a temporary Google Doc; use a raw-file replacement path that preserves the intended bytes.
+
+Safety boundaries:
+
+- always fresh-read the target before replacement;
+- preserve the existing Drive file ID by using `update_file`, not delete+recreate;
+- use a temporary Doc only as a conversion vessel; it is never authority;
+- delete the temporary Doc after success or failure;
+- verify revision history/readback before claiming success;
+- fail closed on any normalized-content, BOM, target-ID, or revision anomaly;
+- do not treat transport-only LF/CRLF conversion as a semantic content change;
+- do not apply this procedure to native Google Docs/Sheets/Slides, which use their dedicated update APIs.
 
 ## 3. Repository and Apps Script synchronization
 

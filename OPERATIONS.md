@@ -392,6 +392,19 @@ The runtime error contract is `H3_WEB_RUNTIME_ERROR_V1`, stored append-only in t
 
 Retention is 90 days with a hard cap of 5000 events. The existing production monitoring cadence performs at most one prune per 24 hours; prune failure must not interrupt the monitoring observer. Error logging itself is best-effort: logging failure must never replace the original learner-facing exception. The learner-facing diagnostic handle is `H3ERR-...`; stack details remain in the observability log/console rather than the UI.
 
+
+### Error-state incident lifecycle reconciliation
+
+Contract: `H3_ERROR_STATE_RECONCILE_V1`.
+
+`web_runtime_error_log_v1` remains the append-only primary evidence of runtime error occurrence. `error_incident_lifecycle_v1` is an append-only runtime projection of verified incident lifecycle transitions using `OPEN | INVESTIGATING | RESOLVED | SUPERSEDED`. Durable closure evidence remains in GitHub `hangul_state/audit/state-events.jsonl` and `hangul_state/incidents/*`; the Sheet projection must not create an independent claim of resolution without that evidence.
+
+`h3ErrorStateReconcile` reads the primary log and the latest lifecycle event per `INCIDENT_ID`, then writes the single-row `error_state_v1` projection. A raw error with no lifecycle match is implicitly `OPEN`. Exact `ERROR_ID` lifecycle state takes precedence. Fingerprint-based `RESOLVED` or `SUPERSEDED` state suppresses only rows whose `AT <= MATCH_THROUGH_AT`; a later recurrence of the same fingerprint remains unresolved automatically.
+
+`UNRESOLVED_COUNT` counts unresolved fingerprint groups rather than repeated raw rows. `LATEST_UNRESOLVED_ID` identifies the newest unresolved raw event. `LAST_LOG_ROW` is the reconciled primary-log watermark. A malformed/unreadable primary or lifecycle source fails closed to `STATUS=UNKNOWN`; it must never produce `NONE`.
+
+The lifecycle sheet and `error_state_v1` are observability/control-plane metadata only. Reconciliation must not mutate learner history, scores, review payloads, queues, scheduler state, pointers, counters, or stages.
+
 ### Automatic live smoke
 
 Normal audited `main` changes may run a permanent impact-selected read-only live smoke without `workflow_dispatch`. The permanent contract is `H3_AUTOMATIC_LIVE_SMOKE_REQUEST_V1` -> `H3_AUTOMATIC_LIVE_SMOKE_RESULT_V1`.

@@ -1414,3 +1414,640 @@ function h3ErrorStatePhase2SelfTest_() {
       false
   };
 }
+
+
+var H3_ERROR_STATE_BOOT_SCHEMA_ =
+  'H3_ERROR_STATE_BOOT_SNAPSHOT_V1';
+
+function h3ErrorStateReadIncidentLifecycleReadOnly_(
+  spreadsheet
+) {
+  var sheet =
+    spreadsheet.getSheetByName(
+      H3_ERROR_INCIDENT_SHEET_
+    );
+
+  if (!sheet) {
+    throw new Error(
+      'ERROR_INCIDENT_SHEET_MISSING'
+    );
+  }
+
+  return h3ErrorStateReadIncidentLifecycle_(
+    spreadsheet
+  );
+}
+
+function h3ErrorStateReadProjectionReadOnly_(
+  spreadsheet
+) {
+  var sheet =
+    spreadsheet.getSheetByName(
+      H3_ERROR_STATE_SHEET_
+    );
+
+  if (!sheet) {
+    return {
+      state:
+        null,
+      read_error:
+        'ERROR_STATE_PROJECTION_MISSING'
+    };
+  }
+
+  var actual =
+    sheet
+      .getRange(
+        1,
+        1,
+        1,
+        H3_ERROR_STATE_HEADERS_.length
+      )
+      .getDisplayValues()[0];
+
+  if (
+    JSON.stringify(actual) !==
+    JSON.stringify(
+      H3_ERROR_STATE_HEADERS_
+    )
+  ) {
+    return {
+      state:
+        null,
+      read_error:
+        'ERROR_STATE_HEADER_MISMATCH'
+    };
+  }
+
+  if (sheet.getLastRow() < 2) {
+    return {
+      state:
+        null,
+      read_error:
+        'ERROR_STATE_PROJECTION_EMPTY'
+    };
+  }
+
+  if (sheet.getLastRow() > 2) {
+    return {
+      state:
+        null,
+      read_error:
+        'ERROR_STATE_ROW_COUNT_INVALID'
+    };
+  }
+
+  try {
+    var row =
+      sheet
+        .getRange(
+          2,
+          1,
+          1,
+          H3_ERROR_STATE_HEADERS_.length
+        )
+        .getDisplayValues()[0];
+
+    var state =
+      h3ErrorStateBuild_({
+        source_status:
+          row[9],
+        unresolved_count:
+          row[2] === ''
+            ? null
+            : Number(row[2]),
+        latest_error_id:
+          row[3],
+        latest_error_at:
+          row[4],
+        latest_error_code:
+          row[5],
+        latest_unresolved_id:
+          row[6],
+        last_log_row:
+          row[7] === ''
+            ? null
+            : Number(row[7]),
+        last_reconciled_at:
+          row[8]
+      });
+
+    if (
+      row[0] !==
+        H3_ERROR_STATE_SCHEMA_ ||
+      row[1] !==
+        state.status
+    ) {
+      throw new Error(
+        'ERROR_STATE_ROW_INVALID'
+      );
+    }
+
+    return {
+      state:
+        state,
+      read_error:
+        null
+    };
+  } catch (error) {
+    return {
+      state:
+        null,
+      read_error:
+        String(
+          error &&
+          error.message
+            ? error.message
+            : error
+        )
+    };
+  }
+}
+
+function h3ErrorStateSemanticComparable_(
+  state
+) {
+  if (!state) {
+    return null;
+  }
+
+  return {
+    status:
+      state.status,
+    unresolved_count:
+      state.unresolved_count,
+    latest_error_id:
+      state.latest_error_id,
+    latest_error_at:
+      state.latest_error_at,
+    latest_error_code:
+      state.latest_error_code,
+    latest_unresolved_id:
+      state.latest_unresolved_id,
+    last_log_row:
+      state.last_log_row,
+    source_status:
+      state.source_status
+  };
+}
+
+function h3ErrorStateSemanticEqual_(
+  left,
+  right
+) {
+  if (!left || !right) {
+    return false;
+  }
+
+  return (
+    JSON.stringify(
+      h3ErrorStateSemanticComparable_(
+        left
+      )
+    ) ===
+    JSON.stringify(
+      h3ErrorStateSemanticComparable_(
+        right
+      )
+    )
+  );
+}
+
+function h3ErrorStateBootEvaluateData_(
+  raw,
+  lifecycleStates,
+  projectionRead,
+  checkedAt
+) {
+  var effective =
+    h3ErrorStateReconcileData_(
+      raw,
+      lifecycleStates,
+      checkedAt
+    );
+  var projection =
+    projectionRead &&
+    projectionRead.state
+      ? projectionRead.state
+      : null;
+  var reasons = [];
+
+  if (!projection) {
+    reasons.push(
+      'PROJECTION_UNAVAILABLE'
+    );
+  } else {
+    if (
+      projection.last_log_row !==
+      effective.last_log_row
+    ) {
+      reasons.push(
+        'RAW_WATERMARK_MISMATCH'
+      );
+    }
+
+    if (
+      !h3ErrorStateSemanticEqual_(
+        projection,
+        effective
+      )
+    ) {
+      reasons.push(
+        'PROJECTION_SEMANTIC_MISMATCH'
+      );
+    }
+  }
+
+  return {
+    schema:
+      H3_ERROR_STATE_BOOT_SCHEMA_,
+    checked_at:
+      checkedAt,
+    error:
+      effective.status,
+    drift:
+      reasons.length
+        ? 'PRESENT'
+        : 'NONE',
+    drift_reasons:
+      reasons,
+    primary_last_log_row:
+      raw.last_log_row,
+    projected_last_log_row:
+      projection
+        ? projection.last_log_row
+        : null,
+    effective_state:
+      effective,
+    projection_state:
+      projection,
+    projection_read_error:
+      projectionRead
+        ? projectionRead.read_error
+        : 'PROJECTION_READ_NOT_PROVIDED',
+    current_summary_role:
+      'DISPLAY_ONLY',
+    write_performed:
+      false
+  };
+}
+
+function h3ErrorStateBootSnapshot() {
+  var checkedAt =
+    h3ErrorStateNowTokyo_();
+
+  try {
+    var spreadsheet =
+      SpreadsheetApp.openById(
+        H3_WEB_RUNTIME_SPREADSHEET_ID
+      );
+    var raw =
+      h3ErrorStateReadRawErrors_(
+        spreadsheet
+      );
+    var lifecycle =
+      h3ErrorStateReadIncidentLifecycleReadOnly_(
+        spreadsheet
+      );
+    var projection =
+      h3ErrorStateReadProjectionReadOnly_(
+        spreadsheet
+      );
+
+    return h3ErrorStateBootEvaluateData_(
+      raw,
+      lifecycle,
+      projection,
+      checkedAt
+    );
+  } catch (error) {
+    return {
+      schema:
+        H3_ERROR_STATE_BOOT_SCHEMA_,
+      checked_at:
+        checkedAt,
+      error:
+        'UNKNOWN',
+      drift:
+        'UNKNOWN',
+      drift_reasons: [
+        'FRESH_SOURCE_READ_FAILED'
+      ],
+      primary_last_log_row:
+        null,
+      projected_last_log_row:
+        null,
+      effective_state:
+        null,
+      projection_state:
+        null,
+      projection_read_error:
+        null,
+      current_summary_role:
+        'DISPLAY_ONLY',
+      read_error:
+        String(
+          error &&
+          error.message
+            ? error.message
+            : error
+        ),
+      write_performed:
+        false
+    };
+  }
+}
+
+function h3ErrorStatePhase3SelfTest_() {
+  var fingerprintA =
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  var fingerprintB =
+    'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+  var checkedAt =
+    '2026-09-26T14:50:00+09:00';
+
+  function event(
+    id,
+    at,
+    fingerprint,
+    code,
+    row
+  ) {
+    return {
+      row_number:
+        row,
+      error_id:
+        id,
+      at:
+        at,
+      at_ms:
+        h3ErrorStateTimeMs_(at),
+      error_code:
+        code,
+      fingerprint_sha256:
+        fingerprint
+    };
+  }
+
+  var oldError =
+    event(
+      'H3ERR-OLD',
+      '2026-09-26T00:20:01+09:00',
+      fingerprintA,
+      'CLIENT_RUNTIME_ERROR',
+      2
+    );
+  var newError =
+    event(
+      'H3ERR-NEW',
+      '2026-09-26T08:54:45+09:00',
+      fingerprintB,
+      'REVIEW_AUDIO_BINDING_COUNT',
+      3
+    );
+  var resolved = {
+    row_number:
+      2,
+    incident_id:
+      'H3ERR-OLD',
+    event_at:
+      '2026-09-26T13:38:00+09:00',
+    event_at_ms:
+      h3ErrorStateTimeMs_(
+        '2026-09-26T13:38:00+09:00'
+      ),
+    status:
+      'RESOLVED',
+    error_id:
+      'H3ERR-OLD',
+    fingerprint_sha256:
+      fingerprintA,
+    match_through_at:
+      '2026-09-26T00:20:01+09:00',
+    match_through_ms:
+      h3ErrorStateTimeMs_(
+        '2026-09-26T00:20:01+09:00'
+      ),
+    evidence_ref:
+      'incidents/H3ERR-OLD.json'
+  };
+
+  var baseline =
+    h3ErrorStateReconcileData_(
+      {
+        errors: [
+          oldError,
+          newError
+        ],
+        last_log_row:
+          3
+      },
+      [
+        resolved
+      ],
+      '2026-09-26T14:40:00+09:00'
+    );
+
+  var noDrift =
+    h3ErrorStateBootEvaluateData_(
+      {
+        errors: [
+          oldError,
+          newError
+        ],
+        last_log_row:
+          3
+      },
+      [
+        resolved
+      ],
+      {
+        state:
+          baseline,
+        read_error:
+          null
+      },
+      checkedAt
+    );
+
+  if (
+    noDrift.error !== 'PRESENT' ||
+    noDrift.drift !== 'NONE' ||
+    noDrift.write_performed !==
+      false
+  ) {
+    throw new Error(
+      'ERROR_STATE_PHASE3_NO_DRIFT_FAIL'
+    );
+  }
+
+  var later =
+    event(
+      'H3ERR-LATER',
+      '2026-09-26T14:45:00+09:00',
+      fingerprintB,
+      'REVIEW_AUDIO_BINDING_COUNT',
+      4
+    );
+  var watermarkDrift =
+    h3ErrorStateBootEvaluateData_(
+      {
+        errors: [
+          oldError,
+          newError,
+          later
+        ],
+        last_log_row:
+          4
+      },
+      [
+        resolved
+      ],
+      {
+        state:
+          baseline,
+        read_error:
+          null
+      },
+      checkedAt
+    );
+
+  if (
+    watermarkDrift.drift !==
+      'PRESENT' ||
+    watermarkDrift.drift_reasons
+      .indexOf(
+        'RAW_WATERMARK_MISMATCH'
+      ) < 0
+  ) {
+    throw new Error(
+      'ERROR_STATE_PHASE3_WATERMARK_FAIL'
+    );
+  }
+
+  var resolvedNew = {
+    row_number:
+      3,
+    incident_id:
+      'H3ERR-NEW',
+    event_at:
+      '2026-09-26T14:46:00+09:00',
+    event_at_ms:
+      h3ErrorStateTimeMs_(
+        '2026-09-26T14:46:00+09:00'
+      ),
+    status:
+      'RESOLVED',
+    error_id:
+      'H3ERR-NEW',
+    fingerprint_sha256:
+      fingerprintB,
+    match_through_at:
+      '2026-09-26T08:54:45+09:00',
+    match_through_ms:
+      h3ErrorStateTimeMs_(
+        '2026-09-26T08:54:45+09:00'
+      ),
+    evidence_ref:
+      'incidents/H3ERR-NEW.json'
+  };
+
+  var semanticDrift =
+    h3ErrorStateBootEvaluateData_(
+      {
+        errors: [
+          oldError,
+          newError
+        ],
+        last_log_row:
+          3
+      },
+      [
+        resolved,
+        resolvedNew
+      ],
+      {
+        state:
+          baseline,
+        read_error:
+          null
+      },
+      checkedAt
+    );
+
+  if (
+    semanticDrift.error !== 'NONE' ||
+    semanticDrift.drift !==
+      'PRESENT' ||
+    semanticDrift.drift_reasons
+      .indexOf(
+        'PROJECTION_SEMANTIC_MISMATCH'
+      ) < 0 ||
+    semanticDrift.drift_reasons
+      .indexOf(
+        'RAW_WATERMARK_MISMATCH'
+      ) >= 0
+  ) {
+    throw new Error(
+      'ERROR_STATE_PHASE3_SEMANTIC_FAIL'
+    );
+  }
+
+  var missingProjection =
+    h3ErrorStateBootEvaluateData_(
+      {
+        errors: [
+          oldError,
+          newError
+        ],
+        last_log_row:
+          3
+      },
+      [
+        resolved
+      ],
+      {
+        state:
+          null,
+        read_error:
+          'ERROR_STATE_PROJECTION_MISSING'
+      },
+      checkedAt
+    );
+
+  if (
+    missingProjection.error !==
+      'PRESENT' ||
+    missingProjection.drift !==
+      'PRESENT' ||
+    missingProjection.drift_reasons
+      .indexOf(
+        'PROJECTION_UNAVAILABLE'
+      ) < 0
+  ) {
+    throw new Error(
+      'ERROR_STATE_PHASE3_MISSING_PROJECTION_FAIL'
+    );
+  }
+
+  return {
+    schema:
+      'H3_ERROR_STATE_PHASE3_SELF_TEST_V1',
+    status:
+      'PASS',
+    boot_schema:
+      H3_ERROR_STATE_BOOT_SCHEMA_,
+    boot_read_only:
+      true,
+    current_summary_role:
+      'DISPLAY_ONLY',
+    detects_raw_watermark_drift:
+      true,
+    detects_lifecycle_only_semantic_drift:
+      true,
+    cases:
+      4,
+    write_performed:
+      false
+  };
+}

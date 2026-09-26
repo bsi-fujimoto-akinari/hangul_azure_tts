@@ -7937,10 +7937,17 @@ var H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_ =
 var H3_MONITOR_PRODUCTION_TRIGGER_HANDLER_ =
   'h3MonitoringObserverEmailRun';
 var H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_ = 1;
+var H3_MONITOR_PRODUCTION_TRIGGER_NEAR_MINUTE_ = 0;
+var H3_MONITOR_PRODUCTION_TRIGGER_TIMEZONE_ =
+  'Asia/Tokyo';
 var H3_MONITOR_PRODUCTION_TRIGGER_ID_KEY_ =
   'H3_MONITOR_PRODUCTION_TRIGGER_ID';
 var H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_KEY_ =
   'H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS';
+var H3_MONITOR_PRODUCTION_TRIGGER_NEAR_MINUTE_KEY_ =
+  'H3_MONITOR_PRODUCTION_TRIGGER_NEAR_MINUTE';
+var H3_MONITOR_PRODUCTION_TRIGGER_TIMEZONE_KEY_ =
+  'H3_MONITOR_PRODUCTION_TRIGGER_TIMEZONE';
 var H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_KEY_ =
   'H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT';
 var H3_MONITOR_PRODUCTION_REQUIRED_SCOPES_ = [
@@ -7974,17 +7981,87 @@ function h3MonitoringProductionTriggerMetadata_() {
     cadence_hours:String(
       props.getProperty(H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_KEY_)||''
     ),
+    near_minute:String(
+      props.getProperty(H3_MONITOR_PRODUCTION_TRIGGER_NEAR_MINUTE_KEY_)||''
+    ),
+    timezone:String(
+      props.getProperty(H3_MONITOR_PRODUCTION_TRIGGER_TIMEZONE_KEY_)||''
+    ),
     contract:String(
       props.getProperty(H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_KEY_)||''
     )
   };
 }
 
+function h3MonitoringProductionTriggerMetadataKeys_() {
+  return [
+    H3_MONITOR_PRODUCTION_TRIGGER_ID_KEY_,
+    H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_KEY_,
+    H3_MONITOR_PRODUCTION_TRIGGER_NEAR_MINUTE_KEY_,
+    H3_MONITOR_PRODUCTION_TRIGGER_TIMEZONE_KEY_,
+    H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_KEY_
+  ];
+}
+
 function h3MonitoringProductionTriggerClearMetadata_() {
   var props=PropertiesService.getScriptProperties();
-  props.deleteProperty(H3_MONITOR_PRODUCTION_TRIGGER_ID_KEY_);
-  props.deleteProperty(H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_KEY_);
-  props.deleteProperty(H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_KEY_);
+  h3MonitoringProductionTriggerMetadataKeys_().forEach(function(key){
+    props.deleteProperty(key);
+  });
+}
+
+function h3MonitoringProductionTriggerWriteMetadata_(props,trigger) {
+  props.setProperty(
+    H3_MONITOR_PRODUCTION_TRIGGER_ID_KEY_,
+    String(trigger.getUniqueId()||'')
+  );
+  props.setProperty(
+    H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_KEY_,
+    String(H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_)
+  );
+  props.setProperty(
+    H3_MONITOR_PRODUCTION_TRIGGER_NEAR_MINUTE_KEY_,
+    String(H3_MONITOR_PRODUCTION_TRIGGER_NEAR_MINUTE_)
+  );
+  props.setProperty(
+    H3_MONITOR_PRODUCTION_TRIGGER_TIMEZONE_KEY_,
+    H3_MONITOR_PRODUCTION_TRIGGER_TIMEZONE_
+  );
+  props.setProperty(
+    H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_KEY_,
+    H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_
+  );
+}
+
+function h3MonitoringProductionTriggerRestoreLegacyMetadata_(props,meta) {
+  props.setProperty(
+    H3_MONITOR_PRODUCTION_TRIGGER_ID_KEY_,
+    String(meta.trigger_id||'')
+  );
+  props.setProperty(
+    H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_KEY_,
+    String(meta.cadence_hours||'')
+  );
+  props.deleteProperty(
+    H3_MONITOR_PRODUCTION_TRIGGER_NEAR_MINUTE_KEY_
+  );
+  props.deleteProperty(
+    H3_MONITOR_PRODUCTION_TRIGGER_TIMEZONE_KEY_
+  );
+  props.setProperty(
+    H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_KEY_,
+    String(meta.contract||'')
+  );
+}
+
+function h3MonitoringProductionTriggerCreateAligned_() {
+  return ScriptApp
+    .newTrigger(H3_MONITOR_PRODUCTION_TRIGGER_HANDLER_)
+    .timeBased()
+    .nearMinute(H3_MONITOR_PRODUCTION_TRIGGER_NEAR_MINUTE_)
+    .everyHours(H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_)
+    .inTimezone(H3_MONITOR_PRODUCTION_TRIGGER_TIMEZONE_)
+    .create();
 }
 
 function h3MonitoringProductionTriggerStatus_() {
@@ -8002,12 +8079,19 @@ function h3MonitoringProductionTriggerStatus_() {
     one.getEventType()===ScriptApp.EventType.CLOCK &&
     one.getTriggerSource()===ScriptApp.TriggerSource.CLOCK;
   var metadataPresent=!!(
-    meta.trigger_id || meta.cadence_hours || meta.contract
+    meta.trigger_id ||
+    meta.cadence_hours ||
+    meta.near_minute ||
+    meta.timezone ||
+    meta.contract
   );
   var metadataMatch=!!one &&
     meta.trigger_id===uniqueId &&
     meta.cadence_hours===
       String(H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_) &&
+    meta.near_minute===
+      String(H3_MONITOR_PRODUCTION_TRIGGER_NEAR_MINUTE_) &&
+    meta.timezone===H3_MONITOR_PRODUCTION_TRIGGER_TIMEZONE_ &&
     meta.contract===H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_;
   var status;
   if(matches.length===0){
@@ -8023,12 +8107,18 @@ function h3MonitoringProductionTriggerStatus_() {
     trigger_handler:H3_MONITOR_PRODUCTION_TRIGGER_HANDLER_,
     configured_cadence_hours:
       H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_,
+    configured_near_minute:
+      H3_MONITOR_PRODUCTION_TRIGGER_NEAR_MINUTE_,
+    configured_timezone:
+      H3_MONITOR_PRODUCTION_TRIGGER_TIMEZONE_,
     project_trigger_count:all.length,
     matching_trigger_count:matches.length,
     event_type:eventType,
     trigger_source:triggerSource,
     metadata_present:metadataPresent,
     metadata_match:metadataMatch,
+    metadata_near_minute:meta.near_minute,
+    metadata_timezone:meta.timezone,
     duplicate_trigger:matches.length>1,
     write_performed:false
   };
@@ -8036,6 +8126,26 @@ function h3MonitoringProductionTriggerStatus_() {
 
 function h3MonitoringProductionTriggerStatus() {
   return h3MonitoringProductionTriggerStatus_();
+}
+
+function h3MonitoringProductionTriggerLegacyReady_() {
+  var matches=h3MonitoringProductionTriggerMatches_();
+  var meta=h3MonitoringProductionTriggerMetadata_();
+  var one=matches.length===1 ? matches[0] : null;
+  var ready=!!one &&
+    one.getEventType()===ScriptApp.EventType.CLOCK &&
+    one.getTriggerSource()===ScriptApp.TriggerSource.CLOCK &&
+    String(one.getUniqueId()||'')===meta.trigger_id &&
+    meta.cadence_hours===
+      String(H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_) &&
+    meta.contract===H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_ &&
+    !meta.near_minute &&
+    !meta.timezone;
+  return {
+    ready:ready,
+    trigger:one,
+    metadata:meta
+  };
 }
 
 function h3MonitoringProductionPreflight_() {
@@ -8111,27 +8221,10 @@ function h3MonitoringProductionTriggerEnsure() {
       throw new Error('MONITOR_PRODUCTION_TRIGGER_NOT_ABSENT');
     }
 
-    // Resolve the metadata store before trigger creation so a
-    // PropertiesService acquisition failure cannot orphan a live trigger.
     var props=PropertiesService.getScriptProperties();
-    var created=ScriptApp
-      .newTrigger(H3_MONITOR_PRODUCTION_TRIGGER_HANDLER_)
-      .timeBased()
-      .everyHours(H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_)
-      .create();
+    var created=h3MonitoringProductionTriggerCreateAligned_();
     try {
-      props.setProperty(
-        H3_MONITOR_PRODUCTION_TRIGGER_ID_KEY_,
-        String(created.getUniqueId()||'')
-      );
-      props.setProperty(
-        H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_KEY_,
-        String(H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_)
-      );
-      props.setProperty(
-        H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_KEY_,
-        H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_
-      );
+      h3MonitoringProductionTriggerWriteMetadata_(props,created);
 
       var after=h3MonitoringProductionTriggerStatus_();
       if(
@@ -8158,11 +8251,7 @@ function h3MonitoringProductionTriggerEnsure() {
           'trigger:'+String(deleteErr&&deleteErr.message||deleteErr)
         );
       }
-      [
-        H3_MONITOR_PRODUCTION_TRIGGER_ID_KEY_,
-        H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_KEY_,
-        H3_MONITOR_PRODUCTION_TRIGGER_CONTRACT_KEY_
-      ].forEach(function(key){
+      h3MonitoringProductionTriggerMetadataKeys_().forEach(function(key){
         try {
           props.deleteProperty(key);
         } catch(metadataErr) {
@@ -8181,6 +8270,136 @@ function h3MonitoringProductionTriggerEnsure() {
       }
       throw err;
     }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function h3MonitoringProductionTriggerRealignToHour() {
+  h3MonitoringProductionRequireScopes_();
+  var lock=LockService.getScriptLock();
+  if(!lock.tryLock(30000)){
+    throw new Error('MONITOR_PRODUCTION_TRIGGER_LOCK_BUSY');
+  }
+  try {
+    var before=h3MonitoringProductionTriggerStatus_();
+    if(before.status==='READY'){
+      return {
+        schema:H3_MONITOR_PRODUCTION_TRIGGER_SCHEMA_,
+        status:'READY',
+        migrated:false,
+        trigger:before,
+        write_performed:false
+      };
+    }
+    if(before.status==='ABSENT'){
+      return {
+        schema:H3_MONITOR_PRODUCTION_TRIGGER_SCHEMA_,
+        status:'ABSENT',
+        migrated:false,
+        trigger:before,
+        write_performed:false
+      };
+    }
+
+    var legacy=h3MonitoringProductionTriggerLegacyReady_();
+    if(!legacy.ready){
+      throw new Error(
+        'MONITOR_PRODUCTION_TRIGGER_REALIGN_LEGACY_IDENTITY_INVALID'
+      );
+    }
+
+    var props=PropertiesService.getScriptProperties();
+    var created=h3MonitoringProductionTriggerCreateAligned_();
+    var rollbackErrors=[];
+    try {
+      h3MonitoringProductionTriggerWriteMetadata_(props,created);
+    } catch(metadataErr) {
+      try {
+        ScriptApp.deleteTrigger(created);
+      } catch(deleteNewErr) {
+        rollbackErrors.push(
+          'new_trigger:'+
+          String(deleteNewErr&&deleteNewErr.message||deleteNewErr)
+        );
+      }
+      try {
+        h3MonitoringProductionTriggerRestoreLegacyMetadata_(
+          props,legacy.metadata
+        );
+      } catch(restoreErr) {
+        rollbackErrors.push(
+          'legacy_metadata:'+
+          String(restoreErr&&restoreErr.message||restoreErr)
+        );
+      }
+      if(rollbackErrors.length){
+        throw new Error(
+          'MONITOR_PRODUCTION_TRIGGER_REALIGN_ROLLBACK_FAILED:'+
+          rollbackErrors.join('|')+
+          ':CAUSE:'+String(metadataErr&&metadataErr.message||metadataErr)
+        );
+      }
+      throw metadataErr;
+    }
+
+    try {
+      ScriptApp.deleteTrigger(legacy.trigger);
+    } catch(deleteLegacyErr) {
+      try {
+        ScriptApp.deleteTrigger(created);
+      } catch(deleteNewErr2) {
+        rollbackErrors.push(
+          'new_trigger:'+
+          String(deleteNewErr2&&deleteNewErr2.message||deleteNewErr2)
+        );
+      }
+      try {
+        h3MonitoringProductionTriggerRestoreLegacyMetadata_(
+          props,legacy.metadata
+        );
+      } catch(restoreErr2) {
+        rollbackErrors.push(
+          'legacy_metadata:'+
+          String(restoreErr2&&restoreErr2.message||restoreErr2)
+        );
+      }
+      if(rollbackErrors.length){
+        throw new Error(
+          'MONITOR_PRODUCTION_TRIGGER_REALIGN_ROLLBACK_FAILED:'+
+          rollbackErrors.join('|')+
+          ':CAUSE:'+
+          String(
+            deleteLegacyErr&&
+            deleteLegacyErr.message||
+            deleteLegacyErr
+          )
+        );
+      }
+      throw deleteLegacyErr;
+    }
+
+    var after=h3MonitoringProductionTriggerStatus_();
+    if(
+      after.status!=='READY' ||
+      Number(after.matching_trigger_count)!==1 ||
+      Number(after.configured_near_minute)!==
+        H3_MONITOR_PRODUCTION_TRIGGER_NEAR_MINUTE_ ||
+      String(after.configured_timezone)!==
+        H3_MONITOR_PRODUCTION_TRIGGER_TIMEZONE_
+    ){
+      throw new Error(
+        'MONITOR_PRODUCTION_TRIGGER_REALIGN_READBACK_MISMATCH'
+      );
+    }
+
+    return {
+      schema:H3_MONITOR_PRODUCTION_TRIGGER_SCHEMA_,
+      status:'READY',
+      migrated:true,
+      trigger:after,
+      write_performed:true
+    };
   } finally {
     lock.releaseLock();
   }

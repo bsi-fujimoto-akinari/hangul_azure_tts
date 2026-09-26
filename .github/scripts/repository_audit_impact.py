@@ -187,7 +187,9 @@ DEPENDENCIES = json.loads(r'''{
     ".github/scripts/error_state_contract_audit.py",
     "OPERATIONS.md",
     "WebAppErrorState.js",
-    "WebAppLiveSmoke.js"
+    "WebAppLiveSmoke.js",
+    "WebAppFamilyScheduler.js",
+    ".github/workflows/family-scheduler-f3-shadow-audit.yml"
   ],
   "Reject credential files and likely embedded secrets": [
     ".github/workflows/repository-audit.yml"

@@ -429,6 +429,28 @@ read current.json + current.schema.json
 -> report ERROR and DRIFT
 ```
 
+### Error State observer and notification integration
+
+Contract: `H3_ERROR_STATE_MONITOR_V1`.
+
+The production hourly `h3MonitoringObserverEmailRun` includes `ERROR_STATE` as a fourth observer source alongside runtime authority, semantic authoring, and RS13/RS14 gate state. The source is read-only: it runs the Phase 3 fresh recomputation against the already-open runtime spreadsheet and performs no learner, projection, lifecycle, scheduler, pointer, counter, or stage write.
+
+Observer flags are:
+
+- `UNRESOLVED_ERROR_PRESENT`: fresh effective Error State is `PRESENT`;
+- `PRIMARY_SOURCE_UNKNOWN`: fresh primary/lifecycle evidence cannot be read or validated;
+- `ERROR_STATE_STALE`: saved `error_state_v1` differs from the fresh effective state, including lifecycle-only semantic drift.
+
+Error State email candidates are deliberately narrower than observer visibility. They are limited to:
+
+- `ERROR_STATE_NEW_UNRESOLVED`: keyed by the newest unresolved Error ID and deduplicated by `monitor_notification_v1`;
+- `ERROR_STATE_PRIMARY_SOURCE_UNKNOWN`: stable identity while fresh evidence remains unavailable;
+- `ERROR_STATE_RAW_WATERMARK_DRIFT`: stable identity while the primary raw-log watermark differs from the saved projection.
+
+Lifecycle-only semantic drift sets `ERROR_STATE_STALE` and degrades the observer but does not itself generate an Error State email. Existing non-Error-State notification contracts remain unchanged.
+
+The hourly observer is the continuous consistency audit for raw log, lifecycle state, and saved Error State projection. Normal boot remains independently read-only and continues to compare the display-only CURRENT summary with fresh evidence.
+
 ### Automatic live smoke
 
 Normal audited `main` changes may run a permanent impact-selected read-only live smoke without `workflow_dispatch`. The permanent contract is `H3_AUTOMATIC_LIVE_SMOKE_REQUEST_V1` -> `H3_AUTOMATIC_LIVE_SMOKE_RESULT_V1`.

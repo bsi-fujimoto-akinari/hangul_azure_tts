@@ -18,7 +18,7 @@ import sys
 
 WORKFLOW_PATH = ".github/workflows/repository-audit.yml"
 HELPER_PATH = ".github/scripts/repository_audit_impact.py"
-OPERATIONS_PATH = "OPERATIONS.md"
+OPERATIONS_PATH = "OPERATIONS.md"\nDRIVE_TEXT_HELPER_PATH = ".github/scripts/drive_raw_text_replace_helper.py"
 
 FORCE_FULL_FILES = {
     WORKFLOW_PATH,
@@ -137,10 +137,6 @@ DEPENDENCIES = json.loads(r'''{
     "appsscript.json"
   ],
   "Audit canonical four-Phase code-change workflow contract": [
-    "OPERATIONS.md"
-  ],
-  "Audit Drive raw TXT replace helper contract": [
-    ".github/scripts/drive_raw_text_replace_helper.py",
     "OPERATIONS.md"
   ],
   "Verify credentialed Apps Script execution boundaries": [
@@ -742,6 +738,32 @@ def validate() -> int:
         raise SystemExit(
             "Repository access fast-path contract missing: " + ", ".join(missing)
         )
+
+    helper_path = Path(DRIVE_TEXT_HELPER_PATH)
+    if not helper_path.is_file():
+        raise SystemExit(
+            f"Drive raw TXT replacement helper missing: {DRIVE_TEXT_HELPER_PATH}"
+        )
+    helper = helper_path.read_text(encoding="utf-8")
+    required_helper = [
+        'CONTRACT_ID = "H3_DRIVE_RAW_TEXT_REPLACE_V1"',
+        "def unwrap_update_file_uri(",
+        "def normalize_text_plain(",
+        "def verify_text_plain_readback(",
+        '"file_id"',
+        'replace("\\r\\n", "\\n").replace("\\r", "\\n")',
+        "expected_bom == actual_bom",
+    ]
+    missing_helper = [token for token in required_helper if token not in helper]
+    if missing_helper:
+        raise SystemExit(
+            "Drive raw TXT replacement helper contract missing: "
+            + ", ".join(missing_helper)
+        )
+    subprocess.run(
+        [sys.executable, DRIVE_TEXT_HELPER_PATH, "self-test"],
+        check=True,
+    )
 
     step_names = re.findall(r"^      - name:\s*(.+)$", workflow, flags=re.MULTILINE)
     missing_map = sorted(

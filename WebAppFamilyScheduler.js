@@ -7856,6 +7856,8 @@ function h3MonitoringNotificationCurrent() {
 }
 
 function h3MonitoringObserverEmailRun() {
+  var triggerAlignment=
+    h3MonitoringProductionTriggerAutoAlignIfLegacy_();
   var lock=LockService.getScriptLock();
   if(!lock.tryLock(30000)){
     return {
@@ -7869,6 +7871,7 @@ function h3MonitoringObserverEmailRun() {
         email_sent:false
       },
       production_trigger_created:false,
+      trigger_alignment:triggerAlignment,
       semantic_authoring_performed:false,
       rs13_close_performed:false,
       rs14_activation_performed:false
@@ -7916,6 +7919,7 @@ function h3MonitoringObserverEmailRun() {
       observer:observer,
       notification:notification,
       production_trigger_created:false,
+      trigger_alignment:triggerAlignment,
       semantic_authoring_performed:false,
       rs13_close_performed:false,
       rs14_activation_performed:false
@@ -8273,6 +8277,67 @@ function h3MonitoringProductionTriggerEnsure() {
     }
   } finally {
     lock.releaseLock();
+  }
+}
+
+function h3MonitoringProductionTriggerAutoAlignIfLegacy_() {
+  try {
+    var current=h3MonitoringProductionTriggerStatus_();
+    if(current.status==='READY'){
+      return {
+        schema:'H3_MONITOR_PRODUCTION_TRIGGER_AUTO_ALIGN_V1',
+        status:'ALREADY_ALIGNED',
+        migrated:false,
+        write_performed:false
+      };
+    }
+
+    var legacy=h3MonitoringProductionTriggerLegacyReady_();
+    if(!legacy.ready){
+      return {
+        schema:'H3_MONITOR_PRODUCTION_TRIGGER_AUTO_ALIGN_V1',
+        status:'SKIPPED_UNVERIFIED',
+        migrated:false,
+        write_performed:false
+      };
+    }
+
+    var result=h3MonitoringProductionTriggerRealignToHour();
+    try {
+      console.log(JSON.stringify({
+        schema:'H3_MONITOR_PRODUCTION_TRIGGER_AUTO_ALIGN_EVENT_V1',
+        status:String(result.status||''),
+        migrated:result.migrated===true,
+        write_performed:result.write_performed===true,
+        configured_near_minute:
+          result.trigger &&
+          result.trigger.configured_near_minute,
+        configured_timezone:
+          result.trigger &&
+          result.trigger.configured_timezone
+      }));
+    } catch (_alignConsoleError) {}
+    return {
+      schema:'H3_MONITOR_PRODUCTION_TRIGGER_AUTO_ALIGN_V1',
+      status:String(result.status||''),
+      migrated:result.migrated===true,
+      write_performed:result.write_performed===true
+    };
+  } catch (error) {
+    try {
+      console.error(JSON.stringify({
+        schema:'H3_MONITOR_PRODUCTION_TRIGGER_AUTO_ALIGN_FAILURE_V1',
+        error:String(
+          error && error.message || error
+        ).slice(0,1000)
+      }));
+    } catch (_alignFailureConsoleError) {}
+    return {
+      schema:'H3_MONITOR_PRODUCTION_TRIGGER_AUTO_ALIGN_V1',
+      status:'ERROR',
+      migrated:false,
+      write_performed:false
+    };
   }
 }
 

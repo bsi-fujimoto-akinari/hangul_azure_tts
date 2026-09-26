@@ -35,6 +35,7 @@ FORCE_FULL_FILES = {
 UNCONDITIONAL_STEPS = {
     "Checkout",
     "Detect repository audit impact",
+    "Verify workflow YAML",
     "Verify tracked-file allowlist",
     "Reject credential files and likely embedded secrets",
     "Audit repository access fast-path contract",
@@ -42,6 +43,21 @@ UNCONDITIONAL_STEPS = {
 
 DEPENDENCIES = json.loads(r'''{
   "Checkout": [],
+  "Verify workflow YAML": [
+    ".github/scripts/workflow_lint_guard.py",
+    ".github/workflows/apps-script-auto-sync.yml",
+    ".github/workflows/family-scheduler-f3-shadow-audit.yml",
+    ".github/workflows/repository-audit.yml",
+    ".github/workflows/rs10-soft-signal-audit.yml",
+    ".github/workflows/rs12-prospective-evidence-audit.yml",
+    ".github/workflows/rs13-real-data-shadow-audit.yml",
+    ".github/workflows/rs13e-concept-authoring-audit.yml",
+    ".github/workflows/rs13g-gate-reporter-audit.yml",
+    ".github/workflows/rs13k1-k1-secondary-authority-audit.yml",
+    ".github/workflows/rs13k1a-authoring-helper-audit.yml",
+    ".github/workflows/rs14p-limited-live-preflight-audit.yml",
+    ".github/workflows/workflow-lint.yml"
+  ],
   "Verify tracked-file allowlist": [
     ".clasp.json",
     ".github/workflows/apps-script-auto-sync.yml",

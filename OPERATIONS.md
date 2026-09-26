@@ -653,6 +653,8 @@ Preparation writes are limited to the canonical preparation surfaces: `listening
 
 This orchestrator does not issue a learner set, set `ISSUED_AT`, consume K1_READY, create learner log or production transaction rows, update `listening_state_v1` counters/pointers, or advance the scheduler. Learner issue remains a separate dedicated flow after a verified `PREISSUE_READY`.
 
+5L learner-issue rollback is exact-identity guarded. Before restoring the payload/K1 snapshots or deleting newly inserted learner-log rows, the issue path must prove immutable payload/K1 identity and exact inserted-log-row identity. Rollback must read back the restored snapshots and prove no rows for that SET_ID remain in `listening_log_v1`. Any rollback identity, mutation, flush, or readback failure escalates as `FAMILY_SCHEDULER_LISTENING_ISSUE_RECOVERY_REQUIRED:*`; rollback failures must never be swallowed.
+
 For current set no.4, K2-K5 pre-stage may remain READY while no new K1_READY exists. In that state the correct runtime behavior is to perform no backend materialization or audio start until a new valid K1_READY is supplied explicitly.
 
 
@@ -742,6 +744,8 @@ The SET_ID numeric suffix is a date-local Reading allocation serial and is never
 The P8 group 245 stage is permitted to reach `PREISSUE_READY` only with exact stored locked-bundle JSON plus source-binding and locked-bundle hash parity. `PREISSUE_READY` is not `ISSUED` and must not appear as current learning.
 
 `WebAppReadingProduction.js` owns the Reading render/transaction path. Render requires `ISSUED`; the controlled Reading commit gate is enabled. After an authoritative COMMITTED Reading transaction, `WebAppReadingSchedulerProjection.js` idempotently projects the exact Reading log into `rt_evidence_v1`, refreshes the affected `rt_skill_queue_v1` identities, and advances `rt_lane_state_v1.READING_CLOCK` only for the new family clock. A post-commit projection failure is recorded as `POSTCOMMIT_PROJECTION:*` and blocks recurring Reading preparation until a same-transaction recovery succeeds. No 5W Answer Sync or 5W source ratio is reused; the shared 5W-derived R/T opportunity anchor is consumed only by the committed sidecar projection.
+
+Translation V2 uses the same post-COMMIT recovery principle. A COMMITTED `translation_web_txn_v2` row retaining `POSTCOMMIT_PROJECTION:*` blocks Family Scheduler Translation preparation and issue. Recovery may replay only the same COMMITTED transaction identity/fingerprint through the idempotent Translation scheduler projection; successful replay clears the prefix, while failed replay remains blocking. Recovery must not rewrite learner answers/scores/logs or force R/T clocks, counters, pointers, or scheduler advancement.
 
 
 ## S3-PREP-FINAL

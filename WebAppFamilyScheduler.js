@@ -106,6 +106,13 @@ var H3_MONITOR_SEMANTIC_AUTHORING_SCHEMA_ =
 var H3_MONITOR_SEMANTIC_AUTHORING_SOURCE_ID_ =
   'SEMANTIC_AUTHORING_QUEUE';
 
+var H3_MONITOR_ERROR_STATE_SCHEMA_ =
+  'H3_MONITOR_ERROR_STATE_SOURCE_V1';
+var H3_MONITOR_ERROR_STATE_SOURCE_ID_ =
+  'ERROR_STATE';
+var H3_MONITOR_ERROR_STATE_CONTRACT_ =
+  'H3_ERROR_STATE_MONITOR_V1';
+
 var H3_MONITOR_RS13_RS14_SCHEMA_ =
   'H3_MONITOR_RS13_RS14_GATE_SOURCE_V1';
 var H3_MONITOR_RS13_RS14_SOURCE_ID_ =
@@ -6248,6 +6255,472 @@ function h3MonitoringObserverStoredSnapshot_(ss,level) {
   return snapshot;
 }
 
+function h3MonitoringErrorStateEvent_(
+  type,
+  key,
+  detail
+) {
+  return {
+    source_id:
+      H3_MONITOR_ERROR_STATE_SOURCE_ID_,
+    event_type:
+      String(type || ''),
+    event_key:
+      String(key || ''),
+    detail:
+      String(detail || '')
+  };
+}
+
+function h3MonitoringErrorStateFromBoot_(
+  boot
+) {
+  if (
+    !boot ||
+    String(boot.schema || '') !==
+      H3_ERROR_STATE_BOOT_SCHEMA_ ||
+    boot.write_performed !== false
+  ) {
+    throw new Error(
+      'MONITOR_ERROR_STATE_BOOT_CONTRACT_INVALID'
+    );
+  }
+
+  var flags = [];
+  var events = [];
+  var reasons =
+    Array.isArray(boot.drift_reasons)
+      ? boot.drift_reasons.map(String)
+      : [];
+
+  if (
+    String(boot.error || '') === 'UNKNOWN' ||
+    String(boot.drift || '') === 'UNKNOWN'
+  ) {
+    flags.push(
+      'PRIMARY_SOURCE_UNKNOWN'
+    );
+    events.push(
+      h3MonitoringErrorStateEvent_(
+        'ERROR_STATE_PRIMARY_SOURCE_UNKNOWN',
+        'ERROR_STATE:PRIMARY_SOURCE_UNKNOWN',
+        String(
+          boot.read_error ||
+          boot.projection_read_error ||
+          'FRESH_SOURCE_READ_FAILED'
+        )
+      )
+    );
+  } else {
+    var effective =
+      boot.effective_state || {};
+
+    if (
+      String(boot.error || '') === 'PRESENT'
+    ) {
+      flags.push(
+        'UNRESOLVED_ERROR_PRESENT'
+      );
+      events.push(
+        h3MonitoringErrorStateEvent_(
+          'ERROR_STATE_NEW_UNRESOLVED',
+          'ERROR_STATE:UNRESOLVED:' +
+            String(
+              effective.latest_unresolved_id ||
+              'UNKNOWN_ID'
+            ),
+          [
+            'ID=' +
+              String(
+                effective.latest_unresolved_id ||
+                ''
+              ),
+            'CODE=' +
+              String(
+                effective.latest_error_code ||
+                ''
+              ),
+            'COUNT=' +
+              String(
+                effective.unresolved_count ===
+                  null ||
+                effective.unresolved_count ===
+                  undefined
+                  ? ''
+                  : effective.unresolved_count
+              )
+          ].join(';')
+        )
+      );
+    }
+
+    if (
+      String(boot.drift || '') === 'PRESENT'
+    ) {
+      flags.push(
+        'ERROR_STATE_STALE'
+      );
+
+      if (
+        reasons.indexOf(
+          'RAW_WATERMARK_MISMATCH'
+        ) >= 0
+      ) {
+        events.push(
+          h3MonitoringErrorStateEvent_(
+            'ERROR_STATE_RAW_WATERMARK_DRIFT',
+            'ERROR_STATE:RAW_WATERMARK_DRIFT',
+            [
+              'PRIMARY=' +
+                String(
+                  boot.primary_last_log_row ===
+                    null ||
+                  boot.primary_last_log_row ===
+                    undefined
+                    ? ''
+                    : boot.primary_last_log_row
+                ),
+              'PROJECTION=' +
+                String(
+                  boot.projected_last_log_row ===
+                    null ||
+                  boot.projected_last_log_row ===
+                    undefined
+                    ? ''
+                    : boot.projected_last_log_row
+                )
+            ].join(';')
+          )
+        );
+      }
+    }
+  }
+
+  flags = flags.filter(
+    function (value, index, array) {
+      return array.indexOf(value) === index;
+    }
+  );
+
+  return {
+    status:
+      flags.indexOf(
+        'PRIMARY_SOURCE_UNKNOWN'
+      ) >= 0
+        ? 'ERROR'
+        : flags.length
+          ? 'WARNING'
+          : 'OK',
+    data: {
+      schema:
+        H3_MONITOR_ERROR_STATE_SCHEMA_,
+      monitor_contract:
+        H3_MONITOR_ERROR_STATE_CONTRACT_,
+      flags:
+        flags,
+      boot:
+        boot,
+      notification_policy: {
+        new_unresolved:
+          true,
+        primary_source_unknown:
+          true,
+        raw_watermark_drift:
+          true,
+        lifecycle_only_semantic_drift:
+          false
+      },
+      error_state_write_performed:
+        false
+    },
+    action_required_events:
+      events
+  };
+}
+
+function h3MonitoringErrorStateSource_(
+  ss,
+  nowMs
+) {
+  try {
+    var checkedAt =
+      h3MonitoringObserverIsoTime_(
+        nowMs
+      );
+    if (!checkedAt) {
+      throw new Error(
+        'MONITOR_ERROR_STATE_TIME_INVALID'
+      );
+    }
+
+    var raw =
+      h3ErrorStateReadRawErrors_(
+        ss
+      );
+    var lifecycle =
+      h3ErrorStateReadIncidentLifecycleReadOnly_(
+        ss
+      );
+    var projection =
+      h3ErrorStateReadProjectionReadOnly_(
+        ss
+      );
+    var boot =
+      h3ErrorStateBootEvaluateData_(
+        raw,
+        lifecycle,
+        projection,
+        checkedAt
+      );
+
+    return h3MonitoringErrorStateFromBoot_(
+      boot
+    );
+  } catch (error) {
+    return h3MonitoringErrorStateFromBoot_({
+      schema:
+        H3_ERROR_STATE_BOOT_SCHEMA_,
+      checked_at:
+        h3MonitoringObserverIsoTime_(
+          nowMs
+        ) || '',
+      error:
+        'UNKNOWN',
+      drift:
+        'UNKNOWN',
+      drift_reasons: [
+        'FRESH_SOURCE_READ_FAILED'
+      ],
+      primary_last_log_row:
+        null,
+      projected_last_log_row:
+        null,
+      effective_state:
+        null,
+      projection_state:
+        null,
+      projection_read_error:
+        null,
+      current_summary_role:
+        'DISPLAY_ONLY',
+      read_error:
+        h3MonitoringObserverErrorText_(
+          error
+        ),
+      write_performed:
+        false
+    });
+  }
+}
+
+function h3MonitoringErrorStatePhase4SelfTest_() {
+  function baseBoot() {
+    return {
+      schema:
+        H3_ERROR_STATE_BOOT_SCHEMA_,
+      checked_at:
+        '2026-09-26T15:00:00.000Z',
+      error:
+        'NONE',
+      drift:
+        'NONE',
+      drift_reasons: [],
+      primary_last_log_row:
+        8,
+      projected_last_log_row:
+        8,
+      effective_state: {
+        status:
+          'NONE',
+        unresolved_count:
+          0,
+        latest_error_id:
+          null,
+        latest_error_at:
+          null,
+        latest_error_code:
+          null,
+        latest_unresolved_id:
+          null,
+        last_log_row:
+          8,
+        source_status:
+          'OK'
+      },
+      projection_state:
+        null,
+      projection_read_error:
+        null,
+      current_summary_role:
+        'DISPLAY_ONLY',
+      write_performed:
+        false
+    };
+  }
+
+  var healthy =
+    h3MonitoringErrorStateFromBoot_(
+      baseBoot()
+    );
+  if (
+    healthy.status !== 'OK' ||
+    healthy.action_required_events.length !== 0 ||
+    healthy.data.flags.length !== 0
+  ) {
+    throw new Error(
+      'ERROR_STATE_PHASE4_HEALTHY_FAIL'
+    );
+  }
+
+  var present =
+    baseBoot();
+  present.error =
+    'PRESENT';
+  present.effective_state.status =
+    'PRESENT';
+  present.effective_state.unresolved_count =
+    1;
+  present.effective_state.latest_error_code =
+    'REVIEW_AUDIO_BINDING_COUNT';
+  present.effective_state.latest_unresolved_id =
+    'H3ERR-NEW';
+
+  var unresolved =
+    h3MonitoringErrorStateFromBoot_(
+      present
+    );
+  if (
+    unresolved.status !== 'WARNING' ||
+    unresolved.data.flags.indexOf(
+      'UNRESOLVED_ERROR_PRESENT'
+    ) < 0 ||
+    unresolved.action_required_events.length !==
+      1 ||
+    unresolved.action_required_events[0]
+      .event_type !==
+      'ERROR_STATE_NEW_UNRESOLVED'
+  ) {
+    throw new Error(
+      'ERROR_STATE_PHASE4_UNRESOLVED_FAIL'
+    );
+  }
+
+  var rawDrift =
+    baseBoot();
+  rawDrift.drift =
+    'PRESENT';
+  rawDrift.drift_reasons = [
+    'RAW_WATERMARK_MISMATCH',
+    'PROJECTION_SEMANTIC_MISMATCH'
+  ];
+  rawDrift.primary_last_log_row =
+    9;
+  rawDrift.projected_last_log_row =
+    8;
+
+  var stale =
+    h3MonitoringErrorStateFromBoot_(
+      rawDrift
+    );
+  if (
+    stale.status !== 'WARNING' ||
+    stale.data.flags.indexOf(
+      'ERROR_STATE_STALE'
+    ) < 0 ||
+    stale.action_required_events.length !==
+      1 ||
+    stale.action_required_events[0]
+      .event_type !==
+      'ERROR_STATE_RAW_WATERMARK_DRIFT'
+  ) {
+    throw new Error(
+      'ERROR_STATE_PHASE4_RAW_DRIFT_FAIL'
+    );
+  }
+
+  var lifecycleOnly =
+    baseBoot();
+  lifecycleOnly.drift =
+    'PRESENT';
+  lifecycleOnly.drift_reasons = [
+    'PROJECTION_SEMANTIC_MISMATCH'
+  ];
+
+  var semantic =
+    h3MonitoringErrorStateFromBoot_(
+      lifecycleOnly
+    );
+  if (
+    semantic.status !== 'WARNING' ||
+    semantic.data.flags.indexOf(
+      'ERROR_STATE_STALE'
+    ) < 0 ||
+    semantic.action_required_events.length !==
+      0
+  ) {
+    throw new Error(
+      'ERROR_STATE_PHASE4_SEMANTIC_DRIFT_FAIL'
+    );
+  }
+
+  var unknown =
+    baseBoot();
+  unknown.error =
+    'UNKNOWN';
+  unknown.drift =
+    'UNKNOWN';
+  unknown.drift_reasons = [
+    'FRESH_SOURCE_READ_FAILED'
+  ];
+  unknown.read_error =
+    'fixture source unavailable';
+
+  var failed =
+    h3MonitoringErrorStateFromBoot_(
+      unknown
+    );
+  if (
+    failed.status !== 'ERROR' ||
+    failed.data.flags.indexOf(
+      'PRIMARY_SOURCE_UNKNOWN'
+    ) < 0 ||
+    failed.action_required_events.length !==
+      1 ||
+    failed.action_required_events[0]
+      .event_type !==
+      'ERROR_STATE_PRIMARY_SOURCE_UNKNOWN'
+  ) {
+    throw new Error(
+      'ERROR_STATE_PHASE4_UNKNOWN_FAIL'
+    );
+  }
+
+  return {
+    schema:
+      'H3_ERROR_STATE_PHASE4_SELF_TEST_V1',
+    status:
+      'PASS',
+    monitor_contract:
+      H3_MONITOR_ERROR_STATE_CONTRACT_,
+    observer_flags: [
+      'ERROR_STATE_STALE',
+      'UNRESOLVED_ERROR_PRESENT',
+      'PRIMARY_SOURCE_UNKNOWN'
+    ],
+    email_event_types: [
+      'ERROR_STATE_NEW_UNRESOLVED',
+      'ERROR_STATE_PRIMARY_SOURCE_UNKNOWN',
+      'ERROR_STATE_RAW_WATERMARK_DRIFT'
+    ],
+    lifecycle_only_semantic_drift_email:
+      false,
+    cases:
+      5,
+    write_performed:
+      false
+  };
+}
+
 function h3MonitoringObserverSourceSpecs_(ss) {
   return [{
     source_id:'RUNTIME_AUTHORITY',
@@ -6277,6 +6750,13 @@ function h3MonitoringObserverSourceSpecs_(ss) {
     source_id:H3_MONITOR_RS13_RS14_SOURCE_ID_,
     reader:function(){
       return h3MonitoringRs13Rs14Source_(ss);
+    }
+  },{
+    source_id:H3_MONITOR_ERROR_STATE_SOURCE_ID_,
+    reader:function(observedAtMs){
+      return h3MonitoringErrorStateSource_(
+        ss,Number(observedAtMs)
+      );
     }
   }];
 }

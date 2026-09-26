@@ -12,9 +12,11 @@ var H3_FS_RT_PREP_CONTRACT_ID_ =
 var H3_FS_RT_PREP_SYNC_REVISION_ = '20260924-R1';
 
 var H3_FS_W_PREP_CONTRACT_ID_ =
-  'H3-FAMILY-SCHEDULER-W-PREP-20260924-V1';
+  'H3-FAMILY-SCHEDULER-W-PREP-20260926-V2';
 var H3_FS_W_AUTHORING_REQUEST_SCHEMA_ =
-  'H3_FAMILY_SCHEDULER_WRITTEN_AUTHORING_REQUEST_V1';
+  'H3_FAMILY_SCHEDULER_WRITTEN_AUTHORING_REQUEST_V2';
+var H3_FS_W_PREP_D5_CONTEXT_POLICY_ID_ =
+  'H3-D5-CONTEXT-QUALITY-20260926-V1';
 
 function h3FsWrittenCanonicalStageId_(ss) {
   var gs=h3FsKv_(ss,'generation_state_v1');
@@ -138,6 +140,19 @@ function h3FsPrepareWritten_(ss) {
     approved_source:String(r[m.APPROVED_SOURCE]||''),
     policy_id:String(r[m.POLICY_ID]||''),
     source_snapshot_id:String(r[m.SOURCE_SNAPSHOT_ID]||''),
+    authoring_constraints:{
+      d5_context:{
+        policy_id:H3_FS_W_PREP_D5_CONTEXT_POLICY_ID_,
+        future_only:true,
+        issued_sets_immutable:true,
+        require_two_independent_natural_contexts:true,
+        reject_both_bare_object_blank:true,
+        allow_short_official_style:true,
+        forbid_padding:true,
+        echo_required_in_question_meta:
+          'questions[q=4].d5_context_quality.policy_id'
+      }
+    },
     boundary:{
       semantic_authoring_required:true,
       issue_performed:false,

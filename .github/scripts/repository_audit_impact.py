@@ -18,7 +18,8 @@ import sys
 
 WORKFLOW_PATH = ".github/workflows/repository-audit.yml"
 HELPER_PATH = ".github/scripts/repository_audit_impact.py"
-OPERATIONS_PATH = "OPERATIONS.md"\nDRIVE_TEXT_HELPER_PATH = ".github/scripts/drive_raw_text_replace_helper.py"
+OPERATIONS_PATH = "OPERATIONS.md"
+DRIVE_TEXT_HELPER_PATH = ".github/scripts/drive_raw_text_replace_helper.py"
 
 FORCE_FULL_FILES = {
     WORKFLOW_PATH,

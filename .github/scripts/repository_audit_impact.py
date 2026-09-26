@@ -42,6 +42,7 @@ UNCONDITIONAL_STEPS = {
     "Checkout",
     "Detect repository audit impact",
     "Verify workflow YAML",
+    "Verify credentialed Apps Script execution boundaries",
     "Audit error-state lifecycle reconciliation contract",
     "Verify tracked-file allowlist",
     "Reject credential files and likely embedded secrets",

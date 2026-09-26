@@ -601,6 +601,10 @@ jobs:
           )
           PY
 
+      - name: Repair H3ERR-20260926-085445-8149B965 Review audio sidecars
+        if: steps.source_binding_boundary.outputs.ready == 'true'
+        run: npx -y @google/clasp@3.4.0 --json run-function runReviewAudioIncidentRepairH3ERR202609260854458149B965
+
       - name: Validate production trigger alignment boundary
         id: trigger_alignment_boundary
         if: steps.source_attestation.outputs.attested == 'true' && steps.auth.outputs.ready == 'true' && steps.source_binding_boundary.outputs.ready == 'true'

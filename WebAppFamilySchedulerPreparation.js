@@ -832,6 +832,8 @@ function h3FsTranslationIdentity_(ss) {
 }
 
 function h3FsPrepareTranslation_(ss) {
+  h3FsTranslationProjectionRecoveryGate_(ss);
+
   var existing=h3FsFindPreparedTranslation_(ss);
   if(existing){
     return {

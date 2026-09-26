@@ -601,6 +601,24 @@ jobs:
           )
           PY
 
+      - name: Validate production trigger alignment boundary
+        id: trigger_alignment_boundary
+        if: steps.source_attestation.outputs.attested == 'true' && steps.auth.outputs.ready == 'true' && steps.source_binding_boundary.outputs.ready == 'true'
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          TRIGGER_NAME: ${{ github.event_name }}
+          TRIGGER_AUDIT_SHA: ${{ github.event.workflow_run.head_sha || '' }}
+          TRIGGER_AUDIT_EVENT: ${{ github.event.workflow_run.event || '' }}
+          TRIGGER_AUDIT_CONCLUSION: ${{ github.event.workflow_run.conclusion || '' }}
+          SOURCE_ATTESTED: ${{ steps.source_attestation.outputs.attested || '' }}
+        run: python3 .github/scripts/production_trigger_alignment.py boundary >> "$GITHUB_OUTPUT"
+
+      - name: Align production monitor trigger near minute 00
+        if: steps.trigger_alignment_boundary.outputs.ready == 'true'
+        shell: bash
+        run: python3 .github/scripts/production_trigger_alignment.py execute
+
       - name: Validate automatic read-only live smoke boundary
         id: automatic_smoke_boundary
         if: steps.automatic_smoke_plan.outputs.requested == 'true' && steps.source_attestation.outputs.attested == 'true' && steps.source_binding_boundary.outputs.ready == 'true' && steps.auth.outputs.ready == 'true'

@@ -12,12 +12,14 @@ var H3_FS_RT_PREP_CONTRACT_ID_ =
 var H3_FS_RT_PREP_SYNC_REVISION_ = '20260924-R1';
 
 var H3_FS_W_PREP_CONTRACT_ID_ =
-  'H3-FAMILY-SCHEDULER-W-PREP-20260926-V2';
+  'H3-FAMILY-SCHEDULER-W-PREP-20260926-V3';
 var H3_FS_W_AUTHORING_REQUEST_SCHEMA_ =
-  'H3_FAMILY_SCHEDULER_WRITTEN_AUTHORING_REQUEST_V2';
+  'H3_FAMILY_SCHEDULER_WRITTEN_AUTHORING_REQUEST_V3';
 // D5 context-quality V2 applies only to future policy-bound authoring.
 var H3_FS_W_PREP_D5_CONTEXT_POLICY_ID_ =
   'H3-D5-CONTEXT-QUALITY-20260926-V1';
+var H3_FS_W_PREP_EXPL_QA_CONTRACT_ID_ =
+  'H3-WRITTEN-EXPLANATION-STATIC-QA-20260926-V1';
 
 function h3FsWrittenCanonicalStageId_(ss) {
   var gs=h3FsKv_(ss,'generation_state_v1');
@@ -152,6 +154,37 @@ function h3FsPrepareWritten_(ss) {
         forbid_padding:true,
         echo_required_in_question_meta:
           'questions[q=4].d5_context_quality.policy_id'
+      },
+      explanation_static_qa:{
+        contract_id:H3_FS_W_PREP_EXPL_QA_CONTRACT_ID_,
+        future_only:true,
+        issued_sets_immutable:true,
+        activation_stage:'STD-B002-S2',
+        hard_fail_blocking:true,
+        heuristic_warnings_blocking:false,
+        warning_codes:[
+          'EXPL_CONTEXT_SIMILARITY',
+          'EXPL_REASON_BLOCK_REDUNDANCY',
+          'EXPL_HANJA_COVERAGE_SHORTFALL',
+          'EXPL_META_STYLE_CUE'
+        ],
+        required_pronunciation_coverage:{
+          min_blocks:1,
+          level_bands:['3級','준2급'],
+          fields:['skill_id','level_band','surface','actual']
+        },
+        structured_hanja_network:{
+          type:'hanja_network',
+          target_fields:['word','hanja'],
+          related_fields:[
+            'word','hanja','target_char_index','example_char_index'
+          ],
+          homophone_fields:[
+            'word','hanja','target_syllable_index','example_syllable_index'
+          ]
+        },
+        echo_required_in_question_meta:
+          'questions[].review.learning_blocks'
       }
     },
     boundary:{

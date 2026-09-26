@@ -14,10 +14,10 @@ This document contains the current operating contract for `hangul_azure_tts`. Co
 ## 2. Standard change workflow
 
 ```text
-main -> feature branch -> pull request -> audit PASS -> squash merge -> main
+main -> feature branch -> pull request -> workflow-lint PASS -> audit PASS -> squash merge -> main
 ```
 
-Direct pushes and force pushes to `main` are prohibited. Each pull request should contain one bounded change. Do not bypass the required `audit` check or auto-resolve conflicts.
+Direct pushes and force pushes to `main` are prohibited. Each pull request should contain one bounded change. Do not merge unless both `workflow-lint` and the required `audit` check are PASS; do not auto-resolve conflicts.
 
 ### 2.1 Four-Phase code-change workflow contract
 
@@ -204,6 +204,10 @@ ACTIVE_REPO_ACCESS_FASTPATH_CONTRACT=H3_REPO_ACCESS_FASTPATH_V1
 ACTIVE_DRIVE_RAW_TEXT_REPLACE_CONTRACT=H3_DRIVE_RAW_TEXT_REPLACE_V1
 DRIVE_RAW_TEXT_REPLACE_HELPER=.github/scripts/drive_raw_text_replace_helper.py
 REPOSITORY_AUDIT_IMPACT_HELPER=.github/scripts/repository_audit_impact.py
+ACTIVE_WORKFLOW_YAML_HARDENING_CONTRACT=H3_WORKFLOW_YAML_HARDENING_V1
+WORKFLOW_LINT_WORKFLOW=.github/workflows/workflow-lint.yml
+WORKFLOW_LINT_HELPER=.github/scripts/workflow_lint_guard.py
+TRACKED_FILE_ALLOWLIST_HELPER=.github/scripts/repository_tracked_allowlist.py
 ```
 
 ### 2.3 Repository access fast path
@@ -280,6 +284,28 @@ Speed optimization must not:
 - suppress failure logs needed for diagnosis;
 - relax Repository audit, Apps Script source-attestation, automatic live-smoke, or protected-runtime checks;
 - use cached Chat context as canonical authority.
+
+### 2.3.1 Workflow YAML hardening
+
+Contract: `H3_WORKFLOW_YAML_HARDENING_V1`.
+
+GitHub Actions YAML is an orchestration surface, not the preferred location for nontrivial validation logic. New validation, parsing, fixture, or policy logic belongs in `.github/scripts/*`; workflow YAML should normally contain only checkout/setup, environment wiring, and one-line helper invocation.
+
+`.github/workflows/workflow-lint.yml` runs independently on every pull request to `main`, every push to `main`, and manual dispatch. Its canonical helper is `.github/scripts/workflow_lint_guard.py`, pinned to actionlint v1.7.12 with a verified release SHA-256.
+
+The guard is fail-closed and must:
+
+- lint every tracked `.github/workflows/*.yml` and `*.yaml` file with actionlint;
+- reject an increase in literal `run: |` / `run: >` body lines for an existing workflow relative to the pull-request/push base;
+- allow a new workflow at most four literal run-block body lines, so substantive logic is moved to `.github/scripts/*`;
+- require the status context `audit` to be unique to `repository-audit.yml`;
+- require both Repository audit and Workflow Lint to invoke the same workflow-lint helper exactly once.
+
+The existing `main-production-protection` ruleset requires status context `audit`. Repository audit therefore keeps the sole effective job name `audit`, and every specialist audit workflow must use a distinct effective job name. Repository audit invokes the workflow-lint helper immediately after checkout; if Repository audit YAML is invalid, the unique required `audit` check is missing and merge remains blocked, while the independent Workflow Lint workflow provides the syntax diagnosis. If any workflow fails lint, Repository audit cannot pass.
+
+Merge policy is stricter than the ruleset minimum: before merge, fresh-read the pull-request head checks and require both the independent `workflow-lint` check and the required `audit` check to be completed successfully. Missing, skipped, cancelled, pending, or failed lint is a merge blocker.
+
+The tracked-file allowlist implementation is externalized to `.github/scripts/repository_tracked_allowlist.py`. Do not move it back into a long YAML literal block.
 
 ### 2.4 Google Drive raw TXT replacement
 

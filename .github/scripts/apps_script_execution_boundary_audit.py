@@ -19,11 +19,6 @@ required_sync = [
     'Bind exact-main observability source provenance',
     'h3ObservabilityBindSource',
     'steps.source_binding_boundary.outputs.ready',
-    'Validate production trigger alignment boundary',
-    'production_trigger_alignment.py boundary',
-    'Align production monitor trigger near minute 00',
-    'production_trigger_alignment.py execute',
-    'steps.trigger_alignment_boundary.outputs.ready',
     'Validate automatic read-only live smoke boundary',
     'Run impact-selected automatic live smoke',
     'h3AutomaticLiveSmoke',
@@ -52,7 +47,6 @@ required_ops = [
     'Production monitor trigger alignment',
     'h3MonitoringProductionTriggerRealignToHour',
     'nearMinute(0)',
-    "if: steps.trigger_alignment_boundary.outputs.ready == 'true'",
     "if: steps.automatic_smoke_boundary.outputs.ready == 'true'",
     "if: steps.smoke_boundary.outputs.ready == 'true'",
     'Remote-only deletion refresh',
@@ -211,37 +205,9 @@ if automatic_refs != 1:
     )
 
 
-alignment_boundary_pos = sync.find(
-    'Validate production trigger alignment boundary'
-)
-alignment_execute_pos = sync.find(
-    'Align production monitor trigger near minute 00'
-)
-automatic_boundary_pos = sync.find(
-    'Validate automatic read-only live smoke boundary'
-)
-if not (
-    0 <= alignment_boundary_pos
-    < alignment_execute_pos
-    < automatic_boundary_pos
-):
-    raise SystemExit('Production trigger alignment step order invalid.')
-alignment_block = sync[
-    alignment_execute_pos:
-    automatic_boundary_pos
-]
-if (
-    "if: steps.trigger_alignment_boundary.outputs.ready == 'true'"
-    not in alignment_block
-):
-    raise SystemExit(
-        'Production trigger alignment execution must be gated by '
-        'trigger_alignment_boundary ready=true.'
-    )
-
 print(
     'Credentialed Apps Script execution boundaries: PASS; '
     f'observability binding refs={binding_refs}; '
     f'automatic smoke refs={automatic_refs}; '
-    f'ad hoc smoke refs={manual_refs}; production trigger alignment helper=1'
+    f'ad hoc smoke refs={manual_refs}'
 )

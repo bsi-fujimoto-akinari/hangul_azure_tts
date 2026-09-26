@@ -119,9 +119,13 @@ function questionNumber(question, index) {
 }
 
 function explanationOf(question) {
-  return question && question.explanation && typeof question.explanation === 'object'
-    ? question.explanation
-    : {};
+  if (question && question.explanation && typeof question.explanation === 'object') {
+    return question.explanation;
+  }
+  if (question && question.review && typeof question.review === 'object') {
+    return question.review;
+  }
+  return {};
 }
 
 function sourceContext(question) {
@@ -132,6 +136,7 @@ function sourceContext(question) {
 }
 
 function correctChoiceSurface(question) {
+  if (question.answer_text) return String(question.answer_text);
   if (question.qa_meta && question.qa_meta.correct_choice_surface) {
     return String(question.qa_meta.correct_choice_surface);
   }
@@ -153,6 +158,10 @@ function correctChoiceSurface(question) {
 function completedAnswerSurface(question) {
   if (question.qa_meta && question.qa_meta.completed_answer_surface) {
     return String(question.qa_meta.completed_answer_surface);
+  }
+  if (question.audio) return String(question.audio);
+  if (Array.isArray(question.audio_segments)) {
+    return question.audio_segments.map(String).join('\n');
   }
   return String(question.script_text || '');
 }

@@ -957,6 +957,141 @@
           "EXPL_PRON_COVERAGE_MISSING"
         ]
       }
+    },
+    {
+      "id": "future_stage_meta_valid",
+      "mode": "future",
+      "payload": {
+        "set_id": "FUTURE-STAGE-META",
+        "stage_id": "STD-B002-S2",
+        "questions": [
+          {
+            "q": 1,
+            "section": "筆2／語彙",
+            "question": "새 문장에서 (　　　)를 확인해요.",
+            "answer_text": "정답",
+            "audio": "새 문장에서 정답을 확인해요.",
+            "review": {
+              "reason": "별도의 설명을 제공한다.",
+              "learning_blocks": [
+                {
+                  "form": "표현",
+                  "usage": "意味関係を簡潔に整理する。",
+                  "example_ko": "새로운 예문을 사용해요."
+                },
+                {
+                  "type": "hanja_network",
+                  "target": {
+                    "word": "출장",
+                    "hanja": "出張"
+                  },
+                  "related": [
+                    {
+                      "word": "출발",
+                      "hanja": "出發",
+                      "target_char_index": 0,
+                      "example_char_index": 0
+                    },
+                    {
+                      "word": "주장",
+                      "hanja": "主張",
+                      "target_char_index": 1,
+                      "example_char_index": 1
+                    }
+                  ],
+                  "homophone": [
+                    {
+                      "word": "장소",
+                      "hanja": "場所",
+                      "target_syllable_index": 1,
+                      "example_syllable_index": 0
+                    }
+                  ]
+                },
+                {
+                  "type": "pronunciation",
+                  "skill_id": "H3-PRON-SAMPLE",
+                  "level_band": "3급",
+                  "surface": "국립",
+                  "actual": "궁닙"
+                }
+              ]
+            }
+          },
+          {
+            "q": 2,
+            "section": "筆3／文法",
+            "question": "별도의 문맥에서 (　　　)를 확인해요.",
+            "answer_text": "표현",
+            "audio": "별도의 문맥에서 표현을 확인해요.",
+            "review": {
+              "reason": "별도의 설명을 제공한다.",
+              "learning_blocks": [
+                {
+                  "form": "표현",
+                  "usage": "意味関係を簡潔に整理する。",
+                  "example_ko": "새로운 예문을 사용해요."
+                }
+              ]
+            }
+          },
+          {
+            "q": 3,
+            "section": "筆4／置換",
+            "question": "별도의 문맥에서 (　　　)를 확인해요.",
+            "answer_text": "표현",
+            "audio": "별도의 문맥에서 표현을 확인해요.",
+            "review": {
+              "reason": "별도의 설명을 제공한다.",
+              "learning_blocks": [
+                {
+                  "form": "표현",
+                  "usage": "意味関係を簡潔に整理する。",
+                  "example_ko": "새로운 예문을 사용해요."
+                }
+              ]
+            }
+          },
+          {
+            "q": 4,
+            "section": "筆5／共通",
+            "question": "별도의 문맥에서 (　　　)를 확인해요.",
+            "answer_text": "표현",
+            "audio": "별도의 문맥에서 표현을 확인해요.",
+            "review": {
+              "reason": "별도의 설명을 제공한다.",
+              "learning_blocks": [
+                {
+                  "form": "표현",
+                  "usage": "意味関係を簡潔に整理する。",
+                  "example_ko": "새로운 예문을 사용해요."
+                }
+              ]
+            }
+          },
+          {
+            "q": 5,
+            "section": "筆6／応答",
+            "question": "별도의 문맥에서 (　　　)를 확인해요.",
+            "answer_text": "표현",
+            "audio": "별도의 문맥에서 표현을 확인해요.",
+            "review": {
+              "reason": "별도의 설명을 제공한다.",
+              "learning_blocks": [
+                {
+                  "form": "표현",
+                  "usage": "意味関係を簡潔に整理する。",
+                  "example_ko": "새로운 예문을 사용해요."
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "expect": {
+        "result": "PASS",
+        "hard_codes": []
+      }
     }
   ]
 }

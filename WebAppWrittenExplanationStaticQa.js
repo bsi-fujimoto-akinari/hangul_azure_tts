@@ -169,7 +169,7 @@ function h3FsWrittenExplQaFinding_(code,qNo,path,detail) {
 function h3FsWrittenExplQaPronValid_(block) {
   if(!block||block.type!=='pronunciation')return false;
   if(
-    block.level_band!=='3級' &&
+    block.level_band!=='3급' &&
     block.level_band!=='준2급'
   )return false;
   return (

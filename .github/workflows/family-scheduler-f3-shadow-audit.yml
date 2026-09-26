@@ -1814,8 +1814,12 @@ jobs:
           prep = Path("WebAppFamilySchedulerPreparation.js").read_text(encoding="utf-8")
 
           required_prep = [
-              "H3-FAMILY-SCHEDULER-W-PREP-20260924-V1",
-              "H3_FAMILY_SCHEDULER_WRITTEN_AUTHORING_REQUEST_V1",
+              "H3-FAMILY-SCHEDULER-W-PREP-20260926-V2",
+              "H3_FAMILY_SCHEDULER_WRITTEN_AUTHORING_REQUEST_V2",
+              "H3-D5-CONTEXT-QUALITY-20260926-V1",
+              "authoring_constraints",
+              "reject_both_bare_object_blank:true",
+              "echo_required_in_question_meta",
               "function h3FsPrepareWritten_(ss)",
               "WRITTEN_STAGE_AUTHORING:",
               "H3-FAMILY-SCHEDULER-RT-PREP-20260924-V1",

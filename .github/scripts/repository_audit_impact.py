@@ -40,6 +40,7 @@ DEPENDENCIES = json.loads(r'''{
     ".github/workflows/apps-script-auto-sync.yml",
     ".github/workflows/family-scheduler-f3-shadow-audit.yml",
     ".github/workflows/repository-audit.yml",
+    ".github/scripts/drive_raw_text_replace_helper.py",
     ".github/workflows/rs10-soft-signal-audit.yml",
     ".github/workflows/rs12-prospective-evidence-audit.yml",
     ".github/workflows/rs13-real-data-shadow-audit.yml",
@@ -136,6 +137,10 @@ DEPENDENCIES = json.loads(r'''{
     "appsscript.json"
   ],
   "Audit canonical four-Phase code-change workflow contract": [
+    "OPERATIONS.md"
+  ],
+  "Audit Drive raw TXT replace helper contract": [
+    ".github/scripts/drive_raw_text_replace_helper.py",
     "OPERATIONS.md"
   ],
   "Verify credentialed Apps Script execution boundaries": [
@@ -729,6 +734,8 @@ def validate() -> int:
         "Repository audit impact selection",
         "PHASE-4 must write the already verified exact application-main",
         "REPOSITORY_AUDIT_IMPACT_HELPER=.github/scripts/repository_audit_impact.py",
+        "H3_DRIVE_RAW_TEXT_REPLACE_V1",
+        "DRIVE_RAW_TEXT_REPLACE_HELPER=.github/scripts/drive_raw_text_replace_helper.py",
     ]
     missing = [token for token in required_ops if token not in operations]
     if missing:

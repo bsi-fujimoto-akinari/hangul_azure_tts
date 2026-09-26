@@ -968,6 +968,13 @@ function h3ReviewAudioGenerateSet_(family,setId){
 }
 
 
+function runReviewAudioIncidentRepairH3ERR202609260854458149B965(){
+  return h3ReviewAudioEnsureForLockedReview_(
+    '5W',
+    'H3-20260925-01'
+  );
+}
+
 function runReviewAudioPilotFamily1(){
   var selfCheck=h3ReviewAudioSelfCheck_();
   var targets=[

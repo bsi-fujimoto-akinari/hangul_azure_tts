@@ -3454,6 +3454,8 @@ function h3FsIssueReading_(ss) {
 }
 
 function h3FsIssueTranslation_(ss) {
+  h3FsTranslationProjectionRecoveryGate_(ss);
+
   var prepared=h3FsFindPreparedTranslation_(ss);
   if(!prepared)throw new Error('FAMILY_SCHEDULER_TRANSLATION_NOT_PREPARED');
 
@@ -3506,6 +3508,248 @@ function h3FsIssueTranslation_(ss) {
     } catch(_rollbackErr) {}
     throw err;
   }
+}
+
+function h3FsComparableCell_(value) {
+  return value === null ||
+    value === undefined
+    ? ''
+    : String(value);
+}
+
+function h3FsAssertRollbackSnapshotIdentity_(
+  actual,
+  expected,
+  headers,
+  mutableFields,
+  code
+) {
+  if (
+    !Array.isArray(actual) ||
+    !Array.isArray(expected) ||
+    actual.length !== expected.length ||
+    actual.length !== headers.length
+  ) {
+    throw new Error(code + ':ROW_SHAPE');
+  }
+  var mutable={};
+  (mutableFields || []).forEach(function (name) {
+    mutable[String(name)]=true;
+  });
+  headers.forEach(function (name,index) {
+    if (mutable[String(name)]) return;
+    if (
+      h3FsComparableCell_(actual[index]) !==
+      h3FsComparableCell_(expected[index])
+    ) {
+      throw new Error(
+        code + ':' + String(name)
+      );
+    }
+  });
+  return true;
+}
+
+function h3FsAssertRollbackRowsExact_(
+  actualRows,
+  expectedRows,
+  code
+) {
+  if (
+    !Array.isArray(actualRows) ||
+    !Array.isArray(expectedRows) ||
+    actualRows.length !== expectedRows.length
+  ) {
+    throw new Error(code + ':ROW_COUNT');
+  }
+  actualRows.forEach(function (row,index) {
+    var expected=expectedRows[index] || [];
+    if (
+      !Array.isArray(row) ||
+      row.length !== expected.length
+    ) {
+      throw new Error(
+        code + ':ROW_SHAPE:' + index
+      );
+    }
+    row.forEach(function (value,column) {
+      if (
+        h3FsComparableCell_(value) !==
+        h3FsComparableCell_(expected[column])
+      ) {
+        throw new Error(
+          code + ':CELL:' +
+          index + ':' + column
+        );
+      }
+    });
+  });
+  return true;
+}
+
+function h3FsListeningIssueRollback_(
+  payloadSheet,
+  payloadRow,
+  payloadTable,
+  payloadSnapshot,
+  k1Sheet,
+  k1Row,
+  k1Table,
+  k1Snapshot,
+  logSheet,
+  firstLogRow,
+  logTable,
+  expectedLogRows,
+  logsInserted,
+  setId
+) {
+  var payloadCurrent=payloadSheet
+    .getRange(
+      payloadRow,
+      1,
+      1,
+      payloadTable.headers.length
+    )
+    .getValues()[0];
+  h3FsAssertRollbackSnapshotIdentity_(
+    payloadCurrent,
+    payloadSnapshot,
+    payloadTable.headers,
+    ['STATUS','ISSUED_AT'],
+    'FAMILY_SCHEDULER_LISTENING_ROLLBACK_PAYLOAD_IDENTITY_MISMATCH'
+  );
+  var payloadStatus=String(
+    payloadCurrent[payloadTable.map.STATUS] || ''
+  );
+  var payloadOriginalStatus=String(
+    payloadSnapshot[payloadTable.map.STATUS] || ''
+  );
+  if (
+    payloadStatus !== payloadOriginalStatus &&
+    payloadStatus !== 'ISSUED'
+  ) {
+    throw new Error(
+      'FAMILY_SCHEDULER_LISTENING_ROLLBACK_PAYLOAD_STATE_MISMATCH'
+    );
+  }
+
+  var k1Current=k1Sheet
+    .getRange(
+      k1Row,
+      1,
+      1,
+      k1Table.headers.length
+    )
+    .getValues()[0];
+  h3FsAssertRollbackSnapshotIdentity_(
+    k1Current,
+    k1Snapshot,
+    k1Table.headers,
+    ['STATUS','CONSUMED_AT'],
+    'FAMILY_SCHEDULER_LISTENING_ROLLBACK_K1_IDENTITY_MISMATCH'
+  );
+  var k1Status=String(
+    k1Current[k1Table.map.STATUS] || ''
+  );
+  var k1OriginalStatus=String(
+    k1Snapshot[k1Table.map.STATUS] || ''
+  );
+  if (
+    k1Status !== k1OriginalStatus &&
+    k1Status !== 'CONSUMED'
+  ) {
+    throw new Error(
+      'FAMILY_SCHEDULER_LISTENING_ROLLBACK_K1_STATE_MISMATCH'
+    );
+  }
+
+  if (logsInserted) {
+    var currentLogRows=logSheet
+      .getRange(
+        firstLogRow,
+        1,
+        expectedLogRows.length,
+        logTable.headers.length
+      )
+      .getValues();
+    h3FsAssertRollbackRowsExact_(
+      currentLogRows,
+      expectedLogRows,
+      'FAMILY_SCHEDULER_LISTENING_ROLLBACK_LOG_IDENTITY_MISMATCH'
+    );
+  }
+
+  payloadSheet
+    .getRange(
+      payloadRow,
+      1,
+      1,
+      payloadTable.headers.length
+    )
+    .setValues([payloadSnapshot]);
+
+  k1Sheet
+    .getRange(
+      k1Row,
+      1,
+      1,
+      k1Table.headers.length
+    )
+    .setValues([k1Snapshot]);
+
+  if (logsInserted) {
+    logSheet.deleteRows(
+      firstLogRow,
+      expectedLogRows.length
+    );
+  }
+  SpreadsheetApp.flush();
+
+  var payloadAfter=payloadSheet
+    .getRange(
+      payloadRow,
+      1,
+      1,
+      payloadTable.headers.length
+    )
+    .getValues();
+  h3FsAssertRollbackRowsExact_(
+    payloadAfter,
+    [payloadSnapshot],
+    'FAMILY_SCHEDULER_LISTENING_ROLLBACK_PAYLOAD_READBACK_MISMATCH'
+  );
+
+  var k1After=k1Sheet
+    .getRange(
+      k1Row,
+      1,
+      1,
+      k1Table.headers.length
+    )
+    .getValues();
+  h3FsAssertRollbackRowsExact_(
+    k1After,
+    [k1Snapshot],
+    'FAMILY_SCHEDULER_LISTENING_ROLLBACK_K1_READBACK_MISMATCH'
+  );
+
+  var logAfter=h3FsTable_(logSheet);
+  var remaining=logAfter.rows.filter(
+    function (row) {
+      return String(
+        row[
+          logAfter.map.PARENT_SET_ID
+        ] || ''
+      ) === String(setId || '');
+    }
+  );
+  if (remaining.length) {
+    throw new Error(
+      'FAMILY_SCHEDULER_LISTENING_ROLLBACK_LOG_READBACK_MISMATCH:' +
+      remaining.length
+    );
+  }
+  return true;
 }
 
 function h3FsIssueListening_(ss) {
@@ -3811,49 +4055,34 @@ function h3FsIssueListening_(ss) {
     };
   } catch(err) {
     try {
-      payloadSheet
-        .getRange(
-          rec.rowNumber,
-          1,
-          1,
-          p.headers.length
+      h3FsListeningIssueRollback_(
+        payloadSheet,
+        rec.rowNumber,
+        p,
+        payloadSnapshot,
+        k1Sheet,
+        k1Found[0].rowNumber,
+        k1t,
+        k1Snapshot,
+        logSheet,
+        firstLogRow,
+        lt,
+        rows,
+        logsInserted,
+        setId
+      );
+    } catch(rollbackErr) {
+      throw new Error(
+        'FAMILY_SCHEDULER_LISTENING_ISSUE_RECOVERY_REQUIRED:' +
+        String(err && err.message || err) +
+        ':' +
+        String(
+          rollbackErr &&
+          rollbackErr.message ||
+          rollbackErr
         )
-        .setValues([payloadSnapshot]);
-
-      k1Sheet
-        .getRange(
-          k1Found[0].rowNumber,
-          1,
-          1,
-          k1t.headers.length
-        )
-        .setValues([k1Snapshot]);
-
-      if(logsInserted){
-        var ids=logSheet
-          .getRange(
-            firstLogRow,
-            lt.map.PARENT_SET_ID+1,
-            rows.length,
-            1
-          )
-          .getDisplayValues();
-        var allMine=ids.every(
-          function(x){
-            return String(
-              x[0]||''
-            )===setId;
-          }
-        );
-        if(allMine){
-          logSheet.deleteRows(
-            firstLogRow,
-            rows.length
-          );
-        }
-      }
-      SpreadsheetApp.flush();
-    } catch(_rollbackErr) {}
+      );
+    }
     throw err;
   }
 }

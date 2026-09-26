@@ -46,6 +46,7 @@ UNCONDITIONAL_STEPS = {
     "Verify workflow YAML",
     "Verify credentialed Apps Script execution boundaries",
     "Audit error-state lifecycle reconciliation contract",
+    "Audit prospective Review audio lifecycle contract",
     "Verify tracked-file allowlist",
     "Reject credential files and likely embedded secrets",
     "Audit repository access fast-path contract",

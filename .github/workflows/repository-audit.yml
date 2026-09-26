@@ -301,10 +301,7 @@ jobs:
         run: python3 .github/scripts/error_state_contract_audit.py
 
       - name: Audit prospective Review audio lifecycle contract
-        shell: bash
-        run: |
-          [ "$(python3 .github/scripts/repository_audit_impact.py decision 'Audit prospective Review audio lifecycle contract')" != "SKIP" ] || { echo "Impact-skip: Audit prospective Review audio lifecycle contract"; exit 0; }
-          node .github/scripts/review_audio_lifecycle_contract_audit.cjs
+        run: node .github/scripts/review_audio_lifecycle_contract_audit.cjs
 
       - name: Reject credential files and likely embedded secrets
         shell: bash

@@ -847,3 +847,57 @@ protected 5W/5L/R-T state unchanged.
 When those conditions hold, Review audio work item ⑬ / E5 is **CLOSED**. Completed E4
 generation/backfill and E5 binding/embedding must not be rerun merely for closeout.
 
+
+
+## 48. Prospective Review audio lifecycle ensure
+
+Contract ID: `H3-REVIEW-AUDIO-PROSPECTIVE-ENSURE-20260926-V1`.
+
+The E4 historical backfill remains complete and must not be rerun for normal production.
+For every newly committed persistent Review in the E5 sidecar families, Review audio is
+now ensured only after that family's persistent Review/source authority is LOCKED and
+before the HOME index or learner-facing Review is published.
+
+The production order is fixed:
+
+```text
+5W:
+  WRITTEN COMMITTED
+  -> answer sync CORE_COMPLETE
+  -> written Review LOCKED
+  -> Review audio ensure (D2-D6)
+  -> HOME / learner Review
+
+READING:
+  READING COMMITTED
+  -> Reading Review LOCKED
+  -> Review audio ensure (PASSAGE_COMPLETE, Q1_CHOICES, Q2_CHOICES)
+  -> HOME / learner Review
+
+TRANSLATION:
+  TRANSLATION COMMITTED
+  -> Translation Review LOCKED
+  -> Review audio ensure (role-derived 2T slots)
+  -> HOME / learner Review
+```
+
+The ensure boundary reuses the canonical E4 planner/generator and is idempotent:
+an existing current-generator DONE row with the same canonical audio-text hash is a
+NO_OP. Partial completion is retryable; a retry must reuse already completed matching
+rows and complete only the missing canonical slots. A ScriptLock serializes prospective
+set generation so two concurrent post-commit requests cannot create duplicate
+`(SURFACE_FAMILY, SET_ID, SLOT_KEY)` rows.
+
+After generation, the boundary must read back the exact expected cardinality
+(`5W=5`, `2R=3`, `2T=2`) and require every row to retain the canonical schema,
+`STATUS=DONE`, empty `ERROR`, `review-audio-v2-1200ms`, exact family folder,
+matching canonical audio-text SHA-256, and non-empty file ID/URL.
+
+This is a post-lock production lifecycle boundary, not a Review read fallback. The E5
+resolver remains read-only and fail-closed. Missing, duplicate, malformed, stale,
+wrong-family, wrong-folder, or wrong-hash sidecars are never substituted or synthesized
+while opening Review or serving media.
+
+The ensure boundary must not rewrite committed answers, score, uncertainty, learner
+history, locked Review payload/binding authority, generation history, skill/retest state,
+scheduler state, counters, pointers, or already valid existing Review-audio identities.

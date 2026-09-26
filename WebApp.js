@@ -503,6 +503,11 @@ function h3SubmitListeningWebAnswersCore_(request) {
           readingResult.txn_id
         );
 
+      h3ReviewAudioEnsureForLockedReview_(
+        'READING',
+        readingResult.set_id
+      );
+
       readingResult.home_index_sync =
         h3ReviewHomeIndexUpsertAfterCommit_(
           readingResult,
@@ -583,6 +588,11 @@ function h3SubmitListeningWebAnswersCore_(request) {
           .releaseLock();
       }
 
+      h3ReviewAudioEnsureForLockedReview_(
+        'TRANSLATION',
+        translationResult.set_id
+      );
+
       translationResult.home_index_sync =
         h3ReviewHomeIndexUpsertAfterCommit_(
           translationResult,
@@ -641,6 +651,11 @@ function h3SubmitListeningWebAnswersCore_(request) {
 
     h3WrittenProductionReviewEnsure_(
       writtenResult.txn_id
+    );
+
+    h3ReviewAudioEnsureForLockedReview_(
+      '5W',
+      writtenResult.set_id
     );
 
     writtenResult.after_sync =

@@ -14,6 +14,7 @@ for (const token of [
   'H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_ = 1',
   'H3_MONITOR_PRODUCTION_TRIGGER_NEAR_MINUTE_ = 0',
   "'Asia/Tokyo'",
+  'function h3MonitoringProductionTriggerAlignmentStatus()',
   'function h3MonitoringProductionTriggerRealignToHour()',
   '.nearMinute(H3_MONITOR_PRODUCTION_TRIGGER_NEAR_MINUTE_)',
   '.everyHours(H3_MONITOR_PRODUCTION_TRIGGER_CADENCE_HOURS_)',
@@ -95,6 +96,15 @@ h3MonitoringObserverPreview=()=>({
   health:{error_count:0,action_required_count:0},
   write_performed:false
 });
+
+let alignmentStatus=h3MonitoringProductionTriggerAlignmentStatus();
+assert(
+  alignmentStatus.schema==='H3_MONITOR_PRODUCTION_TRIGGER_ALIGNMENT_STATUS_V1' &&
+  alignmentStatus.status==='ABSENT' &&
+  alignmentStatus.legacy_ready===false &&
+  alignmentStatus.write_performed===false,
+  'initial alignment diagnostic mismatch'
+);
 
 let ensured=h3MonitoringProductionTriggerEnsure();
 assert(ensured.status==='READY' && ensured.created===true,'ensure failed');

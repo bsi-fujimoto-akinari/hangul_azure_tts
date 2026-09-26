@@ -127,7 +127,6 @@ for path in sorted(Path('.github/workflows').glob('*.yml')):
 binding_refs = 0
 automatic_refs = 0
 manual_refs = 0
-phase4_acceptance_refs = 0
 
 for path, pos, contents, line in command_refs:
     if path != sync_path:
@@ -165,36 +164,6 @@ for path, pos, contents, line in command_refs:
             raise SystemExit(
                 'Observability source binding must be gated by '
                 'source_binding_boundary ready=true.'
-            )
-        continue
-
-    if 'runReviewAudioIncidentPhase4AcceptanceH3ERR202609260854458149B965' in line:
-        phase4_acceptance_refs += 1
-        trigger_boundary_pos = contents.find(
-            'Validate production trigger alignment boundary'
-        )
-        if (
-            binding_boundary_pos < 0
-            or trigger_boundary_pos < 0
-            or pos <= binding_boundary_pos
-            or pos >= trigger_boundary_pos
-        ):
-            raise SystemExit(
-                'Phase 4 Review acceptance must occur after exact-main '
-                'source binding and before production trigger alignment.'
-            )
-        prefix = contents[max(binding_boundary_pos, pos - 1200):pos]
-        if (
-            "if: steps.source_binding_boundary.outputs.ready == 'true'"
-            not in prefix
-        ):
-            raise SystemExit(
-                'Phase 4 Review acceptance must be gated by '
-                'source_binding_boundary ready=true.'
-            )
-        if '--params' in line:
-            raise SystemExit(
-                'Phase 4 acceptance runner must use its fixed no-argument contract.'
             )
         continue
 
@@ -242,12 +211,6 @@ if automatic_refs != 1:
     )
 
 
-if phase4_acceptance_refs != 1:
-    raise SystemExit(
-        f'Expected exactly one temporary Phase 4 Review acceptance command; found {phase4_acceptance_refs}.'
-    )
-
-
 alignment_boundary_pos = sync.find(
     'Validate production trigger alignment boundary'
 )
@@ -280,5 +243,5 @@ print(
     'Credentialed Apps Script execution boundaries: PASS; '
     f'observability binding refs={binding_refs}; '
     f'automatic smoke refs={automatic_refs}; '
-    f'ad hoc smoke refs={manual_refs}; phase4 acceptance refs={phase4_acceptance_refs}; production trigger alignment helper=1'
+    f'ad hoc smoke refs={manual_refs}; production trigger alignment helper=1'
 )

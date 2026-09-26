@@ -2995,7 +2995,7 @@ jobs:
           const fakeSs = {
             getId:()=>H3_WEB_RUNTIME_SPREADSHEET_ID
           };
-          h3MonitoringRs13Rs14Source_ = () => ({
+          h3MonitoringErrorStateSource_=()=>({status:'OK',data:{error_state_write_performed:false},action_required_events:[]}); h3MonitoringRs13Rs14Source_ = () => ({
             status:'OK',
             data:{
               schema:H3_MONITOR_RS13_RS14_SCHEMA_,
@@ -3013,7 +3013,7 @@ jobs:
             snapshot.status !== 'HEALTHY' ||
             snapshot.write_performed !== false ||
             snapshot.sources.map(x=>x.source_id).join(',') !==
-              'RS13_RS14_GATE,RUNTIME_AUTHORITY,SEMANTIC_AUTHORING_QUEUE' ||
+              'ERROR_STATE,RS13_RS14_GATE,RUNTIME_AUTHORITY,SEMANTIC_AUTHORING_QUEUE' ||
             snapshot.sources.find(
               x=>x.source_id==='SEMANTIC_AUTHORING_QUEUE'
             ).data.semantic_write_performed !== false

@@ -23,6 +23,9 @@ DRIVE_TEXT_HELPER_PATH = ".github/scripts/drive_raw_text_replace_helper.py"
 WORKFLOW_LINT_PATH = ".github/workflows/workflow-lint.yml"
 WORKFLOW_LINT_HELPER_PATH = ".github/scripts/workflow_lint_guard.py"
 TRACKED_ALLOWLIST_HELPER_PATH = ".github/scripts/repository_tracked_allowlist.py"
+APPS_SCRIPT_EXECUTION_BOUNDARY_AUDIT_PATH = ".github/scripts/apps_script_execution_boundary_audit.py"
+PRODUCTION_TRIGGER_ALIGNMENT_HELPER_PATH = ".github/scripts/production_trigger_alignment.py"
+PRODUCTION_TRIGGER_CONTRACT_AUDIT_PATH = ".github/scripts/production_trigger_contract_audit.cjs"
 
 FORCE_FULL_FILES = {
     WORKFLOW_PATH,
@@ -30,6 +33,9 @@ FORCE_FULL_FILES = {
     WORKFLOW_LINT_PATH,
     WORKFLOW_LINT_HELPER_PATH,
     TRACKED_ALLOWLIST_HELPER_PATH,
+    APPS_SCRIPT_EXECUTION_BOUNDARY_AUDIT_PATH,
+    PRODUCTION_TRIGGER_ALIGNMENT_HELPER_PATH,
+    PRODUCTION_TRIGGER_CONTRACT_AUDIT_PATH,
 }
 
 UNCONDITIONAL_STEPS = {
@@ -162,14 +168,20 @@ DEPENDENCIES = json.loads(r'''{
     "WebAppWrittenNewfmt.js",
     "WebAppWrittenNewfmtAudit.js",
     "WebAppWrittenProduction.js",
-    "appsscript.json"
+    "appsscript.json",
+    ".github/scripts/apps_script_execution_boundary_audit.py",
+    ".github/scripts/production_trigger_alignment.py",
+    ".github/scripts/production_trigger_contract_audit.cjs"
   ],
   "Audit canonical four-Phase code-change workflow contract": [
     "OPERATIONS.md"
   ],
   "Verify credentialed Apps Script execution boundaries": [
     ".github/workflows/apps-script-auto-sync.yml",
-    "OPERATIONS.md"
+    "OPERATIONS.md",
+    ".github/scripts/apps_script_execution_boundary_audit.py",
+    ".github/scripts/production_trigger_alignment.py",
+    "WebAppFamilyScheduler.js"
   ],
   "Audit automatic read-only live smoke contract": [
     ".github/workflows/apps-script-auto-sync.yml",
@@ -625,7 +637,8 @@ DEPENDENCIES = json.loads(r'''{
     "WebAppWrittenNewfmt.js",
     "WebAppWrittenNewfmtAudit.js",
     "WebAppWrittenProduction.js",
-    "WebAppErrorState.js"
+    "WebAppErrorState.js",
+    ".github/scripts/production_trigger_contract_audit.cjs"
   ],
   "Verify audio semantic invariants": [
     "Code.js"

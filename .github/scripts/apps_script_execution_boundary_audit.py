@@ -127,7 +127,6 @@ for path in sorted(Path('.github/workflows').glob('*.yml')):
 binding_refs = 0
 automatic_refs = 0
 manual_refs = 0
-incident_repair_refs = 0
 
 for path, pos, contents, line in command_refs:
     if path != sync_path:
@@ -165,37 +164,6 @@ for path, pos, contents, line in command_refs:
             raise SystemExit(
                 'Observability source binding must be gated by '
                 'source_binding_boundary ready=true.'
-            )
-        continue
-
-    if 'runReviewAudioIncidentRepairH3ERR202609260854458149B965' in line:
-        incident_repair_refs += 1
-        trigger_boundary_pos = contents.find(
-            'Validate production trigger alignment boundary'
-        )
-        if (
-            binding_boundary_pos < 0
-            or trigger_boundary_pos < 0
-            or pos <= binding_boundary_pos
-            or pos >= trigger_boundary_pos
-        ):
-            raise SystemExit(
-                'Incident Review-audio repair must occur after exact-main '
-                'source binding and before production trigger alignment.'
-            )
-        prefix = contents[max(binding_boundary_pos, pos - 1200):pos]
-        if (
-            "if: steps.source_binding_boundary.outputs.ready == 'true'"
-            not in prefix
-        ):
-            raise SystemExit(
-                'Incident Review-audio repair must be gated by '
-                'source_binding_boundary ready=true.'
-            )
-        if '--params' in line:
-            raise SystemExit(
-                'Incident Review-audio repair runner must use its fixed '
-                'no-argument target contract.'
             )
         continue
 
@@ -243,12 +211,6 @@ if automatic_refs != 1:
     )
 
 
-if incident_repair_refs != 1:
-    raise SystemExit(
-        f'Expected exactly one temporary incident Review-audio repair command; found {incident_repair_refs}.'
-    )
-
-
 alignment_boundary_pos = sync.find(
     'Validate production trigger alignment boundary'
 )
@@ -281,5 +243,5 @@ print(
     'Credentialed Apps Script execution boundaries: PASS; '
     f'observability binding refs={binding_refs}; '
     f'automatic smoke refs={automatic_refs}; '
-    f'ad hoc smoke refs={manual_refs}; incident repair refs={incident_repair_refs}; production trigger alignment helper=1'
+    f'ad hoc smoke refs={manual_refs}; production trigger alignment helper=1'
 )

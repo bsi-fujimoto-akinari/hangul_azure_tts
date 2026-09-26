@@ -48,6 +48,7 @@ jobs:
               'Code.js',
               'WebApp.js',
               'WebAppObservability.js',
+              'WebAppErrorState.js',
               'WebAppLiveSmoke.js',
               'WebAppFixture.js',
               'WebAppProduction.js',

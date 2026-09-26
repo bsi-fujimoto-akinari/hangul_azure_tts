@@ -237,6 +237,8 @@ function h3AutomaticLiveSmokeSystemTest_() {
 }
 
 function h3AutomaticLiveSmoke(request) {
+  var errorStatePhase1 =
+    h3ErrorStatePhase1SelfTest_();
   var source =
     h3AutomaticLiveSmokeRequireSource_(
       request
@@ -286,6 +288,8 @@ function h3AutomaticLiveSmoke(request) {
       source.source_digest,
     source_file_count:
       source.source_file_count,
+    error_state_phase1:
+      errorStatePhase1,
     suites:
       results,
     write_performed:

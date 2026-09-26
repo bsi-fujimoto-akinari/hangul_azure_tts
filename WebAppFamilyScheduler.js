@@ -73,6 +73,15 @@ var H3_FS_AUTHORING_RECOVERY_POLICY_ID_ =
 var H3_FS_AUTHORING_CLAIM_STALE_MINUTES_ = 120;
 var H3_FS_AUTHORING_RETRY_BACKOFF_MINUTES_ = 60;
 var H3_FS_AUTHORING_MAX_ATTEMPTS_ = 3;
+var H3_FS_W_D5_CONTEXT_POLICY_ID_ =
+  'H3-D5-CONTEXT-QUALITY-20260926-V1';
+var H3_FS_W_D5_CONTEXT_ACTIVATION_STAGE_ =
+  'STD-B002-S2';
+var H3_FS_W_D5_CONTEXT_RATIONALE_CODES_ = [
+  'TWO_DISTINCT_CONTEXTS',
+  'SHORT_OFFICIAL_STYLE_WITH_CONTEXT_CUES',
+  'MIXED_SHORT_AND_EXTENDED_CONTEXT'
+];
 var H3_FS_AUTHORING_QUEUE_HEADERS_ = [
   'JOB_ID','CREATED_AT','UPDATED_AT','LEVEL','FAMILY','TARGET_ID',
   'TARGET_KIND','AUTHORING_TARGET','STATUS','PRIORITY','SNAPSHOT_SHA256',
@@ -409,6 +418,181 @@ function h3FsWrittenAnswerSyncGate_(ss,stageId) {
   };
 }
 
+function h3FsWrittenD5StageParts_(stageId) {
+  var match=/^STD-B(\d{3})-S(\d+)$/.exec(
+    String(stageId||'')
+  );
+  if(!match){
+    throw new Error(
+      'WRITTEN_D5_CONTEXT_STAGE_ID_INVALID'
+    );
+  }
+  return {
+    block_no:Number(match[1]),
+    set_offset:Number(match[2])
+  };
+}
+
+function h3FsWrittenD5PolicyBoundStage_(stageId) {
+  var current=h3FsWrittenD5StageParts_(stageId);
+  var activation=h3FsWrittenD5StageParts_(
+    H3_FS_W_D5_CONTEXT_ACTIVATION_STAGE_
+  );
+  if(current.block_no!==activation.block_no){
+    return current.block_no>activation.block_no;
+  }
+  return current.set_offset>=activation.set_offset;
+}
+
+function h3FsWrittenD5QuestionLines_(value) {
+  var text=String(value||'')
+    .replace(/\r/g,'\n');
+  var out=[];
+  text.split('\n').forEach(function(rawLine){
+    rawLine.split('・').forEach(function(part){
+      var line=String(part||'')
+        .replace(
+          /^[\s　]*[０-９0-9]+[）)]\s*/,
+          ''
+        )
+        .trim();
+      if(line)out.push(line);
+    });
+  });
+  return out;
+}
+
+function h3FsWrittenD5BareLineClass_(value) {
+  var line=String(value||'')
+    .replace(
+      /[（(][\s　]*[）)]/g,
+      ' __BLANK__ '
+    )
+    .replace(/[.!?。！？]+\s*$/,'')
+    .trim();
+  var tokens=line
+    .split(/[\s　]+/)
+    .filter(function(x){return !!x;});
+  if(
+    tokens.length<2||
+    tokens[tokens.length-1]!=='__BLANK__'
+  ){
+    return 'CONTEXTUAL';
+  }
+
+  var objectToken=tokens[tokens.length-2];
+  if(!/[을를]$/.test(objectToken)){
+    return 'CONTEXTUAL';
+  }
+
+  var prefix=tokens.slice(0,tokens.length-2);
+  if(prefix.length>2){
+    return 'CONTEXTUAL';
+  }
+
+  var contextParticle=
+    /(에서|에게|한테|으로|부터|까지|보다|께|에|로|와|과)$/;
+  var contextModifier=
+    /(지만|니까|면서|도록|려고|아서|어서|고|게|던|는|은)$/;
+  var contextual=prefix.some(function(token){
+    return (
+      contextParticle.test(token)||
+      contextModifier.test(token)
+    );
+  });
+  return contextual
+    ? 'CONTEXTUAL'
+    : 'BARE_OBJECT_BLANK';
+}
+
+function h3FsWrittenD5ContextValidatePrepared_(
+  stageId,
+  meta
+) {
+  if(!h3FsWrittenD5PolicyBoundStage_(stageId)){
+    return {
+      applied:false,
+      policy_id:'',
+      result:'PREPOLICY_BYPASS'
+    };
+  }
+  if(
+    !meta||
+    !Array.isArray(meta.questions)||
+    meta.questions.length!==5
+  ){
+    throw new Error(
+      'WRITTEN_D5_CONTEXT_META_INVALID'
+    );
+  }
+
+  var question=meta.questions[3]||{};
+  var section=String(question.section||'');
+  if(
+    Number(question.q)!==4||
+    !(
+      section==='D5'||
+      section.indexOf('筆5')===0
+    )
+  ){
+    throw new Error(
+      'WRITTEN_D5_CONTEXT_QUESTION_IDENTITY_INVALID'
+    );
+  }
+
+  var marker=question.d5_context_quality;
+  if(
+    !marker||
+    Object.prototype.toString.call(marker)!==
+      '[object Object]'||
+    String(marker.policy_id||'')!==
+      H3_FS_W_D5_CONTEXT_POLICY_ID_
+  ){
+    throw new Error(
+      'WRITTEN_D5_CONTEXT_POLICY_MARKER_MISSING'
+    );
+  }
+  if(
+    marker.semantic_pass!==true||
+    !Array.isArray(marker.line_profiles)||
+    marker.line_profiles.length!==2||
+    H3_FS_W_D5_CONTEXT_RATIONALE_CODES_.indexOf(
+      String(marker.rationale_code||'')
+    )<0
+  ){
+    throw new Error(
+      'WRITTEN_D5_CONTEXT_SEMANTIC_MARKER_INVALID'
+    );
+  }
+
+  var lines=h3FsWrittenD5QuestionLines_(
+    question.question
+  );
+  if(lines.length!==2){
+    throw new Error(
+      'WRITTEN_D5_CONTEXT_LINES_INVALID'
+    );
+  }
+  var classes=lines.map(
+    h3FsWrittenD5BareLineClass_
+  );
+  if(
+    classes[0]==='BARE_OBJECT_BLANK'&&
+    classes[1]==='BARE_OBJECT_BLANK'
+  ){
+    throw new Error(
+      'WRITTEN_D5_CONTEXT_BOTH_LINES_BARE'
+    );
+  }
+
+  return {
+    applied:true,
+    policy_id:H3_FS_W_D5_CONTEXT_POLICY_ID_,
+    result:'PASS',
+    line_classes:classes
+  };
+}
+
 function h3FsFindPreparedWritten_(ss) {
   var pointer=h3FsWrittenPointerState_(ss);
   var stageId=pointer.stage_id;
@@ -486,6 +670,10 @@ function h3FsFindPreparedWritten_(ss) {
   );
   h3WrittenNewfmtValidatePlannedSlots_(
     meta.planned_slots
+  );
+  h3FsWrittenD5ContextValidatePrepared_(
+    stageId,
+    meta
   );
 
   return x;
@@ -3222,6 +3410,16 @@ function h3FsWrittenGenerationInsert_(
 function h3FsIssueWritten_(ss) {
   var prepared=h3FsFindPreparedWritten_(ss);
   if(!prepared)throw new Error('FAMILY_SCHEDULER_WRITTEN_NOT_PREPARED');
+
+  h3FsWrittenD5ContextValidatePrepared_(
+    prepared.stage_id,
+    h3FsJson_(
+      prepared.row[
+        prepared.map.QUESTION_META_JSON
+      ],
+      null
+    )
+  );
 
   var stageSheet=prepared.sheet;
   var stageSnapshot=stageSheet

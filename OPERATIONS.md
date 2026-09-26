@@ -405,6 +405,30 @@ Contract: `H3_ERROR_STATE_RECONCILE_V1`.
 
 The lifecycle sheet and `error_state_v1` are observability/control-plane metadata only. Reconciliation must not mutate learner history, scores, review payloads, queues, scheduler state, pointers, counters, or stages.
 
+
+### Read-only Error State boot
+
+Contract: `H3_ERROR_STATE_BOOT_V1`.
+
+Normal boot is read-only. `h3ErrorStateBootSnapshot` reads `web_runtime_error_log_v1`, `error_incident_lifecycle_v1`, and `error_state_v1` without creating sheets, appending lifecycle events, or refreshing the saved projection. It recomputes the effective Error State in memory from fresh raw and lifecycle data.
+
+The boot result uses the fresh recomputed state for `ERROR=NONE|PRESENT|UNKNOWN`. The saved `error_state_v1` projection is comparison-only during boot. `DRIFT=PRESENT` when either the raw-log watermark differs from the projection or the projection's semantic fields differ from the fresh recomputation. The semantic comparison is required because lifecycle resolution can change without adding a raw-error row. A missing or malformed projection produces `DRIFT=PRESENT` while fresh raw+lifecycle data may still produce a valid `ERROR`. Failure to read or validate the fresh primary/lifecycle sources produces `ERROR=UNKNOWN` and `DRIFT=UNKNOWN`.
+
+`current.json.error_summary` is a display-only cache. It must never override the fresh boot result. Boot compares the CURRENT summary with the fresh effective state; any mismatch is reportable drift. Boot itself performs no write. Refreshing `error_state_v1` or CURRENT requires a separately authorized state/maintenance write.
+
+Canonical boot order for error status:
+
+```text
+read current.json + current.schema.json
+-> fresh read web_runtime_error_log_v1
+-> fresh read error_incident_lifecycle_v1
+-> read error_state_v1 projection
+-> read-only recompute effective state
+-> compare raw watermark + semantic projection
+-> compare current.json.error_summary
+-> report ERROR and DRIFT
+```
+
 ### Automatic live smoke
 
 Normal audited `main` changes may run a permanent impact-selected read-only live smoke without `workflow_dispatch`. The permanent contract is `H3_AUTOMATIC_LIVE_SMOKE_REQUEST_V1` -> `H3_AUTOMATIC_LIVE_SMOKE_RESULT_V1`.

@@ -209,15 +209,19 @@ assert(
 );
 
 [
-  'H3-FAMILY-SCHEDULER-W-PREP-20260926-V2',
-  'H3_FAMILY_SCHEDULER_WRITTEN_AUTHORING_REQUEST_V2',
+  'H3-FAMILY-SCHEDULER-W-PREP-20260926-V3',
+  'H3_FAMILY_SCHEDULER_WRITTEN_AUTHORING_REQUEST_V3',
   'H3-D5-CONTEXT-QUALITY-20260926-V1',
   'authoring_constraints',
   'require_two_independent_natural_contexts:true',
   'reject_both_bare_object_blank:true',
   'allow_short_official_style:true',
   'forbid_padding:true',
-  'echo_required_in_question_meta'
+  'echo_required_in_question_meta',
+  'H3-WRITTEN-EXPLANATION-STATIC-QA-20260926-V1',
+  'explanation_static_qa',
+  'hard_fail_blocking:true',
+  'heuristic_warnings_blocking:false'
 ].forEach(token => {
   assert(
     prepSource.includes(token),
@@ -247,13 +251,17 @@ const generation =
     {
       authoring_request: {
         contract_id:
-          'H3-FAMILY-SCHEDULER-W-PREP-20260926-V2',
+          'H3-FAMILY-SCHEDULER-W-PREP-20260926-V3',
         schema:
-          'H3_FAMILY_SCHEDULER_WRITTEN_AUTHORING_REQUEST_V2',
+          'H3_FAMILY_SCHEDULER_WRITTEN_AUTHORING_REQUEST_V3',
         authoring_constraints: {
           d5_context: {
             policy_id:
               'H3-D5-CONTEXT-QUALITY-20260926-V1'
+          },
+          explanation_static_qa: {
+            contract_id:
+              'H3-WRITTEN-EXPLANATION-STATIC-QA-20260926-V1'
           }
         }
       }
@@ -261,9 +269,9 @@ const generation =
   );
 assert(
   generation.includes(
-    'H3-FAMILY-SCHEDULER-AUTHORING-GENERATION-20260926-V1'
+    'H3-FAMILY-SCHEDULER-AUTHORING-GENERATION-20260926-V2'
   ),
-  'D5 V2 authoring generation missing.'
+  'Written V3 authoring generation missing.'
 );
 
 const v2Identity =

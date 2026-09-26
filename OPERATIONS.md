@@ -942,6 +942,12 @@ Production lifecycle functions:
   from an exact ABSENT state, persists its unique trigger identity and cadence
   metadata in Script Properties, and requires exact READY readback. Re-running
   against the same verified trigger is a no-op.
+- `h3MonitoringProductionTriggerRealignToHour()` — idempotent migration for
+  the pre-alignment hourly trigger. A legacy one-hour trigger with verified
+  identity is replaced by one trigger configured with `nearMinute(0)`,
+  `everyHours(1)`, and `Asia/Tokyo`. The aligned trigger is created before
+  the legacy trigger is removed so monitoring coverage is preserved; metadata
+  is rolled back if migration cannot complete.
 - `h3MonitoringProductionTriggerRemove()` — recovery-only removal of exactly
   one verified production trigger. Duplicate or identity-mismatched state is
   fail-closed and is never mass-deleted.
@@ -949,8 +955,28 @@ Production lifecycle functions:
 Exactly one matching trigger is allowed. More than one matching trigger,
 or one trigger whose CLOCK source/identity metadata cannot be verified, is an
 ERROR and blocks cutover. The implementation uses
-`ScriptApp.newTrigger(...).timeBased().everyHours(1)` and requires the explicit
+`ScriptApp.newTrigger(...).timeBased().nearMinute(0).everyHours(1).inTimezone('Asia/Tokyo')` and requires the explicit
 `script.scriptapp` OAuth scope.
+
+### Production monitor trigger alignment
+
+The target schedule is `nearMinute(0).everyHours(1)` in `Asia/Tokyo`.
+Apps Script treats `nearMinute(0)` as an approximate minute target, so an
+hourly execution may occur within roughly +/-15 minutes of the top of the hour.
+
+The exact-main Apps Script auto-sync performs the migration only after source
+push, source attestation, and observability source binding have succeeded.
+The boundary step is `Validate production trigger alignment boundary`; the
+mutation step is gated by
+`if: steps.trigger_alignment_boundary.outputs.ready == 'true'` and invokes
+`h3MonitoringProductionTriggerRealignToHour` through
+`.github/scripts/production_trigger_alignment.py`.
+
+The migration is idempotent: an already aligned trigger is a no-op; an absent
+trigger remains absent; an unverified or duplicate legacy state fails closed.
+The CI readback requires one READY trigger with cadence=1,
+`configured_near_minute=0`, timezone=`Asia/Tokyo`, matching metadata, and
+no duplicate trigger.
 
 The production trigger may update only monitoring-owned persistence
 (`monitor_observer_v1` and, only when an action-required event exists or an

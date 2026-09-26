@@ -227,7 +227,7 @@ if not (
 ):
     raise SystemExit('Production trigger alignment step order invalid.')
 alignment_prefix = sync[
-    max(alignment_boundary_pos, alignment_execute_pos - 1600):
+    alignment_boundary_pos:
     alignment_execute_pos
 ]
 if (

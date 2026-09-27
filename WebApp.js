@@ -292,6 +292,10 @@ function getListeningWebSet(request) {
 
 function h3GetListeningWebSetCore_(request) {
   var payload;
+  if (h3RuntimeAuthority_() === 'D1' &&
+      request && request.mode !== 'SYSTEM_TEST') {
+    return h3RuntimeRender_(request);
+  }
 
   if (
     request &&
@@ -389,6 +393,10 @@ function getListeningWebMedia(request) {
 }
 
 function h3GetListeningWebMediaCore_(request) {
+  if (h3RuntimeAuthority_() === 'D1' &&
+      request && request.mode === 'LISTENING') {
+    return h3RuntimeListeningMedia_(request);
+  }
   if (
     request &&
     [
@@ -804,14 +812,15 @@ function h3WebBootRequest_(e) {
       );
     }
   } else {
-    var spreadsheet =
-      SpreadsheetApp.openById(
-        H3_WEB_RUNTIME_SPREADSHEET_ID
-      );
     var current =
-      h3ReviewCurrentLearning_(
-        spreadsheet
-      );
+      h3RuntimeAuthority_() === 'D1'
+        ? h3RuntimeRpc_('CURRENT_LEARNING', {})
+            .current_learning
+        : h3ReviewCurrentLearning_(
+            SpreadsheetApp.openById(
+              H3_WEB_RUNTIME_SPREADSHEET_ID
+            )
+          );
 
     if (current) {
       mode = String(
@@ -981,7 +990,11 @@ function getListeningLearnerUrl(
     String(setId || '').trim();
 
   var payload =
-    buildProductionRenderPayload_({
+    (
+      h3RuntimeAuthority_() === 'D1'
+        ? h3RuntimeRender_
+        : buildProductionRenderPayload_
+    )({
       schema:
         'H3_WEB_RENDER_REQUEST_V1',
       mode:

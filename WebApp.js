@@ -290,8 +290,25 @@ function getListeningWebSet(request) {
   );
 }
 
+function h3WebRuntimeMode_() {
+  if (typeof h3RuntimeAuthority_ === 'function') {
+    return h3RuntimeAuthority_();
+  }
+  if (typeof PropertiesService === 'undefined') return 'LEGACY';
+  var mode = PropertiesService.getScriptProperties()
+    .getProperty('H3_RUNTIME_AUTHORITY_MODE');
+  if (mode && mode !== 'LEGACY') {
+    throw new Error('H3_RUNTIME_ADAPTER_MISSING');
+  }
+  return 'LEGACY';
+}
+
 function h3GetListeningWebSetCore_(request) {
   var payload;
+  if (h3WebRuntimeMode_() === 'D1' &&
+      request && request.mode !== 'SYSTEM_TEST') {
+    return h3RuntimeRender_(request);
+  }
 
   if (
     request &&
@@ -389,6 +406,17 @@ function getListeningWebMedia(request) {
 }
 
 function h3GetListeningWebMediaCore_(request) {
+  if (h3WebRuntimeMode_() === 'D1') {
+    if (request && request.mode === 'LISTENING') {
+      return h3RuntimeListeningMedia_(request);
+    }
+    if (request && request.mode === 'REVIEW') {
+      return h3RuntimeReviewMedia_(request);
+    }
+    if (request && request.mode === 'REVIEW_REPLAY') {
+      throw new Error('REVIEW_REPLAY_RETIRED');
+    }
+  }
   if (
     request &&
     [
@@ -804,14 +832,15 @@ function h3WebBootRequest_(e) {
       );
     }
   } else {
-    var spreadsheet =
-      SpreadsheetApp.openById(
-        H3_WEB_RUNTIME_SPREADSHEET_ID
-      );
     var current =
-      h3ReviewCurrentLearning_(
-        spreadsheet
-      );
+      h3WebRuntimeMode_() === 'D1'
+        ? h3RuntimeRpc_('CURRENT_LEARNING', {})
+            .current_learning
+        : h3ReviewCurrentLearning_(
+            SpreadsheetApp.openById(
+              H3_WEB_RUNTIME_SPREADSHEET_ID
+            )
+          );
 
     if (current) {
       mode = String(
@@ -980,15 +1009,24 @@ function getListeningLearnerUrl(
   var normalized =
     String(setId || '').trim();
 
-  var payload =
-    buildProductionRenderPayload_({
+  var renderRequest = {
       schema:
         'H3_WEB_RENDER_REQUEST_V1',
       mode:
         'LISTENING',
       set_id:
         normalized
+    };
+  var payload;
+  if (h3WebRuntimeMode_() === 'D1') {
+    payload = h3RuntimeRender_(renderRequest);
+  } else {
+    payload = buildProductionRenderPayload_({
+      schema: 'H3_WEB_RENDER_REQUEST_V1',
+      mode: 'LISTENING',
+      set_id: normalized
     });
+  }
 
   if (
     !payload ||

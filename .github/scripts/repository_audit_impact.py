@@ -126,6 +126,7 @@ DEPENDENCIES = json.loads(r'''{
     "ReviewAudioBackfill.js",
     "Stylesheet.html",
     "WebApp.js",
+    "WebAppCloudflareRuntime.js",
     "WebAppConceptAuthoring.js",
     "WebAppFamilyScheduler.js",
     "WebAppFamilySchedulerPreparation.js",

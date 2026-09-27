@@ -685,6 +685,7 @@ function h3TranslationSubmit_(
   var lock =
     LockService.getScriptLock();
   lock.waitLock(30000);
+  h3RuntimeRequireLegacyMutation_();
 
   var journal = null;
   var txnRow = null;

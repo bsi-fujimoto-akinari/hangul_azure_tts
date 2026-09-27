@@ -2485,7 +2485,8 @@ function h3FamilySchedulerAuthoringReconciliationEnsure() {
   lock.waitLock(30000);
   
   try {
-    h3RuntimeRequireLegacyMutation_();
+    if (typeof h3WebRuntimeMode_ === 'function' && h3WebRuntimeMode_() !== 'LEGACY') throw new Error('H3_RUNTIME_LEGACY_WRITE_FORBIDDEN');
+    if (typeof h3RuntimeRequireLegacyMutation_ === 'function') h3RuntimeRequireLegacyMutation_();
     var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
     var first=h3FsAuthoringReconciliationPreviewCore_(ss,'3級');
     if(first.public_result.action!=='ENSURE_OPEN'){
@@ -2636,7 +2637,8 @@ function h3FamilySchedulerWrittenAuthoringGenerationRebind() {
   lock.waitLock(30000);
   
   try {
-    h3RuntimeRequireLegacyMutation_();
+    if (typeof h3WebRuntimeMode_ === 'function' && h3WebRuntimeMode_() !== 'LEGACY') throw new Error('H3_RUNTIME_LEGACY_WRITE_FORBIDDEN');
+    if (typeof h3RuntimeRequireLegacyMutation_ === 'function') h3RuntimeRequireLegacyMutation_();
     var ss=SpreadsheetApp.openById(
       H3_WEB_RUNTIME_SPREADSHEET_ID
     );
@@ -2963,7 +2965,8 @@ function h3FamilySchedulerObserveAfterCommit_(
         error:'FAMILY_SCHEDULER_SHADOW_LOCK_BUSY'
       };
     }
-    h3RuntimeRequireLegacyMutation_();
+    if (typeof h3WebRuntimeMode_ === 'function' && h3WebRuntimeMode_() !== 'LEGACY') throw new Error('H3_RUNTIME_LEGACY_WRITE_FORBIDDEN');
+    if (typeof h3RuntimeRequireLegacyMutation_ === 'function') h3RuntimeRequireLegacyMutation_();
     var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
     return h3FsObserveCommitted_(
       ss,
@@ -5046,7 +5049,8 @@ function h3FsHomeNextLocked_() {
   lock.waitLock(30000);
   
   try {
-    h3RuntimeRequireLegacyMutation_();
+    if (typeof h3WebRuntimeMode_ === 'function' && h3WebRuntimeMode_() !== 'LEGACY') throw new Error('H3_RUNTIME_LEGACY_WRITE_FORBIDDEN');
+    if (typeof h3RuntimeRequireLegacyMutation_ === 'function') h3RuntimeRequireLegacyMutation_();
     var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
     var freshEvaluation=h3FsEvaluate_(ss,'3級');
     var current=h3ReviewCurrentLearning_(ss);
@@ -5551,7 +5555,8 @@ function h3FsHomeFamilyLocked_(family) {
   lock.waitLock(30000);
   
   try {
-    h3RuntimeRequireLegacyMutation_();
+    if (typeof h3WebRuntimeMode_ === 'function' && h3WebRuntimeMode_() !== 'LEGACY') throw new Error('H3_RUNTIME_LEGACY_WRITE_FORBIDDEN');
+    if (typeof h3RuntimeRequireLegacyMutation_ === 'function') h3RuntimeRequireLegacyMutation_();
     var ss=SpreadsheetApp.openById(
       H3_WEB_RUNTIME_SPREADSHEET_ID
     );
@@ -5879,7 +5884,8 @@ function h3FamilySchedulerShadowTick() {
   var lock=LockService.getScriptLock(); lock.waitLock(30000);
   
   try {
-    h3RuntimeRequireLegacyMutation_();
+    if (typeof h3WebRuntimeMode_ === 'function' && h3WebRuntimeMode_() !== 'LEGACY') throw new Error('H3_RUNTIME_LEGACY_WRITE_FORBIDDEN');
+    if (typeof h3RuntimeRequireLegacyMutation_ === 'function') h3RuntimeRequireLegacyMutation_();
     var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
     var e=h3FsEvaluate_(ss,'3級');
     var existing=h3FsEvaluationAtClock_(ss,'3級',e.global_set_clock);

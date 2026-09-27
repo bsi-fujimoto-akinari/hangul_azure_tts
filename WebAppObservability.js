@@ -524,6 +524,9 @@ function h3ObservabilityWriteError_(
   var mode = h3WebRuntimeMode_();
   if (mode === 'D1') {
     try {
+      var safeContext = {};
+      try { safeContext = JSON.parse(spec.context_json || '{}'); }
+      catch (_invalidContext) { safeContext = {}; }
       var reported = h3RuntimeErrorEvent_({
         schema: 'H3_WEB_RUNTIME_CLIENT_ERROR_V1',
         origin: spec.origin === 'CLIENT' ? 'CLIENT' : 'SERVER',
@@ -540,7 +543,7 @@ function h3ObservabilityWriteError_(
         error_name: spec.error_name,
         error_message: spec.error_message,
         stack: spec.stack,
-        context: spec.context_json ? JSON.parse(spec.context_json) : {}
+        context: safeContext
       });
       return {error_id:reported.error_id,trace_id:reported.trace_id,
         logged:reported.status === 'RECORDED',log_error:null};

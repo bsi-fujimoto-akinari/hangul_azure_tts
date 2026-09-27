@@ -521,6 +521,39 @@ function h3ObservabilityFingerprint_(
 function h3ObservabilityWriteError_(
   spec
 ) {
+  var mode = h3WebRuntimeMode_();
+  if (mode === 'D1') {
+    try {
+      var reported = h3RuntimeErrorEvent_({
+        schema: 'H3_WEB_RUNTIME_CLIENT_ERROR_V1',
+        origin: spec.origin === 'CLIENT' ? 'CLIENT' : 'SERVER',
+        trace_id: spec.trace_id,
+        entrypoint: spec.entrypoint,
+        stage: spec.stage,
+        mode: spec.mode,
+        review_kind: spec.review_kind,
+        surface_family: spec.surface_family,
+        set_id: spec.set_id,
+        q_no: spec.q_no,
+        txn_id: spec.txn_id,
+        error_code: spec.error_code,
+        error_name: spec.error_name,
+        error_message: spec.error_message,
+        stack: spec.stack,
+        context: spec.context_json
+      });
+      return {error_id:reported.error_id,trace_id:reported.trace_id,
+        logged:reported.status === 'RECORDED',log_error:null};
+    } catch (rpcError) {
+      console.error('H3_RUNTIME_ERROR_EVENT_RPC_FAILED');
+      return {error_id:null,trace_id:null,logged:false,
+        log_error:'H3_RUNTIME_ERROR_EVENT_RPC_FAILED'};
+    }
+  }
+  if (mode === 'QUIESCED') {
+    return {error_id:null,trace_id:null,logged:false,
+      log_error:'H3_RUNTIME_QUIESCED'};
+  }
   var errorId =
     spec.error_id ||
     h3ObservabilityErrorId_();

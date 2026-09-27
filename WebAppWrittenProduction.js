@@ -982,9 +982,10 @@ function h3WrittenSubmit_(request) {
 
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
-  h3RuntimeRequireLegacyMutation_();
+  
 
   try {
+    h3RuntimeRequireLegacyMutation_();
     var runtimeSpreadsheet = SpreadsheetApp.openById(
       H3_WEB_RUNTIME_SPREADSHEET_ID
     );

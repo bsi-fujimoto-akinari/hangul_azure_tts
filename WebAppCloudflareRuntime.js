@@ -351,3 +351,68 @@ function h3RuntimeReviewMedia_(request) {
       H3_REVIEW_AUDIO_BINDING_CONTRACT_ID_
   };
 }
+
+/** Runtime mutation gate. Call again after taking each legacy mutation lock. */
+function h3RuntimeRequireLegacyMutation_() {
+  var mode = h3RuntimeAuthority_();
+  if (mode !== 'LEGACY') {
+    throw new Error(mode === 'QUIESCED'
+      ? 'H3_RUNTIME_QUIESCED' : 'H3_RUNTIME_D1_LEGACY_WRITE_FORBIDDEN');
+  }
+}
+
+function h3RuntimeSubmit_(request) {
+  return h3RuntimeRpc_('SUBMIT', request);
+}
+
+function h3RuntimeReviewComplete_(request) {
+  return h3RuntimeRpc_('REVIEW_COMPLETE', request);
+}
+
+function h3RuntimeErrorEvent_(request) {
+  return h3RuntimeRpc_('ERROR_EVENT', request);
+}
+
+/** The mode setter never logs or reads the bearer value. */
+function h3RuntimeSetAuthority_(expectedMode, nextMode, expectedLock, nextLock) {
+  if (['LEGACY','QUIESCED','D1'].indexOf(expectedMode) < 0 ||
+      ['LEGACY','QUIESCED','D1'].indexOf(nextMode) < 0 ||
+      ['0','1'].indexOf(expectedLock) < 0 ||
+      ['0','1'].indexOf(nextLock) < 0) {
+    throw new Error('H3_RUNTIME_AUTHORITY_TRANSITION_INVALID');
+  }
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var props = PropertiesService.getScriptProperties();
+    if (props.getProperty('H3_RUNTIME_AUTHORITY_MODE') !== expectedMode ||
+        props.getProperty('H3_RUNTIME_CUTOVER_LOCKED') !== expectedLock) {
+      throw new Error('H3_RUNTIME_AUTHORITY_TRANSITION_CONFLICT');
+    }
+    if (nextMode === 'D1') {
+      if (nextLock !== '1' ||
+          props.getProperty('H3_RUNTIME_BACKEND_BASE_URL') !== H3_RUNTIME_EXPECTED_WORKER_URL_ ||
+          !props.getProperty('H3_RUNTIME_BEARER_TOKEN')) {
+        throw new Error('H3_RUNTIME_D1_PREREQUISITE_INVALID');
+      }
+      var health = h3RuntimeRpc_('HEALTH', {});
+      if (!health || health.status !== 'PASS' || health.database !== 'AVAILABLE') {
+        throw new Error('H3_RUNTIME_D1_HEALTH_INVALID');
+      }
+    }
+    if (nextMode === 'LEGACY' && nextLock !== '0') {
+      throw new Error('H3_RUNTIME_LEGACY_LOCK_INVALID');
+    }
+    props.setProperties({
+      H3_RUNTIME_AUTHORITY_MODE: nextMode,
+      H3_RUNTIME_CUTOVER_LOCKED: nextLock
+    }, false);
+    if (props.getProperty('H3_RUNTIME_AUTHORITY_MODE') !== nextMode ||
+        props.getProperty('H3_RUNTIME_CUTOVER_LOCKED') !== nextLock) {
+      throw new Error('H3_RUNTIME_AUTHORITY_READBACK_MISMATCH');
+    }
+    return {mode:nextMode,cutover_locked:nextLock};
+  } finally {
+    lock.releaseLock();
+  }
+}

@@ -1364,6 +1364,7 @@ function h3ObservabilityPruneRuntimeErrors() {
   }
 
   try {
+    if (h3WebRuntimeMode_() !== 'LEGACY') throw new Error('H3_RUNTIME_LEGACY_WRITE_FORBIDDEN');
     var spreadsheet =
       SpreadsheetApp.openById(
         H3_WEB_RUNTIME_SPREADSHEET_ID

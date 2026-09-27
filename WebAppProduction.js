@@ -1496,6 +1496,7 @@ function h3ProdSubmit_(request) {
 
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
+  h3RuntimeRequireLegacyMutation_();
 
   var spreadsheet = null;
   var journal = null;

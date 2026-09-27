@@ -685,12 +685,13 @@ function h3TranslationSubmit_(
   var lock =
     LockService.getScriptLock();
   lock.waitLock(30000);
-  h3RuntimeRequireLegacyMutation_();
+  
 
   var journal = null;
   var txnRow = null;
 
   try {
+    h3RuntimeRequireLegacyMutation_();
     var spreadsheet =
       SpreadsheetApp.openById(
         H3_WEB_RUNTIME_SPREADSHEET_ID

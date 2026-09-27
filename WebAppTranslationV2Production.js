@@ -599,9 +599,10 @@ function h3TranslationV2AttachSchedulerSync_(
 function h3TranslationV2Submit_(request) {
   var lock=LockService.getScriptLock();
   lock.waitLock(30000);
-  h3RuntimeRequireLegacyMutation_();
+  
   var journal=null, txnRow=null;
   try {
+    h3RuntimeRequireLegacyMutation_();
     var spreadsheet=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
     var context=h3TranslationV2ProdReadContext_(spreadsheet,request && request.set_id);
     var normalized=h3TranslationV2NormalizeSubmission_(request,context.locked);

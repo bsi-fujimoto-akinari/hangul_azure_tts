@@ -540,7 +540,7 @@ function h3ObservabilityWriteError_(
         error_name: spec.error_name,
         error_message: spec.error_message,
         stack: spec.stack,
-        context: spec.context_json
+        context: spec.context_json ? JSON.parse(spec.context_json) : {}
       });
       return {error_id:reported.error_id,trace_id:reported.trace_id,
         logged:reported.status === 'RECORDED',log_error:null};

@@ -290,9 +290,22 @@ function getListeningWebSet(request) {
   );
 }
 
+function h3WebRuntimeMode_() {
+  if (typeof h3RuntimeAuthority_ === 'function') {
+    return h3RuntimeAuthority_();
+  }
+  if (typeof PropertiesService === 'undefined') return 'LEGACY';
+  var mode = PropertiesService.getScriptProperties()
+    .getProperty('H3_RUNTIME_AUTHORITY_MODE');
+  if (mode && mode !== 'LEGACY') {
+    throw new Error('H3_RUNTIME_ADAPTER_MISSING');
+  }
+  return 'LEGACY';
+}
+
 function h3GetListeningWebSetCore_(request) {
   var payload;
-  if (h3RuntimeAuthority_() === 'D1' &&
+  if (h3WebRuntimeMode_() === 'D1' &&
       request && request.mode !== 'SYSTEM_TEST') {
     return h3RuntimeRender_(request);
   }
@@ -393,7 +406,7 @@ function getListeningWebMedia(request) {
 }
 
 function h3GetListeningWebMediaCore_(request) {
-  if (h3RuntimeAuthority_() === 'D1' &&
+  if (h3WebRuntimeMode_() === 'D1' &&
       request && request.mode === 'LISTENING') {
     return h3RuntimeListeningMedia_(request);
   }
@@ -813,7 +826,7 @@ function h3WebBootRequest_(e) {
     }
   } else {
     var current =
-      h3RuntimeAuthority_() === 'D1'
+      h3WebRuntimeMode_() === 'D1'
         ? h3RuntimeRpc_('CURRENT_LEARNING', {})
             .current_learning
         : h3ReviewCurrentLearning_(
@@ -991,7 +1004,7 @@ function getListeningLearnerUrl(
 
   var payload =
     (
-      h3RuntimeAuthority_() === 'D1'
+      h3WebRuntimeMode_() === 'D1'
         ? h3RuntimeRender_
         : buildProductionRenderPayload_
     )({

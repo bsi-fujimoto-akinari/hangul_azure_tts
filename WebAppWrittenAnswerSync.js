@@ -3729,6 +3729,7 @@ function h3WrittenAnswerSync_(
   var lock =
     LockService.getScriptLock();
   lock.waitLock(30000);
+  h3RuntimeRequireLegacyMutation_();
 
   var runtimeSpreadsheet = null;
   var journal = null;

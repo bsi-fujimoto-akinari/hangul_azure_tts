@@ -2013,12 +2013,13 @@ function prepareListeningBackendSet(
   var lock =
     LockService.getScriptLock();
   lock.waitLock(30000);
-  h3RuntimeRequireLegacyMutation_();
+  
 
   var prepared = null;
   var sourceAttestation = null;
 
   try {
+    h3RuntimeRequireLegacyMutation_();
     prepared =
       h3BackendPrepareLocked_(ids);
 
@@ -2054,9 +2055,10 @@ function prepareListeningBackendSet(
   lock =
     LockService.getScriptLock();
   lock.waitLock(30000);
-  h3RuntimeRequireLegacyMutation_();
+  
 
   try {
+    h3RuntimeRequireLegacyMutation_();
     var finalContext =
       h3BackendFinalizeLocked_(
         ids,

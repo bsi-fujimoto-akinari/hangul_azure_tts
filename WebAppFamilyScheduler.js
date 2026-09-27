@@ -2483,8 +2483,9 @@ function h3FamilySchedulerAuthoringReconciliationPreview() {
 function h3FamilySchedulerAuthoringReconciliationEnsure() {
   var lock=LockService.getScriptLock();
   lock.waitLock(30000);
-  h3RuntimeRequireLegacyMutation_();
+  
   try {
+    h3RuntimeRequireLegacyMutation_();
     var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
     var first=h3FsAuthoringReconciliationPreviewCore_(ss,'3級');
     if(first.public_result.action!=='ENSURE_OPEN'){
@@ -2633,8 +2634,9 @@ function h3FsAuthoringRebindPreviousGeneration_(
 function h3FamilySchedulerWrittenAuthoringGenerationRebind() {
   var lock=LockService.getScriptLock();
   lock.waitLock(30000);
-  h3RuntimeRequireLegacyMutation_();
+  
   try {
+    h3RuntimeRequireLegacyMutation_();
     var ss=SpreadsheetApp.openById(
       H3_WEB_RUNTIME_SPREADSHEET_ID
     );
@@ -5042,8 +5044,9 @@ function h3FamilySchedulerIssueRoutePreview() {
 function h3FsHomeNextLocked_() {
   var lock=LockService.getScriptLock();
   lock.waitLock(30000);
-  h3RuntimeRequireLegacyMutation_();
+  
   try {
+    h3RuntimeRequireLegacyMutation_();
     var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
     var freshEvaluation=h3FsEvaluate_(ss,'3級');
     var current=h3ReviewCurrentLearning_(ss);
@@ -5546,8 +5549,9 @@ function h3FsHomeFamilyLocked_(family) {
 
   var lock=LockService.getScriptLock();
   lock.waitLock(30000);
-  h3RuntimeRequireLegacyMutation_();
+  
   try {
+    h3RuntimeRequireLegacyMutation_();
     var ss=SpreadsheetApp.openById(
       H3_WEB_RUNTIME_SPREADSHEET_ID
     );
@@ -5873,8 +5877,9 @@ function h3FamilySchedulerHomeFamily(family) {
 
 function h3FamilySchedulerShadowTick() {
   var lock=LockService.getScriptLock(); lock.waitLock(30000);
-  h3RuntimeRequireLegacyMutation_();
-  try{
+  
+  try {
+    h3RuntimeRequireLegacyMutation_();
     var ss=SpreadsheetApp.openById(H3_WEB_RUNTIME_SPREADSHEET_ID);
     var e=h3FsEvaluate_(ss,'3級');
     var existing=h3FsEvaluationAtClock_(ss,'3級',e.global_set_clock);

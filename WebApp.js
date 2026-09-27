@@ -406,9 +406,16 @@ function getListeningWebMedia(request) {
 }
 
 function h3GetListeningWebMediaCore_(request) {
-  if (h3WebRuntimeMode_() === 'D1' &&
-      request && request.mode === 'LISTENING') {
-    return h3RuntimeListeningMedia_(request);
+  if (h3WebRuntimeMode_() === 'D1') {
+    if (request && request.mode === 'LISTENING') {
+      return h3RuntimeListeningMedia_(request);
+    }
+    if (request && request.mode === 'REVIEW') {
+      return h3RuntimeReviewMedia_(request);
+    }
+    if (request && request.mode === 'REVIEW_REPLAY') {
+      throw new Error('REVIEW_REPLAY_RETIRED');
+    }
   }
   if (
     request &&
@@ -1002,19 +1009,24 @@ function getListeningLearnerUrl(
   var normalized =
     String(setId || '').trim();
 
-  var payload =
-    (
-      h3WebRuntimeMode_() === 'D1'
-        ? h3RuntimeRender_
-        : buildProductionRenderPayload_
-    )({
+  var renderRequest = {
       schema:
         'H3_WEB_RENDER_REQUEST_V1',
       mode:
         'LISTENING',
       set_id:
         normalized
+    };
+  var payload;
+  if (h3WebRuntimeMode_() === 'D1') {
+    payload = h3RuntimeRender_(renderRequest);
+  } else {
+    payload = buildProductionRenderPayload_({
+      schema: 'H3_WEB_RENDER_REQUEST_V1',
+      mode: 'LISTENING',
+      set_id: normalized
     });
+  }
 
   if (
     !payload ||

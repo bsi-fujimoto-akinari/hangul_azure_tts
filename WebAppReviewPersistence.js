@@ -7838,6 +7838,7 @@ function h3ReviewCompleteSession_(
       );
     }
     locked = true;
+    h3RuntimeRequireLegacyMutation_();
 
     var spreadsheet =
       SpreadsheetApp.openById(
@@ -8066,6 +8067,7 @@ function h3ReviewHomeIndexUpsertAfterCommit_(
   var lock =
     LockService.getScriptLock();
   lock.waitLock(30000);
+  h3RuntimeRequireLegacyMutation_();
 
   try {
     var spreadsheet =

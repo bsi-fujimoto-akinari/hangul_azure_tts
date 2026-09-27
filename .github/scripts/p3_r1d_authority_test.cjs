@@ -45,7 +45,10 @@ for(const [file,fn] of [
  ['WebAppTranslationProduction.js','h3TranslationSubmit_'],
  ['WebAppTranslationV2Production.js','h3TranslationV2Submit_'],
  ['WebAppWrittenAnswerSync.js','h3WrittenAnswerSync_'],
- ['WebAppReviewPersistence.js','h3ReviewCompleteSession_']
+ ['WebAppReviewPersistence.js','h3ReviewCompleteSession_'],
+ ['WebAppFamilyScheduler.js','h3FamilySchedulerShadowTick'],
+ ['ListeningBackendOrchestrator.js','prepareListeningBackendSet'],
+ ['WebAppErrorState.js','h3ErrorStateWrite_']
 ]){
  const source=fs.readFileSync(file,'utf8');
  const part=source.slice(source.indexOf('function '+fn+'('));

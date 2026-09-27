@@ -17,7 +17,7 @@ function h3RuntimeAuthority_() {
   if (['LEGACY', 'QUIESCED', 'D1'].indexOf(mode) < 0) {
     throw new Error('H3_RUNTIME_AUTHORITY_INVALID');
   }
-  if (locked === '1' && mode !== 'D1') {
+  if (locked === '1' && mode === 'LEGACY') {
     throw new Error('H3_RUNTIME_CUTOVER_LOCKED');
   }
   return mode;
@@ -380,6 +380,18 @@ function h3RuntimeSetAuthority_(expectedMode, nextMode, expectedLock, nextLock) 
       ['0','1'].indexOf(expectedLock) < 0 ||
       ['0','1'].indexOf(nextLock) < 0) {
     throw new Error('H3_RUNTIME_AUTHORITY_TRANSITION_INVALID');
+  }
+  var allowedTransition =
+    (expectedMode === 'LEGACY' && expectedLock === '0' &&
+      nextMode === 'QUIESCED' && nextLock === '0') ||
+    (expectedMode === 'QUIESCED' && expectedLock === '0' &&
+      nextMode === 'D1' && nextLock === '1') ||
+    (expectedMode === 'QUIESCED' && expectedLock === '0' &&
+      nextMode === 'LEGACY' && nextLock === '0') ||
+    (expectedMode === 'D1' && expectedLock === '1' &&
+      nextMode === 'QUIESCED' && nextLock === '1');
+  if (!allowedTransition) {
+    throw new Error('H3_RUNTIME_AUTHORITY_TRANSITION_FORBIDDEN');
   }
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);

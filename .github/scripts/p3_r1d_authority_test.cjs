@@ -38,6 +38,18 @@ function context(mode,locked){
   const {x}=context('LEGACY','1');
   assert.throws(()=>x.h3WebRuntimeMode_(),/CUTOVER_LOCKED/);
 }
+{
+  const {x,values}=context('LEGACY','0');
+  assert.throws(()=>x.h3RuntimeSetAuthority_('LEGACY','D1','0','1'),/TRANSITION_FORBIDDEN/);
+  assert.equal(x.h3RuntimeSetAuthority_('LEGACY','QUIESCED','0','0').mode,'QUIESCED');
+  assert.equal(values.H3_RUNTIME_AUTHORITY_MODE,'QUIESCED');
+  assert.throws(()=>x.h3RuntimeSetAuthority_('QUIESCED','D1','0','1'),/D1_PREREQUISITE_INVALID/);
+}
+{
+  const {x}=context('D1','1');
+  assert.equal(x.h3RuntimeSetAuthority_('D1','QUIESCED','1','1').mode,'QUIESCED');
+  assert.throws(()=>x.h3RuntimeSetAuthority_('QUIESCED','LEGACY','1','0'),/TRANSITION_FORBIDDEN/);
+}
 for(const [file,fn] of [
  ['WebAppProduction.js','h3ProdSubmit_'],
  ['WebAppWrittenProduction.js','h3WrittenSubmit_'],

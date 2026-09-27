@@ -444,6 +444,9 @@ function h3GetListeningWebMediaCore_(request) {
 
 function completeReviewSession(request) {
   try {
+    var runtimeMode = h3WebRuntimeMode_();
+    if (runtimeMode === 'D1') return h3RuntimeReviewComplete_(request);
+    if (runtimeMode === 'QUIESCED') throw new Error('H3_RUNTIME_QUIESCED');
     return h3ReviewCompleteSession_(
       request
     );
@@ -480,6 +483,14 @@ function submitListeningWebAnswers(request) {
 }
 
 function h3SubmitListeningWebAnswersCore_(request) {
+  var runtimeMode = h3WebRuntimeMode_();
+  if (runtimeMode === 'QUIESCED') throw new Error('H3_RUNTIME_QUIESCED');
+  if (runtimeMode === 'D1' && request && request.mode !== 'SYSTEM_TEST') {
+    if (request.mode === 'REVIEW' || request.mode === 'HOME')
+      throw new Error('READ_ONLY_MODE_SUBMIT_FORBIDDEN');
+    if (request.mode === 'REVIEW_REPLAY') throw new Error('REVIEW_REPLAY_RETIRED');
+    return h3RuntimeSubmit_(request);
+  }
   if (request && request.mode === 'LISTENING') {
     var result =
       h3ProdSubmit_(request);

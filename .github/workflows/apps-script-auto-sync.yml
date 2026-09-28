@@ -11,7 +11,7 @@ on:
         required: false
         type: string
       migration_runtime_control:
-        description: "P3 migration runtime control: NONE, C1_READBACK, or C1_QUIESCE"
+        description: "P3 migration runtime control: bounded C1/C6/C9 controls only"
         required: false
         default: "NONE"
         type: choice
@@ -19,6 +19,8 @@ on:
           - "NONE"
           - "C1_READBACK"
           - "C1_QUIESCE"
+          - "C6_ACTIVATE"
+          - "C9_READBACK"
 
 permissions:
   contents: read
@@ -850,11 +852,23 @@ jobs:
       # Repository audit rejects run-function usage that does not use this boundary.
 
       - name: P3 C1 bounded runtime authority control
-        if: steps.smoke_boundary.outputs.ready == 'true' && github.event.inputs.migration_runtime_control != 'NONE'
+        if: steps.smoke_boundary.outputs.ready == 'true' && (github.event.inputs.migration_runtime_control == 'C1_READBACK' || github.event.inputs.migration_runtime_control == 'C1_QUIESCE')
         shell: bash
         env:
           MIGRATION_RUNTIME_CONTROL: ${{ github.event.inputs.migration_runtime_control }}
         run: python3 .github/scripts/p3_c1_runtime_control.py
+
+      - name: P3 C6/C9 bounded runtime control
+        if: steps.smoke_boundary.outputs.ready == 'true' && (github.event.inputs.migration_runtime_control == 'C6_ACTIVATE' || github.event.inputs.migration_runtime_control == 'C9_READBACK')
+        shell: bash
+        env:
+          MIGRATION_RUNTIME_CONTROL: ${{ github.event.inputs.migration_runtime_control }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          SOURCE_ATTESTED: ${{ steps.source_attestation.outputs.attested || '' }}
+          INTENDED_SMOKE_SHA: ${{ github.event.inputs.intended_smoke_sha || '' }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: python3 .github/scripts/p3_c6_c9_runtime_control.py
 
       - name: Read deployment inventory
         if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'

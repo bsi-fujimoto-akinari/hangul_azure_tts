@@ -518,6 +518,18 @@ The operation must be manual-dispatch only, `run_attempt=1`, bound to `intended_
 Do not use this exception for D1 activation, rollback, arbitrary Script Properties, learner-state mutation, source push, deployment promotion, credential changes, or any non-P3 operation. C1 execution remains owned by the migration critical-section executor and still requires the migration control-plane authorization in force at execution time. The route may be merged/prepared without executing either operation.
 
 
+### P3 C6 activation and C9 readback exception
+
+The migration-only `C6_ACTIVATE` and `C9_READBACK` choices are separate from the C1 exception above. This bounded exception does not weaken C1's rules: the C1 helper and its two allowlisted operations remain unchanged, and C1 itself still forbids D1 activation.
+
+Both controls are available only through a manual dispatch of `.github/workflows/apps-script-auto-sync.yml`, with `run_attempt=1`, an exact `intended_smoke_sha` matching the current audited `main`, exact Apps Script project targeting, successful same-SHA Repository audit, immediate authenticated Apps Script HEAD source attestation, and `smoke_boundary.outputs.ready == 'true'`. No source push, versioned `/exec` deployment, Script Property edit, or unrelated credentialed operation is permitted between attestation and control execution.
+
+`C6_ACTIVATE` may call only `h3RuntimeC6Activate()`, a narrow wrapper for the existing guarded `QUIESCED/0 -> D1/1` transition. The canonical setter must validate the exact backend URL, bearer presence, authenticated HEALTH/database response, ScriptLock, compare-before-set state, and immediate exact readback. It is not authorized by this task and must remain unexecuted until a later, refreshed handoff explicitly authorizes it.
+
+`C9_READBACK` may call only `h3RuntimeC9Readback()`. It is read-only and may report safe booleans/status only: D1/lock state, expected backend URL match, bearer presence, HEALTH/database status, Worker/D1 route verification, and mutation count zero. It must never return the bearer or arbitrary Script Properties. The separate `.github/scripts/p3_c6_c9_runtime_control.py` helper validates the exact safe result and emits no secret values.
+
+Do not use these controls for arbitrary Apps Script function execution, Script Property editing, C2/C3/C4 data operations, learner/history mutation, source push, deployment promotion, credential changes, or non-P3 work. Workflow availability does not imply execution authorization; controls remain unexecuted until separately authorized.
+
 After the smoke, remove the temporary job through a follow-up PR. Require fresh main-audit success after cleanup. If the smoke reads protected runtime data, compare fresh post-run state with the pre-run baseline and fail closed on any unexpected mutation.
 
 ## 4. Secrets and tracked files

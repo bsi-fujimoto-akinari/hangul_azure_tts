@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import re
+import subprocess
 
 sync_path = Path('.github/workflows/apps-script-auto-sync.yml')
 ops_path = Path('OPERATIONS.md')
 alignment_helper_path = Path('.github/scripts/production_trigger_alignment.py')
+c6_c9_helper_path = Path('.github/scripts/p3_c6_c9_runtime_control.py')
+runtime_path = Path('WebAppCloudflareRuntime.js')
 sync = sync_path.read_text(encoding='utf-8')
 ops = ops_path.read_text(encoding='utf-8')
 alignment_helper = alignment_helper_path.read_text(encoding='utf-8')
+c6_c9_helper = c6_c9_helper_path.read_text(encoding='utf-8')
+runtime = runtime_path.read_text(encoding='utf-8')
 github_attempt_token = '$' + '{{ github.run_attempt }}'
 command = 'run-' + 'function'
 
@@ -32,6 +37,10 @@ required_sync = [
     github_attempt_token,
     'steps.source_attestation.outputs.attested',
     'steps.smoke_boundary.outputs.ready',
+    'C6_ACTIVATE',
+    'C9_READBACK',
+    'P3 C6/C9 bounded runtime control',
+    'p3_c6_c9_runtime_control.py',
 ]
 missing_sync = [token for token in required_sync if token not in sync]
 if missing_sync:
@@ -56,6 +65,11 @@ required_ops = [
     "if: steps.automatic_smoke_boundary.outputs.ready == 'true'",
     "if: steps.smoke_boundary.outputs.ready == 'true'",
     'Remote-only deletion refresh',
+    'P3 C6 activation and C9 readback exception',
+    'h3RuntimeC6Activate()',
+    'h3RuntimeC9Readback()',
+    'C6_ACTIVATE',
+    'C9_READBACK',
 ]
 missing_ops = [token for token in required_ops if token not in ops]
 if missing_ops:
@@ -78,6 +92,36 @@ missing_alignment_helper = [
     token for token in required_alignment_helper
     if token not in alignment_helper
 ]
+
+required_c6_c9_helper = [
+    'ALLOWED = {"C6_ACTIVATE", "C9_READBACK"}',
+    'EVENT_NAME',
+    'INTENDED_SMOKE_SHA',
+    'SOURCE_ATTESTED',
+    'RUN_ATTEMPT',
+    'h3RuntimeC6Activate',
+    'h3RuntimeC9Readback',
+    '"mutation_count": 0',
+]
+missing_c6_c9_helper = [
+    token for token in required_c6_c9_helper if token not in c6_c9_helper
+]
+if missing_c6_c9_helper:
+    raise SystemExit(
+        'P3 C6/C9 helper contract missing: '
+        + ', '.join(missing_c6_c9_helper)
+    )
+for token in [
+    "function h3RuntimeC6Activate()",
+    "h3RuntimeSetAuthority_('QUIESCED', 'D1', '0', '1')",
+    "function h3RuntimeC9Readback()",
+    "worker_d1_route_verified: routeVerified",
+    "mutation_count: 0",
+]:
+    if token not in runtime:
+        raise SystemExit('P3 C6/C9 safe runtime wrapper missing: ' + token)
+if 'H3_RUNTIME_BEARER_TOKEN:' in runtime:
+    raise SystemExit('P3 C9 runtime wrapper must not return bearer property')
 if missing_alignment_helper:
     raise SystemExit(
         'Production trigger alignment helper contract missing: '
@@ -85,7 +129,7 @@ if missing_alignment_helper:
     )
 
 for helper_path in sorted(Path('.github/scripts').glob('*')):
-    if helper_path == alignment_helper_path or not helper_path.is_file():
+    if helper_path in {alignment_helper_path, c6_c9_helper_path} or not helper_path.is_file():
         continue
     try:
         helper_text = helper_path.read_text(encoding='utf-8')
@@ -238,6 +282,29 @@ if (
         'Production trigger alignment execution must be gated by '
         'trigger_alignment_boundary ready=true.'
     )
+
+c6_c9_step = sync.find('P3 C6/C9 bounded runtime control')
+manual_boundary_pos = sync.find('Validate one-revision read-only smoke boundary')
+if not (0 <= manual_boundary_pos < c6_c9_step):
+    raise SystemExit('P3 C6/C9 control must follow the exact manual smoke boundary.')
+c6_c9_block = sync[c6_c9_step:c6_c9_step + 1500]
+for token in [
+    "if: steps.smoke_boundary.outputs.ready == 'true'",
+    'MIGRATION_RUNTIME_CONTROL:',
+    'SOURCE_SHA:',
+    'SOURCE_ATTESTED:',
+    'INTENDED_SMOKE_SHA:',
+    'RUN_ATTEMPT:',
+    'EVENT_NAME:',
+    'p3_c6_c9_runtime_control.py',
+]:
+    if token not in c6_c9_block:
+        raise SystemExit('P3 C6/C9 bounded workflow guard missing: ' + token)
+
+subprocess.run(
+    ['node', '.github/scripts/p3_c6_c9_runtime_control_test.cjs'],
+    check=True,
+)
 
 print(
     'Credentialed Apps Script execution boundaries: PASS; '

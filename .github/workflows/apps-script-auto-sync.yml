@@ -852,7 +852,7 @@ jobs:
       # Repository audit rejects run-function usage that does not use this boundary.
 
       - name: P3 C1 bounded runtime authority control
-        if: steps.smoke_boundary.outputs.ready == 'true' && github.event.inputs.migration_runtime_control != 'NONE'
+        if: steps.smoke_boundary.outputs.ready == 'true' && (github.event.inputs.migration_runtime_control == 'C1_READBACK' || github.event.inputs.migration_runtime_control == 'C1_QUIESCE')
         shell: bash
         env:
           MIGRATION_RUNTIME_CONTROL: ${{ github.event.inputs.migration_runtime_control }}

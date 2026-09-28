@@ -14,6 +14,53 @@ function h3RuntimeC1Quiesce() {
   return h3RuntimeSetAuthority_('LEGACY', 'QUIESCED', '0', '0');
 }
 
+/** Narrow P3 operator entry point; transition is guarded by the canonical setter. */
+function h3RuntimeC6Activate() {
+  return h3RuntimeSetAuthority_('QUIESCED', 'D1', '0', '1');
+}
+
+/** Read-only cutover proof. Never returns Script Property values or error text. */
+function h3RuntimeC9Readback() {
+  var props = PropertiesService.getScriptProperties();
+  var mode = '';
+  var lock = String(props.getProperty('H3_RUNTIME_CUTOVER_LOCKED') || '');
+  var backendExact =
+    props.getProperty('H3_RUNTIME_BACKEND_BASE_URL') ===
+      H3_RUNTIME_EXPECTED_WORKER_URL_;
+  var bearerPresent = !!props.getProperty('H3_RUNTIME_BEARER_TOKEN');
+  var health = 'NOT_RUN';
+  var database = 'NOT_RUN';
+  try {
+    mode = h3RuntimeAuthority_();
+  } catch (ignored) {
+    mode = 'INVALID';
+  }
+  if (mode === 'D1' && lock === '1' && backendExact && bearerPresent) {
+    try {
+      var result = h3RuntimeRpc_('HEALTH', {});
+      health = result && result.status === 'PASS' ? 'PASS' : 'FAIL';
+      database = result && result.database === 'AVAILABLE' ?
+        'AVAILABLE' : 'UNAVAILABLE';
+    } catch (ignored) {
+      health = 'FAIL';
+      database = 'UNAVAILABLE';
+    }
+  }
+  var routeVerified = mode === 'D1' && lock === '1' && backendExact &&
+    bearerPresent && health === 'PASS' && database === 'AVAILABLE';
+  return {
+    status: routeVerified ? 'PASS' : 'FAIL',
+    authority_mode: mode,
+    cutover_locked: lock === '1',
+    expected_backend_url: backendExact,
+    bearer_present: bearerPresent,
+    health_status: health,
+    database_status: database,
+    worker_d1_route_verified: routeVerified,
+    mutation_count: 0
+  };
+}
+
 function h3RuntimeAuthority_() {
   var props = PropertiesService.getScriptProperties();
   var locked = props.getProperty('H3_RUNTIME_CUTOVER_LOCKED');

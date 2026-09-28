@@ -19,6 +19,7 @@ on:
           - "NONE"
           - "C1_READBACK"
           - "C1_QUIESCE"
+          - "PRE_C6_READBACK"
           - "C6_ACTIVATE"
           - "C9_READBACK"
 
@@ -858,8 +859,8 @@ jobs:
           MIGRATION_RUNTIME_CONTROL: ${{ github.event.inputs.migration_runtime_control }}
         run: python3 .github/scripts/p3_c1_runtime_control.py
 
-      - name: P3 C6/C9 bounded runtime control
-        if: steps.smoke_boundary.outputs.ready == 'true' && (github.event.inputs.migration_runtime_control == 'C6_ACTIVATE' || github.event.inputs.migration_runtime_control == 'C9_READBACK')
+      - name: P3 pre-C6/C6/C9 bounded runtime control
+        if: steps.smoke_boundary.outputs.ready == 'true' && (github.event.inputs.migration_runtime_control == 'PRE_C6_READBACK' || github.event.inputs.migration_runtime_control == 'C6_ACTIVATE' || github.event.inputs.migration_runtime_control == 'C9_READBACK')
         shell: bash
         env:
           MIGRATION_RUNTIME_CONTROL: ${{ github.event.inputs.migration_runtime_control }}

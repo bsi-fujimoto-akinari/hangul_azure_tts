@@ -6,6 +6,14 @@ var H3_RUNTIME_EXPECTED_WORKER_URL_ =
   'https://hangul-runtime-prod.akinari-fujimoto.workers.dev';
 var H3_RUNTIME_RPC_PATH_ = '/__internal/h3/runtime/v1';
 
+function h3RuntimeC1AuthorityReadback() {
+  return h3RuntimeAuthority_();
+}
+
+function h3RuntimeC1Quiesce() {
+  return h3RuntimeSetAuthority_('LEGACY', 'QUIESCED', '0', '0');
+}
+
 function h3RuntimeAuthority_() {
   var props = PropertiesService.getScriptProperties();
   var locked = props.getProperty('H3_RUNTIME_CUTOVER_LOCKED');

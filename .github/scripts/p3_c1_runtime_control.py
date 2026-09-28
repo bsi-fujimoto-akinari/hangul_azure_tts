@@ -42,16 +42,12 @@ def main() -> None:
     if mode not in ALLOWED:
         fail("Unallowlisted migration runtime control")
     if mode == "C1_READBACK":
-        if call(["h3RuntimeAuthority_"]) != "LEGACY":
+        if call(["h3RuntimeC1AuthorityReadback"]) != "LEGACY":
             fail("C1 authority readback is not exact LEGACY/lock=0-compatible state")
         print("C1_RUNTIME_AUTHORITY_READBACK=LEGACY")
         return
     expected = {"mode": "QUIESCED", "cutover_locked": "0"}
-    response = call([
-        "h3RuntimeSetAuthority_",
-        "--params",
-        '["LEGACY","QUIESCED","0","0"]',
-    ])
+    response = call(["h3RuntimeC1Quiesce"])
     if response != expected:
         fail("C1 quiesce readback mismatch")
     print("C1_RUNTIME_AUTHORITY_TRANSITION=QUIESCED")

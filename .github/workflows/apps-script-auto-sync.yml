@@ -7,9 +7,18 @@ on:
   workflow_dispatch:
     inputs:
       intended_smoke_sha:
-        description: "Exact audited main SHA authorized for an optional temporary read-only Apps Script smoke preflight"
+        description: "Exact audited main SHA authorized for bounded credentialed Apps Script execution"
         required: false
         type: string
+      migration_runtime_control:
+        description: "P3 migration runtime control: NONE, C1_READBACK, or C1_QUIESCE"
+        required: false
+        default: "NONE"
+        type: choice
+        options:
+          - "NONE"
+          - "C1_READBACK"
+          - "C1_QUIESCE"
 
 permissions:
   contents: read
@@ -839,6 +848,46 @@ jobs:
       # smoke_boundary and gated by:
       #   if: steps.smoke_boundary.outputs.ready == 'true'
       # Repository audit rejects run-function usage that does not use this boundary.
+
+      - name: P3 C1 bounded runtime authority control
+        if: steps.smoke_boundary.outputs.ready == 'true' && github.event.inputs.migration_runtime_control != 'NONE'
+        shell: bash
+        env:
+          MIGRATION_RUNTIME_CONTROL: ${{ github.event.inputs.migration_runtime_control }}
+        run: |
+          set -euo pipefail
+          set +x
+          case "$MIGRATION_RUNTIME_CONTROL" in
+            C1_READBACK)
+              out="$(npx -y @google/clasp@3.4.0 --json run-function h3RuntimeAuthority_)"
+              python3 - "$out" <<'PY'
+          import json, sys
+          envelope=json.loads(sys.argv[1])
+          if envelope.get("error"):
+              raise SystemExit("C1 authority readback returned Apps Script error")
+          if envelope.get("response") != "LEGACY":
+              raise SystemExit("C1 authority readback is not exact LEGACY/lock=0-compatible state")
+          print("C1_RUNTIME_AUTHORITY_READBACK=LEGACY")
+          PY
+              ;;
+            C1_QUIESCE)
+              out="$(npx -y @google/clasp@3.4.0 --json run-function h3RuntimeSetAuthority_ --params '["LEGACY","QUIESCED","0","0"]')"
+              python3 - "$out" <<'PY'
+          import json, sys
+          envelope=json.loads(sys.argv[1])
+          if envelope.get("error"):
+              raise SystemExit("C1 quiesce returned Apps Script error")
+          result=envelope.get("response")
+          if result != {"mode":"QUIESCED","cutover_locked":"0"}:
+              raise SystemExit("C1 quiesce readback mismatch")
+          print("C1_RUNTIME_AUTHORITY_TRANSITION=QUIESCED")
+          PY
+              ;;
+            *)
+              echo "::error::Unallowlisted migration_runtime_control."
+              exit 1
+              ;;
+          esac
 
       - name: Read deployment inventory
         if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'

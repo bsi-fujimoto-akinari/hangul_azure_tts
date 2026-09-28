@@ -114,6 +114,7 @@ allowed = {
     '.github/scripts/review_audio_lifecycle_contract_audit.cjs',
     '.github/scripts/production_trigger_alignment.py',
     '.github/scripts/apps_script_execution_boundary_audit.py',
+    '.github/scripts/p3_c1_runtime_control.py',
     '.github/scripts/production_trigger_contract_audit.cjs',
     '.github/workflows/apps-script-auto-sync.yml',
     '.github/workflows/rs10-soft-signal-audit.yml',

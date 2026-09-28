@@ -509,6 +509,15 @@ Before creating or tracking any new `.github/workflows/*.yml` file, inspect the 
 
 A temporary bounded smoke step may be added only to `.github/workflows/apps-script-auto-sync.yml` and only immediately after its permanent `smoke_boundary` step. It must use `if: steps.smoke_boundary.outputs.ready == 'true'`; the boundary itself requires manual dispatch, the exact intended audited SHA, first run attempt, exact Apps Script target verification, and a successful source attestation. The `clasp run-function` call must follow that attestation/boundary in the same job with no push, sync, deployment, or other mutable Apps Script step between them. If the attestation or boundary is absent, skipped, stale, or failed, the smoke must not run. The step may call only the explicitly authorized read-only function, must validate the expected schema/mode and an explicit no-write result when the function contract provides one, and must not promote a versioned deployment or change OAuth credentials, manifest scopes, Script Properties, learner state, queue state, scheduler state, counters, or pointers.
 
+### P3 C1 bounded runtime-authority control
+
+During the explicitly authorized H3 Cloudflare P3 critical cutover only, the existing exact-main credentialed execution boundary may also expose the fixed `migration_runtime_control` choices `C1_READBACK` and `C1_QUIESCE`. This is a migration-only exception to the read-only temporary-smoke rule above; it does not authorize arbitrary function execution or Script Property editing.
+
+The operation must be manual-dispatch only, `run_attempt=1`, bound to `intended_smoke_sha=<exact current audited main SHA>`, gated by immediate authenticated Apps Script HEAD source attestation, and executed only through `.github/workflows/apps-script-auto-sync.yml`. `C1_READBACK` may call only `h3RuntimeAuthority_()` and must return exact `LEGACY`; that return also proves a lock value compatible with `0` because the canonical function rejects `LEGACY` while locked. `C1_QUIESCE` may call only `h3RuntimeSetAuthority_("LEGACY","QUIESCED","0","0")`; the canonical function owns ScriptLock, compare-before-set, and immediate readback and must return exactly `{mode:"QUIESCED",cutover_locked:"0"}`.
+
+Do not use this exception for D1 activation, rollback, arbitrary Script Properties, learner-state mutation, source push, deployment promotion, credential changes, or any non-P3 operation. C1 execution remains owned by the migration critical-section executor and still requires the migration control-plane authorization in force at execution time. The route may be merged/prepared without executing either operation.
+
+
 After the smoke, remove the temporary job through a follow-up PR. Require fresh main-audit success after cleanup. If the smoke reads protected runtime data, compare fresh post-run state with the pre-run baseline and fail closed on any unexpected mutation.
 
 ## 4. Secrets and tracked files

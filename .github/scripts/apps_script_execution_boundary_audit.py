@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import re
+import subprocess
 
 sync_path = Path('.github/workflows/apps-script-auto-sync.yml')
 ops_path = Path('OPERATIONS.md')
@@ -299,6 +300,11 @@ for token in [
 ]:
     if token not in c6_c9_block:
         raise SystemExit('P3 C6/C9 bounded workflow guard missing: ' + token)
+
+subprocess.run(
+    ['node', '.github/scripts/p3_c6_c9_runtime_control_test.cjs'],
+    check=True,
+)
 
 print(
     'Credentialed Apps Script execution boundaries: PASS; '

@@ -38,6 +38,37 @@ const normalized = x => JSON.parse(JSON.stringify(x));
 
 {
   const {context, values} = runtime();
+  const before = JSON.stringify(values);
+  const result = context.h3RuntimePreC6Readback();
+  assert.deepEqual(normalized(result), {
+    status: 'PASS', authority_mode: 'QUIESCED',
+    cutover_locked: false, mutation_count: 0
+  });
+  assert.equal(JSON.stringify(values), before);
+  assert.equal(JSON.stringify(result).includes(secret), false);
+}
+
+{
+  const {context} = runtime({H3_RUNTIME_AUTHORITY_MODE: 'LEGACY'});
+  assert.deepEqual(normalized(context.h3RuntimePreC6Readback()), {
+    status: 'FAIL', authority_mode: 'LEGACY',
+    cutover_locked: false, mutation_count: 0
+  });
+}
+
+{
+  const {context} = runtime({
+    H3_RUNTIME_AUTHORITY_MODE: 'D1',
+    H3_RUNTIME_CUTOVER_LOCKED: '1'
+  });
+  assert.deepEqual(normalized(context.h3RuntimePreC6Readback()), {
+    status: 'FAIL', authority_mode: 'D1',
+    cutover_locked: true, mutation_count: 0
+  });
+}
+
+{
+  const {context, values} = runtime();
   assert.deepEqual(normalized(context.h3RuntimeC6Activate()),
     {mode: 'D1', cutover_locked: '1'});
   assert.equal(values.H3_RUNTIME_AUTHORITY_MODE, 'D1');
@@ -71,4 +102,4 @@ const normalized = x => JSON.parse(JSON.stringify(x));
   assert.equal(result.worker_d1_route_verified, false);
   assert.equal(JSON.stringify(result).includes(secret), false);
 }
-console.log('P3 C6/C9 runtime wrapper tests: PASS');
+console.log('P3 pre-C6/C6/C9 runtime wrapper tests: PASS');

@@ -37,9 +37,10 @@ required_sync = [
     github_attempt_token,
     'steps.source_attestation.outputs.attested',
     'steps.smoke_boundary.outputs.ready',
+    'PRE_C6_READBACK',
     'C6_ACTIVATE',
     'C9_READBACK',
-    'P3 C6/C9 bounded runtime control',
+    'P3 pre-C6/C6/C9 bounded runtime control',
     'p3_c6_c9_runtime_control.py',
 ]
 missing_sync = [token for token in required_sync if token not in sync]
@@ -65,6 +66,9 @@ required_ops = [
     "if: steps.automatic_smoke_boundary.outputs.ready == 'true'",
     "if: steps.smoke_boundary.outputs.ready == 'true'",
     'Remote-only deletion refresh',
+    'P3 pre-C6 read-only authority/lock proof',
+    'h3RuntimePreC6Readback()',
+    'PRE_C6_READBACK',
     'P3 C6 activation and C9 readback exception',
     'h3RuntimeC6Activate()',
     'h3RuntimeC9Readback()',
@@ -94,11 +98,12 @@ missing_alignment_helper = [
 ]
 
 required_c6_c9_helper = [
-    'ALLOWED = {"C6_ACTIVATE", "C9_READBACK"}',
+    'ALLOWED = {"PRE_C6_READBACK", "C6_ACTIVATE", "C9_READBACK"}',
     'EVENT_NAME',
     'INTENDED_SMOKE_SHA',
     'SOURCE_ATTESTED',
     'RUN_ATTEMPT',
+    'h3RuntimePreC6Readback',
     'h3RuntimeC6Activate',
     'h3RuntimeC9Readback',
     '"mutation_count": 0',
@@ -108,10 +113,14 @@ missing_c6_c9_helper = [
 ]
 if missing_c6_c9_helper:
     raise SystemExit(
-        'P3 C6/C9 helper contract missing: '
+        'P3 pre-C6/C6/C9 helper contract missing: '
         + ', '.join(missing_c6_c9_helper)
     )
 for token in [
+    "function h3RuntimePreC6Readback()",
+    "authority_mode: mode",
+    "cutover_locked: lock === '1'",
+    "mutation_count: 0",
     "function h3RuntimeC6Activate()",
     "h3RuntimeSetAuthority_('QUIESCED', 'D1', '0', '1')",
     "function h3RuntimeC9Readback()",
@@ -119,7 +128,7 @@ for token in [
     "mutation_count: 0",
 ]:
     if token not in runtime:
-        raise SystemExit('P3 C6/C9 safe runtime wrapper missing: ' + token)
+        raise SystemExit('P3 pre-C6/C6/C9 safe runtime wrapper missing: ' + token)
 if 'H3_RUNTIME_BEARER_TOKEN:' in runtime:
     raise SystemExit('P3 C9 runtime wrapper must not return bearer property')
 if missing_alignment_helper:
@@ -283,10 +292,10 @@ if (
         'trigger_alignment_boundary ready=true.'
     )
 
-c6_c9_step = sync.find('P3 C6/C9 bounded runtime control')
+c6_c9_step = sync.find('P3 pre-C6/C6/C9 bounded runtime control')
 manual_boundary_pos = sync.find('Validate one-revision read-only smoke boundary')
 if not (0 <= manual_boundary_pos < c6_c9_step):
-    raise SystemExit('P3 C6/C9 control must follow the exact manual smoke boundary.')
+    raise SystemExit('P3 pre-C6/C6/C9 control must follow the exact manual smoke boundary.')
 c6_c9_block = sync[c6_c9_step:c6_c9_step + 1500]
 for token in [
     "if: steps.smoke_boundary.outputs.ready == 'true'",
@@ -299,7 +308,7 @@ for token in [
     'p3_c6_c9_runtime_control.py',
 ]:
     if token not in c6_c9_block:
-        raise SystemExit('P3 C6/C9 bounded workflow guard missing: ' + token)
+        raise SystemExit('P3 pre-C6/C6/C9 bounded workflow guard missing: ' + token)
 
 subprocess.run(
     ['node', '.github/scripts/p3_c6_c9_runtime_control_test.cjs'],

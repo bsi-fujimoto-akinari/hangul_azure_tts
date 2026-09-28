@@ -14,6 +14,25 @@ function h3RuntimeC1Quiesce() {
   return h3RuntimeSetAuthority_('LEGACY', 'QUIESCED', '0', '0');
 }
 
+/** Read-only pre-C6 proof. Returns only safe derived authority/lock state. */
+function h3RuntimePreC6Readback() {
+  var props = PropertiesService.getScriptProperties();
+  var mode = '';
+  var lock = String(props.getProperty('H3_RUNTIME_CUTOVER_LOCKED') || '');
+  try {
+    mode = h3RuntimeAuthority_();
+  } catch (ignored) {
+    mode = 'INVALID';
+  }
+  var pass = mode === 'QUIESCED' && lock === '0';
+  return {
+    status: pass ? 'PASS' : 'FAIL',
+    authority_mode: mode,
+    cutover_locked: lock === '1',
+    mutation_count: 0
+  };
+}
+
 /** Narrow P3 operator entry point; transition is guarded by the canonical setter. */
 function h3RuntimeC6Activate() {
   return h3RuntimeSetAuthority_('QUIESCED', 'D1', '0', '1');

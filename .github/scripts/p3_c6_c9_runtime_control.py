@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Narrow credentialed P3 C6/C9 controls; never prints Apps Script secret data."""
+"""Narrow credentialed P3 pre-C6/C6/C9 controls; never prints Apps Script secret data."""
 
 from __future__ import annotations
 import json
 import os
 import subprocess
 
-ALLOWED = {"C6_ACTIVATE", "C9_READBACK"}
+ALLOWED = {"PRE_C6_READBACK", "C6_ACTIVATE", "C9_READBACK"}
 
 
 def fail(message: str) -> None:
@@ -19,17 +19,17 @@ def call(function: str):
         text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
     )
     if completed.returncode != 0:
-        fail("Apps Script C6/C9 control execution failed")
+        fail("Apps Script bounded P3 runtime control execution failed")
     raw = completed.stdout.strip()
     start, end = raw.find("{"), raw.rfind("}")
     if start < 0 or end < start:
-        fail("Apps Script C6/C9 control returned no JSON object")
+        fail("Apps Script bounded P3 runtime control returned no JSON object")
     try:
         envelope = json.loads(raw[start:end + 1])
     except json.JSONDecodeError:
-        fail("Apps Script C6/C9 control returned invalid JSON")
+        fail("Apps Script bounded P3 runtime control returned invalid JSON")
     if envelope.get("error"):
-        fail("Apps Script C6/C9 control returned an error")
+        fail("Apps Script bounded P3 runtime control returned an error")
     return envelope.get("response")
 
 
@@ -38,15 +38,29 @@ def main() -> None:
     if mode not in ALLOWED:
         fail("Unallowlisted migration runtime control")
     if os.environ.get("EVENT_NAME") != "workflow_dispatch":
-        fail("C6/C9 controls require explicit manual workflow dispatch")
+        fail("Bounded P3 runtime controls require explicit manual workflow dispatch")
     source = os.environ.get("SOURCE_SHA", "")
     if (len(source) != 40 or any(c not in "0123456789abcdef" for c in source)
             or os.environ.get("INTENDED_SMOKE_SHA") != source):
-        fail("C6/C9 controls require exact intended audited source SHA")
+        fail("Bounded P3 runtime controls require exact intended audited source SHA")
     if os.environ.get("SOURCE_ATTESTED") != "true":
-        fail("C6/C9 controls require immediate authenticated source attestation")
+        fail("Bounded P3 runtime controls require immediate authenticated source attestation")
     if os.environ.get("RUN_ATTEMPT") != "1":
-        fail("C6/C9 controls permit run_attempt=1 only")
+        fail("Bounded P3 runtime controls permit run_attempt=1 only")
+
+    if mode == "PRE_C6_READBACK":
+        response = call("h3RuntimePreC6Readback")
+        expected = {
+            "status": "PASS",
+            "authority_mode": "QUIESCED",
+            "cutover_locked": False,
+            "mutation_count": 0,
+        }
+        if response != expected:
+            fail("Pre-C6 safe readback did not match exact QUIESCED/0 state")
+        print("PRE_C6_RUNTIME_READBACK=QUIESCED_UNLOCKED")
+        print("PRE_C6_RUNTIME_MUTATION_COUNT=0")
+        return
 
     if mode == "C6_ACTIVATE":
         response = call("h3RuntimeC6Activate")

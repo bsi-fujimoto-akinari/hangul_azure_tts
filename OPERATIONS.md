@@ -518,6 +518,14 @@ The operation must be manual-dispatch only, `run_attempt=1`, bound to `intended_
 Do not use this exception for D1 activation, rollback, arbitrary Script Properties, learner-state mutation, source push, deployment promotion, credential changes, or any non-P3 operation. C1 execution remains owned by the migration critical-section executor and still requires the migration control-plane authorization in force at execution time. The route may be merged/prepared without executing either operation.
 
 
+### P3 pre-C6 read-only authority/lock proof
+
+During H3 Cloudflare P3 RE04-A, the fixed `migration_runtime_control` choice `PRE_C6_READBACK` is a bounded read-only proof of the exact pre-C6 runtime state. It may call only `h3RuntimePreC6Readback()` and must return exactly `{status:"PASS",authority_mode:"QUIESCED",cutover_locked:false,mutation_count:0}`.
+
+The control inherits the same manual `workflow_dispatch` boundary used by C6/C9: `run_attempt=1`, exact `intended_smoke_sha` equal to current audited `main`, successful same-SHA Repository audit, exact Apps Script project target, immediate authenticated Apps Script HEAD source attestation, and `smoke_boundary.outputs.ready == 'true'`. The helper fails closed on any field/value mismatch.
+
+`h3RuntimePreC6Readback()` is strictly read-only. It may derive the authority mode through `h3RuntimeAuthority_()` and read the cutover-lock flag, but it must not call `h3RuntimeSetAuthority_()`, mutate Script Properties, learner/history/score state, pointers/counters, scheduler state, or credentials. It must never return the bearer, backend credentials, arbitrary Script Properties, or raw error text. Availability of this control does not authorize dispatch; RE04-A still requires explicit current-turn authorization before execution.
+
 ### P3 C6 activation and C9 readback exception
 
 The migration-only `C6_ACTIVATE` and `C9_READBACK` choices are separate from the C1 exception above. This bounded exception does not weaken C1's rules: the C1 helper and its two allowlisted operations remain unchanged, and C1 itself still forbids D1 activation.

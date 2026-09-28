@@ -23,13 +23,19 @@ def call(args: list[str]):
     )
     if completed.returncode != 0:
         fail("Apps Script C1 control execution failed")
-    raw = completed.stdout.strip()
-    start = raw.find("{")
-    end = raw.rfind("}")
-    if start < 0 or end < start:
+    candidates = [completed.stdout.strip(), completed.stderr.strip()]
+    raw = next(
+        (
+            value[value.find("{"):value.rfind("}") + 1]
+            for value in candidates
+            if value.find("{") >= 0 and value.rfind("}") >= value.find("{")
+        ),
+        "",
+    )
+    if not raw:
         fail("Apps Script C1 control returned no JSON object")
     try:
-        envelope = json.loads(raw[start:end + 1])
+        envelope = json.loads(raw)
     except json.JSONDecodeError:
         fail("Apps Script C1 control returned invalid JSON")
     if envelope.get("error"):

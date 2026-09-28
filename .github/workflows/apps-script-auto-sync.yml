@@ -612,7 +612,7 @@ jobs:
 
       - name: Validate production trigger alignment boundary
         id: trigger_alignment_boundary
-        if: steps.source_attestation.outputs.attested == 'true' && steps.auth.outputs.ready == 'true' && steps.source_binding_boundary.outputs.ready == 'true'
+        if: steps.source_attestation.outputs.attested == 'true' && steps.auth.outputs.ready == 'true' && steps.source_binding_boundary.outputs.ready == 'true' && github.event_name == 'workflow_run'
         shell: bash
         env:
           SOURCE_SHA: ${{ steps.source.outputs.sha }}

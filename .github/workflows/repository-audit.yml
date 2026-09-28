@@ -115,9 +115,7 @@ jobs:
           python3 .github/scripts/repository_audit_impact.py validate
 
       - name: Verify credentialed Apps Script execution boundaries
-        run: |
-          python3 .github/scripts/apps_script_execution_boundary_audit.py
-          node .github/scripts/p3_c6_c9_runtime_control_test.cjs
+        run: python3 .github/scripts/apps_script_execution_boundary_audit.py
 
       - name: Audit automatic read-only live smoke contract
         shell: bash

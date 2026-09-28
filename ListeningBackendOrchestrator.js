@@ -2013,11 +2013,14 @@ function prepareListeningBackendSet(
   var lock =
     LockService.getScriptLock();
   lock.waitLock(30000);
+  
 
   var prepared = null;
   var sourceAttestation = null;
 
   try {
+    if (typeof h3WebRuntimeMode_ === 'function' && h3WebRuntimeMode_() !== 'LEGACY') throw new Error('H3_RUNTIME_LEGACY_WRITE_FORBIDDEN');
+    if (typeof h3RuntimeRequireLegacyMutation_ === 'function') h3RuntimeRequireLegacyMutation_();
     prepared =
       h3BackendPrepareLocked_(ids);
 
@@ -2053,8 +2056,11 @@ function prepareListeningBackendSet(
   lock =
     LockService.getScriptLock();
   lock.waitLock(30000);
+  
 
   try {
+    if (typeof h3WebRuntimeMode_ === 'function' && h3WebRuntimeMode_() !== 'LEGACY') throw new Error('H3_RUNTIME_LEGACY_WRITE_FORBIDDEN');
+    if (typeof h3RuntimeRequireLegacyMutation_ === 'function') h3RuntimeRequireLegacyMutation_();
     var finalContext =
       h3BackendFinalizeLocked_(
         ids,

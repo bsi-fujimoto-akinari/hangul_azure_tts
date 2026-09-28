@@ -1,0 +1,33 @@
+name: P3 R1-D authority adapter acceptance
+on:
+  pull_request:
+    paths:
+      - WebApp.js
+      - WebAppCloudflareRuntime.js
+      - WebAppProduction.js
+      - WebAppWrittenProduction.js
+      - WebAppReadingProduction.js
+      - WebAppTranslationProduction.js
+      - WebAppTranslationV2Production.js
+      - WebAppReviewPersistence.js
+      - WebAppWrittenAnswerSync.js
+      - WebAppObservability.js
+      - .github/scripts/p3_r1d_authority_test.cjs
+      - .github/workflows/p3-r1d-authority.yml
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+      - name: Exact SHA adapter fixtures
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+          node .github/scripts/p3_r1d_authority_test.cjs

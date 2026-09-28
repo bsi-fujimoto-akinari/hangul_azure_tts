@@ -3729,6 +3729,7 @@ function h3WrittenAnswerSync_(
   var lock =
     LockService.getScriptLock();
   lock.waitLock(30000);
+  
 
   var runtimeSpreadsheet = null;
   var journal = null;
@@ -3736,6 +3737,8 @@ function h3WrittenAnswerSync_(
   var prestate = null;
 
   try {
+    if (typeof h3WebRuntimeMode_ === 'function' && h3WebRuntimeMode_() !== 'LEGACY') throw new Error('H3_RUNTIME_LEGACY_WRITE_FORBIDDEN');
+    if (typeof h3RuntimeRequireLegacyMutation_ === 'function') h3RuntimeRequireLegacyMutation_();
     runtimeSpreadsheet =
       SpreadsheetApp.openById(
         H3_WEB_RUNTIME_SPREADSHEET_ID

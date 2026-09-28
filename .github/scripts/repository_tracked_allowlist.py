@@ -99,6 +99,8 @@ allowed = {
     'OPERATIONS.md',
     'RECOVERY.md',
     '.github/workflows/repository-audit.yml',
+    '.github/workflows/p3-r1d-authority.yml',
+    '.github/scripts/p3_r1d_authority_test.cjs',
     '.github/scripts/repository_tracked_allowlist.py',
     '.github/scripts/workflow_lint_guard.py',
     '.github/workflows/workflow-lint.yml',

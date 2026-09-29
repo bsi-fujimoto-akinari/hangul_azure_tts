@@ -999,9 +999,11 @@ jobs:
           rm -f /tmp/rem09-open-*.out /tmp/rem09-open-*.err \
                 /tmp/rem09-invalid.out /tmp/rem09-invalid.err \
                 /tmp/rem09-missing.out /tmp/rem09-missing.err
-          echo "status=pass" >> "$GITHUB_OUTPUT"
-          echo "opened=28" >> "$GITHUB_OUTPUT"
-          echo "five_l=3" >> "$GITHUB_OUTPUT"
+          {
+            echo "status=pass"
+            echo "opened=28"
+            echo "five_l=3"
+          } >> "$GITHUB_OUTPUT"
           echo "REM-09 Review open validation PASS: 28/28; 5L=3; fail-closed=2"
 
       - name: P3 C1 bounded runtime authority control

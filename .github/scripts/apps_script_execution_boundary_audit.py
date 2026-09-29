@@ -7,11 +7,13 @@ sync_path = Path('.github/workflows/apps-script-auto-sync.yml')
 ops_path = Path('OPERATIONS.md')
 alignment_helper_path = Path('.github/scripts/production_trigger_alignment.py')
 c6_c9_helper_path = Path('.github/scripts/p3_c6_c9_runtime_control.py')
+rem09_d4_helper_path = Path('.github/scripts/rem09_d4_audio_parity_repair.py')
 runtime_path = Path('WebAppCloudflareRuntime.js')
 sync = sync_path.read_text(encoding='utf-8')
 ops = ops_path.read_text(encoding='utf-8')
 alignment_helper = alignment_helper_path.read_text(encoding='utf-8')
 c6_c9_helper = c6_c9_helper_path.read_text(encoding='utf-8')
+rem09_d4_helper = rem09_d4_helper_path.read_text(encoding='utf-8')
 runtime = runtime_path.read_text(encoding='utf-8')
 github_attempt_token = '$' + '{{ github.run_attempt }}'
 command = 'run-' + 'function'
@@ -43,6 +45,8 @@ required_sync = [
     'O1_RESUME',
     'P3 pre-C6/C6/C9/O1 bounded runtime control',
     'p3_c6_c9_runtime_control.py',
+    'REM-09 bounded single-target D4 audio parity repair',
+    'rem09_d4_audio_parity_repair.py',
 ]
 missing_sync = [token for token in required_sync if token not in sync]
 if missing_sync:
@@ -122,6 +126,31 @@ if missing_c6_c9_helper:
         'P3 pre-C6/C6/C9 helper contract missing: '
         + ', '.join(missing_c6_c9_helper)
     )
+
+required_rem09_d4_helper = [
+    'FUNCTION = "runRem09D4AudioParityRepair"',
+    '"H3-20260914-02"',
+    '"H3-20260914-04"',
+    'EVENT_NAME',
+    'RUN_ATTEMPT',
+    'SOURCE_SHA',
+    'INTENDED_SMOKE_SHA',
+    'SOURCE_ATTESTED',
+    'REM09_VALIDATION',
+    'MIGRATION_CONTROL',
+    'workflow_dispatch',
+    'STALE_REPLACED_ARCHIVE',
+    'run-function',
+]
+missing_rem09_d4_helper = [
+    token for token in required_rem09_d4_helper
+    if token not in rem09_d4_helper
+]
+if missing_rem09_d4_helper:
+    raise SystemExit(
+        'REM-09 D4 repair helper contract missing: '
+        + ', '.join(missing_rem09_d4_helper)
+    )
 for token in [
     "function h3RuntimePreC6Readback()",
     "authority_mode: mode",
@@ -144,7 +173,11 @@ if missing_alignment_helper:
     )
 
 for helper_path in sorted(Path('.github/scripts').glob('*')):
-    if helper_path in {alignment_helper_path, c6_c9_helper_path} or not helper_path.is_file():
+    if helper_path in {
+        alignment_helper_path,
+        c6_c9_helper_path,
+        rem09_d4_helper_path,
+    } or not helper_path.is_file():
         continue
     try:
         helper_text = helper_path.read_text(encoding='utf-8')
@@ -297,6 +330,26 @@ if (
         'Production trigger alignment execution must be gated by '
         'trigger_alignment_boundary ready=true.'
     )
+
+rem09_d4_step = sync.find('REM-09 bounded single-target D4 audio parity repair')
+manual_boundary_pos = sync.find('Validate one-revision read-only smoke boundary')
+if not (0 <= manual_boundary_pos < rem09_d4_step):
+    raise SystemExit('REM-09 D4 repair must follow the exact manual smoke boundary.')
+rem09_d4_block = sync[rem09_d4_step:rem09_d4_step + 1800]
+for token in [
+    "if: steps.smoke_boundary.outputs.ready == 'true'",
+    'TARGET_SET_ID:',
+    'SOURCE_SHA:',
+    'INTENDED_SMOKE_SHA:',
+    'SOURCE_ATTESTED:',
+    'RUN_ATTEMPT:',
+    'EVENT_NAME:',
+    'REM09_VALIDATION:',
+    'MIGRATION_CONTROL:',
+    'python3 .github/scripts/rem09_d4_audio_parity_repair.py',
+]:
+    if token not in rem09_d4_block:
+        raise SystemExit('REM-09 D4 repair workflow guard missing: ' + token)
 
 c6_c9_step = sync.find('P3 pre-C6/C6/C9/O1 bounded runtime control')
 manual_boundary_pos = sync.find('Validate one-revision read-only smoke boundary')

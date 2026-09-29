@@ -31,6 +31,15 @@ on:
         options:
           - "NO"
           - "AUTHORIZE_REM09_28_OPEN_READONLY"
+      rem09_d4_audio_parity_repair:
+        description: "REM-09 bounded single-target D4 Review-audio parity repair"
+        required: false
+        default: "NONE"
+        type: choice
+        options:
+          - "NONE"
+          - "H3-20260914-02"
+          - "H3-20260914-04"
 
 permissions:
   contents: read
@@ -860,6 +869,20 @@ jobs:
       # smoke_boundary and gated by:
       #   if: steps.smoke_boundary.outputs.ready == 'true'
       # Repository audit rejects run-function usage that does not use this boundary.
+
+      - name: REM-09 bounded single-target D4 audio parity repair
+        if: steps.smoke_boundary.outputs.ready == 'true' && github.event.inputs.rem09_d4_audio_parity_repair != 'NONE'
+        shell: bash
+        env:
+          TARGET_SET_ID: ${{ github.event.inputs.rem09_d4_audio_parity_repair }}
+          REM09_VALIDATION: ${{ github.event.inputs.rem09_review_open_validation || 'NO' }}
+          MIGRATION_CONTROL: ${{ github.event.inputs.migration_runtime_control || 'NONE' }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          INTENDED_SMOKE_SHA: ${{ github.event.inputs.intended_smoke_sha || '' }}
+          SOURCE_ATTESTED: ${{ steps.source_attestation.outputs.attested || '' }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: python3 .github/scripts/rem09_d4_audio_parity_repair.py
 
       - name: REM-09 validate all 28 Review opens read-only
         if: steps.smoke_boundary.outputs.ready == 'true' && github.event.inputs.rem09_review_open_validation == 'AUTHORIZE_REM09_28_OPEN_READONLY'

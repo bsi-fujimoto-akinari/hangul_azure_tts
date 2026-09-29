@@ -27,6 +27,7 @@ APPS_SCRIPT_EXECUTION_BOUNDARY_AUDIT_PATH = ".github/scripts/apps_script_executi
 PRODUCTION_TRIGGER_ALIGNMENT_HELPER_PATH = ".github/scripts/production_trigger_alignment.py"
 PRODUCTION_TRIGGER_CONTRACT_AUDIT_PATH = ".github/scripts/production_trigger_contract_audit.cjs"
 REVIEW_AUDIO_LIFECYCLE_AUDIT_PATH = ".github/scripts/review_audio_lifecycle_contract_audit.cjs"
+REM09_D4_REPAIR_HELPER_PATH = ".github/scripts/rem09_d4_audio_parity_repair.py"
 
 FORCE_FULL_FILES = {
     WORKFLOW_PATH,
@@ -38,6 +39,7 @@ FORCE_FULL_FILES = {
     PRODUCTION_TRIGGER_ALIGNMENT_HELPER_PATH,
     PRODUCTION_TRIGGER_CONTRACT_AUDIT_PATH,
     REVIEW_AUDIO_LIFECYCLE_AUDIT_PATH,
+    REM09_D4_REPAIR_HELPER_PATH,
 }
 
 UNCONDITIONAL_STEPS = {

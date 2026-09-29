@@ -10279,9 +10279,7 @@ jobs:
             );
           }
           for (const forbidden of [
-            'H3_REVIEW_AUDIO_STALE_REPLACED_FOLDER_ID_',
             'REVIEW_AUDIO_UXR2B_D4_MIGRATION_SOURCE_MISMATCH',
-            'STALE_REPLACED_ARCHIVE',
             'runUxr2bReviewAudioRepair'
           ]) {
             assert(

@@ -149,6 +149,108 @@ assert.strictEqual(
   'Structured D4 explanation overlay must reconstruct the canonical 5W audio script.'
 );
 
+const bracketPriorityD4 = sandbox.h3ReviewAudioLegacy5WScript_({
+  section: 'D4',
+  correct_answer_text: '한 번 더 살펴봤어요',
+  question_surface: {
+    rendered:
+      '次の下線部と最も近い意味のものを選んでください。\n' +
+      '회의 시간이 바뀌었다는 말을 듣고 일정을 [다시 확인했어요].'
+  },
+  explanation: {
+    learning_blocks: [{
+      usage:
+        '다시 확인하다\n' +
+        '일정을 한 번 더 살펴봤어요.'
+    }]
+  }
+});
+assert.strictEqual(
+  bracketPriorityD4,
+  '회의 시간이 바뀌었다는 말을 듣고 일정을 [다시 확인했어요].\n' +
+    '회의 시간이 바뀌었다는 말을 듣고 일정을 한 번 더 살펴봤어요.',
+  'Bracketed D4 replacement must preserve the full original context before structured overlay fallback.'
+);
+
+const rem09Target5Canonical = sandbox.h3ReviewAudioCanonicalize5WScript_(
+  {
+    question_surface: {
+      rendered:
+        '次の文全体と最も近い意味のものを選んでください。\n' +
+        '이 영화는 생각보다 재미있어서 시간 가는 줄 몰랐어요.'
+    },
+    correct_answer_text:
+      '너무 재미있어서 시간이 빨리 간 것처럼 느꼈어요.'
+  },
+  'D4',
+  '이 영화는 생각보다 재미있어서 시간 가는 줄 몰랐어요.\n' +
+    '너무 재미있어서 시간이 빨리 간 것처럼 느꼈어요 が最も近い。',
+  'H3-20260914-02'
+);
+assert.strictEqual(
+  rem09Target5Canonical,
+  '이 영화는 생각보다 재미있어서 시간 가는 줄 몰랐어요.\n' +
+    '너무 재미있어서 시간이 빨리 간 것처럼 느꼈어요.'
+);
+assert.strictEqual(
+  crypto.createHash('sha256').update(rem09Target5Canonical).digest('hex'),
+  '7a68b6db4162e4ebb0065f5574eda0cf32f38896f2f58ebbcecc264603471614'
+);
+
+const rem09Target7Canonical = sandbox.h3ReviewAudioCanonicalize5WScript_(
+  {
+    question_surface: {
+      rendered:
+        '次の文全体と最も近い意味のものを選んでください。\n' +
+        '그는 작은 실수도 놓치지 않고 꼼꼼하게 확인해요.'
+    },
+    correct_answer_text: '세세한 부분까지 주의 깊게 살펴봐요.'
+  },
+  'D4',
+  '작은 실수도 놓치지 않고 꼼꼼하게 확인하다≈세세한 부분까지 주의 깊게 살펴보다.\n' +
+    '꼼꼼하다=細かい部分まで注意深く丁寧だ。',
+  'H3-20260914-04'
+);
+assert.strictEqual(
+  rem09Target7Canonical,
+  '그는 작은 실수도 놓치지 않고 꼼꼼하게 확인해요.\n' +
+    '세세한 부분까지 주의 깊게 살펴봐요.'
+);
+assert.strictEqual(
+  crypto.createHash('sha256').update(rem09Target7Canonical).digest('hex'),
+  '4a681bccc1bfe81aeea20ec4707dcc7cb7e86866526c8c7fa29dd30801b018d3'
+);
+
+assert.throws(
+  () => sandbox.h3ReviewAudioCanonicalize5WScript_(
+    {
+      question_surface: {rendered: '다른 문장입니다.'},
+      correct_answer_text:
+        '너무 재미있어서 시간이 빨리 간 것처럼 느꼈어요.'
+    },
+    'D4',
+    'irrelevant',
+    'H3-20260914-02'
+  ),
+  /REVIEW_AUDIO_REM09_D4_SOURCE_MISMATCH/,
+  'REM-09 D4 canonicalization must fail closed on source drift.'
+);
+
+for (const token of [
+  "H3_REVIEW_AUDIO_REM09_D4_REPAIR_MODE_='REM09_D4_PARITY_REPAIR'",
+  "'H3-20260914-02':{",
+  "'H3-20260914-04':{",
+  "old_hash:'968137e9c373c7d286b29ea1b94e7aa1589a991aabaf5052c23d2d7877dd2f4a'",
+  "old_hash:'a007bad415d99c991a2a7704d2ba0225ac5cd80ce5b9a1bb0fd96a5fb0f797c6'",
+  'function runRem09D4AudioParityRepair(targetSetId)',
+  "retire_mode:'STALE_REPLACED_ARCHIVE'"
+]) {
+  assert(
+    backfill.includes(token),
+    'Missing bounded REM-09 D4 parity repair contract token: ' + token
+  );
+}
+
 const target2Expected =
   '요즘 회사 일이 많아서 아주 바빠요.\n' +
   '할 일이 많아서 정신이 없어요.';

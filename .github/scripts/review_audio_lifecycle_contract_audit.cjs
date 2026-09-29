@@ -151,7 +151,7 @@ assert.strictEqual(
 
 const bracketPriorityD4 = sandbox.h3ReviewAudioLegacy5WScript_({
   section: 'D4',
-  correct_answer_text: '한 번 더 살펴봤어요.',
+  correct_answer_text: '한 번 더 살펴봤어요',
   question_surface: {
     rendered:
       '次の下線部と最も近い意味のものを選んでください。\n' +

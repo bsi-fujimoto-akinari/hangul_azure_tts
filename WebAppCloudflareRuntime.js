@@ -351,6 +351,19 @@ function h3RuntimeReviewAudioTexts_(payload) {
       var sec = String(q.section || 'D' + (i + 2));
       var script = String(q.script_text || '').trim() ||
         h3ReviewAudioLegacy5WScript_(q);
+      if (
+        payload.schema === 'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1' &&
+        q.question_surface &&
+        typeof q.question_surface === 'object'
+      ) {
+        var legacyQ = JSON.parse(JSON.stringify(q));
+        legacyQ.question_surface =
+          String(q.question_surface.rendered || q.question_surface.body || '');
+        legacyQ.explanation_text =
+          String(q.explanation && q.explanation.text || '');
+        script = h3ReviewAudioLegacy5WScript_(legacyQ);
+        q = legacyQ;
+      }
       out[sec] = h3ReviewAudioCanonicalize5WScript_(
         q, sec, script, setId
       );

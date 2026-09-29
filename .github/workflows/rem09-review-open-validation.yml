@@ -25,58 +25,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Guard exact current main and authorization
+      - uses: actions/checkout@v4
+      - name: Dispatch exact-main REM-09 validation
         env:
           GH_TOKEN: ${{ github.token }}
           INTENDED_APP_SHA: ${{ inputs.intended_app_sha }}
           CONFIRMATION: ${{ inputs.confirmation }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          set +x
-          [[ "$INTENDED_APP_SHA" =~ ^[0-9a-f]{40}$ ]] || {
-            echo "::error::intended_app_sha must be one immutable 40-character SHA."
-            exit 1
-          }
-          [[ "$CONFIRMATION" == "AUTHORIZE_REM09_28_OPEN_READONLY" ]] || {
-            echo "::error::Explicit REM-09 authorization missing."
-            exit 1
-          }
-          current_main="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
-          [[ "$current_main" == "$INTENDED_APP_SHA" ]] || {
-            echo "::error::intended_app_sha is no longer current main."
-            exit 1
-          }
-          echo "REM09_DISPATCH_PREFLIGHT_PASS"
-
-      - name: Dispatch bounded Apps Script REM-09 validation
-        env:
-          GH_TOKEN: ${{ github.token }}
-          INTENDED_APP_SHA: ${{ inputs.intended_app_sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          set +x
-          payload="$(jq -cn \
-            --arg ref "main" \
-            --arg sha "$INTENDED_APP_SHA" \
-            '{ref:$ref,inputs:{intended_smoke_sha:$sha,migration_runtime_control:"C9_READBACK",rem09_review_open_validation:"AUTHORIZE_REM09_28_OPEN_READONLY"}}')"
-          gh api \
-            --method POST \
-            "repos/$GITHUB_REPOSITORY/actions/workflows/apps-script-auto-sync.yml/dispatches" \
-            --input - <<<"$payload"
-          echo "REM09_CHILD_DISPATCH_ACCEPTED"
-
-      - name: Write dispatch summary
-        env:
-          INTENDED_APP_SHA: ${{ inputs.intended_app_sha }}
-        shell: bash
-        run: |
-          {
-            echo "## REM-09 Review open validation"
-            echo ""
-            echo "- exact app SHA: $INTENDED_APP_SHA"
-            echo "- child workflow: Apps Script auto-sync"
-            echo "- validation: 28 Review opens + 3 retained 5L hydrations + fail-closed checks + C9 readback"
-            echo "- mutation authority: none"
-          } >> "$GITHUB_STEP_SUMMARY"
+        run: python3 .github/scripts/rem09_dispatch.py

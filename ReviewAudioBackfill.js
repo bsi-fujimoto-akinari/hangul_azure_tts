@@ -106,7 +106,10 @@ function h3ReviewAudioStripSpeaker_(line){
 
 function h3ReviewAudioLegacy5WScript_(q){
   var sec=String(q.section||''),correct=String(q.correct_answer_text||'').trim();
-  var surface=String(q.question_surface||q.question_body||'');
+  var surfaceValue=q.question_surface;
+  var surface=(surfaceValue&&typeof surfaceValue==='object')
+    ?String(surfaceValue.rendered||surfaceValue.body||q.question_body||'')
+    :String(surfaceValue||q.question_body||'');
   if(!correct)throw new Error('REVIEW_AUDIO_5W_CORRECT_TEXT_MISSING:'+sec);
 
   if(sec==='D2'||sec==='D3'){
@@ -116,7 +119,9 @@ function h3ReviewAudioLegacy5WScript_(q){
   }
 
   if(sec==='D4'){
-    var e=h3ReviewAudioExtractHangulLines_(q.explanation_text||'');
+    var explanationText=q.explanation_text||
+      (q.explanation&&typeof q.explanation==='object'?q.explanation.text:'')||'';
+    var e=h3ReviewAudioExtractHangulLines_(explanationText);
     if(e.length>=2)return h3ReviewAudioNormalizeText_(e.slice(0,2).join('\n'));
     var d=h3ReviewAudioExtractHangulLines_(surface);
     if(!d.length)throw new Error('REVIEW_AUDIO_5W_D4_ORIGINAL_MISSING');
@@ -158,7 +163,10 @@ function h3ReviewAudioCanonicalize5WScript_(q,sec,script,setId){
     String(setId||'')==='H3-20260915-01' &&
     sec==='D4'
   ){
-    var surface=String(q.question_surface||q.question_body||'');
+    var specialSurface=q.question_surface;
+    var surface=(specialSurface&&typeof specialSurface==='object')
+      ?String(specialSurface.rendered||specialSurface.body||q.question_body||'')
+      :String(specialSurface||q.question_body||'');
     var correct=String(q.correct_answer_text||'').trim();
     if(
       surface.indexOf(
@@ -181,7 +189,7 @@ function h3ReviewAudioCanonicalize5WScript_(q,sec,script,setId){
   var d5surface=q.question_surface||q.question_body||'';
   var body=typeof d5surface==='string'?
     d5surface:
-    String((d5surface&&d5surface.body)||(d5surface&&d5surface.rendered)||q.question_body||'');
+    String((d5surface&&d5surface.rendered)||(d5surface&&d5surface.body)||q.question_body||'');
   var d5correct=String(q.correct_answer_text||'').trim();
   var lines=h3ReviewAudioExtractHangulLines_(body);
 

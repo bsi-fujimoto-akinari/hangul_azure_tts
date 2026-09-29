@@ -11,7 +11,7 @@ on:
         required: false
         type: string
       migration_runtime_control:
-        description: "P3 migration runtime control: bounded C1/C6/C9 controls only"
+        description: "P3 migration runtime control: bounded C1/C6/C9/O1 controls only"
         required: false
         default: "NONE"
         type: choice
@@ -22,6 +22,7 @@ on:
           - "PRE_C6_READBACK"
           - "C6_ACTIVATE"
           - "C9_READBACK"
+          - "O1_RESUME"
 
 permissions:
   contents: read
@@ -859,8 +860,8 @@ jobs:
           MIGRATION_RUNTIME_CONTROL: ${{ github.event.inputs.migration_runtime_control }}
         run: python3 .github/scripts/p3_c1_runtime_control.py
 
-      - name: P3 pre-C6/C6/C9 bounded runtime control
-        if: steps.smoke_boundary.outputs.ready == 'true' && (github.event.inputs.migration_runtime_control == 'PRE_C6_READBACK' || github.event.inputs.migration_runtime_control == 'C6_ACTIVATE' || github.event.inputs.migration_runtime_control == 'C9_READBACK')
+      - name: P3 pre-C6/C6/C9/O1 bounded runtime control
+        if: steps.smoke_boundary.outputs.ready == 'true' && (github.event.inputs.migration_runtime_control == 'PRE_C6_READBACK' || github.event.inputs.migration_runtime_control == 'C6_ACTIVATE' || github.event.inputs.migration_runtime_control == 'C9_READBACK' || github.event.inputs.migration_runtime_control == 'O1_RESUME')
         shell: bash
         env:
           MIGRATION_RUNTIME_CONTROL: ${{ github.event.inputs.migration_runtime_control }}

@@ -878,58 +878,7 @@ jobs:
 
           count=0
           five_l=0
-          while IFS=
-        if: steps.smoke_boundary.outputs.ready == 'true' && (github.event.inputs.migration_runtime_control == 'C1_READBACK' || github.event.inputs.migration_runtime_control == 'C1_QUIESCE')
-        shell: bash
-        env:
-          MIGRATION_RUNTIME_CONTROL: ${{ github.event.inputs.migration_runtime_control }}
-        run: python3 .github/scripts/p3_c1_runtime_control.py
-
-      - name: P3 pre-C6/C6/C9/O1 bounded runtime control
-        if: steps.smoke_boundary.outputs.ready == 'true' && (github.event.inputs.migration_runtime_control == 'PRE_C6_READBACK' || github.event.inputs.migration_runtime_control == 'C6_ACTIVATE' || github.event.inputs.migration_runtime_control == 'C9_READBACK' || github.event.inputs.migration_runtime_control == 'O1_RESUME')
-        shell: bash
-        env:
-          MIGRATION_RUNTIME_CONTROL: ${{ github.event.inputs.migration_runtime_control }}
-          SOURCE_SHA: ${{ steps.source.outputs.sha }}
-          SOURCE_ATTESTED: ${{ steps.source_attestation.outputs.attested || '' }}
-          INTENDED_SMOKE_SHA: ${{ github.event.inputs.intended_smoke_sha || '' }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: python3 .github/scripts/p3_c6_c9_runtime_control.py
-
-      - name: Read deployment inventory
-        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
-        shell: bash
-        run: npx -y @google/clasp@3.4.0 list-deployments
-
-
-      - name: Write run summary
-        if: always()
-        shell: bash
-        run: |
-          {
-            echo "## Apps Script auto-sync"
-            echo ""
-            echo "- source: $(git rev-parse HEAD 2>/dev/null || echo unavailable)"
-            echo "- Apps Script-impacting change: ${{ steps.impact.outputs.changed || 'unknown' }}"
-            echo "- synchronization-policy change: ${{ steps.policy_change.outputs.changed || 'unknown' }}"
-            echo "- remote file-set refresh required: ${{ steps.remote_file_set.outputs.refresh || 'not-run' }}"
-            echo "- remote file-set missing count: ${{ steps.remote_file_set.outputs.missing_count || 'not-run' }}"
-            echo "- remote file-set extra count: ${{ steps.remote_file_set.outputs.extra_count || 'not-run' }}"
-            echo "- source push status: ${{ steps.source_push.outputs.status || 'not-run' }}"
-            echo "- deletion-only refresh used: ${{ steps.source_push.outputs.delete_only_refresh || 'false' }}"
-            echo "- clasp credential ready: ${{ steps.auth.outputs.ready || 'not-needed' }}"
-            echo "- source attestation: ${{ steps.source_attestation.outputs.attested || 'not-run' }}"
-            echo "- attested file count: ${{ steps.source_attestation.outputs.file_count || 'not-run' }}"
-            echo "- source digest: ${{ steps.source_attestation.outputs.source_digest || 'not-run' }}"
-            echo "- automatic live smoke requested: ${{ steps.automatic_smoke_plan.outputs.requested || 'false' }}"
-            echo "- automatic live smoke suites: ${{ steps.automatic_live_smoke.outputs.suites || 'not-run' }}"
-            echo "- automatic live smoke status: ${{ steps.automatic_live_smoke.outputs.status || 'not-run' }}"
-            echo "- target script ID: 1p_e1jKICTZXHpCrQ7rwU9HilloZdkFBpHry_lCq5YgXpaiU4FNEQlDa-"
-            echo '- manifest overwrite mode: audited CI only (clasp push --force)'
-            echo '- versioned /exec deployment: not changed by this workflow'
-          } >> "$GITHUB_STEP_SUMMARY"
-\t' read -r set_id kind family source_id; do
+          while IFS="$(printf '\t')" read -r set_id kind family source_id; do
             [ -n "$set_id" ] || continue
             params="$(python3 - "$set_id" "$kind" "$family" "$source_id" <<'PY'
           import json, sys

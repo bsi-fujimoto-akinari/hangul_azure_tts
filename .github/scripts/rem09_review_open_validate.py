@@ -46,34 +46,79 @@ SAFE_ERROR_CODE = re.compile(r"^[A-Z][A-Z0-9_]{2,159}$")
 SAFE_ERROR_TOKEN = re.compile(r"\\b[A-Z][A-Z0-9_]{2,159}\\b")
 
 def safe_error_code(error):
+    def tokens(value):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key == "scriptStackTraceElements":
+                    continue
+                for token in tokens(item):
+                    yield token
+            return
+        if isinstance(value, list):
+            for item in value:
+                for token in tokens(item):
+                    yield token
+            return
+        text = str(value or "")
+        for token in SAFE_ERROR_TOKEN.findall(text):
+            if "_" in token:
+                yield token
+
     if isinstance(error, dict):
         direct = str(error.get("code") or "").strip()
         if SAFE_ERROR_CODE.fullmatch(direct):
             return direct
-        for key in ("message", "details"):
-            value = str(error.get(key) or "")
-            for token in SAFE_ERROR_TOKEN.findall(value):
-                if "_" in token:
-                    return token
+        for token in tokens(error):
+            return token
         status = str(error.get("status") or "").strip()
         if SAFE_ERROR_CODE.fullmatch(status):
             return status
-        return "UNKNOWN"
-    value = str(error or "")
-    for token in SAFE_ERROR_TOKEN.findall(value):
-        if "_" in token:
-            return token
-    return "UNKNOWN"
+        return "NATIVE_ERROR"
+    for token in tokens(error):
+        return token
+    return "NATIVE_ERROR"
 
-def diagnostic(target_index, set_id, kind, family, source_id, error_code):
-    fields = (
+def safe_stack_frames(error):
+    if not isinstance(error, dict):
+        return []
+    details = error.get("details")
+    if not isinstance(details, list):
+        return []
+    frames = []
+    for detail in details[:3]:
+        if not isinstance(detail, dict):
+            continue
+        stack = detail.get("scriptStackTraceElements")
+        if not isinstance(stack, list):
+            continue
+        for item in stack[:3]:
+            if not isinstance(item, dict):
+                continue
+            fn = str(item.get("function") or "")
+            line = item.get("lineNumber")
+            if not re.fullmatch(r"[A-Za-z_$][A-Za-z0-9_$]{0,119}", fn):
+                fn = "UNKNOWN"
+            try:
+                line_i = int(line)
+            except Exception:
+                line_i = 0
+            if line_i < 0 or line_i > 999999:
+                line_i = 0
+            frames.append(fn + ":" + str(line_i))
+    return frames[:3]
+
+def diagnostic(target_index, set_id, kind, family, source_id, error_code, frames=None):
+    fields = [
         ("target_index", str(target_index)),
         ("set_id", set_id),
         ("review_kind", kind),
         ("surface_family", family),
         ("review_source_id", source_id),
         ("error_code", error_code),
-    )
+    ]
+    for index, frame in enumerate(frames or [], start=1):
+        fields.append(("frame" + str(index), frame))
+    fields = tuple(fields)
     safe = []
     for key, value in fields:
         text = str(value)
@@ -94,7 +139,7 @@ def validate_success(stdout, target_index, set_id, kind, family, source_id):
     if error:
         diagnostic(
             target_index, set_id, kind, family, source_id,
-            safe_error_code(error),
+            safe_error_code(error), safe_stack_frames(error),
         )
         fail("REM09_REVIEW_OPEN_APPS_SCRIPT_ERROR")
     result = envelope.get("response")

@@ -7,9 +7,23 @@ This document contains the current operating contract for `hangul_azure_tts`. Co
 - GitHub `main` is authoritative for repository-managed code, workflows, manifests, and documentation.
 - Feature branches and pull requests are change workspaces.
 - Apps Script is the execution environment, not the code source of truth.
-- Google Sheets remain authoritative for runtime, queue, and learner history data.
+- Cloudflare D1 production is authoritative for learner/runtime state after cutover. Google Sheets/Drive and Apps Script retain only the resource-specific bridge, asset, rule, projection, or provenance roles explicitly assigned by `bsi-fujimoto-akinari/hangul_state@main/architecture/resource-authority-v1.json`.
 - Script Properties hold environment-specific configuration and secrets.
 - Production and baseline tags are immutable verified snapshots.
+
+## 1.1 Federated role and retirement boundary
+
+This repository is currently in lifecycle `RETAINED_BRIDGE_ACTIVE`. It is not the current backend runtime authority.
+
+The canonical retirement contract is:
+
+`bsi-fujimoto-akinari/hangul_state@main/architecture/legacy-retirement-v1.json`
+
+Repository retirement is separate from Google Drive asset/rule authority. The repository must not be treated as retired, archive-eligible, or archived merely because Cloudflare owns learner/runtime data.
+
+Before this repository can become `RETIRED_REFERENCE`, the P6 gates must prove all required static and dynamic consumers, classify unknown dependencies conservatively, reversibly disable proven-dead hot-path dependencies, pass post-disable production and real-device regression, complete the final authority/dependency/rollback audit, and receive explicit P6/6C migration-completion approval.
+
+GitHub repository archival is a later, separate action. It requires `ARCHIVE_ELIGIBLE` to be freshly proven and explicit user approval. Archive eligibility does not authorize deletion of this repository, Google Drive files, Sheets, learner history, Apps Script projects, tags, or migration evidence.
 
 ## 2. Standard change workflow
 

@@ -79,8 +79,8 @@ def invoke(target: str) -> dict:
         )
     try:
         return json.loads(completed.stdout)
-    except json.JSONDecodeError as exc:
-        fail("REM-09 D4 audio repair returned invalid JSON.") from exc
+    except json.JSONDecodeError:
+        fail("REM-09 D4 audio repair returned invalid JSON.")
 
 
 def validate(envelope: dict, target: str) -> None:

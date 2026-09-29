@@ -104,6 +104,48 @@ function h3ReviewAudioStripSpeaker_(line){
   return String(line||'').replace(/^[^:：\n]{1,30}[:：][ \t]*/,'').trim();
 }
 
+function h3ReviewAudioStructuredD4Script_(q,surface,correct){
+  var explanation=q&&q.explanation;
+  if(
+    !explanation||
+    typeof explanation!=='object'||
+    !Array.isArray(explanation.learning_blocks)
+  ){
+    return '';
+  }
+
+  var originalLines=h3ReviewAudioExtractHangulLines_(surface);
+  var original=originalLines.length?originalLines[0]:'';
+  var wanted=String(correct||'').trim();
+  if(!original||!wanted)return '';
+
+  var replacement='';
+  explanation.learning_blocks.some(function(block){
+    var usage=
+      block&&typeof block==='object'
+        ?String(block.usage||'')
+        :'';
+    var lines=h3ReviewAudioNormalizeText_(usage).split('\n')
+      .map(function(x){return x.trim();})
+      .filter(function(x){return/[가-힣]/.test(x);});
+    return lines.some(function(line){
+      if(
+        line!==original&&
+        line!==wanted&&
+        line.indexOf(wanted)>=0
+      ){
+        replacement=line;
+        return true;
+      }
+      return false;
+    });
+  });
+
+  return replacement
+    ?h3ReviewAudioNormalizeText_(original+'\n'+replacement)
+    :'';
+}
+
 function h3ReviewAudioLegacy5WScript_(q){
   var sec=String(q.section||''),correct=String(q.correct_answer_text||'').trim();
   var surfaceValue=q.question_surface;
@@ -123,6 +165,8 @@ function h3ReviewAudioLegacy5WScript_(q){
       (q.explanation&&typeof q.explanation==='object'?q.explanation.text:'')||'';
     var e=h3ReviewAudioExtractHangulLines_(explanationText);
     if(e.length>=2)return h3ReviewAudioNormalizeText_(e.slice(0,2).join('\n'));
+    var structured=h3ReviewAudioStructuredD4Script_(q,surface,correct);
+    if(structured)return structured;
     var d=h3ReviewAudioExtractHangulLines_(surface);
     if(!d.length)throw new Error('REVIEW_AUDIO_5W_D4_ORIGINAL_MISSING');
     var original=d[0],br=/\[([^\]]+)\]/;

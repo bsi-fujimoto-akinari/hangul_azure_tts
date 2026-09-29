@@ -1024,3 +1024,12 @@ The legacy ChatGPT Work monitoring tasks remain paused after cutover; they are
 not deleted or re-enabled. Their paused state is retained as rollback/audit
 evidence while Apps Script observer + HOME + deduplicated email becomes the
 canonical monitoring path.
+
+
+### P3 O1 D1-aware background resume
+
+During the explicitly authorized H3 Cloudflare P3 3D-POST O1 step, the fixed `migration_runtime_control` choice `O1_RESUME` is the only bounded background-resume control. It is manual-dispatch only, `run_attempt=1`, bound to `intended_smoke_sha=<exact current audited main SHA>`, and requires immediate authenticated Apps Script HEAD source attestation through `.github/workflows/apps-script-auto-sync.yml`.
+
+The control must first call the existing read-only `h3RuntimeC9Readback()` and require exact D1/locked backend, HEALTH/database, Worker/D1 route, bearer-presence boolean, and `mutation_count=0` evidence. Only after that proof may it call `h3MonitoringProductionTriggerEnsure()`. The only trigger that O1 may ensure is the canonical hourly CLOCK trigger for `h3MonitoringObserverEmailRun`, with one matching trigger, metadata match, cadence=1 hour, nearMinute(0), and timezone `Asia/Tokyo`. An already READY trigger is a no-op; an exact ABSENT state may create the one canonical trigger and must immediately read back READY.
+
+O1 does not re-enable any legacy learner/runtime writer, does not alter D1 authority or the cutover lock, does not change asset authority, does not create or modify the fallback `processLatestPendingAudioJob()` trigger, and does not authorize O2, O3, O4, P4, rollback, learner/history/score/pointer/counter mutation, or versioned Apps Script deployment changes.

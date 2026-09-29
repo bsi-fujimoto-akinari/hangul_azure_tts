@@ -42,15 +42,60 @@ def call_runner(runner, request):
     )
     return completed.returncode, completed.stdout, completed.stderr
 
+SAFE_ERROR_CODE = re.compile(r"^[A-Z][A-Z0-9_]{2,159}$")
+SAFE_ERROR_TOKEN = re.compile(r"\\b[A-Z][A-Z0-9_]{2,159}\\b")
+
+def safe_error_code(error):
+    if isinstance(error, dict):
+        direct = str(error.get("code") or "").strip()
+        if SAFE_ERROR_CODE.fullmatch(direct):
+            return direct
+        for key in ("message", "details"):
+            value = str(error.get(key) or "")
+            for token in SAFE_ERROR_TOKEN.findall(value):
+                if "_" in token:
+                    return token
+        status = str(error.get("status") or "").strip()
+        if SAFE_ERROR_CODE.fullmatch(status):
+            return status
+        return "UNKNOWN"
+    value = str(error or "")
+    for token in SAFE_ERROR_TOKEN.findall(value):
+        if "_" in token:
+            return token
+    return "UNKNOWN"
+
+def diagnostic(target_index, set_id, kind, family, source_id, error_code):
+    fields = (
+        ("target_index", str(target_index)),
+        ("set_id", set_id),
+        ("review_kind", kind),
+        ("surface_family", family),
+        ("review_source_id", source_id),
+        ("error_code", error_code),
+    )
+    safe = []
+    for key, value in fields:
+        text = str(value)
+        if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,200}", text):
+            text = "INVALID"
+        safe.append(key + "=" + text)
+    print("REM09_DIAGNOSTIC " + " ".join(safe), file=sys.stderr)
+
 def parse_envelope(stdout):
     try:
         return json.loads(stdout)
     except Exception:
         fail("REM09_APPS_SCRIPT_ENVELOPE_INVALID")
 
-def validate_success(stdout, set_id, kind, family):
+def validate_success(stdout, target_index, set_id, kind, family, source_id):
     envelope = parse_envelope(stdout)
-    if envelope.get("error"):
+    error = envelope.get("error")
+    if error:
+        diagnostic(
+            target_index, set_id, kind, family, source_id,
+            safe_error_code(error),
+        )
         fail("REM09_REVIEW_OPEN_APPS_SCRIPT_ERROR")
     result = envelope.get("response")
     if not isinstance(result, dict):
@@ -110,7 +155,7 @@ def main():
     opened = 0
     listening = 0
 
-    for set_id, kind, family, source_id in rows:
+    for target_index, (set_id, kind, family, source_id) in enumerate(rows, start=1):
         request = {
             "schema": "H3_WEB_RENDER_REQUEST_V1",
             "mode": "REVIEW",
@@ -121,8 +166,14 @@ def main():
         }
         code, stdout, _ = call_runner(runner, request)
         if code != 0:
+            diagnostic(
+                target_index, set_id, kind, family, source_id,
+                "TRANSPORT_NONZERO",
+            )
             fail("REM09_REVIEW_OPEN_TRANSPORT_FAILED")
-        validate_success(stdout, set_id, kind, family)
+        validate_success(
+            stdout, target_index, set_id, kind, family, source_id
+        )
         opened += 1
         if family == "5L":
             listening += 1

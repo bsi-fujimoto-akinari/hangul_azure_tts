@@ -867,7 +867,7 @@ jobs:
         run: |
           set -euo pipefail
           runner=/tmp/h3-rem09-get-review
-          printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' 'npx -y @google/clasp@3.4.0 --json run-function getListeningWebSet --params "$1"' > "$runner"
+          printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' "npx -y @google/clasp@3.4.0 --json run-function getListeningWebSet --params \"\$1\"" > "$runner"
           chmod 700 "$runner"
           python3 .github/scripts/rem09_review_open_validate.py "$runner" .github/rem09-review-open-targets.tsv
 

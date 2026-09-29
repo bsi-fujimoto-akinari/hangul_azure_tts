@@ -1,0 +1,34 @@
+name: REM-09 Review open validation dispatcher
+
+on:
+  workflow_dispatch:
+    inputs:
+      intended_app_sha:
+        description: "Exact current hangul_azure_tts main SHA to validate"
+        required: true
+        type: string
+      confirmation:
+        description: "Explicit REM-09 read-only 28-open authorization"
+        required: true
+        default: "NO"
+        type: choice
+        options:
+          - "NO"
+          - "AUTHORIZE_REM09_28_OPEN_READONLY"
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dispatch exact-main REM-09 validation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INTENDED_APP_SHA: ${{ inputs.intended_app_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: python3 .github/scripts/rem09_dispatch.py

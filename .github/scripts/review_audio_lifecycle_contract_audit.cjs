@@ -116,4 +116,34 @@ assert(
   'Review-audio generation must not occur in the Review/read path.'
 );
 
+const vm = require('vm');
+const sandbox = {};
+vm.createContext(sandbox);
+vm.runInContext(backfill, sandbox);
+
+const structuredD4 = sandbox.h3ReviewAudioLegacy5WScript_({
+  section: 'D4',
+  correct_answer_text: '담당할게요',
+  question_surface: {
+    rendered: '次の下線部と最も近い意味のものを選んでください。\n이번 일은 제가 맡을게요.'
+  },
+  explanation: {
+    learning_blocks: [
+      {
+        usage:
+          '맡다 / 담당하다\n' +
+          '이번 일은 제가 맡을게요.\n' +
+          '→ 今回の仕事は私が引き受けます。\n' +
+          '이번 일은 제가 담당할게요.\n' +
+          '→ 今回の仕事は私が担当します。'
+      }
+    ]
+  }
+});
+assert.strictEqual(
+  structuredD4,
+  '이번 일은 제가 맡을게요.\n이번 일은 제가 담당할게요.',
+  'Structured D4 explanation overlay must reconstruct the canonical 5W audio script.'
+);
+
 console.log('Prospective Review audio lifecycle contract: PASS');

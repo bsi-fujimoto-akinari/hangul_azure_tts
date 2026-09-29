@@ -864,12 +864,7 @@ jobs:
       - name: REM-09 validate all 28 Review opens read-only
         if: steps.smoke_boundary.outputs.ready == 'true' && github.event.inputs.rem09_review_open_validation == 'AUTHORIZE_REM09_28_OPEN_READONLY'
         shell: bash
-        run: |
-          set -euo pipefail
-          runner=/tmp/h3-rem09-get-review
-          printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' "npx -y @google/clasp@3.4.0 --json run-function getListeningWebSet --params \"\$1\"" > "$runner"
-          chmod 700 "$runner"
-          python3 .github/scripts/rem09_review_open_validate.py "$runner" .github/rem09-review-open-targets.tsv
+        run: runner=/tmp/h3-rem09-get-review; printf '%s\\n' "#!/usr/bin/env bash" "set -euo pipefail" "npx -y @google/clasp@3.4.0 --json run-function getListeningWebSet --params \"\\$1\"" > "$runner"; chmod 700 "$runner"; python3 .github/scripts/rem09_review_open_validate.py "$runner" .github/rem09-review-open-targets.tsv
 
       - name: P3 C1 bounded runtime authority control
         if: steps.smoke_boundary.outputs.ready == 'true' && (github.event.inputs.migration_runtime_control == 'C1_READBACK' || github.event.inputs.migration_runtime_control == 'C1_QUIESCE')

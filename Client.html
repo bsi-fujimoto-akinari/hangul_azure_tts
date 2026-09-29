@@ -1327,12 +1327,22 @@
     });
   }
 
-  function loadReviewTxn(txnId) {
+  function loadReviewTxn(
+    txnId,
+    setId
+  ) {
     loadSet({
       schema:
         'H3_WEB_RENDER_REQUEST_V1',
       mode: 'REVIEW',
-      set_id: null,
+      review_kind:
+        'LISTENING',
+      surface_family:
+        '5L',
+      set_id:
+        String(setId),
+      review_source_id:
+        String(txnId),
       txn_id:
         String(txnId),
       legacy_review_id: null
@@ -1340,13 +1350,21 @@
   }
 
   function loadLegacyReview(
-    legacyReviewId
+    legacyReviewId,
+    setId
   ) {
     loadSet({
       schema:
         'H3_WEB_RENDER_REQUEST_V1',
       mode: 'REVIEW',
-      set_id: null,
+      review_kind:
+        'LISTENING',
+      surface_family:
+        '5L',
+      set_id:
+        String(setId),
+      review_source_id:
+        String(legacyReviewId),
       txn_id: null,
       legacy_review_id:
         String(legacyReviewId)
@@ -1450,13 +1468,15 @@
 
     if (entry.legacy_review_id) {
       loadLegacyReview(
-        entry.legacy_review_id
+        entry.legacy_review_id,
+        entry.set_id
       );
       return;
     }
 
     loadReviewTxn(
-      entry.txn_id
+      entry.txn_id,
+      entry.set_id
     );
   }
 

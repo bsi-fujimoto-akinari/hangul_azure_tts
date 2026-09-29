@@ -23,6 +23,14 @@ on:
           - "C6_ACTIVATE"
           - "C9_READBACK"
           - "O1_RESUME"
+      rem09_review_open_validation:
+        description: "REM-09 exact-main 28 Review open validation"
+        required: false
+        default: "NO"
+        type: choice
+        options:
+          - "NO"
+          - "AUTHORIZE_REM09_28_OPEN_READONLY"
 
 permissions:
   contents: read
@@ -852,6 +860,200 @@ jobs:
       # smoke_boundary and gated by:
       #   if: steps.smoke_boundary.outputs.ready == 'true'
       # Repository audit rejects run-function usage that does not use this boundary.
+
+      - name: REM-09 validate all 28 Review opens read-only
+        id: rem09_review_open
+        if: steps.smoke_boundary.outputs.ready == 'true' && github.event.inputs.rem09_review_open_validation == 'AUTHORIZE_REM09_28_OPEN_READONLY'
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_case() {
+            local params="$1" out="$2" err="$3"
+            set +e
+            npx -y @google/clasp@3.4.0 --json run-function getListeningWebSet --params "$params" >"$out" 2>"$err"
+            local rc=$?
+            set -e
+            return "$rc"
+          }
+
+          count=0
+          five_l=0
+          while IFS=
+        if: steps.smoke_boundary.outputs.ready == 'true' && (github.event.inputs.migration_runtime_control == 'C1_READBACK' || github.event.inputs.migration_runtime_control == 'C1_QUIESCE')
+        shell: bash
+        env:
+          MIGRATION_RUNTIME_CONTROL: ${{ github.event.inputs.migration_runtime_control }}
+        run: python3 .github/scripts/p3_c1_runtime_control.py
+
+      - name: P3 pre-C6/C6/C9/O1 bounded runtime control
+        if: steps.smoke_boundary.outputs.ready == 'true' && (github.event.inputs.migration_runtime_control == 'PRE_C6_READBACK' || github.event.inputs.migration_runtime_control == 'C6_ACTIVATE' || github.event.inputs.migration_runtime_control == 'C9_READBACK' || github.event.inputs.migration_runtime_control == 'O1_RESUME')
+        shell: bash
+        env:
+          MIGRATION_RUNTIME_CONTROL: ${{ github.event.inputs.migration_runtime_control }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          SOURCE_ATTESTED: ${{ steps.source_attestation.outputs.attested || '' }}
+          INTENDED_SMOKE_SHA: ${{ github.event.inputs.intended_smoke_sha || '' }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: python3 .github/scripts/p3_c6_c9_runtime_control.py
+
+      - name: Read deployment inventory
+        if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'
+        shell: bash
+        run: npx -y @google/clasp@3.4.0 list-deployments
+
+
+      - name: Write run summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Apps Script auto-sync"
+            echo ""
+            echo "- source: $(git rev-parse HEAD 2>/dev/null || echo unavailable)"
+            echo "- Apps Script-impacting change: ${{ steps.impact.outputs.changed || 'unknown' }}"
+            echo "- synchronization-policy change: ${{ steps.policy_change.outputs.changed || 'unknown' }}"
+            echo "- remote file-set refresh required: ${{ steps.remote_file_set.outputs.refresh || 'not-run' }}"
+            echo "- remote file-set missing count: ${{ steps.remote_file_set.outputs.missing_count || 'not-run' }}"
+            echo "- remote file-set extra count: ${{ steps.remote_file_set.outputs.extra_count || 'not-run' }}"
+            echo "- source push status: ${{ steps.source_push.outputs.status || 'not-run' }}"
+            echo "- deletion-only refresh used: ${{ steps.source_push.outputs.delete_only_refresh || 'false' }}"
+            echo "- clasp credential ready: ${{ steps.auth.outputs.ready || 'not-needed' }}"
+            echo "- source attestation: ${{ steps.source_attestation.outputs.attested || 'not-run' }}"
+            echo "- attested file count: ${{ steps.source_attestation.outputs.file_count || 'not-run' }}"
+            echo "- source digest: ${{ steps.source_attestation.outputs.source_digest || 'not-run' }}"
+            echo "- automatic live smoke requested: ${{ steps.automatic_smoke_plan.outputs.requested || 'false' }}"
+            echo "- automatic live smoke suites: ${{ steps.automatic_live_smoke.outputs.suites || 'not-run' }}"
+            echo "- automatic live smoke status: ${{ steps.automatic_live_smoke.outputs.status || 'not-run' }}"
+            echo "- target script ID: 1p_e1jKICTZXHpCrQ7rwU9HilloZdkFBpHry_lCq5YgXpaiU4FNEQlDa-"
+            echo '- manifest overwrite mode: audited CI only (clasp push --force)'
+            echo '- versioned /exec deployment: not changed by this workflow'
+          } >> "$GITHUB_STEP_SUMMARY"
+\t' read -r set_id kind family source_id; do
+            [ -n "$set_id" ] || continue
+            params="$(python3 - "$set_id" "$kind" "$family" "$source_id" <<'PY'
+          import json, sys
+          set_id, kind, family, source_id = sys.argv[1:5]
+          request = {
+              "schema": "H3_WEB_RENDER_REQUEST_V1",
+              "mode": "REVIEW",
+              "set_id": set_id,
+              "review_kind": kind,
+              "surface_family": family,
+              "review_source_id": source_id,
+          }
+          print(json.dumps([request], separators=(",", ":")))
+          PY
+          )"
+            out="/tmp/rem09-open-$count.out"
+            err="/tmp/rem09-open-$count.err"
+            if ! run_case "$params" "$out" "$err"; then
+              echo "::error::REM-09 Review open transport failed for target index $count."
+              exit 1
+            fi
+            python3 - "$out" "$set_id" "$kind" "$family" <<'PY'
+          import json, re, sys
+          path, set_id, kind, family = sys.argv[1:5]
+          envelope = json.loads(open(path, encoding="utf-8").read())
+          if envelope.get("error"):
+              raise SystemExit("REM09_REVIEW_OPEN_APPS_SCRIPT_ERROR")
+          result = envelope.get("response")
+          if not isinstance(result, dict):
+              raise SystemExit("REM09_REVIEW_OPEN_RESPONSE_INVALID")
+          if result.get("mode") != "REVIEW":
+              raise SystemExit("REM09_REVIEW_OPEN_MODE_MISMATCH")
+          if result.get("set_id") != set_id:
+              raise SystemExit("REM09_REVIEW_OPEN_SET_ID_MISMATCH")
+          if result.get("surface_family") != family:
+              raise SystemExit("REM09_REVIEW_OPEN_FAMILY_MISMATCH")
+          actual_kind = str(result.get("kind") or result.get("provider_kind") or "")
+          if actual_kind != kind:
+              raise SystemExit("REM09_REVIEW_OPEN_KIND_MISMATCH")
+          if result.get("read_only") is not True:
+              raise SystemExit("REM09_REVIEW_OPEN_NOT_READ_ONLY")
+          if family == "5L":
+              sections = result.get("sections")
+              if not isinstance(sections, list) or len(sections) != 5:
+                  raise SystemExit("REM09_5L_SECTION_COUNT_MISMATCH")
+              by_section = {
+                  str(x.get("section")): x
+                  for x in sections if isinstance(x, dict)
+              }
+              if set(by_section) != {"K1","K2","K3","K4","K5"}:
+                  raise SystemExit("REM09_5L_SECTION_IDENTITY_MISMATCH")
+              if any(not str(by_section[k].get("audio_fallback_url") or "") for k in by_section):
+                  raise SystemExit("REM09_5L_AUDIO_HYDRATION_MISSING")
+              q = by_section["K1"].get("question_surface")
+              if not isinstance(q, dict):
+                  raise SystemExit("REM09_5L_K1_SURFACE_INVALID")
+              if not re.fullmatch(r"[0-9a-f]{64}", str(q.get("image_sha256") or "")):
+                  raise SystemExit("REM09_5L_IMAGE_HASH_INVALID")
+              if not str(q.get("image_data_uri") or "").startswith("data:image/"):
+                  raise SystemExit("REM09_5L_IMAGE_HYDRATION_MISSING")
+          elif family == "5W":
+              sections = result.get("sections")
+              if not isinstance(sections, list) or len(sections) != 5:
+                  raise SystemExit("REM09_5W_SECTION_COUNT_MISMATCH")
+          print("PASS", set_id, family)
+          PY
+            count=$((count + 1))
+            if [ "$family" = "5L" ]; then five_l=$((five_l + 1)); fi
+          done < .github/rem09-review-open-targets.tsv
+
+          [ "$count" -eq 28 ] || { echo "::error::REM-09 target count mismatch: $count"; exit 1; }
+          [ "$five_l" -eq 3 ] || { echo "::error::REM-09 5L target count mismatch: $five_l"; exit 1; }
+
+          invalid_params='[{"schema":"H3_WEB_RENDER_REQUEST_V1","mode":"REVIEW","set_id":"H3-20260919-L02","review_kind":"WRITTEN","surface_family":"5L"}]'
+          run_case "$invalid_params" /tmp/rem09-invalid.out /tmp/rem09-invalid.err || true
+          python3 - /tmp/rem09-invalid.out /tmp/rem09-invalid.err REVIEW_RENDER_REQUEST_INVALID <<'PY'
+          import json, sys
+          out, err, expected = sys.argv[1:4]
+          texts=[]
+          for path in (out, err):
+              try:
+                  texts.append(open(path, encoding="utf-8").read())
+              except FileNotFoundError:
+                  pass
+          joined="\n".join(texts)
+          try:
+              envelope=json.loads(texts[0]) if texts else {}
+              joined += "\n" + json.dumps(envelope.get("error"), ensure_ascii=False)
+          except Exception:
+              pass
+          if expected not in joined:
+              raise SystemExit("REM09_FAIL_CLOSED_INVALID_REQUEST_NOT_CONFIRMED")
+          print("PASS fail-closed", expected)
+          PY
+
+          missing_params='[{"schema":"H3_WEB_RENDER_REQUEST_V1","mode":"REVIEW","set_id":"H3-REM09-NOT-FOUND","review_kind":"WRITTEN","surface_family":"5W"}]'
+          run_case "$missing_params" /tmp/rem09-missing.out /tmp/rem09-missing.err || true
+          python3 - /tmp/rem09-missing.out /tmp/rem09-missing.err REVIEW_PAYLOAD_NOT_FOUND <<'PY'
+          import json, sys
+          out, err, expected = sys.argv[1:4]
+          texts=[]
+          for path in (out, err):
+              try:
+                  texts.append(open(path, encoding="utf-8").read())
+              except FileNotFoundError:
+                  pass
+          joined="\n".join(texts)
+          try:
+              envelope=json.loads(texts[0]) if texts else {}
+              joined += "\n" + json.dumps(envelope.get("error"), ensure_ascii=False)
+          except Exception:
+              pass
+          if expected not in joined:
+              raise SystemExit("REM09_FAIL_CLOSED_MISSING_PAYLOAD_NOT_CONFIRMED")
+          print("PASS fail-closed", expected)
+          PY
+
+          rm -f /tmp/rem09-open-*.out /tmp/rem09-open-*.err \
+                /tmp/rem09-invalid.out /tmp/rem09-invalid.err \
+                /tmp/rem09-missing.out /tmp/rem09-missing.err
+          echo "status=pass" >> "$GITHUB_OUTPUT"
+          echo "opened=28" >> "$GITHUB_OUTPUT"
+          echo "five_l=3" >> "$GITHUB_OUTPUT"
+          echo "REM-09 Review open validation PASS: 28/28; 5L=3; fail-closed=2"
 
       - name: P3 C1 bounded runtime authority control
         if: steps.smoke_boundary.outputs.ready == 'true' && (github.event.inputs.migration_runtime_control == 'C1_READBACK' || github.event.inputs.migration_runtime_control == 'C1_QUIESCE')

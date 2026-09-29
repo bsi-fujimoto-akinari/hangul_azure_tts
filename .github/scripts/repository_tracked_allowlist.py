@@ -122,6 +122,7 @@ allowed = {
     '.github/workflows/rem09-review-open-validation.yml',
     '.github/rem09-review-open-targets.tsv',
     '.github/scripts/rem09_dispatch.py',
+    '.github/scripts/rem09_d4_audio_parity_repair.py',
     '.github/scripts/rem09_review_open_validate.py',
     '.github/workflows/rs10-soft-signal-audit.yml',
     '.github/workflows/rs12-prospective-evidence-audit.yml',

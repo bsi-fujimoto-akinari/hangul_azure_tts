@@ -31,6 +31,15 @@ on:
         options:
           - "NO"
           - "AUTHORIZE_REM09_28_OPEN_READONLY"
+      rem09_d4_audio_parity_repair:
+        description: "REM-09 bounded single-target D4 Review-audio parity repair"
+        required: false
+        default: "NONE"
+        type: choice
+        options:
+          - "NONE"
+          - "H3-20260914-02"
+          - "H3-20260914-04"
 
 permissions:
   contents: read
@@ -860,6 +869,72 @@ jobs:
       # smoke_boundary and gated by:
       #   if: steps.smoke_boundary.outputs.ready == 'true'
       # Repository audit rejects run-function usage that does not use this boundary.
+
+      - name: REM-09 bounded single-target D4 audio parity repair
+        if: steps.smoke_boundary.outputs.ready == 'true' && github.event.inputs.rem09_d4_audio_parity_repair != 'NONE'
+        shell: bash
+        env:
+          TARGET_SET_ID: ${{ github.event.inputs.rem09_d4_audio_parity_repair }}
+          REM09_VALIDATION: ${{ github.event.inputs.rem09_review_open_validation || 'NO' }}
+          MIGRATION_CONTROL: ${{ github.event.inputs.migration_runtime_control || 'NONE' }}
+        run: |
+          set -euo pipefail
+          if [ "$REM09_VALIDATION" != "NO" ] || [ "$MIGRATION_CONTROL" != "NONE" ]; then
+            echo "::error::REM-09 D4 audio repair must run in an isolated manual dispatch."
+            exit 1
+          fi
+          params="$(python3 - "$TARGET_SET_ID" <<'PY'
+          import json
+          import sys
+          print(json.dumps([sys.argv[1]], separators=(',', ':')))
+          PY
+          )"
+          out=/tmp/rem09-d4-audio-parity-repair.json
+          npx -y @google/clasp@3.4.0 --json run-function runRem09D4AudioParityRepair --params "$params" > "$out"
+          python3 - "$out" "$TARGET_SET_ID" <<'PY'
+          import json
+          import sys
+
+          expected = {
+              'H3-20260914-02': {
+                  'hash': '7a68b6db4162e4ebb0065f5574eda0cf32f38896f2f58ebbcecc264603471614',
+                  'old_file': '1eBPnqb--fQa62yrtp6NdnNE_XTJKJTAA',
+              },
+              'H3-20260914-04': {
+                  'hash': '4a681bccc1bfe81aeea20ec4707dcc7cb7e86866526c8c7fa29dd30801b018d3',
+                  'old_file': '1dByJWmpjXrZSLUBptJLDeLGQ0yQbuH6-',
+              },
+          }
+          target = sys.argv[2]
+          if target not in expected:
+              raise SystemExit('Unexpected REM-09 D4 repair target.')
+          envelope = json.loads(open(sys.argv[1], encoding='utf-8').read())
+          if envelope.get('error'):
+              raise SystemExit('REM-09 D4 repair returned an error envelope.')
+          response = envelope.get('response')
+          if not isinstance(response, dict):
+              raise SystemExit('REM-09 D4 repair response missing.')
+          if response.get('schema') != 'H3_REM09_D4_AUDIO_PARITY_REPAIR_V1':
+              raise SystemExit('Unexpected REM-09 D4 repair schema.')
+          if response.get('status') != 'PASS' or response.get('set_id') != target or response.get('slot_key') != 'D4':
+              raise SystemExit('REM-09 D4 repair identity/status mismatch.')
+          result = response.get('result') or {}
+          exp = expected[target]
+          if result.get('audio_text_sha256') != exp['hash']:
+              raise SystemExit('REM-09 D4 repaired hash mismatch.')
+          if result.get('replaced_file_id') != exp['old_file']:
+              raise SystemExit('REM-09 D4 replaced-file mismatch.')
+          if result.get('retired_mode') != 'STALE_REPLACED_ARCHIVE':
+              raise SystemExit('REM-09 D4 retire mode mismatch.')
+          if result.get('stale_replaced_folder_id') != '1CcFqmt9ljhgiTXheYAQ0suxGZZkWTGEp':
+              raise SystemExit('REM-09 D4 archive folder mismatch.')
+          readback = response.get('readback') or {}
+          if readback.get('asset_count') != 5:
+              raise SystemExit('REM-09 D4 post-repair set readback mismatch.')
+          print('REM-09 bounded D4 audio parity repair: PASS')
+          print('set_id=' + target)
+          print('audio_text_sha256=' + exp['hash'])
+          PY
 
       - name: REM-09 validate all 28 Review opens read-only
         if: steps.smoke_boundary.outputs.ready == 'true' && github.event.inputs.rem09_review_open_validation == 'AUTHORIZE_REM09_28_OPEN_READONLY'

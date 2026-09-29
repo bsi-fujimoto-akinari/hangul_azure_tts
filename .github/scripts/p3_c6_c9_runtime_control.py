@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Narrow credentialed P3 pre-C6/C6/C9 controls; never prints Apps Script secret data."""
+"""Narrow credentialed P3 pre-C6/C6/C9/O1 controls; never prints Apps Script secret data."""
 
 from __future__ import annotations
 import json
 import os
 import subprocess
 
-ALLOWED = {"PRE_C6_READBACK", "C6_ACTIVATE", "C9_READBACK"}
+ALLOWED = {"PRE_C6_READBACK", "C6_ACTIVATE", "C9_READBACK", "O1_RESUME"}
 
 
 def fail(message: str) -> None:
@@ -77,9 +77,46 @@ def main() -> None:
         "worker_d1_route_verified": True, "mutation_count": 0,
     }
     if response != expected:
-        fail("C9 safe readback did not match the exact production route")
-    print("C9_RUNTIME_READBACK=PASS")
-    print("C9_RUNTIME_MUTATION_COUNT=0")
+        fail("Post-C6 safe readback did not match the exact production route")
+    if mode == "C9_READBACK":
+        print("C9_RUNTIME_READBACK=PASS")
+        print("C9_RUNTIME_MUTATION_COUNT=0")
+        return
+
+    trigger = call("h3MonitoringProductionTriggerEnsure")
+    if not isinstance(trigger, dict):
+        fail("O1 production monitor trigger result is not an object")
+    if trigger.get("schema") != "H3_MONITOR_PRODUCTION_TRIGGER_V1":
+        fail("O1 production monitor trigger schema mismatch")
+    if trigger.get("status") != "READY":
+        fail("O1 production monitor trigger is not READY")
+    created = trigger.get("created")
+    write_performed = trigger.get("write_performed")
+    if not isinstance(created, bool) or not isinstance(write_performed, bool):
+        fail("O1 production monitor trigger flags are invalid")
+    if write_performed is not created:
+        fail("O1 trigger write flag does not match creation state")
+    status = trigger.get("trigger")
+    if not isinstance(status, dict):
+        fail("O1 production monitor trigger readback is missing")
+    expected_trigger = {
+        "status": "READY",
+        "matching_trigger_count": 1,
+        "metadata_match": True,
+        "duplicate_trigger": False,
+        "configured_cadence_hours": 1,
+        "configured_near_minute": 0,
+        "configured_timezone": "Asia/Tokyo",
+        "trigger_handler": "h3MonitoringObserverEmailRun",
+        "trigger_source": "CLOCK",
+    }
+    for key, value in expected_trigger.items():
+        if status.get(key) != value:
+            fail("O1 production monitor trigger readback mismatch: " + key)
+    print("O1_D1_RUNTIME_READBACK=PASS")
+    print("O1_BACKGROUND_TRIGGER_STATUS=READY")
+    print("O1_BACKGROUND_TRIGGER_CREATED=" + str(created).lower())
+    print("O1_BACKGROUND_TRIGGER_WRITE_PERFORMED=" + str(write_performed).lower())
 
 
 if __name__ == "__main__":

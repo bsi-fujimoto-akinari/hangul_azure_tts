@@ -40,7 +40,8 @@ required_sync = [
     'PRE_C6_READBACK',
     'C6_ACTIVATE',
     'C9_READBACK',
-    'P3 pre-C6/C6/C9 bounded runtime control',
+    'O1_RESUME',
+    'P3 pre-C6/C6/C9/O1 bounded runtime control',
     'p3_c6_c9_runtime_control.py',
 ]
 missing_sync = [token for token in required_sync if token not in sync]
@@ -74,6 +75,9 @@ required_ops = [
     'h3RuntimeC9Readback()',
     'C6_ACTIVATE',
     'C9_READBACK',
+    'P3 O1 D1-aware background resume',
+    'h3MonitoringProductionTriggerEnsure()',
+    'O1_RESUME',
 ]
 missing_ops = [token for token in required_ops if token not in ops]
 if missing_ops:
@@ -98,7 +102,7 @@ missing_alignment_helper = [
 ]
 
 required_c6_c9_helper = [
-    'ALLOWED = {"PRE_C6_READBACK", "C6_ACTIVATE", "C9_READBACK"}',
+    'ALLOWED = {"PRE_C6_READBACK", "C6_ACTIVATE", "C9_READBACK", "O1_RESUME"}',
     'EVENT_NAME',
     'INTENDED_SMOKE_SHA',
     'SOURCE_ATTESTED',
@@ -106,6 +110,8 @@ required_c6_c9_helper = [
     'h3RuntimePreC6Readback',
     'h3RuntimeC6Activate',
     'h3RuntimeC9Readback',
+    'h3MonitoringProductionTriggerEnsure',
+    'O1_BACKGROUND_TRIGGER_STATUS=READY',
     '"mutation_count": 0',
 ]
 missing_c6_c9_helper = [
@@ -292,7 +298,7 @@ if (
         'trigger_alignment_boundary ready=true.'
     )
 
-c6_c9_step = sync.find('P3 pre-C6/C6/C9 bounded runtime control')
+c6_c9_step = sync.find('P3 pre-C6/C6/C9/O1 bounded runtime control')
 manual_boundary_pos = sync.find('Validate one-revision read-only smoke boundary')
 if not (0 <= manual_boundary_pos < c6_c9_step):
     raise SystemExit('P3 pre-C6/C6/C9 control must follow the exact manual smoke boundary.')

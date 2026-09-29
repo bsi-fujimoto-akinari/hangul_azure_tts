@@ -1327,10 +1327,8 @@
     });
   }
 
-  function loadReviewTxn(
-    txnId,
-    setId
-  ) {
+  function loadReviewTxn(txnId) {
+    var setId = arguments[1];
     loadSet({
       schema:
         'H3_WEB_RENDER_REQUEST_V1',
@@ -1349,10 +1347,8 @@
     });
   }
 
-  function loadLegacyReview(
-    legacyReviewId,
-    setId
-  ) {
+  function loadLegacyReview(legacyReviewId) {
+    var setId = arguments[1];
     loadSet({
       schema:
         'H3_WEB_RENDER_REQUEST_V1',

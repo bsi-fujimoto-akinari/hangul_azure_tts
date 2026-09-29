@@ -3,8 +3,10 @@
 
 const fs = require('fs');
 const assert = require('assert');
+const crypto = require('crypto');
 
 const backfill = fs.readFileSync('ReviewAudioBackfill.js', 'utf8');
+const runtime = fs.readFileSync('WebAppCloudflareRuntime.js', 'utf8');
 const web = fs.readFileSync('WebApp.js', 'utf8');
 const architecture = fs.readFileSync('H3_REVIEW_ARCHITECTURE.md', 'utf8');
 
@@ -120,6 +122,7 @@ const vm = require('vm');
 const sandbox = {};
 vm.createContext(sandbox);
 vm.runInContext(backfill, sandbox);
+vm.runInContext(runtime, sandbox);
 
 const structuredD4 = sandbox.h3ReviewAudioLegacy5WScript_({
   section: 'D4',
@@ -144,6 +147,149 @@ assert.strictEqual(
   structuredD4,
   '이번 일은 제가 맡을게요.\n이번 일은 제가 담당할게요.',
   'Structured D4 explanation overlay must reconstruct the canonical 5W audio script.'
+);
+
+const target2Expected =
+  '요즘 회사 일이 많아서 아주 바빠요.\n' +
+  '할 일이 많아서 정신이 없어요.';
+
+const target2Payload = {
+  schema: 'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1',
+  surface_family: '5W',
+  set_id: 'H3-20260913-02',
+  sections: [
+    {
+      section: 'D2',
+      correct_answer_text: '기뻤어요',
+      question_surface: {
+        rendered: '오랫동안 준비한 일이 잘 끝나서 정말 (　).'
+      },
+      explanation: {}
+    },
+    {
+      section: 'D3',
+      correct_answer_text: '하기로 했어요',
+      question_surface: {
+        rendered: '내일부터 운동을 (　).'
+      },
+      explanation: {}
+    },
+    {
+      section: 'D4',
+      correct_answer_text: '할 일이 많아서 정신이 없어요',
+      question_surface: {
+        rendered:
+          '次の文全体と最も近い意味のものを選んでください。\n' +
+          '요즘 회사 일이 많아서 아주 바빠요.\n' +
+          '① 할 일이 별로 없어요\n' +
+          '② 할 일이 많아서 정신이 없어요\n' +
+          '③ 회사 일이 재미없어요\n' +
+          '④ 회사에 자주 늦어요'
+      },
+      explanation: {
+        reason: 'runtime overlay fixture',
+        learning_blocks: [
+          {
+            usage:
+              '바쁘다 / 정신이 없다\n' +
+              '요즘 일이 많아서 정신이 없어요.'
+          }
+        ]
+      }
+    },
+    {
+      section: 'D5',
+      correct_answer_text: '신경',
+      question_surface: {
+        rendered:
+          '시험을 앞두고 공부에 (　)을 쓰고 있어요.\n' +
+          '요즘 건강에 더 (　)을 써야겠어요.'
+      },
+      explanation: {}
+    },
+    {
+      section: 'D6',
+      correct_answer_text: '정말 축하해요.',
+      question_surface: {
+        rendered:
+          'A：시험에 합격했다면서요?\n' +
+          'B：네. 좋은 결과가 나왔어요.\n' +
+          'A：(　)'
+      },
+      explanation: {}
+    }
+  ]
+};
+
+target2Payload.sections.forEach(section => {
+  section.script_text = section.question_surface.rendered;
+});
+
+const target2Texts =
+  sandbox.h3RuntimeReviewAudioTexts_(target2Payload);
+assert.strictEqual(
+  target2Texts.D4,
+  target2Expected,
+  'REM-09 target 2 must reconstruct the canonical D4 audio text.'
+);
+
+assert.strictEqual(
+  crypto.createHash('sha256').update(target2Texts.D4).digest('hex'),
+  'f8caafd5ffdcf4b41aff5194a1e5f775ceeb772ee938fcaaa20cb93e65a66f07',
+  'REM-09 target 2 reconstructed D4 text must match the locked asset text hash.'
+);
+
+const target2Question = target2Payload.sections[2];
+assert.throws(
+  () => sandbox.h3RuntimeReviewD4FallbackScript_(
+    target2Payload,
+    target2Question,
+    new Error('REVIEW_AUDIO_5W_D4_ORIGINAL_MISSING')
+  ),
+  /REVIEW_AUDIO_5W_D4_ORIGINAL_MISSING/,
+  'D4 fallback must not catch unrelated Review-audio errors.'
+);
+assert.throws(
+  () => sandbox.h3RuntimeReviewD4FallbackScript_(
+    Object.assign({}, target2Payload, {schema: 'OTHER_SCHEMA'}),
+    target2Question,
+    new Error('REVIEW_AUDIO_5W_D4_REPLACEMENT_UNRESOLVED')
+  ),
+  /REVIEW_AUDIO_5W_D4_REPLACEMENT_UNRESOLVED/,
+  'D4 fallback must be limited to persistent Written Review payloads.'
+);
+assert.throws(
+  () => sandbox.h3RuntimeReviewD4FallbackScript_(
+    target2Payload,
+    Object.assign({}, target2Question, {section: 'D3'}),
+    new Error('REVIEW_AUDIO_5W_D4_REPLACEMENT_UNRESOLVED')
+  ),
+  /REVIEW_AUDIO_5W_D4_REPLACEMENT_UNRESOLVED/,
+  'D4 fallback must not apply to another section.'
+);
+
+sandbox.SpreadsheetApp = {
+  openById: () => ({})
+};
+sandbox.H3_WEB_RUNTIME_SPREADSHEET_ID = 'TEST_ONLY';
+sandbox.h3ReviewAudioExpectedBindings_ = () => [{
+  slot_key: 'D4',
+  surface_family: '5W',
+  set_id: 'H3-20260913-02',
+  target: 'sections',
+  target_index: 2,
+  q_no: 3
+}];
+sandbox.h3ReviewAudioBindingResolve_ = () => ({
+  audio_text_sha256: '0'.repeat(64)
+});
+sandbox.h3ReviewAudioSha256_ = text =>
+  crypto.createHash('sha256').update(String(text || '')).digest('hex');
+
+assert.throws(
+  () => sandbox.h3RuntimeHydrateReviewAudio_(target2Payload),
+  /ASSET_HASH_MISMATCH/,
+  'Runtime D4 fallback must remain fail-closed behind the locked asset hash.'
 );
 
 console.log('Prospective Review audio lifecycle contract: PASS');

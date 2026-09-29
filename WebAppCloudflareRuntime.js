@@ -338,6 +338,52 @@ function h3RuntimeRender_(request) {
   return result;
 }
 
+function h3RuntimeReviewD4FallbackScript_(payload, q, error) {
+  var code = String(
+    error && error.message || error || ''
+  );
+  if (
+    code !== 'REVIEW_AUDIO_5W_D4_REPLACEMENT_UNRESOLVED' ||
+    !payload ||
+    payload.schema !==
+      'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1' ||
+    !q ||
+    String(q.section || '') !== 'D4' ||
+    !q.question_surface ||
+    typeof q.question_surface !== 'object'
+  ) {
+    throw error;
+  }
+
+  var surface = String(
+    q.question_surface.rendered ||
+    q.question_surface.body ||
+    q.question_body ||
+    ''
+  );
+  var originalLines =
+    h3ReviewAudioExtractHangulLines_(surface);
+  var correct =
+    String(q.correct_answer_text || '').trim();
+  if (!originalLines.length || !correct) {
+    throw error;
+  }
+
+  var original = originalLines[0];
+  var replacement = correct;
+  var terminal = original.match(/[.!?。？！]$/);
+  if (
+    terminal &&
+    !/[.!?。？！]$/.test(replacement)
+  ) {
+    replacement += terminal[0];
+  }
+
+  return h3ReviewAudioNormalizeText_(
+    original + '\n' + replacement
+  );
+}
+
 function h3RuntimeReviewAudioTexts_(payload) {
   var family = String(payload.surface_family || '');
   var setId = String(payload.set_id || '');
@@ -361,7 +407,13 @@ function h3RuntimeReviewAudioTexts_(payload) {
           String(q.question_surface.rendered || q.question_surface.body || '');
         legacyQ.explanation_text =
           String(q.explanation && q.explanation.text || '');
-        script = h3ReviewAudioLegacy5WScript_(legacyQ);
+        try {
+          script = h3ReviewAudioLegacy5WScript_(legacyQ);
+        } catch (error) {
+          script = h3RuntimeReviewD4FallbackScript_(
+            payload, q, error
+          );
+        }
         q = legacyQ;
       }
       out[sec] = h3ReviewAudioCanonicalize5WScript_(

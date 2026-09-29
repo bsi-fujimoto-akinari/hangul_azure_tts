@@ -1,6 +1,7 @@
 /* =========================================================
  * H3 AUTOMATIC READ-ONLY LIVE SMOKE
  * Permanent CI-only execution surface.
+ * REM-08 REVIEW_5W trigger-only revalidation; no runtime semantic change.
  * =======================================================*/
 
 var H3_AUTO_LIVE_SMOKE_REQUEST_SCHEMA_ =

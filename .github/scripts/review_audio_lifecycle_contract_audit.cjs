@@ -221,6 +221,10 @@ const target2Payload = {
   ]
 };
 
+target2Payload.sections.forEach(section => {
+  section.script_text = section.question_surface.rendered;
+});
+
 const target2Texts =
   sandbox.h3RuntimeReviewAudioTexts_(target2Payload);
 assert.strictEqual(

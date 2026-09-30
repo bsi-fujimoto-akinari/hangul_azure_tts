@@ -1,6 +1,6 @@
 # Operations Policy
 
-This document contains the current operating contract for `hangul_azure_tts`. Completed migration chronology remains available in Git history.
+This document contains the current operating contract for `hangul_legacy`. Completed migration chronology remains available in Git history.
 
 ## 1. Source of truth
 

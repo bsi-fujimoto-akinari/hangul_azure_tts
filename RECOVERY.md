@@ -1,6 +1,6 @@
 # Recovery and Rollback Procedure
 
-This document defines the incident-classification, evidence-preservation, recovery-source, repository, local, Apps Script production, reverse-recovery, wrong-target, secret-exposure, verification, and abort procedures for `hangul_azure_tts`.
+This document defines the incident-classification, evidence-preservation, recovery-source, repository, local, Apps Script production, reverse-recovery, wrong-target, secret-exposure, verification, and abort procedures for `hangul_legacy`.
 
 `OPERATIONS.md` remains the governing source-of-truth and normal-operations policy. This document applies when recovery or rollback is required and does not replace the normal change workflow.
 

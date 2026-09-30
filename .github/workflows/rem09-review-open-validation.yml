@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       intended_app_sha:
-        description: "Exact current hangul_azure_tts main SHA to validate"
+        description: "Exact current hangul_legacy main SHA to validate"
         required: true
         type: string
       confirmation:

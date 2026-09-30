@@ -384,6 +384,52 @@ function h3RuntimeReviewD4FallbackScript_(payload, q, error) {
   );
 }
 
+function h3RuntimePersistentD4Script_(q) {
+  var script = h3ReviewAudioNormalizeText_(
+    q && q.script_text || ''
+  );
+  if (!script) return '';
+
+  var lines = script.split('\n')
+    .map(function (line) { return line.trim(); })
+    .filter(Boolean);
+  if (
+    lines.length !== 2 ||
+    lines.some(function (line) {
+      return !/[가-힣]/.test(line) ||
+        /^[①②③④]/.test(line) ||
+        /\[[^\]]+\]/.test(line);
+    })
+  ) {
+    return '';
+  }
+
+  var surfaceValue = q && q.question_surface;
+  var surface = surfaceValue && typeof surfaceValue === 'object'
+    ? String(
+        surfaceValue.rendered ||
+        surfaceValue.body ||
+        q.question_body ||
+        ''
+      )
+    : String(surfaceValue || q && q.question_body || '');
+  var originalLines = h3ReviewAudioExtractHangulLines_(surface);
+  var original = originalLines.length
+    ? originalLines[0].replace(/\[([^\]]+)\]/g, '$1')
+    : '';
+  var correct = String(q && q.correct_answer_text || '').trim();
+
+  if (
+    !original ||
+    !correct ||
+    lines[0] !== original ||
+    lines[1].indexOf(correct) < 0
+  ) {
+    return '';
+  }
+  return script;
+}
+
 function h3RuntimeReviewAudioTexts_(payload) {
   var family = String(payload.surface_family || '');
   var setId = String(payload.set_id || '');
@@ -397,7 +443,13 @@ function h3RuntimeReviewAudioTexts_(payload) {
       var sec = String(q.section || 'D' + (i + 2));
       var script = String(q.script_text || '').trim() ||
         h3ReviewAudioLegacy5WScript_(q);
-      if (
+      var persistentD4Script = (
+        payload.schema === 'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1' &&
+        sec === 'D4'
+      ) ? h3RuntimePersistentD4Script_(q) : '';
+      if (persistentD4Script) {
+        script = persistentD4Script;
+      } else if (
         payload.schema === 'H3_PERSISTENT_WRITTEN_REVIEW_PAYLOAD_V1' &&
         q.question_surface &&
         typeof q.question_surface === 'object'

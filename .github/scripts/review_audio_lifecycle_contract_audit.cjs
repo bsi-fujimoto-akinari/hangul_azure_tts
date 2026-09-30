@@ -341,6 +341,69 @@ assert.strictEqual(
   'REM-09 target 2 reconstructed D4 text must match the locked asset text hash.'
 );
 
+const persistentD4Cases = [
+  {
+    set_id: 'H3-20260920-01',
+    rendered:
+      'Q3 [筆4/置換]\n' +
+      '민지는 옷을 살 때 [눈이 높아서] 마음에 드는 것을 고르는 데 시간이 오래 걸려요.\n' +
+      '① 눈이 나빠서\n' +
+      '② 가격만 확인해서\n' +
+      '③ 고르는 기준이 높아서\n' +
+      '④ 유행을 잘 몰라서',
+    correct: '고르는 기준이 높아서',
+    script:
+      '민지는 옷을 살 때 눈이 높아서 마음에 드는 것을 고르는 데 시간이 오래 걸려요.\n' +
+      '민지는 옷을 살 때 고르는 기준이 높아서 마음에 드는 것을 고르는 데 시간이 오래 걸려요.',
+    hash: 'b7785c8db78d4b13df0aaa8219db216c23dc88258e62272766847ff1b6869c49'
+  },
+  {
+    set_id: 'H3-20260925-01',
+    rendered:
+      'Q3 [筆4/置換]\n' +
+      '검은색 옷이 많은 매장에서 노란 재킷이 특히 [눈에 띄었어요].\n' +
+      '① 다른 옷보다 훨씬 돋보였어요\n' +
+      '② 색이 비슷해서 구별하기 어려웠어요\n' +
+      '③ 손님들이 자주 입어 보지 않았어요\n' +
+      '④ 가격이 생각보다 많이 올랐어요',
+    correct: '다른 옷보다 훨씬 돋보였어요',
+    script:
+      '검은색 옷이 많은 매장에서 노란 재킷이 특히 눈에 띄었어요.\n' +
+      '검은색 옷이 많은 매장에서 노란 재킷이 다른 옷보다 훨씬 돋보였어요.',
+    hash: '1fd708e30e014f796c20f026c07c81ee21fcc6eaddb4b4fba4c5b25f3598d8ba'
+  }
+];
+
+persistentD4Cases.forEach(testCase => {
+  const payload = JSON.parse(JSON.stringify(target2Payload));
+  payload.set_id = testCase.set_id;
+  const d4 = payload.sections[2];
+  d4.question_surface = {rendered: testCase.rendered};
+  d4.correct_answer_text = testCase.correct;
+  d4.script_text = testCase.script;
+  const texts = sandbox.h3RuntimeReviewAudioTexts_(payload);
+  assert.strictEqual(
+    texts.D4,
+    testCase.script,
+    testCase.set_id + ' must preserve the locked persistent D4 script_text.'
+  );
+  assert.strictEqual(
+    crypto.createHash('sha256').update(texts.D4).digest('hex'),
+    testCase.hash,
+    testCase.set_id + ' persistent D4 text must match the locked asset hash.'
+  );
+});
+
+const invalidPersistentD4 = JSON.parse(JSON.stringify(target2Payload.sections[2]));
+invalidPersistentD4.script_text =
+  '민지는 옷을 살 때 [눈이 높아서] 마음에 드는 것을 고르는 데 시간이 오래 걸려요.\n' +
+  '민지는 옷을 살 때 고르는 기준이 높아서 마음에 드는 것을 고르는 데 시간이 오래 걸려요.';
+assert.strictEqual(
+  sandbox.h3RuntimePersistentD4Script_(invalidPersistentD4),
+  '',
+  'Persistent D4 script_text with bracket residue must not bypass fallback reconstruction.'
+);
+
 const target2Question = target2Payload.sections[2];
 assert.throws(
   () => sandbox.h3RuntimeReviewD4FallbackScript_(

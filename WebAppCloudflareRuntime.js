@@ -141,6 +141,192 @@ function h3RuntimeRpc_(operation, payload) {
 }
 
 
+var H3_RUNTIME_PRIVATE_MEDIA_PATH_ =
+  '/__internal/h3/media/v1';
+
+function h3RuntimePrivateMediaHeaders_(response) {
+  return response.getAllHeaders
+    ? response.getAllHeaders()
+    : response.getHeaders();
+}
+
+function h3RuntimePrivateMediaHeader_(headers,name) {
+  var target=String(name||'').toLowerCase();
+  var value='';
+  Object.keys(headers||{}).some(function(key){
+    if(String(key).toLowerCase()===target){
+      value=String(headers[key]||'');
+      return true;
+    }
+    return false;
+  });
+  return value;
+}
+
+function h3RuntimePrivateMediaRequest_(
+  assetClass,identity,range,maxBytes
+) {
+  var spec=h3RuntimeR2AssetSpec_(assetClass);
+  var canonical=h3RuntimeR2CanonicalRecord_(
+    identity,
+    'MEDIA_IDENTITY_INVALID',
+    spec.identity_fields
+  );
+  var props=PropertiesService.getScriptProperties();
+  var baseUrl=props.getProperty(
+    'H3_RUNTIME_BACKEND_BASE_URL'
+  );
+  if(baseUrl!==H3_RUNTIME_EXPECTED_WORKER_URL_){
+    throw new Error('H3_RUNTIME_BACKEND_INVALID');
+  }
+  var token=props.getProperty(
+    'H3_RUNTIME_BEARER_TOKEN'
+  );
+  if(!token)throw new Error('H3_RUNTIME_TOKEN_MISSING');
+
+  var query=[
+    'asset_class='+encodeURIComponent(String(assetClass))
+  ];
+  spec.identity_fields.forEach(function(field){
+    query.push(
+      encodeURIComponent(field)+'='+
+      encodeURIComponent(canonical[field])
+    );
+  });
+  var headers={
+    Authorization:'Bearer '+token
+  };
+  if(range)headers.Range=range;
+  var response=UrlFetchApp.fetch(
+    baseUrl+H3_RUNTIME_PRIVATE_MEDIA_PATH_+
+      '?'+query.join('&'),
+    {
+      method:'get',
+      headers:headers,
+      muteHttpExceptions:true
+    }
+  );
+  var code=response.getResponseCode();
+  var all=h3RuntimePrivateMediaHeaders_(response);
+  var mime=h3RuntimePrivateMediaHeader_(
+    all,'Content-Type'
+  ).split(';')[0].trim();
+  if(spec.mime_types.indexOf(mime)<0){
+    throw new Error('MEDIA_MIME_MISMATCH');
+  }
+  var bytes=response.getContent();
+  if(range){
+    if(
+      code!==206 ||
+      bytes.length!==1 ||
+      !/^bytes 0-0\/\d+$/.test(
+        h3RuntimePrivateMediaHeader_(
+          all,'Content-Range'
+        )
+      )
+    ){
+      throw new Error(
+        'MEDIA_RECEIPT_READBACK_MISMATCH'
+      );
+    }
+  }else if(
+    code!==200 ||
+    !bytes.length ||
+    bytes.length>Number(maxBytes||0)
+  ){
+    throw new Error('MEDIA_BODY_INVALID');
+  }
+  return{
+    bytes:bytes,
+    mime_type:mime,
+    size_bytes:bytes.length
+  };
+}
+
+function h3RuntimePrivateMediaProbe_(
+  assetClass,identity
+) {
+  h3RuntimePrivateMediaRequest_(
+    assetClass,identity,'bytes=0-0',1
+  );
+  return true;
+}
+
+function h3RuntimePrivateMediaDataUri_(
+  assetClass,identity,maxBytes
+) {
+  var media=h3RuntimePrivateMediaRequest_(
+    assetClass,identity,'',maxBytes
+  );
+  return{
+    data_uri:
+      'data:'+media.mime_type+';base64,'+
+      Utilities.base64Encode(media.bytes),
+    mime_type:media.mime_type,
+    size_bytes:media.size_bytes
+  };
+}
+
+function h3RuntimeAudioBindingAuthority_(binding) {
+  if(
+    !binding ||
+    typeof binding!=='object' ||
+    Array.isArray(binding)
+  )throw new Error('AUDIO_BINDING_INVALID');
+  var fileId=String(binding.audio_file_id||'');
+  var url=String(binding.audio_url||'');
+  var authority=String(
+    binding.storage_authority||''
+  );
+  if(!authority && fileId && url){
+    authority='GOOGLE_DRIVE';
+  }
+  if(authority==='GOOGLE_DRIVE'){
+    if(!fileId||!url){
+      throw new Error('AUDIO_DRIVE_BINDING_INVALID');
+    }
+    return authority;
+  }
+  if(authority==='CLOUDFLARE_R2_PRIVATE'){
+    if(fileId||url){
+      throw new Error('AUDIO_R2_FAKE_DRIVE_BINDING');
+    }
+    return authority;
+  }
+  throw new Error('AUDIO_STORAGE_AUTHORITY_INVALID');
+}
+
+function h3RuntimeAudioMedia_(
+  binding,assetClass,identity,maxBytes
+) {
+  var authority=h3RuntimeAudioBindingAuthority_(
+    binding
+  );
+  if(authority==='GOOGLE_DRIVE'){
+    var drive=h3DriveDataUri_(
+      String(binding.audio_file_id),
+      'audio/mpeg',
+      null,
+      maxBytes
+    );
+    return{
+      data_uri:drive.data_uri,
+      mime_type:drive.mime_type,
+      size_bytes:drive.size_bytes,
+      fallback_url:String(binding.audio_url)
+    };
+  }
+  var r2=h3RuntimePrivateMediaDataUri_(
+    assetClass,identity,maxBytes
+  );
+  return{
+    data_uri:r2.data_uri,
+    mime_type:r2.mime_type,
+    size_bytes:r2.size_bytes,
+    fallback_url:''
+  };
+}
+
 var H3_RUNTIME_R2_RECEIPT_SCHEMA_ =
   'H3_R2_PRIMARY_ASSET_WRITE_RECEIPT_V1';
 var H3_RUNTIME_R2_STORAGE_AUTHORITY_ =

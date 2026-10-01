@@ -167,9 +167,11 @@ function context(mode,locked){
     /R2_PRIMARY_WRITER_ENV_INVALID/
   );
 
-  const body=adapter.slice(
-    adapter.indexOf('function h3RuntimeAssetWriteR2_(')
-  );
+  const assetWriteStart=
+    adapter.indexOf('function h3RuntimeAssetWriteR2_(');
+  const assetWriteEnd=
+    adapter.indexOf('function ',assetWriteStart+9);
+  const body=adapter.slice(assetWriteStart,assetWriteEnd);
   assert.match(body,/h3RuntimeRpc_\('ASSET_WRITE_R2'/);
   assert.doesNotMatch(body,/UrlFetchApp\.fetch/);
 }

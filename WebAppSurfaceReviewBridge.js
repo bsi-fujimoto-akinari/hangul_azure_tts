@@ -1344,10 +1344,15 @@ function h3SurfaceReviewMedia_(
   }
 
   var media =
-    h3DriveDataUri_(
-      binding.audio_file_id,
-      'audio/mpeg',
-      null,
+    h3RuntimeAudioMedia_(
+      binding,
+      'REVIEW_AUDIO',
+      {
+        surface_family:
+          binding.sidecar_family,
+        set_id: setId,
+        slot_key: assetKey
+      },
       8 * 1024 * 1024
     );
 
@@ -1368,7 +1373,7 @@ function h3SurfaceReviewMedia_(
       media.size_bytes,
     trim_start_ms: 0,
     fallback_url:
-      binding.audio_url,
+      media.fallback_url,
     review_audio_binding_contract_id:
       H3_REVIEW_AUDIO_BINDING_CONTRACT_ID_
   };

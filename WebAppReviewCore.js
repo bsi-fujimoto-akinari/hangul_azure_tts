@@ -410,6 +410,52 @@ function h3ReviewAudioParseJsonField_(
 }
 
 
+function h3ReviewAudioBindingAuthority_(binding) {
+  if (
+    !binding ||
+    typeof binding !== 'object' ||
+    Array.isArray(binding)
+  ) {
+    throw new Error(
+      'REVIEW_AUDIO_BINDING_AUTHORITY_INVALID'
+    );
+  }
+  var authority =
+    String(
+      binding.storage_authority || ''
+    );
+  var fileId =
+    String(binding.audio_file_id || '');
+  var url =
+    String(binding.audio_url || '');
+  var folder =
+    String(binding.drive_folder_id || '');
+
+  if (authority === 'GOOGLE_DRIVE') {
+    if (!fileId || !url || !folder) {
+      throw new Error(
+        'REVIEW_AUDIO_DRIVE_BINDING_INVALID'
+      );
+    }
+    return authority;
+  }
+  if (
+    authority ===
+      'CLOUDFLARE_R2_PRIVATE'
+  ) {
+    if (fileId || url || folder) {
+      throw new Error(
+        'REVIEW_AUDIO_R2_FAKE_DRIVE_BINDING'
+      );
+    }
+    return authority;
+  }
+  throw new Error(
+    'REVIEW_AUDIO_BINDING_AUTHORITY_INVALID'
+  );
+}
+
+
 function h3ReviewAudioBindingResolve_(
   spreadsheet,
   surfaceFamily,
@@ -473,22 +519,34 @@ function h3ReviewAudioBindingResolve_(
     );
   };
 
-  if (
-    get('SCHEMA') !==
-      H3_REVIEW_AUDIO_BINDING_SCHEMA_ ||
-    get('STATUS') !== 'DONE' ||
-    get('ERROR') ||
-    get('GENERATOR_VERSION') !==
-      H3_REVIEW_AUDIO_BINDING_GENERATOR_ ||
-    get('DRIVE_FOLDER_ID') !==
+  var status =
+    get('STATUS');
+  var baseValid =
+    get('SCHEMA') ===
+      H3_REVIEW_AUDIO_BINDING_SCHEMA_ &&
+    !get('ERROR') &&
+    get('GENERATOR_VERSION') ===
+      H3_REVIEW_AUDIO_BINDING_GENERATOR_ &&
+    /^[0-9a-f]{64}$/.test(
+      get('AUDIO_TEXT_SHA256')
+    );
+  var driveValid =
+    status === 'DONE' &&
+    get('DRIVE_FOLDER_ID') ===
       H3_REVIEW_AUDIO_BINDING_FOLDERS_[
         family
-      ] ||
-    !get('AUDIO_FILE_ID') ||
-    !get('AUDIO_URL') ||
-    !/^[0-9a-f]{64}$/.test(
-      get('AUDIO_TEXT_SHA256')
-    )
+      ] &&
+    !!get('AUDIO_FILE_ID') &&
+    !!get('AUDIO_URL');
+  var r2Valid =
+    status === 'DONE_R2' &&
+    !get('DRIVE_FOLDER_ID') &&
+    !get('AUDIO_FILE_ID') &&
+    !get('AUDIO_URL');
+
+  if (
+    !baseValid ||
+    (!driveValid && !r2Valid)
   ) {
     throw new Error(
       'REVIEW_AUDIO_BINDING_ROW_INVALID:' +
@@ -530,6 +588,10 @@ function h3ReviewAudioBindingResolve_(
     selection: selection,
     audio_text_sha256:
       get('AUDIO_TEXT_SHA256'),
+    storage_authority:
+      driveValid
+        ? 'GOOGLE_DRIVE'
+        : 'CLOUDFLARE_R2_PRIVATE',
     audio_file_id:
       get('AUDIO_FILE_ID'),
     audio_url:
@@ -613,7 +675,7 @@ function h3ReviewAudioApply5WBindings_(
         !binding.slot_key ||
         binding.asset_key !==
           binding.slot_key ||
-        !binding.audio_url
+        !h3ReviewAudioBindingAuthority_(binding)
       ) {
         throw new Error(
           'REVIEW_AUDIO_5W_BINDING_INVALID'
@@ -700,7 +762,7 @@ function h3ReviewAudioApplyReadingBindings_(
         !binding.slot_key ||
         binding.asset_key !==
           binding.slot_key ||
-        !binding.audio_url
+        !h3ReviewAudioBindingAuthority_(binding)
       ) {
         throw new Error(
           'REVIEW_AUDIO_2R_BINDING_INVALID'
@@ -870,7 +932,7 @@ function h3ReviewAudioApplyTranslationBindings_(
         !binding.slot_key ||
         binding.asset_key !==
           binding.slot_key ||
-        !binding.audio_url
+        !h3ReviewAudioBindingAuthority_(binding)
       ) {
         throw new Error(
           'REVIEW_AUDIO_2T_BINDING_INVALID'

@@ -1,0 +1,8 @@
+{
+  "schema": "H3_RESOURCE_LEASE_LEDGER_V2",
+  "authority_repository": "bsi-fujimoto-akinari/hangul_legacy",
+  "generation": 0,
+  "updated_at": "2026-10-01T12:16:00Z",
+  "fence_counters": {},
+  "claims": []
+}

@@ -1,7 +1,9 @@
 var H3_P4_ASSET_WRITER_MODE_KEY_='H3_P4_ASSET_WRITER_MODE';
 var H3_P4_ASSET_WRITER_WATERMARK_KEY_='H3_P4_ASSET_WRITER_QUIESCE_WATERMARK';
+var H3_P4_ASSET_WRITER_TRANSITION_WATERMARK_KEY_='H3_P4_ASSET_WRITER_TRANSITION_WATERMARK';
 var H3_P4_ASSET_WRITER_DRIVE_PRIMARY_='DRIVE_PRIMARY';
 var H3_P4_ASSET_WRITER_QUIESCED_='QUIESCED';
+var H3_P4_ASSET_WRITER_R2_PRIMARY_='R2_PRIMARY';
 
 function h3P4AssetWriterMode_(){
   var raw=String(
@@ -11,7 +13,8 @@ function h3P4AssetWriterMode_(){
   if(!raw)return H3_P4_ASSET_WRITER_DRIVE_PRIMARY_;
   if(
     raw!==H3_P4_ASSET_WRITER_DRIVE_PRIMARY_ &&
-    raw!==H3_P4_ASSET_WRITER_QUIESCED_
+    raw!==H3_P4_ASSET_WRITER_QUIESCED_ &&
+    raw!==H3_P4_ASSET_WRITER_R2_PRIMARY_
   )throw new Error('P4_ASSET_WRITER_MODE_INVALID:'+raw);
   return raw;
 }
@@ -36,6 +39,9 @@ function h3P4AssetWriterStatus(){
     quiesce_watermark:String(
       props.getProperty(H3_P4_ASSET_WRITER_WATERMARK_KEY_) || ''
     ),
+    transition_watermark:String(
+      props.getProperty(H3_P4_ASSET_WRITER_TRANSITION_WATERMARK_KEY_) || ''
+    ),
     fallback_trigger_count:fallback.length,
     mutation_count:0
   };
@@ -55,6 +61,7 @@ function h3P4AssetWriterQuiesce(){
         before:before,
         after:existing.mode,
         quiesce_watermark:existing.quiesce_watermark,
+        transition_watermark:existing.transition_watermark,
         fallback_trigger_count:existing.fallback_trigger_count,
         mutation_count:0,
         idempotent:true
@@ -68,12 +75,14 @@ function h3P4AssetWriterQuiesce(){
       var x={};
       x[H3_P4_ASSET_WRITER_MODE_KEY_]=H3_P4_ASSET_WRITER_QUIESCED_;
       x[H3_P4_ASSET_WRITER_WATERMARK_KEY_]=watermark;
+      x[H3_P4_ASSET_WRITER_TRANSITION_WATERMARK_KEY_]=watermark;
       return x;
     })(),false);
     var after=h3P4AssetWriterStatus();
     if(
       after.mode!==H3_P4_ASSET_WRITER_QUIESCED_ ||
-      after.quiesce_watermark!==watermark
+      after.quiesce_watermark!==watermark ||
+      after.transition_watermark!==watermark
     )throw new Error('P4_ASSET_WRITER_QUIESCE_READBACK_MISMATCH');
     return{
       schema:'H3_P4_ASSET_WRITER_CONTROL_V1',
@@ -81,7 +90,73 @@ function h3P4AssetWriterQuiesce(){
       before:before,
       after:after.mode,
       quiesce_watermark:watermark,
+      transition_watermark:watermark,
       fallback_trigger_count:after.fallback_trigger_count,
+      mutation_count:1,
+      idempotent:false
+    };
+  }finally{
+    lock.releaseLock();
+  }
+}
+
+function h3P4AssetWriterSwitchToR2Primary(){
+  var lock=LockService.getScriptLock();
+  lock.waitLock(30000);
+  try{
+    var props=PropertiesService.getScriptProperties();
+    var before=h3P4AssetWriterMode_();
+    var oldQuiesceWatermark=String(
+      props.getProperty(H3_P4_ASSET_WRITER_WATERMARK_KEY_) || ''
+    );
+    var oldTransitionWatermark=String(
+      props.getProperty(H3_P4_ASSET_WRITER_TRANSITION_WATERMARK_KEY_) || ''
+    );
+
+    if(before===H3_P4_ASSET_WRITER_R2_PRIMARY_){
+      var existing=h3P4AssetWriterStatus();
+      return{
+        schema:'H3_P4_ASSET_WRITER_CONTROL_V1',
+        action:'SWITCH_R2_PRIMARY',
+        before:before,
+        after:existing.mode,
+        quiesce_watermark:existing.quiesce_watermark,
+        transition_watermark:existing.transition_watermark,
+        previous_transition_watermark:oldTransitionWatermark,
+        mutation_count:0,
+        idempotent:true
+      };
+    }
+    if(before!==H3_P4_ASSET_WRITER_QUIESCED_){
+      throw new Error('P4_ASSET_WRITER_R2_PRIMARY_PRECONDITION:'+before);
+    }
+    if(!oldQuiesceWatermark){
+      throw new Error('P4_ASSET_WRITER_R2_PRIMARY_QUIESCE_WATERMARK_MISSING');
+    }
+
+    var transitionWatermark=new Date().toISOString();
+    props.setProperties((function(){
+      var x={};
+      x[H3_P4_ASSET_WRITER_MODE_KEY_]=H3_P4_ASSET_WRITER_R2_PRIMARY_;
+      x[H3_P4_ASSET_WRITER_TRANSITION_WATERMARK_KEY_]=transitionWatermark;
+      return x;
+    })(),false);
+
+    var after=h3P4AssetWriterStatus();
+    if(
+      after.mode!==H3_P4_ASSET_WRITER_R2_PRIMARY_ ||
+      after.quiesce_watermark!==oldQuiesceWatermark ||
+      after.transition_watermark!==transitionWatermark
+    )throw new Error('P4_ASSET_WRITER_R2_PRIMARY_READBACK_MISMATCH');
+
+    return{
+      schema:'H3_P4_ASSET_WRITER_CONTROL_V1',
+      action:'SWITCH_R2_PRIMARY',
+      before:before,
+      after:after.mode,
+      quiesce_watermark:after.quiesce_watermark,
+      transition_watermark:after.transition_watermark,
+      previous_transition_watermark:oldTransitionWatermark,
       mutation_count:1,
       idempotent:false
     };
@@ -99,6 +174,9 @@ function h3P4AssetWriterResumeDrivePrimary(){
     var oldWatermark=String(
       props.getProperty(H3_P4_ASSET_WRITER_WATERMARK_KEY_) || ''
     );
+    var oldTransitionWatermark=String(
+      props.getProperty(H3_P4_ASSET_WRITER_TRANSITION_WATERMARK_KEY_) || ''
+    );
     if(before===H3_P4_ASSET_WRITER_DRIVE_PRIMARY_){
       return{
         schema:'H3_P4_ASSET_WRITER_CONTROL_V1',
@@ -106,29 +184,43 @@ function h3P4AssetWriterResumeDrivePrimary(){
         before:before,
         after:before,
         previous_quiesce_watermark:oldWatermark,
+        transition_watermark:oldTransitionWatermark,
+        previous_transition_watermark:oldTransitionWatermark,
         mutation_count:0,
         idempotent:true
       };
     }
-    if(before!==H3_P4_ASSET_WRITER_QUIESCED_){
+    if(
+      before!==H3_P4_ASSET_WRITER_QUIESCED_ &&
+      before!==H3_P4_ASSET_WRITER_R2_PRIMARY_
+    ){
       throw new Error('P4_ASSET_WRITER_RESUME_PRECONDITION:'+before);
     }
-    props.setProperty(
-      H3_P4_ASSET_WRITER_MODE_KEY_,
-      H3_P4_ASSET_WRITER_DRIVE_PRIMARY_
-    );
+
+    var transitionWatermark=new Date().toISOString();
+    props.setProperties((function(){
+      var x={};
+      x[H3_P4_ASSET_WRITER_MODE_KEY_]=H3_P4_ASSET_WRITER_DRIVE_PRIMARY_;
+      x[H3_P4_ASSET_WRITER_TRANSITION_WATERMARK_KEY_]=transitionWatermark;
+      return x;
+    })(),false);
     props.deleteProperty(H3_P4_ASSET_WRITER_WATERMARK_KEY_);
+
     var after=h3P4AssetWriterStatus();
     if(
       after.mode!==H3_P4_ASSET_WRITER_DRIVE_PRIMARY_ ||
-      after.quiesce_watermark!==''
+      after.quiesce_watermark!=='' ||
+      after.transition_watermark!==transitionWatermark
     )throw new Error('P4_ASSET_WRITER_RESUME_READBACK_MISMATCH');
+
     return{
       schema:'H3_P4_ASSET_WRITER_CONTROL_V1',
       action:'RESUME_DRIVE_PRIMARY',
       before:before,
       after:after.mode,
       previous_quiesce_watermark:oldWatermark,
+      transition_watermark:transitionWatermark,
+      previous_transition_watermark:oldTransitionWatermark,
       mutation_count:1,
       idempotent:false
     };

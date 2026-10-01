@@ -5364,11 +5364,7 @@ jobs:
               Date,
               Math,
               Set,
-              RegExp,
-              H3_P4_ASSET_WRITER_DRIVE_PRIMARY_:'DRIVE_PRIMARY',
-              H3_P4_ASSET_WRITER_QUIESCED_:'QUIESCED',
-              H3_P4_ASSET_WRITER_R2_PRIMARY_:'R2_PRIMARY',
-              h3P4AssetWriterMode_:()=> 'DRIVE_PRIMARY',
+              RegExp, H3_P4_ASSET_WRITER_DRIVE_PRIMARY_:'DRIVE_PRIMARY', H3_P4_ASSET_WRITER_QUIESCED_:'QUIESCED', H3_P4_ASSET_WRITER_R2_PRIMARY_:'R2_PRIMARY', h3P4AssetWriterMode_:()=> 'DRIVE_PRIMARY',
               SpreadsheetApp: {flush: () => { calls.flush++; }},
               DriveApp: {
                 getFolderById: () => folder,

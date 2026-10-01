@@ -155,6 +155,9 @@ const HQ_LISTENING_TAB =
 const HQ_LISTENING_STORAGE_MODE =
   'listening_audio_v1';
 
+const HQ_LISTENING_STORAGE_MODE_R2 =
+  'listening_audio_r2_v1';
+
 const HQ_LISTENING_NOTE =
   'HANGUL_LISTENING_AUDIO_STATE_V1\n';
 
@@ -2025,6 +2028,35 @@ function validateQueueSetup() {
 }
 
 
+function h3ListeningAudioWriterMode_() {
+  const mode =
+    h3P4AssetWriterMode_();
+
+  if (
+    mode ===
+      H3_P4_ASSET_WRITER_QUIESCED_
+  ) {
+    throw new Error(
+      'P4_ASSET_WRITERS_QUIESCED'
+    );
+  }
+
+  if (
+    mode !==
+      H3_P4_ASSET_WRITER_DRIVE_PRIMARY_ &&
+    mode !==
+      H3_P4_ASSET_WRITER_R2_PRIMARY_
+  ) {
+    throw new Error(
+      'LISTENING_AUDIO_WRITER_MODE_INVALID:' +
+      mode
+    );
+  }
+
+  return mode;
+}
+
+
 /* =========================================================
  * QUEUE ENTRY POINT
  * =======================================================*/
@@ -2082,10 +2114,12 @@ function processPendingAudioForSet(
   }
 
   try {
-    h3P4AssetWriterRequireDrivePrimary_();
+    const writerMode =
+      h3ListeningAudioWriterMode_();
     const c = config_();
 
     if (normalizedMode === '5W') {
+      h3P4AssetWriterRequireDrivePrimary_();
       const sheet = queueSheet_(c);
       const row = locate_(
         sheet,
@@ -2174,6 +2208,15 @@ function processPendingAudioForSet(
         x => x.values[1] === 'done'
       )
     ) {
+      if (
+        writerMode ===
+          H3_P4_ASSET_WRITER_R2_PRIMARY_
+      ) {
+        members.forEach(
+          h3ListeningAssertDoneR2Member_
+        );
+      }
+
       return {
         status: 'done',
         mode: '5L',
@@ -2221,8 +2264,20 @@ function processLatestPendingAudioJob() {
   }
 
   try {
-    h3P4AssetWriterRequireDrivePrimary_();
+    const writerMode =
+      h3ListeningAudioWriterMode_();
     const c = config_();
+
+    if (
+      writerMode ===
+        H3_P4_ASSET_WRITER_R2_PRIMARY_
+    ) {
+      return processListeningAudioQueue_(
+        c
+      );
+    }
+
+    h3P4AssetWriterRequireDrivePrimary_();
     const sheet = queueSheet_(c);
     const last = sheet.getLastRow();
 
@@ -2326,6 +2381,9 @@ function idle_() {
 function processListeningAudioQueue_(
   c
 ) {
+  const writerMode =
+    h3ListeningAudioWriterMode_();
+
   const sheet =
     listeningAudioSheet_(
       c,
@@ -2419,6 +2477,15 @@ function processListeningAudioQueue_(
     ) === 0 &&
     members.length === 1
   ) {
+    if (
+      writerMode ===
+        H3_P4_ASSET_WRITER_R2_PRIMARY_
+    ) {
+      throw new Error(
+        'LISTENING_R2_SYSTEM_TEST_SINGLETON_FORBIDDEN'
+      );
+    }
+
     return runListeningJob_(
       sheet,
       seed,
@@ -2473,6 +2540,8 @@ function processListeningAudioSet_(
   c,
   prefetchedMembers
 ) {
+  h3ListeningAudioWriterMode_();
+
   let members =
     prefetchedMembers ||
     snapshotListeningSet_(
@@ -3024,7 +3093,549 @@ function publishListeningBatchError_(
  * - one fetchAll for only missing audio
  * - one final immutable recheck and publish flush
  */
+function h3ListeningAssertDoneR2Member_(member) {
+  const values =
+    member && member.values;
+
+  if (
+    !values ||
+    values[1] !== 'done' ||
+    !values[8] ||
+    !values[9] ||
+    values[10] ||
+    values[11] ||
+    values[12] ||
+    !values[13] ||
+    values[14] !==
+      HQ_LISTENING_STORAGE_MODE_R2
+  ) {
+    throw new Error(
+      'Done R2 Listening row lacks verified final evidence.'
+    );
+  }
+}
+
+function listeningR2BatchState_(
+  member,
+  job
+) {
+  let state =
+    parseListeningStateNote_(
+      member.note,
+      job
+    );
+
+  if (!state) {
+    if (
+      job.status === 'processing' ||
+      job.status === 'done'
+    ) {
+      throw new Error(
+        job.status +
+        ' R2 Listening row has no checkpoint.'
+      );
+    }
+
+    const voice =
+      shuffle_(
+        HQ_VOICES.slice()
+      )[0];
+
+    state = {
+      id: job.id,
+      hash: job.hash,
+      voice: voice.label,
+      audioVersion:
+        HQ_LISTENING_AUDIO_VERSION,
+      stage: 'r2_prepared',
+      attempts: 0,
+      storageAuthority:
+        'CLOUDFLARE_R2_PRIVATE'
+    };
+  }
+
+  if (
+    state.folderId ||
+    state.audioId ||
+    (
+      state.storageAuthority &&
+      state.storageAuthority !==
+        'CLOUDFLARE_R2_PRIVATE'
+    )
+  ) {
+    throw new Error(
+      'Listening R2 checkpoint contains Drive state.'
+    );
+  }
+
+  if (
+    state.audioVersion !==
+      HQ_LISTENING_AUDIO_VERSION &&
+    state.audioVersion !==
+      HQ_LISTENING_AUDIO_VERSION_V2 &&
+    state.audioVersion !==
+      HQ_LISTENING_AUDIO_VERSION_LEADING5S
+  ) {
+    throw new Error(
+      'Unknown persisted Listening R2 audio version.'
+    );
+  }
+
+  if (
+    state.audioVersion ===
+      HQ_LISTENING_AUDIO_VERSION
+  ) {
+    validateListeningOfficialParityPlan_(
+      job.plan,
+      job.section
+    );
+  }
+
+  state.storageAuthority =
+    'CLOUDFLARE_R2_PRIVATE';
+
+  return state;
+}
+
+function verifyDoneListeningR2Item_(
+  item
+) {
+  h3ListeningAssertDoneR2Member_(
+    item.member
+  );
+
+  if (
+    item.state.stage !== 'done' ||
+    item.member.values[8] !==
+      item.job.hash ||
+    item.member.values[9] !==
+      item.spec.assignment
+  ) {
+    throw new Error(
+      'Done R2 Listening row checkpoint mismatch.'
+    );
+  }
+}
+
+function runListeningSetBatchR2_(
+  sheet,
+  parentSetId,
+  members,
+  c,
+  sourceAttestation
+) {
+  let stage = 'preflight_r2';
+  const items = [];
+
+  try {
+    members.forEach(
+      member => {
+        const status =
+          member.values[1];
+
+        if (
+          status !== 'pending' &&
+          status !== 'processing' &&
+          status !== 'done'
+        ) {
+          throw new Error(
+            '5L R2 member ' +
+            member.values[0] +
+            ' has non-runnable status ' +
+            status +
+            '.'
+          );
+        }
+
+        const job =
+          readListeningSnapshotJob_(
+            member,
+            true
+          );
+
+        if (
+          status === 'done' &&
+          job.storageMode !==
+            HQ_LISTENING_STORAGE_MODE_R2
+        ) {
+          throw new Error(
+            'Listening R2 set cannot mix Drive and R2 done rows.'
+          );
+        }
+
+        if (
+          status !== 'done' &&
+          job.storageMode !==
+            HQ_LISTENING_STORAGE_MODE
+        ) {
+          throw new Error(
+            'Active Listening R2 row has invalid storage mode.'
+          );
+        }
+
+        const state =
+          listeningR2BatchState_(
+            member,
+            job
+          );
+
+        if (
+          !sourceAttestation ||
+          !/^[0-9a-f]{64}$/.test(
+            String(
+              sourceAttestation.sha256 ||
+              ''
+            )
+          )
+        ) {
+          throw new Error(
+            'Listening audio source attestation is missing.'
+          );
+        }
+
+        if (
+          state.sourceAttestationSha256 &&
+          state.sourceAttestationSha256 !==
+            sourceAttestation.sha256
+        ) {
+          throw new Error(
+            'Listening audio source attestation differs from R2 checkpoint.'
+          );
+        }
+
+        if (status !== 'done') {
+          state.sourceAttestationSchema =
+            HQ_LISTENING_AUDIO_SOURCE_ATTESTATION_SCHEMA;
+          state.sourceAttestationSha256 =
+            sourceAttestation.sha256;
+
+          if (status === 'pending') {
+            state.attempts = 0;
+          }
+
+          if (state.attempts >= 3) {
+            throw new Error(
+              'Repeated Listening R2 interruption: manual inspection required.'
+            );
+          }
+
+          state.attempts++;
+        }
+
+        const spec =
+          listeningAudioSpec_(
+            job,
+            state
+          );
+
+        const item = {
+          member: member,
+          job: job,
+          state: state,
+          spec: spec,
+          blob: null,
+          receipt: null,
+          completedAt: ''
+        };
+
+        if (status === 'done') {
+          verifyDoneListeningR2Item_(
+            item
+          );
+        }
+
+        items.push(item);
+      }
+    );
+
+    const active =
+      items.filter(
+        item =>
+          item.job.status !== 'done'
+      );
+
+    if (!active.length) {
+      return {
+        status: 'done',
+        members: members
+      };
+    }
+
+    stage = 'checkpoint_r2';
+
+    assertListeningBatchCurrent_(
+      sheet,
+      parentSetId,
+      items
+    );
+
+    active.forEach(
+      item => {
+        sheet
+          .getRange(
+            item.member.row,
+            2
+          )
+          .setValue('processing');
+
+        sheet
+          .getRange(
+            item.member.row,
+            9,
+            1,
+            2
+          )
+          .setValues([[
+            item.job.hash,
+            item.spec.assignment
+          ]]);
+
+        sheet
+          .getRange(
+            item.member.row,
+            13
+          )
+          .clearContent();
+
+        item.state.stage =
+          'r2_audio_requested';
+
+        listeningBatchCheckpoint_(
+          sheet,
+          item
+        );
+      }
+    );
+
+    SpreadsheetApp.flush();
+
+    assertListeningBatchCurrent_(
+      sheet,
+      parentSetId,
+      items
+    );
+
+    stage = 'azure_batch_r2';
+
+    const requests =
+      active.map(
+        item =>
+          azureTtsFetchAllRequest_(
+            item.spec.ssml,
+            c
+          )
+      );
+
+    if (
+      requests.length >
+        HQ_LISTENING_SET_SIZE
+    ) {
+      throw new Error(
+        'Listening R2 Azure batch exceeds five requests.'
+      );
+    }
+
+    const responses =
+      UrlFetchApp.fetchAll(
+        requests
+      );
+
+    if (
+      responses.length !==
+        active.length
+    ) {
+      throw new Error(
+        'Listening R2 Azure response count mismatch.'
+      );
+    }
+
+    active.forEach(
+      (item, i) => {
+        item.blob =
+          azureTtsBlobFromResponse_(
+            responses[i]
+          );
+      }
+    );
+
+    stage = 'r2_receipt';
+
+    active.forEach(
+      item => {
+        const bytes =
+          item.blob.getBytes();
+
+        if (
+          !Array.isArray(bytes) ||
+          bytes.length < 128
+        ) {
+          throw new Error(
+            'Listening R2 audio bytes invalid:' +
+            item.job.id
+          );
+        }
+
+        const writtenAt =
+          new Date().toISOString();
+
+        item.receipt =
+          h3RuntimeAssetWriteR2_({
+            asset_class:
+              'LISTENING_AUDIO_INDIVIDUAL',
+            logical_binding_identity: {
+              set_id:
+                item.job.parentSetId,
+              slot_key:
+                item.job.section,
+              listen_gen_id:
+                item.job.id
+            },
+            bytes: bytes,
+            mime_type: 'audio/mpeg',
+            written_at: writtenAt,
+            pre_cutover_or_previous_drive_binding_snapshot:
+              null,
+            drive_rollback_target_class:
+              'LISTENING_AUDIO_INDIVIDUAL'
+          });
+
+        item.completedAt =
+          writtenAt;
+      }
+    );
+
+    stage = 'final_source_check_r2';
+
+    assertListeningBatchCurrent_(
+      sheet,
+      parentSetId,
+      items
+    );
+
+    stage = 'final_publish_r2';
+
+    active.forEach(
+      item => {
+        sheet
+          .getRange(
+            item.member.row,
+            9,
+            1,
+            7
+          )
+          .setValues([[
+            item.job.hash,
+            item.spec.assignment,
+            '',
+            '',
+            '',
+            item.completedAt,
+            HQ_LISTENING_STORAGE_MODE_R2
+          ]]);
+
+        item.state.stage = 'done';
+        item.state.completedAt =
+          item.completedAt;
+
+        listeningBatchCheckpoint_(
+          sheet,
+          item
+        );
+
+        sheet
+          .getRange(
+            item.member.row,
+            2
+          )
+          .setValue('done');
+      }
+    );
+
+    SpreadsheetApp.flush();
+
+    const finalMembers =
+      items.map(
+        item => {
+          if (
+            item.job.status !== 'done'
+          ) {
+            item.member.values[1] =
+              'done';
+            item.member.values[8] =
+              item.job.hash;
+            item.member.values[9] =
+              item.spec.assignment;
+            item.member.values[10] = '';
+            item.member.values[11] = '';
+            item.member.values[12] = '';
+            item.member.values[13] =
+              item.completedAt;
+            item.member.values[14] =
+              HQ_LISTENING_STORAGE_MODE_R2;
+          }
+
+          h3ListeningAssertDoneR2Member_(
+            item.member
+          );
+
+          return item.member;
+        }
+      );
+
+    return {
+      status: 'done',
+      members: finalMembers
+    };
+
+  } catch (e) {
+    if (!items.length) {
+      throw e;
+    }
+
+    return publishListeningBatchError_(
+      sheet,
+      items,
+      stage,
+      e,
+      c
+    );
+  }
+}
+
 function runListeningSetBatch_(
+  sheet,
+  parentSetId,
+  members,
+  c,
+  sourceAttestation
+) {
+  const mode =
+    h3ListeningAudioWriterMode_();
+
+  if (
+    mode ===
+      H3_P4_ASSET_WRITER_DRIVE_PRIMARY_
+  ) {
+    return runListeningSetBatchDrive_(
+      sheet,
+      parentSetId,
+      members,
+      c,
+      sourceAttestation
+    );
+  }
+
+  return runListeningSetBatchR2_(
+    sheet,
+    parentSetId,
+    members,
+    c,
+    sourceAttestation
+  );
+}
+
+
+function runListeningSetBatchDrive_(
   sheet,
   parentSetId,
   members,
@@ -3845,11 +4456,13 @@ function readListeningJob_(
     range.getFormulas()[0];
 
   /**
-   * ChatGPT所有のimmutable input:
-   * A,C:H,O
+   * ChatGPT-owned immutable input:
+   * A,C:H
    *
-   * B=STATUSは共有、
-   * I:NはApps Script出力。
+   * B=STATUS is shared.
+   * I:N are Apps Script output.
+   * O=STORAGE_MODE starts as listening_audio_v1 and may transition only
+   * after a committed R2 receipt to listening_audio_r2_v1.
    */
   const immutableIndexes = [
     0,  // A LISTEN_GEN_ID
@@ -3966,14 +4579,19 @@ function readListeningJob_(
     );
   }
 
+  const r2Done =
+    allowDone === true &&
+    j.status === 'done' &&
+    j.storageMode ===
+      HQ_LISTENING_STORAGE_MODE_R2;
+
   if (
     j.storageMode !==
-    HQ_LISTENING_STORAGE_MODE
+      HQ_LISTENING_STORAGE_MODE &&
+    !r2Done
   ) {
     throw new Error(
-      'Listening STORAGE_MODE must be ' +
-      HQ_LISTENING_STORAGE_MODE +
-      '.'
+      'Listening STORAGE_MODE is invalid for current STATUS.'
     );
   }
 
@@ -3993,7 +4611,10 @@ function readListeningJob_(
         j.section,
         j.skillId,
         j.audioPlanRaw,
-        j.storageMode
+        j.storageMode ===
+          HQ_LISTENING_STORAGE_MODE_R2
+          ? HQ_LISTENING_STORAGE_MODE
+          : j.storageMode
       ])
     );
 

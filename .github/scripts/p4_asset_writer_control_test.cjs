@@ -5,6 +5,13 @@ const vm=require('node:vm');
 const source=fs.readFileSync('P4AssetWriterControl.js','utf8');
 const code=fs.readFileSync('Code.js','utf8');
 const review=fs.readFileSync('ReviewAudioBackfill.js','utf8');
+const cloud=fs.readFileSync('WebAppCloudflareRuntime.js','utf8');
+const orchestrator=fs.readFileSync('ListeningBackendOrchestrator.js','utf8');
+const preissue=fs.readFileSync('WebAppPreissue.js','utf8');
+const productionRender=fs.readFileSync('WebAppProductionRender.js','utf8');
+const reviewCore=fs.readFileSync('WebAppReviewCore.js','utf8');
+const reviewPersistence=fs.readFileSync('WebAppReviewPersistence.js','utf8');
+const surfaceReview=fs.readFileSync('WebAppSurfaceReviewBridge.js','utf8');
 
 const props=new Map();
 const properties={
@@ -178,10 +185,562 @@ function body(text,name,next){
 }
 assert.match(body(code,'processPendingAudioForSet','processLatestPendingAudioJob'),/h3P4AssetWriterRequireDrivePrimary_\(\)/);
 assert.match(body(code,'processLatestPendingAudioJob','idle_'),/h3P4AssetWriterRequireDrivePrimary_\(\)/);
-assert.match(body(review,'h3ReviewAudioGeneratePlannedAsset_','h3ReviewAudioValidateStaleCanonical_'),/h3P4AssetWriterRequireDrivePrimary_\(\)/);
+const reviewR2=body(
+  review,
+  'h3ReviewAudioGeneratePlannedR2Asset_',
+  'h3ReviewAudioGeneratePlannedAsset_'
+);
+const reviewDispatch=body(
+  review,
+  'h3ReviewAudioGeneratePlannedAsset_',
+  'h3ReviewAudioGeneratePlannedDriveAsset_'
+);
+const reviewDrive=body(
+  review,
+  'h3ReviewAudioGeneratePlannedDriveAsset_',
+  'h3ReviewAudioValidateStaleCanonical_'
+);
+assert.match(reviewDispatch,/h3ReviewAudioWriterMode_\(\)/);
+assert.match(
+  reviewDispatch,
+  /H3_P4_ASSET_WRITER_DRIVE_PRIMARY_/
+);
+assert.match(
+  reviewDispatch,
+  /h3ReviewAudioGeneratePlannedR2Asset_\(/
+);
+assert.match(
+  reviewDrive,
+  /h3P4AssetWriterRequireDrivePrimary_\(\)/
+);
+assert.match(reviewDrive,/DriveApp\.getFolderById/);
+assert.match(reviewDrive,/folder\.createFile/);
+assert.match(reviewR2,/synthesize_\(/);
+assert.match(reviewR2,/h3RuntimeAssetWriteR2_\(/);
+assert.match(reviewR2,/asset_class:'REVIEW_AUDIO'/);
+assert.match(
+  reviewR2,
+  /pre_cutover_or_previous_drive_binding_snapshot:null/
+);
+assert.match(
+  reviewR2,
+  /h3ReviewAudioWriteR2AssetRow_\(/
+);
+assert.doesNotMatch(reviewR2,/DriveApp\./);
+assert.doesNotMatch(reviewR2,/\.createFile\(/);
+assert.ok(
+  reviewR2.indexOf('h3RuntimeAssetWriteR2_(') <
+  reviewR2.indexOf('h3ReviewAudioWriteR2AssetRow_(')
+);
+const reviewReadback=body(
+  review,
+  'h3ReviewAudioAssertSetReady_',
+  'h3ReviewAudioEnsureForLockedReview_'
+);
+assert.match(reviewReadback,/DONE_R2/);
+assert.match(reviewReadback,/!get\('AUDIO_FILE_ID'\)/);
+assert.match(reviewReadback,/!get\('AUDIO_URL'\)/);
+assert.match(reviewReadback,/!get\('DRIVE_FOLDER_ID'\)/);
+
+const r2Write=body(
+  review,
+  'h3ReviewAudioWriteR2AssetRow_',
+  'h3ReviewAudioAssertR2AssetRow_'
+);
+const r2Assert=body(
+  review,
+  'h3ReviewAudioAssertR2AssetRow_',
+  'h3ReviewAudioGeneratePlannedR2Asset_'
+);
+const r2ctx=vm.createContext({
+  Date,JSON,String,Array,Error,
+  H3_REVIEW_AUDIO_HEADERS_:Array(17).fill(''),
+  H3_REVIEW_AUDIO_SCHEMA_:'H3_REVIEW_AUDIO_ASSET_V1',
+  H3_REVIEW_AUDIO_GENERATOR_VERSION_:'review-audio-v2-1200ms',
+  SpreadsheetApp:{flush(){}}
+});
+vm.runInContext(r2Write+r2Assert+reviewR2,r2ctx);
+const headers=[
+  'SCHEMA','SURFACE_FAMILY','SET_ID','SLOT_KEY','SOURCE_REF_JSON',
+  'SELECTION_JSON','AUDIO_TEXT','AUDIO_TEXT_SHA256',
+  'VOICE_ASSIGNMENT_JSON','AUDIO_FILE_ID','AUDIO_URL','DRIVE_FOLDER_ID',
+  'STATUS','CREATED_AT','UPDATED_AT','ERROR','GENERATOR_VERSION'
+];
+const map=Object.fromEntries(headers.map((x,i)=>[x,i]));
+let persisted=null;
+const events=[];
+const fakeSheet={
+  getLastRow:()=>1,
+  getRange:()=>({
+    setValues(values){
+      events.push('row_write');
+      persisted=values[0];
+    }
+  })
+};
+r2ctx.h3ReviewAudioAssetSheet_=()=>fakeSheet;
+r2ctx.h3ReviewAudioFindAssetRow_=()=>persisted?{
+  rowNumber:2,row:persisted,map
+}:null;
+r2ctx.h3ReviewAudioSsml_=()=>'<speak>review</speak>';
+r2ctx.config_=()=>({});
+r2ctx.synthesize_=()=>{
+  events.push('synthesize');
+  return{getBytes:()=>Array(128).fill(1)};
+};
+r2ctx.h3RuntimeAssetWriteR2_=request=>{
+  events.push('receipt');
+  assert.equal(request.asset_class,'REVIEW_AUDIO');
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(request.logical_binding_identity)),
+    {surface_family:'5W',set_id:'W-R2',slot_key:'D2'}
+  );
+  assert.equal(
+    request.pre_cutover_or_previous_drive_binding_snapshot,
+    null
+  );
+  return{
+    schema:'H3_R2_PRIMARY_ASSET_WRITE_RECEIPT_V1',
+    receipt_id:'a'.repeat(64),
+    storage_authority:'CLOUDFLARE_R2_PRIVATE',
+    source_byte_sha256:'b'.repeat(64),
+    size_bytes:128
+  };
+};
+const r2Plan={
+  surface_family:'5W',
+  set_id:'W-R2',
+  slot_key:'D2',
+  source_ref:{x:'source'},
+  selection:{x:'selection'},
+  audio_text:'테스트',
+  audio_text_sha256:'c'.repeat(64),
+  voice_assignment:{primary:{label:'Hyunsu'}},
+  drive_folder_id:'DRIVE-FOLDER'
+};
+const r2Result=r2ctx.h3ReviewAudioGeneratePlannedR2Asset_(
+  {},r2Plan
+);
+assert.deepEqual(events,['synthesize','receipt','row_write']);
+assert.equal(r2Result.status,'DONE_R2');
+assert.equal(persisted[9],'');
+assert.equal(persisted[10],'');
+assert.equal(persisted[11],'');
+assert.equal(persisted[12],'DONE_R2');
+
 const generateSet=body(review,'h3ReviewAudioGenerateSet_','runReviewAudioPilotFamily1');
 assert.match(generateSet,/LockService\.getScriptLock\(\)/);
-assert.match(generateSet,/h3P4AssetWriterRequireDrivePrimary_\(\)/);
+assert.match(generateSet,/h3ReviewAudioWriterMode_\(\)/);
+
+const pendingAudio=body(
+  code,
+  'processPendingAudioForSet',
+  'processLatestPendingAudioJob'
+);
+const latestAudio=body(
+  code,
+  'processLatestPendingAudioJob',
+  'idle_'
+);
+const listeningQueue=body(
+  code,
+  'processListeningAudioQueue_',
+  'processListeningAudioSet_'
+);
+const listeningSet=body(
+  code,
+  'processListeningAudioSet_',
+  'snapshotListeningSet_'
+);
+const listeningDispatch=body(
+  code,
+  'runListeningSetBatch_',
+  'runListeningSetBatchDrive_'
+);
+const listeningDrive=body(
+  code,
+  'runListeningSetBatchDrive_'
+);
+const listeningR2=body(
+  code,
+  'runListeningSetBatchR2_',
+  'runListeningSetBatch_'
+);
+const r2MemberAssert=body(
+  code,
+  'h3ListeningAssertDoneR2Member_',
+  'listeningR2BatchState_'
+);
+
+assert.match(
+  pendingAudio,
+  /h3ListeningAudioWriterMode_\(\)/
+);
+assert.match(
+  pendingAudio,
+  /normalizedMode === '5W'/
+);
+assert.match(
+  pendingAudio,
+  /h3P4AssetWriterRequireDrivePrimary_\(\)/
+);
+assert.match(
+  latestAudio,
+  /H3_P4_ASSET_WRITER_R2_PRIMARY_/
+);
+assert.match(
+  latestAudio,
+  /processListeningAudioQueue_/
+);
+assert.match(
+  latestAudio,
+  /h3P4AssetWriterRequireDrivePrimary_\(\)/
+);
+assert.match(
+  listeningQueue,
+  /LISTENING_R2_SYSTEM_TEST_SINGLETON_FORBIDDEN/
+);
+assert.match(
+  listeningSet,
+  /h3ListeningAudioWriterMode_\(\)/
+);
+assert.match(
+  listeningDispatch,
+  /H3_P4_ASSET_WRITER_DRIVE_PRIMARY_/
+);
+assert.match(
+  listeningDispatch,
+  /runListeningSetBatchDrive_\(/
+);
+assert.match(
+  listeningDispatch,
+  /runListeningSetBatchR2_\(/
+);
+assert.match(listeningDrive,/DriveApp\.getFolderById/);
+assert.match(listeningDrive,/\.createFile\(/);
+assert.match(
+  listeningR2,
+  /asset_class:\s*'LISTENING_AUDIO_INDIVIDUAL'/
+);
+assert.match(
+  listeningR2,
+  /h3RuntimeAssetWriteR2_\(/
+);
+assert.match(
+  listeningR2,
+  /HQ_LISTENING_STORAGE_MODE_R2/
+);
+assert.doesNotMatch(listeningR2,/DriveApp\./);
+assert.doesNotMatch(listeningR2,/\.createFile\(/);
+assert.doesNotMatch(
+  listeningR2,
+  /LISTENING_AUDIO_COMBINED/
+);
+assert.match(
+  r2MemberAssert,
+  /values\[10\]/
+);
+assert.match(
+  r2MemberAssert,
+  /values\[11\]/
+);
+assert.match(
+  r2MemberAssert,
+  /HQ_LISTENING_STORAGE_MODE_R2/
+);
+
+// Dynamic R2 batch fixture: all five receipts must precede final row publication.
+const r2ctx2=vm.createContext({
+  Date,JSON,String,Array,Object,Error,Set,
+  HQ_LISTENING_SET_SIZE:5,
+  HQ_LISTENING_STORAGE_MODE:'listening_audio_v1',
+  HQ_LISTENING_STORAGE_MODE_R2:'listening_audio_r2_v1',
+  HQ_LISTENING_AUDIO_SOURCE_ATTESTATION_SCHEMA:
+    'H3_LISTENING_AUDIO_SOURCE_ATTESTATION_V1',
+  SpreadsheetApp:{flush(){}},
+  UrlFetchApp:{
+    fetchAll:reqs=>reqs.map((_,i)=>({index:i}))
+  }
+});
+vm.runInContext(listeningR2,r2ctx2);
+
+const eventLog=[];
+const rows={};
+const members2=['K1','K2','K3','K4','K5'].map((section,i)=>{
+  const values=Array(15).fill('');
+  values[0]='H3-L-20261002-'+String(i+1).padStart(3,'0');
+  values[1]='pending';
+  values[3]='H3-20261002-L01';
+  values[5]=section;
+  values[14]='listening_audio_v1';
+  const member={row:i+2,values,note:''};
+  rows[member.row]=member;
+  return member;
+});
+const sheet2={
+  getRange(row,col,_rc,_cc){
+    return{
+      setValue(value){
+        eventLog.push('set:'+row+':'+col+':'+value);
+        rows[row].values[col-1]=value;
+      },
+      clearContent(){
+        eventLog.push('clear:'+row+':'+col);
+        rows[row].values[col-1]='';
+      },
+      setValues(values){
+        const data=values[0];
+        eventLog.push(
+          'setValues:'+row+':'+col+':'+data.length
+        );
+        data.forEach((v,i)=>{
+          rows[row].values[col-1+i]=v;
+        });
+      }
+    };
+  }
+};
+r2ctx2.readListeningSnapshotJob_=member=>({
+  id:member.values[0],
+  status:member.values[1],
+  parentSetId:member.values[3],
+  section:member.values[5],
+  storageMode:member.values[14],
+  hash:'h'.repeat(64),
+  plan:[]
+});
+r2ctx2.listeningR2BatchState_=(_member,job)=>({
+  id:job.id,
+  hash:job.hash,
+  voice:'Hyunsu',
+  audioVersion:'v',
+  stage:'r2_prepared',
+  attempts:0,
+  storageAuthority:'CLOUDFLARE_R2_PRIVATE'
+});
+r2ctx2.listeningAudioSpec_=job=>({
+  ssml:'<speak>'+job.section+'</speak>',
+  assignment:'VOICE=Hyunsu'
+});
+r2ctx2.assertListeningBatchCurrent_=()=>{};
+r2ctx2.listeningBatchCheckpoint_=()=>{};
+r2ctx2.azureTtsFetchAllRequest_=ssml=>({ssml});
+r2ctx2.azureTtsBlobFromResponse_=()=>({
+  getBytes:()=>Array(128).fill(1)
+});
+r2ctx2.h3RuntimeAssetWriteR2_=request=>{
+  eventLog.push(
+    'receipt:'+request.logical_binding_identity.slot_key
+  );
+  assert.equal(
+    request.asset_class,
+    'LISTENING_AUDIO_INDIVIDUAL'
+  );
+  assert.equal(
+    request.logical_binding_identity.set_id,
+    'H3-20261002-L01'
+  );
+  assert.equal(
+    request.pre_cutover_or_previous_drive_binding_snapshot,
+    null
+  );
+  return{
+    schema:'H3_R2_PRIMARY_ASSET_WRITE_RECEIPT_V1',
+    receipt_id:'a'.repeat(64),
+    storage_authority:'CLOUDFLARE_R2_PRIVATE',
+    status:'COMMITTED'
+  };
+};
+r2ctx2.h3ListeningAssertDoneR2Member_=member=>{
+  assert.equal(member.values[1],'done');
+  assert.equal(member.values[10],'');
+  assert.equal(member.values[11],'');
+  assert.equal(
+    member.values[14],
+    'listening_audio_r2_v1'
+  );
+};
+r2ctx2.publishListeningBatchError_=(_s,_i,stage,e)=>{
+  throw new Error(stage+':'+e.message);
+};
+
+const batchResult=
+  r2ctx2.runListeningSetBatchR2_(
+    sheet2,
+    'H3-20261002-L01',
+    members2,
+    {},
+    {sha256:'f'.repeat(64)}
+  );
+assert.equal(batchResult.status,'done');
+assert.equal(
+  eventLog.filter(x=>x.startsWith('receipt:')).length,
+  5
+);
+const lastReceipt=Math.max(
+  ...eventLog.map((x,i)=>x.startsWith('receipt:')?i:-1)
+);
+const firstFinal=eventLog.findIndex(
+  x=>x.endsWith(':9:7')
+);
+assert.ok(lastReceipt>=0);
+assert.ok(firstFinal>lastReceipt);
+assert.equal(
+  eventLog.some(x=>x.includes('COMBINED')),
+  false
+);
+
+const bindingAuthority=body(
+  cloud,
+  'h3RuntimeAudioBindingAuthority_',
+  'h3RuntimeAudioMedia_'
+);
+const mediaRequest=body(
+  cloud,
+  'h3RuntimePrivateMediaRequest_',
+  'h3RuntimePrivateMediaProbe_'
+);
+assert.match(
+  cloud,
+  /H3_RUNTIME_PRIVATE_MEDIA_PATH_[\s\S]*\/__internal\/h3\/media\/v1/
+);
+assert.match(
+  mediaRequest,
+  /H3_RUNTIME_PRIVATE_MEDIA_PATH_/
+);
+assert.match(mediaRequest,/bytes=0-0|Content-Range/);
+assert.match(mediaRequest,/h3RuntimeR2CanonicalRecord_/);
+assert.match(mediaRequest,/UrlFetchApp\.fetch/);
+
+const authorityContext=vm.createContext({
+  String,Array,Error
+});
+vm.runInContext(bindingAuthority,authorityContext);
+assert.equal(
+  authorityContext.h3RuntimeAudioBindingAuthority_({
+    audio_file_id:'FILE',
+    audio_url:'https://drive.example/FILE'
+  }),
+  'GOOGLE_DRIVE'
+);
+assert.equal(
+  authorityContext.h3RuntimeAudioBindingAuthority_({
+    audio_file_id:'',
+    audio_url:'',
+    storage_authority:'CLOUDFLARE_R2_PRIVATE'
+  }),
+  'CLOUDFLARE_R2_PRIVATE'
+);
+assert.throws(
+  ()=>authorityContext.h3RuntimeAudioBindingAuthority_({
+    audio_file_id:'FAKE',
+    audio_url:'',
+    storage_authority:'CLOUDFLARE_R2_PRIVATE'
+  }),
+  /AUDIO_R2_FAKE_DRIVE_BINDING/
+);
+
+const backendBinding=body(
+  orchestrator,
+  'h3BackendDoneAudioBinding_',
+  'h3BackendBindAudioToPayload_'
+);
+assert.match(
+  backendBinding,
+  /HQ_LISTENING_STORAGE_MODE_R2/
+);
+assert.match(
+  backendBinding,
+  /h3RuntimePrivateMediaProbe_\(/
+);
+assert.match(
+  backendBinding,
+  /storage_authority:\s*'CLOUDFLARE_R2_PRIVATE'/
+);
+
+const preissueQueue=body(
+  preissue,
+  'h3PreissueRequireQueue_',
+  'h3PreissueRequireScript_'
+);
+assert.match(preissueQueue,/r2Mode/);
+assert.match(
+  preissueQueue,
+  /h3RuntimePrivateMediaProbe_\(/
+);
+assert.match(
+  preissueQueue,
+  /r2Mode\s*\? HQ_LISTENING_STORAGE_MODE/
+);
+
+const productionMedia=body(
+  productionRender,
+  'getProductionMediaPayload_',
+  'h3ProdReviewScriptUrl_'
+);
+assert.match(
+  productionMedia,
+  /h3RuntimeAudioMedia_\(/
+);
+assert.match(
+  productionMedia,
+  /LISTENING_AUDIO_INDIVIDUAL/
+);
+
+const reviewResolve=body(
+  reviewCore,
+  'h3ReviewAudioBindingResolve_',
+  'h3ReviewAudioBindingResolveAll_'
+);
+assert.match(reviewResolve,/DONE_R2/);
+assert.match(
+  reviewResolve,
+  /CLOUDFLARE_R2_PRIVATE/
+);
+assert.match(
+  reviewResolve,
+  /!get\('AUDIO_FILE_ID'\)/
+);
+assert.match(
+  reviewResolve,
+  /!get\('AUDIO_URL'\)/
+);
+
+const persistentMedia=body(
+  reviewPersistence,
+  'getPersistentReviewMediaPayload_',
+  'getLegacyPersistentReviewMediaPayload_'
+);
+assert.match(
+  persistentMedia,
+  /h3RuntimeAudioMedia_\(/
+);
+const writtenMedia=body(
+  reviewPersistence,
+  'getWrittenPersistentReviewMediaPayload_',
+  'h3WrittenProductionReviewBuildPayload_'
+);
+assert.match(
+  writtenMedia,
+  /h3RuntimeAudioMedia_\(/
+);
+const surfaceMedia=body(
+  surfaceReview,
+  'h3SurfaceReviewMedia_'
+);
+assert.match(
+  surfaceMedia,
+  /h3RuntimeAudioMedia_\(/
+);
+
+assert.match(
+  source,
+  /P4_ASSET_R2_REVIEW_FAKE_DRIVE_BINDING/
+);
+assert.match(
+  source,
+  /P4_ASSET_R2_LISTENING_FAKE_DRIVE_BINDING/
+);
 
 const quiesceBody=body(source,'h3P4AssetWriterQuiesce','h3P4AssetWriterSwitchToR2Primary');
 const r2Body=body(source,'h3P4AssetWriterSwitchToR2Primary','h3P4AssetWriterResumeDrivePrimary');
@@ -199,4 +758,4 @@ assert.match(r2Body,/before!==H3_P4_ASSET_WRITER_QUIESCED_/);
 assert.doesNotMatch(r2Body,/before===H3_P4_ASSET_WRITER_DRIVE_PRIMARY_/);
 assert.match(resumeBody,/before!==H3_P4_ASSET_WRITER_R2_PRIMARY_/);
 
-console.log(JSON.stringify({status:'PASS',tests:36}));
+console.log(JSON.stringify({status:'PASS',tests:108}));

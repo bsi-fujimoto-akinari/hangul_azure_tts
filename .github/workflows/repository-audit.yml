@@ -861,7 +861,7 @@ jobs:
           const vm = require('vm');
           const surfaceSource = fs.readFileSync('WebAppSurfaceCommon.js','utf8');
           const source = fs.readFileSync('WebAppProductionRender.js','utf8');
-          const ctx = vm.createContext({console});
+          const ctx = vm.createContext({console,h3RuntimeAudioBindingAuthority_:binding=>{if(binding&&binding.audio_file_id&&binding.audio_url)return 'GOOGLE_DRIVE';if(binding&&!binding.audio_file_id&&!binding.audio_url&&binding.storage_authority==='CLOUDFLARE_R2_PRIVATE')return 'CLOUDFLARE_R2_PRIVATE';throw new Error('invalid binding');}});
 
           ctx.H3_WEB_RUNTIME_SPREADSHEET_ID = 'S';
           ctx.H3_WEB_PROD_SECTIONS = ['K1','K2','K3','K4','K5'];
@@ -5364,7 +5364,7 @@ jobs:
               Date,
               Math,
               Set,
-              RegExp,
+              RegExp, H3_P4_ASSET_WRITER_DRIVE_PRIMARY_:'DRIVE_PRIMARY', H3_P4_ASSET_WRITER_QUIESCED_:'QUIESCED', H3_P4_ASSET_WRITER_R2_PRIMARY_:'R2_PRIMARY', h3P4AssetWriterMode_:()=> 'DRIVE_PRIMARY',
               SpreadsheetApp: {flush: () => { calls.flush++; }},
               DriveApp: {
                 getFolderById: () => folder,
@@ -8810,7 +8810,7 @@ jobs:
               'function getWrittenPersistentReviewMediaPayload_(',
               'h3ReviewAudioBindingResolveAll_(',
               'h3ReviewAudioBindingResolve_(',
-              'h3DriveDataUri_(',
+              'h3RuntimeAudioMedia_(',
               "provider_kind: 'WRITTEN'",
               "surface_family: '5W'",
           ]:
@@ -8905,7 +8905,7 @@ jobs:
               sidecar_family: '5W',
               set_id: 'H3-20260913-01',
               asset_key: slot,
-              audio_url: 'https://example.invalid/' + slot
+              storage_authority: 'GOOGLE_DRIVE', drive_folder_id: 'FOLDER-5W', audio_file_id: 'FILE-' + slot, audio_url: 'https://example.invalid/' + slot
             })
           );
           context.__payload = payload;
@@ -9010,7 +9010,7 @@ jobs:
               'h3ReviewAudioBindingResolveAll_(',
               'h3ReviewAudioApplyReadingBindings_(',
               'h3ReviewAudioBindingResolve_(',
-              'h3DriveDataUri_(',
+              'h3RuntimeAudioMedia_(',
               "family === 'READING'",
           ]:
               if needle not in bridge:
@@ -9121,7 +9121,7 @@ jobs:
               sidecar_family:'2R',
               set_id:'H3-20260921-R001',
               asset_key:'PASSAGE_COMPLETE',
-              audio_url:'https://example.invalid/passage'
+              storage_authority:'GOOGLE_DRIVE', drive_folder_id:'FOLDER-2R', audio_file_id:'FILE-PASSAGE', audio_url:'https://example.invalid/passage'
             },
             {
               target:'QUESTION_CHOICES',
@@ -9132,7 +9132,7 @@ jobs:
               sidecar_family:'2R',
               set_id:'H3-20260921-R001',
               asset_key:'Q1_CHOICES',
-              audio_url:'https://example.invalid/q1'
+              storage_authority:'GOOGLE_DRIVE', drive_folder_id:'FOLDER-2R', audio_file_id:'FILE-Q1', audio_url:'https://example.invalid/q1'
             },
             {
               target:'QUESTION_CHOICES',
@@ -9143,7 +9143,7 @@ jobs:
               sidecar_family:'2R',
               set_id:'H3-20260921-R001',
               asset_key:'Q2_CHOICES',
-              audio_url:'https://example.invalid/q2'
+              storage_authority:'GOOGLE_DRIVE', drive_folder_id:'FOLDER-2R', audio_file_id:'FILE-Q2', audio_url:'https://example.invalid/q2'
             }
           ];
           context.__payload = payload;
@@ -9339,7 +9339,7 @@ jobs:
               sidecar_family:'2T',
               set_id:setId,
               asset_key:slot,
-              audio_url:'https://example.invalid/' + slot
+              storage_authority:'GOOGLE_DRIVE', drive_folder_id:'FOLDER-2T', audio_file_id:'FILE-' + slot, audio_url:'https://example.invalid/' + slot
             }));
             context.__payload = payload;
             context.__bindings = bindings;

@@ -140,6 +140,430 @@ function h3RuntimeRpc_(operation, payload) {
   return body.data;
 }
 
+
+var H3_RUNTIME_PRIVATE_MEDIA_PATH_ =
+  '/__internal/h3/media/v1';
+
+function h3RuntimePrivateMediaHeaders_(response) {
+  return response.getAllHeaders
+    ? response.getAllHeaders()
+    : response.getHeaders();
+}
+
+function h3RuntimePrivateMediaHeader_(headers,name) {
+  var target=String(name||'').toLowerCase();
+  var value='';
+  Object.keys(headers||{}).some(function(key){
+    if(String(key).toLowerCase()===target){
+      value=String(headers[key]||'');
+      return true;
+    }
+    return false;
+  });
+  return value;
+}
+
+function h3RuntimePrivateMediaRequest_(
+  assetClass,identity,range,maxBytes
+) {
+  var spec=h3RuntimeR2AssetSpec_(assetClass);
+  var canonical=h3RuntimeR2CanonicalRecord_(
+    identity,
+    'MEDIA_IDENTITY_INVALID',
+    spec.identity_fields
+  );
+  var props=PropertiesService.getScriptProperties();
+  var baseUrl=props.getProperty(
+    'H3_RUNTIME_BACKEND_BASE_URL'
+  );
+  if(baseUrl!==H3_RUNTIME_EXPECTED_WORKER_URL_){
+    throw new Error('H3_RUNTIME_BACKEND_INVALID');
+  }
+  var token=props.getProperty(
+    'H3_RUNTIME_BEARER_TOKEN'
+  );
+  if(!token)throw new Error('H3_RUNTIME_TOKEN_MISSING');
+
+  var query=[
+    'asset_class='+encodeURIComponent(String(assetClass))
+  ];
+  spec.identity_fields.forEach(function(field){
+    query.push(
+      encodeURIComponent(field)+'='+
+      encodeURIComponent(canonical[field])
+    );
+  });
+  var headers={
+    Authorization:'Bearer '+token
+  };
+  if(range)headers.Range=range;
+  var response=UrlFetchApp.fetch(
+    baseUrl+H3_RUNTIME_PRIVATE_MEDIA_PATH_+
+      '?'+query.join('&'),
+    {
+      method:'get',
+      headers:headers,
+      muteHttpExceptions:true
+    }
+  );
+  var code=response.getResponseCode();
+  var all=h3RuntimePrivateMediaHeaders_(response);
+  var mime=h3RuntimePrivateMediaHeader_(
+    all,'Content-Type'
+  ).split(';')[0].trim();
+  if(spec.mime_types.indexOf(mime)<0){
+    throw new Error('MEDIA_MIME_MISMATCH');
+  }
+  var bytes=response.getContent();
+  if(range){
+    if(
+      code!==206 ||
+      bytes.length!==1 ||
+      !/^bytes 0-0\/\d+$/.test(
+        h3RuntimePrivateMediaHeader_(
+          all,'Content-Range'
+        )
+      )
+    ){
+      throw new Error(
+        'MEDIA_RECEIPT_READBACK_MISMATCH'
+      );
+    }
+  }else if(
+    code!==200 ||
+    !bytes.length ||
+    bytes.length>Number(maxBytes||0)
+  ){
+    throw new Error('MEDIA_BODY_INVALID');
+  }
+  return{
+    bytes:bytes,
+    mime_type:mime,
+    size_bytes:bytes.length
+  };
+}
+
+function h3RuntimePrivateMediaProbe_(
+  assetClass,identity
+) {
+  h3RuntimePrivateMediaRequest_(
+    assetClass,identity,'bytes=0-0',1
+  );
+  return true;
+}
+
+function h3RuntimePrivateMediaDataUri_(
+  assetClass,identity,maxBytes
+) {
+  var media=h3RuntimePrivateMediaRequest_(
+    assetClass,identity,'',maxBytes
+  );
+  return{
+    data_uri:
+      'data:'+media.mime_type+';base64,'+
+      Utilities.base64Encode(media.bytes),
+    mime_type:media.mime_type,
+    size_bytes:media.size_bytes
+  };
+}
+
+function h3RuntimeAudioBindingAuthority_(binding) {
+  if(
+    !binding ||
+    typeof binding!=='object' ||
+    Array.isArray(binding)
+  )throw new Error('AUDIO_BINDING_INVALID');
+  var fileId=String(binding.audio_file_id||'');
+  var url=String(binding.audio_url||'');
+  var authority=String(
+    binding.storage_authority||''
+  );
+  if(!authority && fileId && url){
+    authority='GOOGLE_DRIVE';
+  }
+  if(authority==='GOOGLE_DRIVE'){
+    if(!fileId||!url){
+      throw new Error('AUDIO_DRIVE_BINDING_INVALID');
+    }
+    return authority;
+  }
+  if(authority==='CLOUDFLARE_R2_PRIVATE'){
+    if(fileId||url){
+      throw new Error('AUDIO_R2_FAKE_DRIVE_BINDING');
+    }
+    return authority;
+  }
+  throw new Error('AUDIO_STORAGE_AUTHORITY_INVALID');
+}
+
+function h3RuntimeAudioMedia_(
+  binding,assetClass,identity,maxBytes
+) {
+  var authority=h3RuntimeAudioBindingAuthority_(
+    binding
+  );
+  if(authority==='GOOGLE_DRIVE'){
+    var drive=h3DriveDataUri_(
+      String(binding.audio_file_id),
+      'audio/mpeg',
+      null,
+      maxBytes
+    );
+    return{
+      data_uri:drive.data_uri,
+      mime_type:drive.mime_type,
+      size_bytes:drive.size_bytes,
+      fallback_url:String(binding.audio_url)
+    };
+  }
+  var r2=h3RuntimePrivateMediaDataUri_(
+    assetClass,identity,maxBytes
+  );
+  return{
+    data_uri:r2.data_uri,
+    mime_type:r2.mime_type,
+    size_bytes:r2.size_bytes,
+    fallback_url:''
+  };
+}
+
+var H3_RUNTIME_R2_RECEIPT_SCHEMA_ =
+  'H3_R2_PRIMARY_ASSET_WRITE_RECEIPT_V1';
+var H3_RUNTIME_R2_STORAGE_AUTHORITY_ =
+  'CLOUDFLARE_R2_PRIVATE';
+
+function h3RuntimeR2AssetSpec_(assetClass) {
+  var specs = {
+    REVIEW_AUDIO: {
+      identity_fields: ['set_id','slot_key','surface_family'],
+      mime_types: ['audio/mpeg'],
+      object_prefix: 'v1/review_audio/sha256/'
+    },
+    LISTENING_AUDIO_INDIVIDUAL: {
+      identity_fields: ['listen_gen_id','set_id','slot_key'],
+      mime_types: ['audio/mpeg'],
+      object_prefix: 'v1/listening_audio_individual/sha256/'
+    },
+    LISTENING_K1_IMAGE: {
+      identity_fields: ['k1_ready_id'],
+      mime_types: ['image/png','image/jpeg','image/webp'],
+      object_prefix: 'v1/LISTENING_K1_IMAGE/sha256/'
+    }
+  };
+  var spec = specs[String(assetClass || '')];
+  if (!spec) throw new Error('R2_PRIMARY_ASSET_CLASS_INVALID');
+  return spec;
+}
+
+function h3RuntimeR2Nonblank_(value) {
+  return typeof value === 'string' &&
+    value.length > 0 &&
+    !/[\x00-\x1f]/.test(value);
+}
+
+function h3RuntimeR2CanonicalRecord_(value, code, expectedFields) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(code);
+  }
+  var keys = Object.keys(value).sort();
+  if (expectedFields) {
+    var expected = expectedFields.slice().sort();
+    if (JSON.stringify(keys) !== JSON.stringify(expected)) {
+      throw new Error(code);
+    }
+  }
+  var out = {};
+  keys.forEach(function(key) {
+    if (!h3RuntimeR2Nonblank_(key) ||
+        !h3RuntimeR2Nonblank_(value[key])) {
+      throw new Error(code);
+    }
+    out[key] = String(value[key]);
+  });
+  return out;
+}
+
+function h3RuntimeR2CanonicalNullableRecord_(value, code) {
+  return value === null
+    ? null
+    : h3RuntimeR2CanonicalRecord_(value, code, null);
+}
+
+function h3RuntimeR2HexFromDigest_(digest) {
+  return digest.map(function(b) {
+    return ('0' + (((b + 256) % 256).toString(16))).slice(-2);
+  }).join('');
+}
+
+function h3RuntimeR2Sha256Text_(value) {
+  return h3RuntimeR2HexFromDigest_(
+    Utilities.computeDigest(
+      Utilities.DigestAlgorithm.SHA_256,
+      String(value),
+      Utilities.Charset.UTF_8
+    )
+  );
+}
+
+function h3RuntimeR2Sha256Bytes_(bytes) {
+  return h3RuntimeR2HexFromDigest_(
+    Utilities.computeDigest(
+      Utilities.DigestAlgorithm.SHA_256,
+      bytes
+    )
+  );
+}
+
+function h3RuntimeR2ValidateInput_(request) {
+  var required = [
+    'asset_class',
+    'bytes',
+    'drive_rollback_target_class',
+    'logical_binding_identity',
+    'mime_type',
+    'pre_cutover_or_previous_drive_binding_snapshot',
+    'written_at'
+  ].sort();
+  if (!request || typeof request !== 'object' || Array.isArray(request) ||
+      JSON.stringify(Object.keys(request).sort()) !== JSON.stringify(required)) {
+    throw new Error('R2_PRIMARY_WRITE_REQUEST_INVALID');
+  }
+
+  var assetClass = String(request.asset_class || '');
+  var spec = h3RuntimeR2AssetSpec_(assetClass);
+  var identity = h3RuntimeR2CanonicalRecord_(
+    request.logical_binding_identity,
+    'R2_PRIMARY_LOGICAL_IDENTITY_INVALID',
+    spec.identity_fields
+  );
+  if (!Array.isArray(request.bytes) || request.bytes.length < 1 ||
+      request.bytes.some(function(b) {
+        return !Number.isInteger(b) || b < -128 || b > 127;
+      })) {
+    throw new Error('R2_PRIMARY_BYTES_INVALID');
+  }
+  var mimeType = String(request.mime_type || '');
+  if (spec.mime_types.indexOf(mimeType) < 0) {
+    throw new Error('R2_PRIMARY_MIME_TYPE_INVALID');
+  }
+  var writtenAt = String(request.written_at || '');
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(writtenAt)) {
+    throw new Error('R2_PRIMARY_WRITTEN_AT_INVALID');
+  }
+  if (!h3RuntimeR2Nonblank_(request.drive_rollback_target_class)) {
+    throw new Error('R2_PRIMARY_ROLLBACK_TARGET_INVALID');
+  }
+  return {
+    asset_class: assetClass,
+    spec: spec,
+    logical_binding_identity: identity,
+    bytes: request.bytes.slice(),
+    mime_type: mimeType,
+    written_at: writtenAt,
+    pre_cutover_or_previous_drive_binding_snapshot:
+      h3RuntimeR2CanonicalNullableRecord_(
+        request.pre_cutover_or_previous_drive_binding_snapshot,
+        'R2_PRIMARY_DRIVE_SNAPSHOT_INVALID'
+      ),
+    drive_rollback_target_class:
+      String(request.drive_rollback_target_class)
+  };
+}
+
+function h3RuntimeR2ValidateReceipt_(receipt, input) {
+  var fields = [
+    'asset_class',
+    'drive_rollback_target_class',
+    'logical_binding_identity',
+    'logical_binding_identity_sha256',
+    'mime_type',
+    'pre_cutover_or_previous_drive_binding_snapshot',
+    'r2_object_key',
+    'receipt_id',
+    'schema',
+    'size_bytes',
+    'source_byte_sha256',
+    'status',
+    'storage_authority',
+    'written_at'
+  ].sort();
+  if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt) ||
+      JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(fields)) {
+    throw new Error('R2_PRIMARY_RECEIPT_INVALID');
+  }
+  if (receipt.schema !== H3_RUNTIME_R2_RECEIPT_SCHEMA_ ||
+      receipt.asset_class !== input.asset_class ||
+      receipt.storage_authority !== H3_RUNTIME_R2_STORAGE_AUTHORITY_ ||
+      receipt.status !== 'COMMITTED' ||
+      receipt.mime_type !== input.mime_type ||
+      receipt.drive_rollback_target_class !==
+        input.drive_rollback_target_class ||
+      !Number.isInteger(receipt.size_bytes) ||
+      receipt.size_bytes !== input.bytes.length ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(
+        String(receipt.written_at || '')
+      )) {
+    throw new Error('R2_PRIMARY_RECEIPT_INVALID');
+  }
+
+  var receiptIdentity = h3RuntimeR2CanonicalRecord_(
+    receipt.logical_binding_identity,
+    'R2_PRIMARY_RECEIPT_INVALID',
+    input.spec.identity_fields
+  );
+  if (JSON.stringify(receiptIdentity) !==
+      JSON.stringify(input.logical_binding_identity)) {
+    throw new Error('R2_PRIMARY_RECEIPT_IDENTITY_MISMATCH');
+  }
+
+  var receiptSnapshot = h3RuntimeR2CanonicalNullableRecord_(
+    receipt.pre_cutover_or_previous_drive_binding_snapshot,
+    'R2_PRIMARY_RECEIPT_INVALID'
+  );
+  if (JSON.stringify(receiptSnapshot) !==
+      JSON.stringify(input.pre_cutover_or_previous_drive_binding_snapshot)) {
+    throw new Error('R2_PRIMARY_RECEIPT_DRIVE_SNAPSHOT_MISMATCH');
+  }
+
+  var identityJson = JSON.stringify(input.logical_binding_identity);
+  var identityHash = h3RuntimeR2Sha256Text_(
+    input.asset_class + '\n' + identityJson
+  );
+  var sourceHash = h3RuntimeR2Sha256Bytes_(input.bytes);
+  var receiptId = h3RuntimeR2Sha256Text_(
+    H3_RUNTIME_R2_RECEIPT_SCHEMA_ + '\n' +
+      input.asset_class + '\n' + identityHash
+  );
+
+  if (receipt.logical_binding_identity_sha256 !== identityHash ||
+      receipt.source_byte_sha256 !== sourceHash ||
+      receipt.receipt_id !== receiptId ||
+      receipt.r2_object_key !== input.spec.object_prefix + sourceHash ||
+      !/^[0-9a-f]{64}$/.test(String(receipt.receipt_id || '')) ||
+      !/^[0-9a-f]{64}$/.test(
+        String(receipt.logical_binding_identity_sha256 || '')
+      ) ||
+      !/^[0-9a-f]{64}$/.test(String(receipt.source_byte_sha256 || ''))) {
+    throw new Error('R2_PRIMARY_RECEIPT_HASH_MISMATCH');
+  }
+  return receipt;
+}
+
+function h3RuntimeAssetWriteR2_(request) {
+  var input = h3RuntimeR2ValidateInput_(request);
+  var receipt = h3RuntimeRpc_('ASSET_WRITE_R2', {
+    asset_class: input.asset_class,
+    logical_binding_identity: input.logical_binding_identity,
+    bytes_base64: Utilities.base64Encode(input.bytes),
+    mime_type: input.mime_type,
+    written_at: input.written_at,
+    pre_cutover_or_previous_drive_binding_snapshot:
+      input.pre_cutover_or_previous_drive_binding_snapshot,
+    drive_rollback_target_class: input.drive_rollback_target_class
+  });
+  return h3RuntimeR2ValidateReceipt_(receipt, input);
+}
+
 function h3RuntimeRetainedListening_(setId) {
   if (!/^H3-\d{8}-L\d{2,3}$/.test(String(setId || ''))) {
     throw new Error('LISTENING_RENDER_REQUEST_INVALID');
@@ -186,16 +610,18 @@ function h3RuntimeRetainedListening_(setId) {
   ['K1', 'K2', 'K3', 'K4', 'K5'].forEach(function (section) {
     var item = binding && binding.individual &&
       binding.individual[section];
-    if (!item || !item.audio_file_id || !item.audio_url ||
-        !item.payload_hash || !item.listen_gen_id) {
-      throw new Error('RETAINED_DRIVE_ASSET_INVALID');
+    if (!item || !item.payload_hash || !item.listen_gen_id) {
+      throw new Error('RETAINED_AUDIO_BINDING_INVALID');
     }
+    var authority =
+      h3RuntimeAudioBindingAuthority_(item);
     audio[section] = {
       set_id: setId, slot_key: section,
       payload_hash: String(item.payload_hash),
-      file_id: String(item.audio_file_id),
-      url: String(item.audio_url),
-      listen_gen_id: String(item.listen_gen_id)
+      file_id: String(item.audio_file_id || ''),
+      url: String(item.audio_url || ''),
+      listen_gen_id: String(item.listen_gen_id),
+      storage_authority: authority
     };
   });
   return {
@@ -573,15 +999,28 @@ function h3RuntimeListeningMedia_(request) {
         .audio_fallback_url !== binding.url) {
     throw new Error('ASSET_IDENTITY_MISMATCH');
   }
-  var media = h3DriveDataUri_(
-    binding.file_id, 'audio/mpeg', null, 8 * 1024 * 1024
+  var media = h3RuntimeAudioMedia_(
+    {
+      audio_file_id: binding.file_id,
+      audio_url: binding.url,
+      storage_authority:
+        binding.storage_authority
+    },
+    'LISTENING_AUDIO_INDIVIDUAL',
+    {
+      set_id: setId,
+      slot_key: section,
+      listen_gen_id:
+        binding.listen_gen_id
+    },
+    8 * 1024 * 1024
   );
   return {
     schema: 'H3_WEB_MEDIA_V1', mode: 'LISTENING',
     set_id: setId, asset_key: section,
     data_uri: media.data_uri, mime_type: media.mime_type,
     size_bytes: media.size_bytes, trim_start_ms: 0,
-    fallback_url: binding.url
+    fallback_url: media.fallback_url
   };
 }
 
@@ -622,8 +1061,21 @@ function h3RuntimeReviewMedia_(request) {
         String(matches5L[0].audio_fallback_url || '') !== binding5L.url) {
       throw new Error('ASSET_IDENTITY_MISMATCH');
     }
-    var media5L = h3DriveDataUri_(
-      binding5L.file_id, 'audio/mpeg', null, 8 * 1024 * 1024
+    var media5L = h3RuntimeAudioMedia_(
+      {
+        audio_file_id: binding5L.file_id,
+        audio_url: binding5L.url,
+        storage_authority:
+          binding5L.storage_authority
+      },
+      'LISTENING_AUDIO_INDIVIDUAL',
+      {
+        set_id: review.set_id,
+        slot_key: section,
+        listen_gen_id:
+          binding5L.listen_gen_id
+      },
+      8 * 1024 * 1024
     );
     return {
       schema: 'H3_WEB_MEDIA_V1', mode: 'REVIEW', read_only: true,
@@ -631,7 +1083,7 @@ function h3RuntimeReviewMedia_(request) {
       set_id: review.set_id, asset_key: section,
       data_uri: media5L.data_uri, mime_type: media5L.mime_type,
       size_bytes: media5L.size_bytes, trim_start_ms: 0,
-      fallback_url: binding5L.url
+      fallback_url: media5L.fallback_url
     };
   }
 
@@ -656,8 +1108,16 @@ function h3RuntimeReviewMedia_(request) {
   if (binding.audio_text_sha256 !== h3ReviewAudioSha256_(text)) {
     throw new Error('ASSET_HASH_MISMATCH');
   }
-  var media = h3DriveDataUri_(
-    binding.audio_file_id, 'audio/mpeg', null, 8 * 1024 * 1024
+  var media = h3RuntimeAudioMedia_(
+    binding,
+    'REVIEW_AUDIO',
+    {
+      surface_family:
+        binding.sidecar_family,
+      set_id: review.set_id,
+      slot_key: binding.slot_key
+    },
+    8 * 1024 * 1024
   );
   return {
     schema: 'H3_WEB_MEDIA_V1', mode: 'REVIEW', read_only: true,
@@ -665,7 +1125,7 @@ function h3RuntimeReviewMedia_(request) {
     set_id: review.set_id, asset_key: binding.asset_key,
     data_uri: media.data_uri, mime_type: media.mime_type,
     size_bytes: media.size_bytes, trim_start_ms: 0,
-    fallback_url: binding.audio_url,
+    fallback_url: media.fallback_url,
     review_audio_binding_contract_id:
       H3_REVIEW_AUDIO_BINDING_CONTRACT_ID_
   };

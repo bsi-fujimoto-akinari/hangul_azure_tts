@@ -874,7 +874,222 @@ function h3ReviewAudioWriteAssetRow_(sheet,rowNumber,plan,file,status,errorText,
   SpreadsheetApp.flush();
 }
 
-function h3ReviewAudioGeneratePlannedAsset_(ss,plan,repairMode){
+function h3ReviewAudioWriterMode_(){
+  var mode=h3P4AssetWriterMode_();
+  if(mode===H3_P4_ASSET_WRITER_QUIESCED_){
+    throw new Error('P4_ASSET_WRITERS_QUIESCED');
+  }
+  if(
+    mode!==H3_P4_ASSET_WRITER_DRIVE_PRIMARY_ &&
+    mode!==H3_P4_ASSET_WRITER_R2_PRIMARY_
+  ){
+    throw new Error('REVIEW_AUDIO_WRITER_MODE_INVALID:'+mode);
+  }
+  return mode;
+}
+
+function h3ReviewAudioWriteR2AssetRow_(
+  sheet,rowNumber,plan,createdAt
+){
+  var now=new Date().toISOString();
+  sheet.getRange(
+    rowNumber,1,1,H3_REVIEW_AUDIO_HEADERS_.length
+  ).setValues([[
+    H3_REVIEW_AUDIO_SCHEMA_,
+    plan.surface_family,
+    plan.set_id,
+    plan.slot_key,
+    JSON.stringify(plan.source_ref),
+    JSON.stringify(plan.selection),
+    plan.audio_text,
+    plan.audio_text_sha256,
+    JSON.stringify(plan.voice_assignment),
+    '',
+    '',
+    '',
+    'DONE_R2',
+    createdAt||now,
+    now,
+    '',
+    H3_REVIEW_AUDIO_GENERATOR_VERSION_
+  ]]);
+  SpreadsheetApp.flush();
+}
+
+function h3ReviewAudioAssertR2AssetRow_(row,plan){
+  if(!row){
+    throw new Error(
+      'REVIEW_AUDIO_R2_READBACK_MISSING:'+
+      plan.set_id+':'+plan.slot_key
+    );
+  }
+  var get=function(name){
+    return String(row.row[row.map[name]]||'');
+  };
+  if(
+    get('SCHEMA')!==H3_REVIEW_AUDIO_SCHEMA_ ||
+    get('SURFACE_FAMILY')!==plan.surface_family ||
+    get('SET_ID')!==plan.set_id ||
+    get('SLOT_KEY')!==plan.slot_key ||
+    get('STATUS')!=='DONE_R2' ||
+    get('ERROR') ||
+    get('GENERATOR_VERSION')!==
+      H3_REVIEW_AUDIO_GENERATOR_VERSION_ ||
+    get('AUDIO_TEXT_SHA256')!==
+      plan.audio_text_sha256 ||
+    get('AUDIO_FILE_ID') ||
+    get('AUDIO_URL') ||
+    get('DRIVE_FOLDER_ID')
+  ){
+    throw new Error(
+      'REVIEW_AUDIO_R2_READBACK_INVALID:'+
+      plan.set_id+':'+plan.slot_key
+    );
+  }
+  return true;
+}
+
+function h3ReviewAudioGeneratePlannedR2Asset_(
+  ss,plan,repairMode
+){
+  if(String(repairMode||'')){
+    throw new Error(
+      'REVIEW_AUDIO_R2_REPAIR_FORBIDDEN:'+
+      plan.set_id+':'+plan.slot_key
+    );
+  }
+
+  var sheet=h3ReviewAudioAssetSheet_(ss);
+  var row=h3ReviewAudioFindAssetRow_(sheet,plan);
+
+  if(row){
+    var oldHash=String(
+      row.row[row.map.AUDIO_TEXT_SHA256]||''
+    );
+    var oldStatus=String(
+      row.row[row.map.STATUS]||''
+    );
+    var oldGen=String(
+      row.row[row.map.GENERATOR_VERSION]||''
+    );
+
+    if(oldHash!==plan.audio_text_sha256){
+      throw new Error(
+        'REVIEW_AUDIO_EXISTING_ROW_HASH_MISMATCH:'+
+        plan.set_id+':'+plan.slot_key
+      );
+    }
+
+    if(
+      oldStatus==='DONE' &&
+      oldGen===H3_REVIEW_AUDIO_GENERATOR_VERSION_
+    ){
+      if(
+        !String(row.row[row.map.AUDIO_FILE_ID]||'') ||
+        !String(row.row[row.map.AUDIO_URL]||'') ||
+        !String(row.row[row.map.DRIVE_FOLDER_ID]||'')
+      ){
+        throw new Error(
+          'REVIEW_AUDIO_R2_EXISTING_DRIVE_ROW_INVALID:'+
+          plan.set_id+':'+plan.slot_key
+        );
+      }
+      return{
+        status:'NO_OP',
+        storage_authority:'GOOGLE_DRIVE',
+        set_id:plan.set_id,
+        slot_key:plan.slot_key
+      };
+    }
+
+    if(oldStatus==='DONE_R2'){
+      h3ReviewAudioAssertR2AssetRow_(row,plan);
+      return{
+        status:'NO_OP_R2',
+        storage_authority:'CLOUDFLARE_R2_PRIVATE',
+        set_id:plan.set_id,
+        slot_key:plan.slot_key
+      };
+    }
+
+    throw new Error(
+      'REVIEW_AUDIO_R2_EXISTING_ROW_STATE_INVALID:'+
+      plan.set_id+':'+plan.slot_key+':'+oldStatus
+    );
+  }
+
+  var writtenAt=new Date().toISOString();
+  var blob=synthesize_(
+    h3ReviewAudioSsml_(plan),
+    config_()
+  );
+  var bytes=blob.getBytes();
+  if(!Array.isArray(bytes)||bytes.length<128){
+    throw new Error(
+      'REVIEW_AUDIO_R2_BYTES_INVALID:'+
+      plan.set_id+':'+plan.slot_key
+    );
+  }
+
+  var receipt=h3RuntimeAssetWriteR2_({
+    asset_class:'REVIEW_AUDIO',
+    logical_binding_identity:{
+      surface_family:plan.surface_family,
+      set_id:plan.set_id,
+      slot_key:plan.slot_key
+    },
+    bytes:bytes,
+    mime_type:'audio/mpeg',
+    written_at:writtenAt,
+    pre_cutover_or_previous_drive_binding_snapshot:null,
+    drive_rollback_target_class:'REVIEW_AUDIO'
+  });
+
+  var rowNumber=sheet.getLastRow()+1;
+  h3ReviewAudioWriteR2AssetRow_(
+    sheet,rowNumber,plan,writtenAt
+  );
+  var readback=h3ReviewAudioFindAssetRow_(
+    sheet,plan
+  );
+  h3ReviewAudioAssertR2AssetRow_(
+    readback,plan
+  );
+
+  return{
+    status:'DONE_R2',
+    family:plan.surface_family,
+    set_id:plan.set_id,
+    slot_key:plan.slot_key,
+    storage_authority:
+      receipt.storage_authority,
+    receipt_schema:receipt.schema,
+    receipt_id:receipt.receipt_id,
+    source_byte_sha256:
+      receipt.source_byte_sha256,
+    size_bytes:receipt.size_bytes,
+    audio_text_sha256:
+      plan.audio_text_sha256,
+    generator_version:
+      H3_REVIEW_AUDIO_GENERATOR_VERSION_
+  };
+}
+
+function h3ReviewAudioGeneratePlannedAsset_(
+  ss,plan,repairMode
+){
+  var mode=h3ReviewAudioWriterMode_();
+  if(mode===H3_P4_ASSET_WRITER_DRIVE_PRIMARY_){
+    return h3ReviewAudioGeneratePlannedDriveAsset_(
+      ss,plan,repairMode
+    );
+  }
+  return h3ReviewAudioGeneratePlannedR2Asset_(
+    ss,plan,repairMode
+  );
+}
+
+function h3ReviewAudioGeneratePlannedDriveAsset_(ss,plan,repairMode){
   h3P4AssetWriterRequireDrivePrimary_();
   var sheet=h3ReviewAudioAssetSheet_(ss);
   var row=h3ReviewAudioFindAssetRow_(sheet,plan);
@@ -1080,18 +1295,27 @@ function h3ReviewAudioAssertSetReady_(ss,family,setId,plan){
     var get=function(name){
       return String(row[table.map[name]]||'');
     };
-    if(
-      get('SCHEMA')!==H3_REVIEW_AUDIO_SCHEMA_ ||
-      get('STATUS')!=='DONE' ||
-      get('ERROR') ||
-      get('GENERATOR_VERSION')!==
-        H3_REVIEW_AUDIO_GENERATOR_VERSION_ ||
-      get('DRIVE_FOLDER_ID')!==item.drive_folder_id ||
-      get('AUDIO_TEXT_SHA256')!==
-        item.audio_text_sha256 ||
-      !get('AUDIO_FILE_ID') ||
-      !get('AUDIO_URL')
-    ){
+    var baseValid=
+      get('SCHEMA')===H3_REVIEW_AUDIO_SCHEMA_ &&
+      !get('ERROR') &&
+      get('GENERATOR_VERSION')===
+        H3_REVIEW_AUDIO_GENERATOR_VERSION_ &&
+      get('AUDIO_TEXT_SHA256')===
+        item.audio_text_sha256;
+
+    var driveValid=
+      get('STATUS')==='DONE' &&
+      get('DRIVE_FOLDER_ID')===item.drive_folder_id &&
+      !!get('AUDIO_FILE_ID') &&
+      !!get('AUDIO_URL');
+
+    var r2Valid=
+      get('STATUS')==='DONE_R2' &&
+      !get('DRIVE_FOLDER_ID') &&
+      !get('AUDIO_FILE_ID') &&
+      !get('AUDIO_URL');
+
+    if(!baseValid||(!driveValid&&!r2Valid)){
       throw new Error(
         'REVIEW_AUDIO_ENSURE_ROW_INVALID:'+
         family+':'+setId+':'+item.slot_key
@@ -1122,6 +1346,7 @@ function h3ReviewAudioEnsureForLockedReview_(surfaceFamily,setId){
   lock.waitLock(30000);
 
   try{
+    h3ReviewAudioWriterMode_();
     var ss=h3ReviewAudioRuntimeSpreadsheet_();
     var plan=
       h3ReviewAudioPlanForSet_(
@@ -1182,7 +1407,7 @@ function h3ReviewAudioGenerateSet_(family,setId){
   var lock=LockService.getScriptLock();
   lock.waitLock(30000);
   try{
-    h3P4AssetWriterRequireDrivePrimary_();
+    h3ReviewAudioWriterMode_();
     var ss=h3ReviewAudioRuntimeSpreadsheet_();
     return h3ReviewAudioPlanForSet_(ss,family,setId).map(function(p){
       return h3ReviewAudioGeneratePlannedAsset_(ss,p);

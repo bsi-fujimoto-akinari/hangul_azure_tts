@@ -370,15 +370,17 @@ function h3ReviewSourceContext_(
         ];
       if (
         !binding ||
-        !binding.audio_file_id ||
-        !binding.audio_url ||
-        !binding.payload_hash
+        !binding.payload_hash ||
+        !binding.listen_gen_id
       ) {
         throw new Error(
           'REVIEW_AUDIO_BINDING_INVALID:' +
             section
         );
       }
+      h3RuntimeAudioBindingAuthority_(
+        binding
+      );
       if (
         !Object.prototype.hasOwnProperty.call(
           answerKey,
@@ -1908,9 +1910,8 @@ function getPersistentReviewMediaPayload_(
     );
   }
 
-  var section = String(
-    request.asset_key
-  );
+  var section =
+    String(request.asset_key);
   if (
     H3_WEB_PROD_SECTIONS.indexOf(
       section
@@ -1965,8 +1966,8 @@ function getPersistentReviewMediaPayload_(
 
   if (
     !binding ||
-    !binding.audio_file_id ||
-    !binding.audio_url
+    !binding.listen_gen_id ||
+    !binding.payload_hash
   ) {
     throw new Error(
       'REVIEW_MEDIA_BINDING_INVALID:' +
@@ -1975,10 +1976,15 @@ function getPersistentReviewMediaPayload_(
   }
 
   var media =
-    h3DriveDataUri_(
-      binding.audio_file_id,
-      'audio/mpeg',
-      null,
+    h3RuntimeAudioMedia_(
+      binding,
+      'LISTENING_AUDIO_INDIVIDUAL',
+      {
+        set_id: txn.setId,
+        slot_key: section,
+        listen_gen_id:
+          String(binding.listen_gen_id)
+      },
       8 * 1024 * 1024
     );
 
@@ -1998,10 +2004,9 @@ function getPersistentReviewMediaPayload_(
       media.size_bytes,
     trim_start_ms: 0,
     fallback_url:
-      binding.audio_url
+      media.fallback_url
   };
 }
-
 
 function h3LegacyReviewValidateRequest_(
   request,
@@ -5599,10 +5604,15 @@ function getWrittenPersistentReviewMediaPayload_(
   }
 
   var media =
-    h3DriveDataUri_(
-      binding.audio_file_id,
-      'audio/mpeg',
-      null,
+    h3RuntimeAudioMedia_(
+      binding,
+      'REVIEW_AUDIO',
+      {
+        surface_family:
+          binding.sidecar_family,
+        set_id: setId,
+        slot_key: assetKey
+      },
       8 * 1024 * 1024
     );
 
@@ -5623,7 +5633,7 @@ function getWrittenPersistentReviewMediaPayload_(
       media.size_bytes,
     trim_start_ms: 0,
     fallback_url:
-      binding.audio_url,
+      media.fallback_url,
     review_audio_binding_contract_id:
       H3_REVIEW_AUDIO_BINDING_CONTRACT_ID_
   };

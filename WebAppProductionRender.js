@@ -148,8 +148,6 @@ function h3ProdRenderParts_(context) {
     var binding = individual[section];
     if (
       !binding ||
-      !binding.audio_file_id ||
-      !binding.audio_url ||
       !binding.payload_hash ||
       !binding.listen_gen_id
     ) {
@@ -158,6 +156,9 @@ function h3ProdRenderParts_(context) {
         section
       );
     }
+    h3RuntimeAudioBindingAuthority_(
+      binding
+    );
   });
 
   return {
@@ -364,9 +365,11 @@ function getProductionMediaPayload_(request) {
     );
   }
 
+  var section =
+    String(request.asset_key || '');
   if (
     H3_WEB_PROD_SECTIONS.indexOf(
-      String(request.asset_key || '')
+      section
     ) < 0
   ) {
     throw new Error(
@@ -374,40 +377,49 @@ function getProductionMediaPayload_(request) {
     );
   }
 
+  var setId =
+    String(request.set_id || '');
   var individual =
     h3ProdIssuedPayloadBinding_(
-      request.set_id
+      setId
     );
   var binding =
-    individual[request.asset_key];
+    individual[section];
 
   if (
     !binding ||
-    !binding.audio_file_id ||
-    !binding.audio_url
+    !binding.listen_gen_id ||
+    !binding.payload_hash
   ) {
     throw new Error(
       'PRODUCTION_MEDIA_BINDING_INVALID'
     );
   }
 
-  var media = h3DriveDataUri_(
-    binding.audio_file_id,
-    'audio/mpeg',
-    null,
-    8 * 1024 * 1024
-  );
+  var media =
+    h3RuntimeAudioMedia_(
+      binding,
+      'LISTENING_AUDIO_INDIVIDUAL',
+      {
+        set_id: setId,
+        slot_key: section,
+        listen_gen_id:
+          String(binding.listen_gen_id)
+      },
+      8 * 1024 * 1024
+    );
 
   return {
     schema: 'H3_WEB_MEDIA_V1',
     mode: 'LISTENING',
-    set_id: String(request.set_id),
-    asset_key: String(request.asset_key),
+    set_id: setId,
+    asset_key: section,
     data_uri: media.data_uri,
     mime_type: media.mime_type,
     size_bytes: media.size_bytes,
     trim_start_ms: 0,
-    fallback_url: binding.audio_url
+    fallback_url:
+      media.fallback_url
   };
 }
 

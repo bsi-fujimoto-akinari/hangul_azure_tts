@@ -1,0 +1,27 @@
+name: P4 asset writer control audit
+on:
+  pull_request:
+    paths:
+      - P4AssetWriterControl.js
+      - Code.js
+      - ReviewAudioBackfill.js
+      - .github/scripts/p4_asset_writer_control_test.cjs
+      - .github/workflows/p4-asset-writer-control-audit.yml
+  push:
+    branches:
+      - main
+    paths:
+      - P4AssetWriterControl.js
+      - Code.js
+      - ReviewAudioBackfill.js
+      - .github/scripts/p4_asset_writer_control_test.cjs
+      - .github/workflows/p4-asset-writer-control-audit.yml
+permissions:
+  contents: read
+jobs:
+  p4-asset-writer-control:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test P4 asset writer control
+        run: node .github/scripts/p4_asset_writer_control_test.cjs

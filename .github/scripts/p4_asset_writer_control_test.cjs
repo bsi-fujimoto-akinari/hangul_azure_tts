@@ -601,8 +601,12 @@ const mediaRequest=body(
   'h3RuntimePrivateMediaProbe_'
 );
 assert.match(
+  cloud,
+  /H3_RUNTIME_PRIVATE_MEDIA_PATH_[\s\S]*\/__internal\/h3\/media\/v1/
+);
+assert.match(
   mediaRequest,
-  /\/__internal\/h3\/media\/v1/
+  /H3_RUNTIME_PRIVATE_MEDIA_PATH_/
 );
 assert.match(mediaRequest,/bytes=0-0|Content-Range/);
 assert.match(mediaRequest,/h3RuntimeR2CanonicalRecord_/);

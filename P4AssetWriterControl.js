@@ -313,6 +313,15 @@ function h3P4AssetBindingSnapshot(){
 
   var entries=[];
   reviewRows.forEach(function(row){
+    if(row.STATUS==='DONE_R2'){
+      if(row.AUDIO_FILE_ID||row.AUDIO_URL){
+        throw new Error(
+          'P4_ASSET_R2_REVIEW_FAKE_DRIVE_BINDING:'+
+          row.SURFACE_FAMILY+':'+row.SET_ID+':'+row.SLOT_KEY
+        );
+      }
+      return;
+    }
     if(row.STATUS!=='DONE')return;
     if(!activeReviewKeys[row.SURFACE_FAMILY+'|'+row.SET_ID])return;
     entries.push({
@@ -353,6 +362,30 @@ function h3P4AssetBindingSnapshot(){
       var a=individual[slot];
       if(!a || typeof a!=='object'){
         throw new Error('P4_ASSET_INDIVIDUAL_SLOT_MISSING:'+setId+':'+slot);
+      }
+      var authority=String(a.storage_authority||'');
+      if(authority==='CLOUDFLARE_R2_PRIVATE'){
+        if(a.audio_file_id||a.audio_url){
+          throw new Error(
+            'P4_ASSET_R2_LISTENING_FAKE_DRIVE_BINDING:'+
+            setId+':'+slot
+          );
+        }
+        h3P4AssetRequire_(
+          a.listen_gen_id,
+          'individual.listen_gen_id'
+        );
+        h3P4AssetRequire_(
+          a.payload_hash,
+          'individual.payload_hash'
+        );
+        return;
+      }
+      if(authority && authority!=='GOOGLE_DRIVE'){
+        throw new Error(
+          'P4_ASSET_LISTENING_STORAGE_AUTHORITY_INVALID:'+
+          setId+':'+slot
+        );
       }
       entries.push({
         binding_class:'LISTENING_AUDIO_INDIVIDUAL',

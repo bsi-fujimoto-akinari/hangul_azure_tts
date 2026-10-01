@@ -1039,6 +1039,39 @@ function h3PreissueRequireQueue_(
       audioBinding.individual &&
       audioBinding.individual[section];
 
+    var storageMode =
+      String(
+        row[table.map.STORAGE_MODE] || ''
+      );
+    var authority =
+      h3RuntimeAudioBindingAuthority_(
+        binding
+      );
+    var driveMode =
+      storageMode ===
+        HQ_LISTENING_STORAGE_MODE;
+    var r2Mode =
+      storageMode ===
+        HQ_LISTENING_STORAGE_MODE_R2;
+
+    if (
+      (!driveMode && !r2Mode) ||
+      (
+        driveMode &&
+        authority !== 'GOOGLE_DRIVE'
+      ) ||
+      (
+        r2Mode &&
+        authority !==
+          'CLOUDFLARE_R2_PRIVATE'
+      )
+    ) {
+      throw new Error(
+        'PREISSUE_AUDIO_STORAGE_AUTHORITY_MISMATCH:' +
+        section
+      );
+    }
+
     if (
       String(
         row[
@@ -1058,10 +1091,7 @@ function h3PreissueRequireQueue_(
       ) !== '' ||
       !String(
         row[table.map.PROCESSED_AT] || ''
-      ) ||
-      String(
-        row[table.map.STORAGE_MODE] || ''
-      ) !== HQ_LISTENING_STORAGE_MODE
+      )
     ) {
       throw new Error(
         'PREISSUE_AUDIO_ROW_STATE_INVALID:' +
@@ -1123,8 +1153,10 @@ function h3PreissueRequireQueue_(
           String(
             row[table.map.AUDIO_PLAN_JSON] || ''
           ),
-          String(
-            row[table.map.STORAGE_MODE] || ''
+          (
+            r2Mode
+              ? HQ_LISTENING_STORAGE_MODE
+              : storageMode
           )
         ])
       );
@@ -1180,42 +1212,58 @@ function h3PreissueRequireQueue_(
       );
     }
 
-    var file =
-      DriveApp.getFileById(
-        String(
-          row[
-            table.map.AUDIO_FILE_ID
-          ] || ''
-        )
-      );
+    if (driveMode) {
+      var file =
+        DriveApp.getFileById(
+          String(
+            row[
+              table.map.AUDIO_FILE_ID
+            ] || ''
+          )
+        );
 
-    if (
-      file.isTrashed() ||
-      file.getSize() <= 0 ||
-      file.getMimeType() !==
-        'audio/mpeg'
-    ) {
-      throw new Error(
-        'PREISSUE_AUDIO_FILE_INVALID:' +
-        section
-      );
-    }
-
-    var parents =
-      file.getParents();
-    var inTargetFolder = false;
-    while (parents.hasNext()) {
       if (
-        parents.next().getId() ===
-          HQ_AUDIO_LISTENING_FOLDER_ID
+        file.isTrashed() ||
+        file.getSize() <= 0 ||
+        file.getMimeType() !==
+          'audio/mpeg'
       ) {
-        inTargetFolder = true;
+        throw new Error(
+          'PREISSUE_AUDIO_FILE_INVALID:' +
+          section
+        );
       }
-    }
-    if (!inTargetFolder) {
-      throw new Error(
-        'PREISSUE_AUDIO_FOLDER_MISMATCH:' +
-        section
+
+      var parents =
+        file.getParents();
+      var inTargetFolder = false;
+      while (parents.hasNext()) {
+        if (
+          parents.next().getId() ===
+            HQ_AUDIO_LISTENING_FOLDER_ID
+        ) {
+          inTargetFolder = true;
+        }
+      }
+      if (!inTargetFolder) {
+        throw new Error(
+          'PREISSUE_AUDIO_FOLDER_MISMATCH:' +
+          section
+        );
+      }
+    } else {
+      h3RuntimePrivateMediaProbe_(
+        'LISTENING_AUDIO_INDIVIDUAL',
+        {
+          set_id: String(setId),
+          slot_key: section,
+          listen_gen_id:
+            String(
+              row[
+                table.map.LISTEN_GEN_ID
+              ] || ''
+            )
+        }
       );
     }
   });

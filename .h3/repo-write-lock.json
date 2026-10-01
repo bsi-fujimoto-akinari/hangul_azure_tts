@@ -1,5 +1,11 @@
 {
   "schema": "H3_REPO_WRITE_LOCK_V1",
   "repository": "bsi-fujimoto-akinari/hangul_legacy",
-  "lock": null
+  "lock": {
+    "lock_id": "4D-WRPC-5-6-E5CFIX2:be6c838b1f657135fcf355732dbc4655ba9f540e:CHAT",
+    "holder": "CHAT",
+    "base_sha": "be6c838b1f657135fcf355732dbc4655ba9f540e",
+    "acquired_at": "2026-10-01T22:31:48.473Z",
+    "expires_at": "2026-10-01T22:46:48.473Z"
+  }
 }

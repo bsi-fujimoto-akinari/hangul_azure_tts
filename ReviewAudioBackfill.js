@@ -875,6 +875,7 @@ function h3ReviewAudioWriteAssetRow_(sheet,rowNumber,plan,file,status,errorText,
 }
 
 function h3ReviewAudioGeneratePlannedAsset_(ss,plan,repairMode){
+  h3P4AssetWriterRequireDrivePrimary_();
   var sheet=h3ReviewAudioAssetSheet_(ss);
   var row=h3ReviewAudioFindAssetRow_(sheet,plan);
   var migration=null;
@@ -961,6 +962,7 @@ function runRem09D4AudioParityRepair(targetSetId){
   var lock=LockService.getScriptLock();
   lock.waitLock(30000);
   try{
+    h3P4AssetWriterRequireDrivePrimary_();
     var ss=h3ReviewAudioRuntimeSpreadsheet_();
     var fullPlan=h3ReviewAudioPlanForSet_(ss,'5W',setId);
     var plans=fullPlan.filter(function(plan){return plan.slot_key==='D4';});
@@ -1177,10 +1179,17 @@ function h3ReviewAudioEnsureForLockedReview_(surfaceFamily,setId){
 }
 
 function h3ReviewAudioGenerateSet_(family,setId){
-  var ss=h3ReviewAudioRuntimeSpreadsheet_();
-  return h3ReviewAudioPlanForSet_(ss,family,setId).map(function(p){
-    return h3ReviewAudioGeneratePlannedAsset_(ss,p);
-  });
+  var lock=LockService.getScriptLock();
+  lock.waitLock(30000);
+  try{
+    h3P4AssetWriterRequireDrivePrimary_();
+    var ss=h3ReviewAudioRuntimeSpreadsheet_();
+    return h3ReviewAudioPlanForSet_(ss,family,setId).map(function(p){
+      return h3ReviewAudioGeneratePlannedAsset_(ss,p);
+    });
+  }finally{
+    lock.releaseLock();
+  }
 }
 
 

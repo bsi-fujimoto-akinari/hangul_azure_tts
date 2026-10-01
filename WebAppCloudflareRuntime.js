@@ -610,16 +610,18 @@ function h3RuntimeRetainedListening_(setId) {
   ['K1', 'K2', 'K3', 'K4', 'K5'].forEach(function (section) {
     var item = binding && binding.individual &&
       binding.individual[section];
-    if (!item || !item.audio_file_id || !item.audio_url ||
-        !item.payload_hash || !item.listen_gen_id) {
-      throw new Error('RETAINED_DRIVE_ASSET_INVALID');
+    if (!item || !item.payload_hash || !item.listen_gen_id) {
+      throw new Error('RETAINED_AUDIO_BINDING_INVALID');
     }
+    var authority =
+      h3RuntimeAudioBindingAuthority_(item);
     audio[section] = {
       set_id: setId, slot_key: section,
       payload_hash: String(item.payload_hash),
-      file_id: String(item.audio_file_id),
-      url: String(item.audio_url),
-      listen_gen_id: String(item.listen_gen_id)
+      file_id: String(item.audio_file_id || ''),
+      url: String(item.audio_url || ''),
+      listen_gen_id: String(item.listen_gen_id),
+      storage_authority: authority
     };
   });
   return {
@@ -997,15 +999,28 @@ function h3RuntimeListeningMedia_(request) {
         .audio_fallback_url !== binding.url) {
     throw new Error('ASSET_IDENTITY_MISMATCH');
   }
-  var media = h3DriveDataUri_(
-    binding.file_id, 'audio/mpeg', null, 8 * 1024 * 1024
+  var media = h3RuntimeAudioMedia_(
+    {
+      audio_file_id: binding.file_id,
+      audio_url: binding.url,
+      storage_authority:
+        binding.storage_authority
+    },
+    'LISTENING_AUDIO_INDIVIDUAL',
+    {
+      set_id: setId,
+      slot_key: section,
+      listen_gen_id:
+        binding.listen_gen_id
+    },
+    8 * 1024 * 1024
   );
   return {
     schema: 'H3_WEB_MEDIA_V1', mode: 'LISTENING',
     set_id: setId, asset_key: section,
     data_uri: media.data_uri, mime_type: media.mime_type,
     size_bytes: media.size_bytes, trim_start_ms: 0,
-    fallback_url: binding.url
+    fallback_url: media.fallback_url
   };
 }
 
@@ -1046,8 +1061,21 @@ function h3RuntimeReviewMedia_(request) {
         String(matches5L[0].audio_fallback_url || '') !== binding5L.url) {
       throw new Error('ASSET_IDENTITY_MISMATCH');
     }
-    var media5L = h3DriveDataUri_(
-      binding5L.file_id, 'audio/mpeg', null, 8 * 1024 * 1024
+    var media5L = h3RuntimeAudioMedia_(
+      {
+        audio_file_id: binding5L.file_id,
+        audio_url: binding5L.url,
+        storage_authority:
+          binding5L.storage_authority
+      },
+      'LISTENING_AUDIO_INDIVIDUAL',
+      {
+        set_id: review.set_id,
+        slot_key: section,
+        listen_gen_id:
+          binding5L.listen_gen_id
+      },
+      8 * 1024 * 1024
     );
     return {
       schema: 'H3_WEB_MEDIA_V1', mode: 'REVIEW', read_only: true,
@@ -1055,7 +1083,7 @@ function h3RuntimeReviewMedia_(request) {
       set_id: review.set_id, asset_key: section,
       data_uri: media5L.data_uri, mime_type: media5L.mime_type,
       size_bytes: media5L.size_bytes, trim_start_ms: 0,
-      fallback_url: binding5L.url
+      fallback_url: media5L.fallback_url
     };
   }
 
@@ -1080,8 +1108,16 @@ function h3RuntimeReviewMedia_(request) {
   if (binding.audio_text_sha256 !== h3ReviewAudioSha256_(text)) {
     throw new Error('ASSET_HASH_MISMATCH');
   }
-  var media = h3DriveDataUri_(
-    binding.audio_file_id, 'audio/mpeg', null, 8 * 1024 * 1024
+  var media = h3RuntimeAudioMedia_(
+    binding,
+    'REVIEW_AUDIO',
+    {
+      surface_family:
+        binding.sidecar_family,
+      set_id: review.set_id,
+      slot_key: binding.slot_key
+    },
+    8 * 1024 * 1024
   );
   return {
     schema: 'H3_WEB_MEDIA_V1', mode: 'REVIEW', read_only: true,
@@ -1089,7 +1125,7 @@ function h3RuntimeReviewMedia_(request) {
     set_id: review.set_id, asset_key: binding.asset_key,
     data_uri: media.data_uri, mime_type: media.mime_type,
     size_bytes: media.size_bytes, trim_start_ms: 0,
-    fallback_url: binding.audio_url,
+    fallback_url: media.fallback_url,
     review_audio_binding_contract_id:
       H3_REVIEW_AUDIO_BINDING_CONTRACT_ID_
   };

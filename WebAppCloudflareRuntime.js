@@ -140,6 +140,244 @@ function h3RuntimeRpc_(operation, payload) {
   return body.data;
 }
 
+
+var H3_RUNTIME_R2_RECEIPT_SCHEMA_ =
+  'H3_R2_PRIMARY_ASSET_WRITE_RECEIPT_V1';
+var H3_RUNTIME_R2_STORAGE_AUTHORITY_ =
+  'CLOUDFLARE_R2_PRIVATE';
+
+function h3RuntimeR2AssetSpec_(assetClass) {
+  var specs = {
+    REVIEW_AUDIO: {
+      identity_fields: ['set_id','slot_key','surface_family'],
+      mime_types: ['audio/mpeg'],
+      object_prefix: 'v1/review_audio/sha256/'
+    },
+    LISTENING_AUDIO_INDIVIDUAL: {
+      identity_fields: ['listen_gen_id','set_id','slot_key'],
+      mime_types: ['audio/mpeg'],
+      object_prefix: 'v1/listening_audio_individual/sha256/'
+    },
+    LISTENING_K1_IMAGE: {
+      identity_fields: ['k1_ready_id'],
+      mime_types: ['image/png','image/jpeg','image/webp'],
+      object_prefix: 'v1/LISTENING_K1_IMAGE/sha256/'
+    }
+  };
+  var spec = specs[String(assetClass || '')];
+  if (!spec) throw new Error('R2_PRIMARY_ASSET_CLASS_INVALID');
+  return spec;
+}
+
+function h3RuntimeR2Nonblank_(value) {
+  return typeof value === 'string' &&
+    value.length > 0 &&
+    !/[\x00-\x1f]/.test(value);
+}
+
+function h3RuntimeR2CanonicalRecord_(value, code, expectedFields) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(code);
+  }
+  var keys = Object.keys(value).sort();
+  if (expectedFields) {
+    var expected = expectedFields.slice().sort();
+    if (JSON.stringify(keys) !== JSON.stringify(expected)) {
+      throw new Error(code);
+    }
+  }
+  var out = {};
+  keys.forEach(function(key) {
+    if (!h3RuntimeR2Nonblank_(key) ||
+        !h3RuntimeR2Nonblank_(value[key])) {
+      throw new Error(code);
+    }
+    out[key] = String(value[key]);
+  });
+  return out;
+}
+
+function h3RuntimeR2CanonicalNullableRecord_(value, code) {
+  return value === null
+    ? null
+    : h3RuntimeR2CanonicalRecord_(value, code, null);
+}
+
+function h3RuntimeR2HexFromDigest_(digest) {
+  return digest.map(function(b) {
+    return ('0' + (((b + 256) % 256).toString(16))).slice(-2);
+  }).join('');
+}
+
+function h3RuntimeR2Sha256Text_(value) {
+  return h3RuntimeR2HexFromDigest_(
+    Utilities.computeDigest(
+      Utilities.DigestAlgorithm.SHA_256,
+      String(value),
+      Utilities.Charset.UTF_8
+    )
+  );
+}
+
+function h3RuntimeR2Sha256Bytes_(bytes) {
+  return h3RuntimeR2HexFromDigest_(
+    Utilities.computeDigest(
+      Utilities.DigestAlgorithm.SHA_256,
+      bytes
+    )
+  );
+}
+
+function h3RuntimeR2ValidateInput_(request) {
+  var required = [
+    'asset_class',
+    'bytes',
+    'drive_rollback_target_class',
+    'logical_binding_identity',
+    'mime_type',
+    'pre_cutover_or_previous_drive_binding_snapshot',
+    'written_at'
+  ].sort();
+  if (!request || typeof request !== 'object' || Array.isArray(request) ||
+      JSON.stringify(Object.keys(request).sort()) !== JSON.stringify(required)) {
+    throw new Error('R2_PRIMARY_WRITE_REQUEST_INVALID');
+  }
+
+  var assetClass = String(request.asset_class || '');
+  var spec = h3RuntimeR2AssetSpec_(assetClass);
+  var identity = h3RuntimeR2CanonicalRecord_(
+    request.logical_binding_identity,
+    'R2_PRIMARY_LOGICAL_IDENTITY_INVALID',
+    spec.identity_fields
+  );
+  if (!Array.isArray(request.bytes) || request.bytes.length < 1 ||
+      request.bytes.some(function(b) {
+        return !Number.isInteger(b) || b < -128 || b > 127;
+      })) {
+    throw new Error('R2_PRIMARY_BYTES_INVALID');
+  }
+  var mimeType = String(request.mime_type || '');
+  if (spec.mime_types.indexOf(mimeType) < 0) {
+    throw new Error('R2_PRIMARY_MIME_TYPE_INVALID');
+  }
+  var writtenAt = String(request.written_at || '');
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(writtenAt)) {
+    throw new Error('R2_PRIMARY_WRITTEN_AT_INVALID');
+  }
+  if (!h3RuntimeR2Nonblank_(request.drive_rollback_target_class)) {
+    throw new Error('R2_PRIMARY_ROLLBACK_TARGET_INVALID');
+  }
+  return {
+    asset_class: assetClass,
+    spec: spec,
+    logical_binding_identity: identity,
+    bytes: request.bytes.slice(),
+    mime_type: mimeType,
+    written_at: writtenAt,
+    pre_cutover_or_previous_drive_binding_snapshot:
+      h3RuntimeR2CanonicalNullableRecord_(
+        request.pre_cutover_or_previous_drive_binding_snapshot,
+        'R2_PRIMARY_DRIVE_SNAPSHOT_INVALID'
+      ),
+    drive_rollback_target_class:
+      String(request.drive_rollback_target_class)
+  };
+}
+
+function h3RuntimeR2ValidateReceipt_(receipt, input) {
+  var fields = [
+    'asset_class',
+    'drive_rollback_target_class',
+    'logical_binding_identity',
+    'logical_binding_identity_sha256',
+    'mime_type',
+    'pre_cutover_or_previous_drive_binding_snapshot',
+    'r2_object_key',
+    'receipt_id',
+    'schema',
+    'size_bytes',
+    'source_byte_sha256',
+    'status',
+    'storage_authority',
+    'written_at'
+  ].sort();
+  if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt) ||
+      JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(fields)) {
+    throw new Error('R2_PRIMARY_RECEIPT_INVALID');
+  }
+  if (receipt.schema !== H3_RUNTIME_R2_RECEIPT_SCHEMA_ ||
+      receipt.asset_class !== input.asset_class ||
+      receipt.storage_authority !== H3_RUNTIME_R2_STORAGE_AUTHORITY_ ||
+      receipt.status !== 'COMMITTED' ||
+      receipt.mime_type !== input.mime_type ||
+      receipt.drive_rollback_target_class !==
+        input.drive_rollback_target_class ||
+      !Number.isInteger(receipt.size_bytes) ||
+      receipt.size_bytes !== input.bytes.length ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(
+        String(receipt.written_at || '')
+      )) {
+    throw new Error('R2_PRIMARY_RECEIPT_INVALID');
+  }
+
+  var receiptIdentity = h3RuntimeR2CanonicalRecord_(
+    receipt.logical_binding_identity,
+    'R2_PRIMARY_RECEIPT_INVALID',
+    input.spec.identity_fields
+  );
+  if (JSON.stringify(receiptIdentity) !==
+      JSON.stringify(input.logical_binding_identity)) {
+    throw new Error('R2_PRIMARY_RECEIPT_IDENTITY_MISMATCH');
+  }
+
+  var receiptSnapshot = h3RuntimeR2CanonicalNullableRecord_(
+    receipt.pre_cutover_or_previous_drive_binding_snapshot,
+    'R2_PRIMARY_RECEIPT_INVALID'
+  );
+  if (JSON.stringify(receiptSnapshot) !==
+      JSON.stringify(input.pre_cutover_or_previous_drive_binding_snapshot)) {
+    throw new Error('R2_PRIMARY_RECEIPT_DRIVE_SNAPSHOT_MISMATCH');
+  }
+
+  var identityJson = JSON.stringify(input.logical_binding_identity);
+  var identityHash = h3RuntimeR2Sha256Text_(
+    input.asset_class + '\n' + identityJson
+  );
+  var sourceHash = h3RuntimeR2Sha256Bytes_(input.bytes);
+  var receiptId = h3RuntimeR2Sha256Text_(
+    H3_RUNTIME_R2_RECEIPT_SCHEMA_ + '\n' +
+      input.asset_class + '\n' + identityHash
+  );
+
+  if (receipt.logical_binding_identity_sha256 !== identityHash ||
+      receipt.source_byte_sha256 !== sourceHash ||
+      receipt.receipt_id !== receiptId ||
+      receipt.r2_object_key !== input.spec.object_prefix + sourceHash ||
+      !/^[0-9a-f]{64}$/.test(String(receipt.receipt_id || '')) ||
+      !/^[0-9a-f]{64}$/.test(
+        String(receipt.logical_binding_identity_sha256 || '')
+      ) ||
+      !/^[0-9a-f]{64}$/.test(String(receipt.source_byte_sha256 || ''))) {
+    throw new Error('R2_PRIMARY_RECEIPT_HASH_MISMATCH');
+  }
+  return receipt;
+}
+
+function h3RuntimeAssetWriteR2_(request) {
+  var input = h3RuntimeR2ValidateInput_(request);
+  var receipt = h3RuntimeRpc_('ASSET_WRITE_R2', {
+    asset_class: input.asset_class,
+    logical_binding_identity: input.logical_binding_identity,
+    bytes_base64: Utilities.base64Encode(input.bytes),
+    mime_type: input.mime_type,
+    written_at: input.written_at,
+    pre_cutover_or_previous_drive_binding_snapshot:
+      input.pre_cutover_or_previous_drive_binding_snapshot,
+    drive_rollback_target_class: input.drive_rollback_target_class
+  });
+  return h3RuntimeR2ValidateReceipt_(receipt, input);
+}
+
 function h3RuntimeRetainedListening_(setId) {
   if (!/^H3-\d{8}-L\d{2,3}$/.test(String(setId || ''))) {
     throw new Error('LISTENING_RENDER_REQUEST_INVALID');

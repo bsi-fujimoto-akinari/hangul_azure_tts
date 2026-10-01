@@ -325,6 +325,264 @@ const generateSet=body(review,'h3ReviewAudioGenerateSet_','runReviewAudioPilotFa
 assert.match(generateSet,/LockService\.getScriptLock\(\)/);
 assert.match(generateSet,/h3ReviewAudioWriterMode_\(\)/);
 
+const pendingAudio=body(
+  code,
+  'processPendingAudioForSet',
+  'processLatestPendingAudioJob'
+);
+const latestAudio=body(
+  code,
+  'processLatestPendingAudioJob',
+  'idle_'
+);
+const listeningQueue=body(
+  code,
+  'processListeningAudioQueue_',
+  'processListeningAudioSet_'
+);
+const listeningSet=body(
+  code,
+  'processListeningAudioSet_',
+  'snapshotListeningSet_'
+);
+const listeningDispatch=body(
+  code,
+  'runListeningSetBatch_',
+  'runListeningSetBatchDrive_'
+);
+const listeningDrive=body(
+  code,
+  'runListeningSetBatchDrive_'
+);
+const listeningR2=body(
+  code,
+  'runListeningSetBatchR2_',
+  'runListeningSetBatch_'
+);
+const r2MemberAssert=body(
+  code,
+  'h3ListeningAssertDoneR2Member_',
+  'listeningR2BatchState_'
+);
+
+assert.match(
+  pendingAudio,
+  /h3ListeningAudioWriterMode_\(\)/
+);
+assert.match(
+  pendingAudio,
+  /normalizedMode === '5W'/
+);
+assert.match(
+  pendingAudio,
+  /h3P4AssetWriterRequireDrivePrimary_\(\)/
+);
+assert.match(
+  latestAudio,
+  /H3_P4_ASSET_WRITER_R2_PRIMARY_/
+);
+assert.match(
+  latestAudio,
+  /processListeningAudioQueue_/
+);
+assert.match(
+  latestAudio,
+  /h3P4AssetWriterRequireDrivePrimary_\(\)/
+);
+assert.match(
+  listeningQueue,
+  /LISTENING_R2_SYSTEM_TEST_SINGLETON_FORBIDDEN/
+);
+assert.match(
+  listeningSet,
+  /h3ListeningAudioWriterMode_\(\)/
+);
+assert.match(
+  listeningDispatch,
+  /H3_P4_ASSET_WRITER_DRIVE_PRIMARY_/
+);
+assert.match(
+  listeningDispatch,
+  /runListeningSetBatchDrive_\(/
+);
+assert.match(
+  listeningDispatch,
+  /runListeningSetBatchR2_\(/
+);
+assert.match(listeningDrive,/DriveApp\.getFolderById/);
+assert.match(listeningDrive,/\.createFile\(/);
+assert.match(
+  listeningR2,
+  /asset_class:\s*'LISTENING_AUDIO_INDIVIDUAL'/
+);
+assert.match(
+  listeningR2,
+  /h3RuntimeAssetWriteR2_\(/
+);
+assert.match(
+  listeningR2,
+  /HQ_LISTENING_STORAGE_MODE_R2/
+);
+assert.doesNotMatch(listeningR2,/DriveApp\./);
+assert.doesNotMatch(listeningR2,/\.createFile\(/);
+assert.doesNotMatch(
+  listeningR2,
+  /LISTENING_AUDIO_COMBINED/
+);
+assert.match(
+  r2MemberAssert,
+  /values\[10\]/
+);
+assert.match(
+  r2MemberAssert,
+  /values\[11\]/
+);
+assert.match(
+  r2MemberAssert,
+  /HQ_LISTENING_STORAGE_MODE_R2/
+);
+
+// Dynamic R2 batch fixture: all five receipts must precede final row publication.
+const r2ctx2=vm.createContext({
+  Date,JSON,String,Array,Object,Error,Set,
+  HQ_LISTENING_SET_SIZE:5,
+  HQ_LISTENING_STORAGE_MODE:'listening_audio_v1',
+  HQ_LISTENING_STORAGE_MODE_R2:'listening_audio_r2_v1',
+  HQ_LISTENING_AUDIO_SOURCE_ATTESTATION_SCHEMA:
+    'H3_LISTENING_AUDIO_SOURCE_ATTESTATION_V1',
+  SpreadsheetApp:{flush(){}},
+  UrlFetchApp:{
+    fetchAll:reqs=>reqs.map((_,i)=>({index:i}))
+  }
+});
+vm.runInContext(listeningR2,r2ctx2);
+
+const eventLog=[];
+const rows={};
+const members2=['K1','K2','K3','K4','K5'].map((section,i)=>{
+  const values=Array(15).fill('');
+  values[0]='H3-L-20261002-'+String(i+1).padStart(3,'0');
+  values[1]='pending';
+  values[3]='H3-20261002-L01';
+  values[5]=section;
+  values[14]='listening_audio_v1';
+  const member={row:i+2,values,note:''};
+  rows[member.row]=member;
+  return member;
+});
+const sheet2={
+  getRange(row,col,_rc,_cc){
+    return{
+      setValue(value){
+        eventLog.push('set:'+row+':'+col+':'+value);
+        rows[row].values[col-1]=value;
+      },
+      clearContent(){
+        eventLog.push('clear:'+row+':'+col);
+        rows[row].values[col-1]='';
+      },
+      setValues(values){
+        const data=values[0];
+        eventLog.push(
+          'setValues:'+row+':'+col+':'+data.length
+        );
+        data.forEach((v,i)=>{
+          rows[row].values[col-1+i]=v;
+        });
+      }
+    };
+  }
+};
+r2ctx2.readListeningSnapshotJob_=member=>({
+  id:member.values[0],
+  status:member.values[1],
+  parentSetId:member.values[3],
+  section:member.values[5],
+  storageMode:member.values[14],
+  hash:'h'.repeat(64),
+  plan:[]
+});
+r2ctx2.listeningR2BatchState_=(_member,job)=>({
+  id:job.id,
+  hash:job.hash,
+  voice:'Hyunsu',
+  audioVersion:'v',
+  stage:'r2_prepared',
+  attempts:0,
+  storageAuthority:'CLOUDFLARE_R2_PRIVATE'
+});
+r2ctx2.listeningAudioSpec_=job=>({
+  ssml:'<speak>'+job.section+'</speak>',
+  assignment:'VOICE=Hyunsu'
+});
+r2ctx2.assertListeningBatchCurrent_=()=>{};
+r2ctx2.listeningBatchCheckpoint_=()=>{};
+r2ctx2.azureTtsFetchAllRequest_=ssml=>({ssml});
+r2ctx2.azureTtsBlobFromResponse_=()=>({
+  getBytes:()=>Array(128).fill(1)
+});
+r2ctx2.h3RuntimeAssetWriteR2_=request=>{
+  eventLog.push(
+    'receipt:'+request.logical_binding_identity.slot_key
+  );
+  assert.equal(
+    request.asset_class,
+    'LISTENING_AUDIO_INDIVIDUAL'
+  );
+  assert.equal(
+    request.logical_binding_identity.set_id,
+    'H3-20261002-L01'
+  );
+  assert.equal(
+    request.pre_cutover_or_previous_drive_binding_snapshot,
+    null
+  );
+  return{
+    schema:'H3_R2_PRIMARY_ASSET_WRITE_RECEIPT_V1',
+    receipt_id:'a'.repeat(64),
+    storage_authority:'CLOUDFLARE_R2_PRIVATE',
+    status:'COMMITTED'
+  };
+};
+r2ctx2.h3ListeningAssertDoneR2Member_=member=>{
+  assert.equal(member.values[1],'done');
+  assert.equal(member.values[10],'');
+  assert.equal(member.values[11],'');
+  assert.equal(
+    member.values[14],
+    'listening_audio_r2_v1'
+  );
+};
+r2ctx2.publishListeningBatchError_=(_s,_i,stage,e)=>{
+  throw new Error(stage+':'+e.message);
+};
+
+const batchResult=
+  r2ctx2.runListeningSetBatchR2_(
+    sheet2,
+    'H3-20261002-L01',
+    members2,
+    {},
+    {sha256:'f'.repeat(64)}
+  );
+assert.equal(batchResult.status,'done');
+assert.equal(
+  eventLog.filter(x=>x.startsWith('receipt:')).length,
+  5
+);
+const lastReceipt=Math.max(
+  ...eventLog.map((x,i)=>x.startsWith('receipt:')?i:-1)
+);
+const firstFinal=eventLog.findIndex(
+  x=>x.endsWith(':9:7')
+);
+assert.ok(lastReceipt>=0);
+assert.ok(firstFinal>lastReceipt);
+assert.equal(
+  eventLog.some(x=>x.includes('COMBINED')),
+  false
+);
+
 const quiesceBody=body(source,'h3P4AssetWriterQuiesce','h3P4AssetWriterSwitchToR2Primary');
 const r2Body=body(source,'h3P4AssetWriterSwitchToR2Primary','h3P4AssetWriterResumeDrivePrimary');
 const resumeBody=body(source,'h3P4AssetWriterResumeDrivePrimary','h3P4AssetSheetRows_');
@@ -341,4 +599,4 @@ assert.match(r2Body,/before!==H3_P4_ASSET_WRITER_QUIESCED_/);
 assert.doesNotMatch(r2Body,/before===H3_P4_ASSET_WRITER_DRIVE_PRIMARY_/);
 assert.match(resumeBody,/before!==H3_P4_ASSET_WRITER_R2_PRIMARY_/);
 
-console.log(JSON.stringify({status:'PASS',tests:57}));
+console.log(JSON.stringify({status:'PASS',tests:82}));

@@ -5,6 +5,13 @@ const vm=require('node:vm');
 const source=fs.readFileSync('P4AssetWriterControl.js','utf8');
 const code=fs.readFileSync('Code.js','utf8');
 const review=fs.readFileSync('ReviewAudioBackfill.js','utf8');
+const cloud=fs.readFileSync('WebAppCloudflareRuntime.js','utf8');
+const orchestrator=fs.readFileSync('ListeningBackendOrchestrator.js','utf8');
+const preissue=fs.readFileSync('WebAppPreissue.js','utf8');
+const productionRender=fs.readFileSync('WebAppProductionRender.js','utf8');
+const reviewCore=fs.readFileSync('WebAppReviewCore.js','utf8');
+const reviewPersistence=fs.readFileSync('WebAppReviewPersistence.js','utf8');
+const surfaceReview=fs.readFileSync('WebAppSurfaceReviewBridge.js','utf8');
 
 const props=new Map();
 const properties={
@@ -583,6 +590,154 @@ assert.equal(
   false
 );
 
+const bindingAuthority=body(
+  cloud,
+  'h3RuntimeAudioBindingAuthority_',
+  'h3RuntimeAudioMedia_'
+);
+const mediaRequest=body(
+  cloud,
+  'h3RuntimePrivateMediaRequest_',
+  'h3RuntimePrivateMediaProbe_'
+);
+assert.match(
+  mediaRequest,
+  /\/__internal\/h3\/media\/v1/
+);
+assert.match(mediaRequest,/bytes=0-0|Content-Range/);
+assert.match(mediaRequest,/h3RuntimeR2CanonicalRecord_/);
+assert.match(mediaRequest,/UrlFetchApp\.fetch/);
+
+const authorityContext=vm.createContext({
+  String,Array,Error
+});
+vm.runInContext(bindingAuthority,authorityContext);
+assert.equal(
+  authorityContext.h3RuntimeAudioBindingAuthority_({
+    audio_file_id:'FILE',
+    audio_url:'https://drive.example/FILE'
+  }),
+  'GOOGLE_DRIVE'
+);
+assert.equal(
+  authorityContext.h3RuntimeAudioBindingAuthority_({
+    audio_file_id:'',
+    audio_url:'',
+    storage_authority:'CLOUDFLARE_R2_PRIVATE'
+  }),
+  'CLOUDFLARE_R2_PRIVATE'
+);
+assert.throws(
+  ()=>authorityContext.h3RuntimeAudioBindingAuthority_({
+    audio_file_id:'FAKE',
+    audio_url:'',
+    storage_authority:'CLOUDFLARE_R2_PRIVATE'
+  }),
+  /AUDIO_R2_FAKE_DRIVE_BINDING/
+);
+
+const backendBinding=body(
+  orchestrator,
+  'h3BackendDoneAudioBinding_',
+  'h3BackendBindAudioToPayload_'
+);
+assert.match(
+  backendBinding,
+  /HQ_LISTENING_STORAGE_MODE_R2/
+);
+assert.match(
+  backendBinding,
+  /h3RuntimePrivateMediaProbe_\(/
+);
+assert.match(
+  backendBinding,
+  /storage_authority:\s*'CLOUDFLARE_R2_PRIVATE'/
+);
+
+const preissueQueue=body(
+  preissue,
+  'h3PreissueRequireQueue_',
+  'h3PreissueRequireScript_'
+);
+assert.match(preissueQueue,/r2Mode/);
+assert.match(
+  preissueQueue,
+  /h3RuntimePrivateMediaProbe_\(/
+);
+assert.match(
+  preissueQueue,
+  /r2Mode\s*\? HQ_LISTENING_STORAGE_MODE/
+);
+
+const productionMedia=body(
+  productionRender,
+  'getProductionMediaPayload_',
+  'h3ProdReviewScriptUrl_'
+);
+assert.match(
+  productionMedia,
+  /h3RuntimeAudioMedia_\(/
+);
+assert.match(
+  productionMedia,
+  /LISTENING_AUDIO_INDIVIDUAL/
+);
+
+const reviewResolve=body(
+  reviewCore,
+  'h3ReviewAudioBindingResolve_',
+  'h3ReviewAudioBindingResolveAll_'
+);
+assert.match(reviewResolve,/DONE_R2/);
+assert.match(
+  reviewResolve,
+  /CLOUDFLARE_R2_PRIVATE/
+);
+assert.match(
+  reviewResolve,
+  /!get\('AUDIO_FILE_ID'\)/
+);
+assert.match(
+  reviewResolve,
+  /!get\('AUDIO_URL'\)/
+);
+
+const persistentMedia=body(
+  reviewPersistence,
+  'getPersistentReviewMediaPayload_',
+  'getLegacyPersistentReviewMediaPayload_'
+);
+assert.match(
+  persistentMedia,
+  /h3RuntimeAudioMedia_\(/
+);
+const writtenMedia=body(
+  reviewPersistence,
+  'getWrittenPersistentReviewMediaPayload_',
+  'h3WrittenProductionReviewBuildPayload_'
+);
+assert.match(
+  writtenMedia,
+  /h3RuntimeAudioMedia_\(/
+);
+const surfaceMedia=body(
+  surfaceReview,
+  'h3SurfaceReviewMedia_'
+);
+assert.match(
+  surfaceMedia,
+  /h3RuntimeAudioMedia_\(/
+);
+
+assert.match(
+  source,
+  /P4_ASSET_R2_REVIEW_FAKE_DRIVE_BINDING/
+);
+assert.match(
+  source,
+  /P4_ASSET_R2_LISTENING_FAKE_DRIVE_BINDING/
+);
+
 const quiesceBody=body(source,'h3P4AssetWriterQuiesce','h3P4AssetWriterSwitchToR2Primary');
 const r2Body=body(source,'h3P4AssetWriterSwitchToR2Primary','h3P4AssetWriterResumeDrivePrimary');
 const resumeBody=body(source,'h3P4AssetWriterResumeDrivePrimary','h3P4AssetSheetRows_');
@@ -599,4 +754,4 @@ assert.match(r2Body,/before!==H3_P4_ASSET_WRITER_QUIESCED_/);
 assert.doesNotMatch(r2Body,/before===H3_P4_ASSET_WRITER_DRIVE_PRIMARY_/);
 assert.match(resumeBody,/before!==H3_P4_ASSET_WRITER_R2_PRIMARY_/);
 
-console.log(JSON.stringify({status:'PASS',tests:82}));
+console.log(JSON.stringify({status:'PASS',tests:108}));

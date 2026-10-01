@@ -861,7 +861,7 @@ jobs:
           const vm = require('vm');
           const surfaceSource = fs.readFileSync('WebAppSurfaceCommon.js','utf8');
           const source = fs.readFileSync('WebAppProductionRender.js','utf8');
-          const ctx = vm.createContext({console});
+          const ctx = vm.createContext({console,h3RuntimeAudioBindingAuthority_:binding=>{if(binding&&binding.audio_file_id&&binding.audio_url)return 'GOOGLE_DRIVE';if(binding&&!binding.audio_file_id&&!binding.audio_url&&binding.storage_authority==='CLOUDFLARE_R2_PRIVATE')return 'CLOUDFLARE_R2_PRIVATE';throw new Error('invalid binding');}});
 
           ctx.H3_WEB_RUNTIME_SPREADSHEET_ID = 'S';
           ctx.H3_WEB_PROD_SECTIONS = ['K1','K2','K3','K4','K5'];

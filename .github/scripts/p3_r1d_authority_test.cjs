@@ -92,11 +92,11 @@ function context(mode,locked){
   const sourceHash=crypto.createHash('sha256')
     .update(Buffer.from(bytes.map(v=>(v+256)%256))).digest('hex');
   const identityHash=sha(
-    'LISTENING_AUDIO_INDIVIDUAL\\n'+identityJson
+    'LISTENING_AUDIO_INDIVIDUAL\n'+identityJson
   );
   const receiptId=sha(
-    'H3_R2_PRIMARY_ASSET_WRITE_RECEIPT_V1\\n'+
-      'LISTENING_AUDIO_INDIVIDUAL\\n'+identityHash
+    'H3_R2_PRIMARY_ASSET_WRITE_RECEIPT_V1\n'+
+      'LISTENING_AUDIO_INDIVIDUAL\n'+identityHash
   );
   let observed=null;
   const receipt={

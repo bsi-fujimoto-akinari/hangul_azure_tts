@@ -1706,8 +1706,6 @@ function h3BackendDoneAudioBinding_(
           'done' ||
         !String(values[8] || '') ||
         !String(values[9] || '') ||
-        !String(values[10] || '') ||
-        !String(values[11] || '') ||
         String(values[12] || '') !== '' ||
         !String(values[13] || '')
       ) {
@@ -1732,23 +1730,78 @@ function h3BackendDoneAudioBinding_(
         );
       }
 
-      var file =
-        DriveApp.getFileById(
-          String(values[10])
-        );
+      var storageMode =
+        String(values[14] || '');
+      var fileId =
+        String(values[10] || '');
+      var audioUrl =
+        String(values[11] || '');
+
       if (
-        file.isTrashed() ||
-        String(values[11])
-          .indexOf(
-            '/d/' +
-            String(values[10])
+        storageMode ===
+          HQ_LISTENING_STORAGE_MODE
+      ) {
+        if (!fileId || !audioUrl) {
+          throw new Error(
+            'BACKEND_AUDIO_DRIVE_BINDING_INVALID:' +
+            section
+          );
+        }
+        var file =
+          DriveApp.getFileById(
+            fileId
+          );
+        if (
+          file.isTrashed() ||
+          audioUrl.indexOf(
+            '/d/' + fileId
           ) < 0
+        ) {
+          throw new Error(
+            'BACKEND_AUDIO_FILE_INVALID:' +
+            section
+          );
+        }
+        individual[section] = {
+          listen_gen_id:
+            String(values[0]),
+          payload_hash:
+            String(values[8]),
+          assignment:
+            String(values[9]),
+          audio_file_id:
+            fileId,
+          audio_url:
+            audioUrl,
+          processed_at:
+            String(values[13])
+        };
+        return;
+      }
+
+      if (
+        storageMode !==
+          HQ_LISTENING_STORAGE_MODE_R2 ||
+        fileId ||
+        audioUrl
       ) {
         throw new Error(
-          'BACKEND_AUDIO_FILE_INVALID:' +
+          'BACKEND_AUDIO_R2_BINDING_INVALID:' +
           section
         );
       }
+
+      h3RuntimePrivateMediaProbe_(
+        'LISTENING_AUDIO_INDIVIDUAL',
+        {
+          set_id:
+            String(context.setId),
+          slot_key:
+            section,
+          listen_gen_id:
+            String(values[0])
+        }
+      );
 
       individual[section] = {
         listen_gen_id:
@@ -1757,12 +1810,12 @@ function h3BackendDoneAudioBinding_(
           String(values[8]),
         assignment:
           String(values[9]),
-        audio_file_id:
-          String(values[10]),
-        audio_url:
-          String(values[11]),
+        audio_file_id: '',
+        audio_url: '',
         processed_at:
-          String(values[13])
+          String(values[13]),
+        storage_authority:
+          'CLOUDFLARE_R2_PRIVATE'
       };
     });
 

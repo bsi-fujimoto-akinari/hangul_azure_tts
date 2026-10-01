@@ -14,9 +14,19 @@ const properties={
   deleteProperty:key=>props.delete(String(key))
 };
 let held=false;
+let waitCount=0;
+let releaseCount=0;
 const lock={
-  waitLock(){assert.equal(held,false);held=true;},
-  releaseLock(){assert.equal(held,true);held=false;}
+  waitLock(){
+    assert.equal(held,false);
+    held=true;
+    waitCount++;
+  },
+  releaseLock(){
+    assert.equal(held,true);
+    held=false;
+    releaseCount++;
+  }
 };
 const binding={
   individual:Object.fromEntries(['K1','K2','K3','K4','K5'].map((slot,i)=>[slot,{
@@ -67,15 +77,82 @@ const context=vm.createContext({
 vm.runInContext(source,context);
 
 assert.equal(context.h3P4AssetWriterMode_(),'DRIVE_PRIMARY');
-assert.equal(context.h3P4AssetWriterStatus().fallback_trigger_count,1);
+let status=context.h3P4AssetWriterStatus();
+assert.equal(status.schema,'H3_P4_ASSET_WRITER_STATUS_V1');
+assert.equal(status.mode,'DRIVE_PRIMARY');
+assert.equal(status.quiesce_watermark,'');
+assert.equal(status.transition_watermark,'');
+assert.equal(status.fallback_trigger_count,1);
+assert.equal(status.mutation_count,0);
+
+assert.throws(
+  ()=>context.h3P4AssetWriterSwitchToR2Primary(),
+  /P4_ASSET_WRITER_R2_PRIMARY_PRECONDITION:DRIVE_PRIMARY/
+);
+assert.equal(context.h3P4AssetWriterMode_(),'DRIVE_PRIMARY');
+
 const q=context.h3P4AssetWriterQuiesce();
+assert.equal(q.before,'DRIVE_PRIMARY');
 assert.equal(q.after,'QUIESCED');
 assert.equal(q.mutation_count,1);
+assert.equal(q.idempotent,false);
+assert.ok(q.quiesce_watermark);
+assert.ok(q.transition_watermark);
 assert.throws(()=>context.h3P4AssetWriterRequireDrivePrimary_(),/P4_ASSET_WRITERS_QUIESCED/);
-assert.equal(context.h3P4AssetWriterQuiesce().idempotent,true);
+
+const q2=context.h3P4AssetWriterQuiesce();
+assert.equal(q2.after,'QUIESCED');
+assert.equal(q2.mutation_count,0);
+assert.equal(q2.idempotent,true);
+assert.equal(q2.quiesce_watermark,q.quiesce_watermark);
+assert.equal(q2.transition_watermark,q.transition_watermark);
+
+const r2=context.h3P4AssetWriterSwitchToR2Primary();
+assert.equal(r2.before,'QUIESCED');
+assert.equal(r2.after,'R2_PRIMARY');
+assert.equal(r2.mutation_count,1);
+assert.equal(r2.idempotent,false);
+assert.equal(r2.quiesce_watermark,q.quiesce_watermark);
+assert.ok(r2.transition_watermark);
+status=context.h3P4AssetWriterStatus();
+assert.equal(status.mode,'R2_PRIMARY');
+assert.equal(status.quiesce_watermark,q.quiesce_watermark);
+assert.equal(status.transition_watermark,r2.transition_watermark);
+assert.throws(()=>context.h3P4AssetWriterRequireDrivePrimary_(),/P4_ASSET_WRITERS_QUIESCED/);
+
+const r2Again=context.h3P4AssetWriterSwitchToR2Primary();
+assert.equal(r2Again.after,'R2_PRIMARY');
+assert.equal(r2Again.mutation_count,0);
+assert.equal(r2Again.idempotent,true);
+assert.equal(r2Again.transition_watermark,r2.transition_watermark);
+
 const resume=context.h3P4AssetWriterResumeDrivePrimary();
+assert.equal(resume.before,'R2_PRIMARY');
 assert.equal(resume.after,'DRIVE_PRIMARY');
+assert.equal(resume.mutation_count,1);
+assert.equal(resume.idempotent,false);
+assert.ok(resume.transition_watermark);
+status=context.h3P4AssetWriterStatus();
+assert.equal(status.mode,'DRIVE_PRIMARY');
+assert.equal(status.quiesce_watermark,'');
+assert.equal(status.transition_watermark,resume.transition_watermark);
 assert.equal(context.h3P4AssetWriterRequireDrivePrimary_(),'DRIVE_PRIMARY');
+
+const resumeAgain=context.h3P4AssetWriterResumeDrivePrimary();
+assert.equal(resumeAgain.after,'DRIVE_PRIMARY');
+assert.equal(resumeAgain.mutation_count,0);
+assert.equal(resumeAgain.idempotent,true);
+assert.equal(resumeAgain.transition_watermark,resume.transition_watermark);
+
+props.set('H3_P4_ASSET_WRITER_MODE','UNKNOWN_MODE');
+assert.throws(()=>context.h3P4AssetWriterMode_(),/P4_ASSET_WRITER_MODE_INVALID:UNKNOWN_MODE/);
+assert.throws(()=>context.h3P4AssetWriterStatus(),/P4_ASSET_WRITER_MODE_INVALID:UNKNOWN_MODE/);
+props.delete('H3_P4_ASSET_WRITER_MODE');
+assert.equal(context.h3P4AssetWriterMode_(),'DRIVE_PRIMARY');
+
+assert.equal(waitCount,7);
+assert.equal(releaseCount,7);
+assert.equal(held,false);
 
 props.set('REVIEW_AUDIO_SHEET_ID','SHEET');
 props.set('K1_READY_SHEET_ID','SHEET');
@@ -106,4 +183,20 @@ const generateSet=body(review,'h3ReviewAudioGenerateSet_','runReviewAudioPilotFa
 assert.match(generateSet,/LockService\.getScriptLock\(\)/);
 assert.match(generateSet,/h3P4AssetWriterRequireDrivePrimary_\(\)/);
 
-console.log(JSON.stringify({status:'PASS',tests:16}));
+const quiesceBody=body(source,'h3P4AssetWriterQuiesce','h3P4AssetWriterSwitchToR2Primary');
+const r2Body=body(source,'h3P4AssetWriterSwitchToR2Primary','h3P4AssetWriterResumeDrivePrimary');
+const resumeBody=body(source,'h3P4AssetWriterResumeDrivePrimary','h3P4AssetSheetRows_');
+for(const transitionBody of [quiesceBody,r2Body,resumeBody]){
+  const lockIndex=transitionBody.indexOf('LockService.getScriptLock()');
+  const waitIndex=transitionBody.indexOf('lock.waitLock(30000)');
+  const modeReadIndex=transitionBody.indexOf('h3P4AssetWriterMode_()');
+  assert.ok(lockIndex>=0);
+  assert.ok(waitIndex>lockIndex);
+  assert.ok(modeReadIndex>waitIndex);
+  assert.match(transitionBody,/finally\s*\{\s*lock\.releaseLock\(\)/);
+}
+assert.match(r2Body,/before!==H3_P4_ASSET_WRITER_QUIESCED_/);
+assert.doesNotMatch(r2Body,/before===H3_P4_ASSET_WRITER_DRIVE_PRIMARY_/);
+assert.match(resumeBody,/before!==H3_P4_ASSET_WRITER_R2_PRIMARY_/);
+
+console.log(JSON.stringify({status:'PASS',tests:36}));

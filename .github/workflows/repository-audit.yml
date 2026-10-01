@@ -8905,7 +8905,7 @@ jobs:
               sidecar_family: '5W',
               set_id: 'H3-20260913-01',
               asset_key: slot,
-              audio_file_id: 'FILE-' + slot, audio_url: 'https://example.invalid/' + slot
+              storage_authority: 'GOOGLE_DRIVE', drive_folder_id: 'FOLDER-5W', audio_file_id: 'FILE-' + slot, audio_url: 'https://example.invalid/' + slot
             })
           );
           context.__payload = payload;

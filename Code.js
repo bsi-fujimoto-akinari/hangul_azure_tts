@@ -2082,6 +2082,7 @@ function processPendingAudioForSet(
   }
 
   try {
+    h3P4AssetWriterRequireDrivePrimary_();
     const c = config_();
 
     if (normalizedMode === '5W') {
@@ -2220,6 +2221,7 @@ function processLatestPendingAudioJob() {
   }
 
   try {
+    h3P4AssetWriterRequireDrivePrimary_();
     const c = config_();
     const sheet = queueSheet_(c);
     const last = sheet.getLastRow();

@@ -1041,7 +1041,21 @@ function h3ReviewAudioGeneratePlannedR2Asset_(
     bytes:bytes,
     mime_type:'audio/mpeg',
     written_at:writtenAt,
-    pre_cutover_or_previous_drive_binding_snapshot:null,
+    pre_cutover_or_previous_drive_binding_snapshot:{
+      schema:'H3_P4_DRIVE_ROLLBACK_TARGET_V1',
+      target_mode:'CREATE_OR_REUSE_EXACT_FILE',
+      drive_folder_id:String(plan.drive_folder_id),
+      drive_file_name:h3ReviewAudioFilename_(plan),
+      binding_store:'GOOGLE_SHEETS',
+      binding_table:H3_REVIEW_AUDIO_ASSET_SHEET_,
+      binding_key_json:JSON.stringify({
+        surface_family:plan.surface_family,
+        set_id:plan.set_id,
+        slot_key:plan.slot_key
+      }),
+      expected_r2_state:
+        'STATUS=DONE_R2;AUDIO_FILE_ID=;AUDIO_URL=;DRIVE_FOLDER_ID='
+    },
     drive_rollback_target_class:'REVIEW_AUDIO'
   });
 

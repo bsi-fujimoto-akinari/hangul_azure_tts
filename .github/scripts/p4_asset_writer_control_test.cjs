@@ -220,7 +220,7 @@ assert.match(reviewR2,/h3RuntimeAssetWriteR2_\(/);
 assert.match(reviewR2,/asset_class:'REVIEW_AUDIO'/);
 assert.match(
   reviewR2,
-  /pre_cutover_or_previous_drive_binding_snapshot:null/
+  /pre_cutover_or_previous_drive_binding_snapshot:\s*\{/
 );
 assert.match(
   reviewR2,
@@ -296,8 +296,16 @@ r2ctx.h3RuntimeAssetWriteR2_=request=>{
     {surface_family:'5W',set_id:'W-R2',slot_key:'D2'}
   );
   assert.equal(
-    request.pre_cutover_or_previous_drive_binding_snapshot,
-    null
+    request.pre_cutover_or_previous_drive_binding_snapshot.schema,
+    'H3_P4_DRIVE_ROLLBACK_TARGET_V1'
+  );
+  assert.equal(
+    request.pre_cutover_or_previous_drive_binding_snapshot.target_mode,
+    'CREATE_OR_REUSE_EXACT_FILE'
+  );
+  assert.equal(
+    request.pre_cutover_or_previous_drive_binding_snapshot.drive_folder_id,
+    'DRIVE-FOLDER'
   );
   return{
     schema:'H3_R2_PRIMARY_ASSET_WRITE_RECEIPT_V1',
@@ -541,8 +549,16 @@ r2ctx2.h3RuntimeAssetWriteR2_=request=>{
     'H3-20261002-L01'
   );
   assert.equal(
-    request.pre_cutover_or_previous_drive_binding_snapshot,
-    null
+    request.pre_cutover_or_previous_drive_binding_snapshot.schema,
+    'H3_P4_DRIVE_ROLLBACK_TARGET_V1'
+  );
+  assert.equal(
+    request.pre_cutover_or_previous_drive_binding_snapshot.drive_folder_id,
+    '1xeDF4AYNhykK1YPTh5rckyTmsGHvihaF'
+  );
+  assert.equal(
+    request.pre_cutover_or_previous_drive_binding_snapshot.drive_file_name,
+    request.logical_binding_identity.listen_gen_id+'.mp3'
   );
   return{
     schema:'H3_R2_PRIMARY_ASSET_WRITE_RECEIPT_V1',

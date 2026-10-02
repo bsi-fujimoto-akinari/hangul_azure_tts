@@ -465,6 +465,8 @@ assert.match(
 const r2ctx2=vm.createContext({
   Date,JSON,String,Array,Object,Error,Set,
   HQ_LISTENING_SET_SIZE:5,
+  HQ_AUDIO_LISTENING_FOLDER_ID:'1xeDF4AYNhykK1YPTh5rckyTmsGHvihaF',
+  HQ_LISTENING_TAB:'listening_audio_queue_v1',
   HQ_LISTENING_STORAGE_MODE:'listening_audio_v1',
   HQ_LISTENING_STORAGE_MODE_R2:'listening_audio_r2_v1',
   HQ_LISTENING_AUDIO_SOURCE_ATTESTATION_SCHEMA:

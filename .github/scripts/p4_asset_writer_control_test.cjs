@@ -284,6 +284,9 @@ r2ctx.h3ReviewAudioFindAssetRow_=()=>persisted?{
 }:null;
 r2ctx.h3ReviewAudioSsml_=()=>'<speak>review</speak>';
 r2ctx.config_=()=>({});
+r2ctx.h3ReviewAudioFilename_=plan=>
+  plan.set_id+'__'+plan.slot_key+'__'+
+  plan.audio_text_sha256.slice(0,12)+'__rv2_1200ms.mp3';
 r2ctx.synthesize_=()=>{
   events.push('synthesize');
   return{getBytes:()=>Array(128).fill(1)};
@@ -774,4 +777,5 @@ assert.match(r2Body,/before!==H3_P4_ASSET_WRITER_QUIESCED_/);
 assert.doesNotMatch(r2Body,/before===H3_P4_ASSET_WRITER_DRIVE_PRIMARY_/);
 assert.match(resumeBody,/before!==H3_P4_ASSET_WRITER_R2_PRIMARY_/);
 
-console.log(JSON.stringify({status:'PASS',tests:108}));
+require('./p4_asset_reverse_copy_test.cjs');
+console.log(JSON.stringify({status:'PASS',tests:109}));

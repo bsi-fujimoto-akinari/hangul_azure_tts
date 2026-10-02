@@ -3493,8 +3493,33 @@ function runListeningSetBatchR2_(
             bytes: bytes,
             mime_type: 'audio/mpeg',
             written_at: writtenAt,
-            pre_cutover_or_previous_drive_binding_snapshot:
-              null,
+            pre_cutover_or_previous_drive_binding_snapshot: {
+              schema:
+                'H3_P4_DRIVE_ROLLBACK_TARGET_V1',
+              target_mode:
+                'CREATE_OR_REUSE_EXACT_FILE',
+              drive_folder_id:
+                HQ_AUDIO_LISTENING_FOLDER_ID,
+              drive_file_name:
+                item.job.id + '.mp3',
+              binding_store:
+                'GOOGLE_SHEETS',
+              binding_table:
+                HQ_LISTENING_TAB,
+              binding_key_json:
+                JSON.stringify({
+                  set_id:
+                    item.job.parentSetId,
+                  slot_key:
+                    item.job.section,
+                  listen_gen_id:
+                    item.job.id
+                }),
+              expected_r2_state:
+                'STATUS=done;STORAGE_MODE=' +
+                HQ_LISTENING_STORAGE_MODE_R2 +
+                ';AUDIO_FILE_ID=;AUDIO_URL='
+            },
             drive_rollback_target_class:
               'LISTENING_AUDIO_INDIVIDUAL'
           });

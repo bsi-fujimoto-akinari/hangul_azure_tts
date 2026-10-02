@@ -256,6 +256,7 @@ const r2ctx=vm.createContext({
   Date,JSON,String,Array,Error,
   H3_REVIEW_AUDIO_HEADERS_:Array(17).fill(''),
   H3_REVIEW_AUDIO_SCHEMA_:'H3_REVIEW_AUDIO_ASSET_V1',
+  H3_REVIEW_AUDIO_ASSET_SHEET_:'review_audio_asset_v1',
   H3_REVIEW_AUDIO_GENERATOR_VERSION_:'review-audio-v2-1200ms',
   SpreadsheetApp:{flush(){}}
 });

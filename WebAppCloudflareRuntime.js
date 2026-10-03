@@ -1436,6 +1436,28 @@ function h3MigAssetAcceptance2Batch_(request) {
   };
 }
 
+function h3MigAssetAcceptance2NegativeObservation_(
+  name,response,expectedStatus,size
+) {
+  var observation = {
+    name: String(name),
+    expected_status: Number(expectedStatus),
+    observed_status: Number(response.status),
+    accept_ranges: h3RuntimePrivateMediaHeader_(response.headers,'Accept-Ranges'),
+    content_range: h3RuntimePrivateMediaHeader_(response.headers,'Content-Range'),
+    content_length: h3RuntimePrivateMediaHeader_(response.headers,'Content-Length'),
+    body_size: response.bytes.length,
+    pass: Number(response.status) === Number(expectedStatus)
+  };
+  if (Number(expectedStatus) === 416) {
+    observation.pass = observation.pass &&
+      observation.accept_ranges === 'bytes' &&
+      observation.content_range === 'bytes */' + String(size) &&
+      observation.content_length === '0';
+  }
+  return observation;
+}
+
 function h3MigAssetAcceptance2Negative_(request) {
   var audio = h3MigAssetAcceptance2Target_(request.audio_target);
   var image = h3MigAssetAcceptance2Target_(request.image_target);
@@ -1444,47 +1466,62 @@ function h3MigAssetAcceptance2Negative_(request) {
     h3MigAssetAcceptance2Fail_('MIG_ASSET_ACCEPTANCE_2_NEGATIVE_TARGET_INVALID');
   }
 
-  h3MigAssetAcceptance2RequireStatus_(
+  var observations = [];
+  observations.push(h3MigAssetAcceptance2NegativeObservation_(
+    'unauthorized_401',
     h3MigAssetAcceptance2Fetch_(audio, null, 'INVALID', 'NORMAL'),
-    401, 'MIG_ASSET_ACCEPTANCE_2_401_MISMATCH'
-  );
-  h3MigAssetAcceptance2RequireStatus_(
+    401, audio.size_bytes
+  ));
+  observations.push(h3MigAssetAcceptance2NegativeObservation_(
+    'unknown_field_400',
     h3MigAssetAcceptance2Fetch_(audio, null, 'REAL', 'UNKNOWN_FIELD'),
-    400, 'MIG_ASSET_ACCEPTANCE_2_UNKNOWN_FIELD_MISMATCH'
-  );
-  h3MigAssetAcceptance2RequireStatus_(
+    400, audio.size_bytes
+  ));
+  observations.push(h3MigAssetAcceptance2NegativeObservation_(
+    'missing_field_400',
     h3MigAssetAcceptance2Fetch_(audio, null, 'REAL', 'MISSING_FIELD'),
-    400, 'MIG_ASSET_ACCEPTANCE_2_MISSING_FIELD_MISMATCH'
-  );
-  h3MigAssetAcceptance2RequireStatus_(
+    400, audio.size_bytes
+  ));
+  observations.push(h3MigAssetAcceptance2NegativeObservation_(
+    'not_found_404',
     h3MigAssetAcceptance2Fetch_(audio, null, 'REAL', 'NOT_FOUND'),
-    404, 'MIG_ASSET_ACCEPTANCE_2_404_MISMATCH'
-  );
-
-  h3MigAssetAcceptance2Require416_(
+    404, audio.size_bytes
+  ));
+  observations.push(h3MigAssetAcceptance2NegativeObservation_(
+    'invalid_range_416',
     h3MigAssetAcceptance2Fetch_(audio, 'bytes=x-y', 'REAL', 'NORMAL'),
-    audio.size_bytes
-  );
-  h3MigAssetAcceptance2Require416_(
+    416, audio.size_bytes
+  ));
+  observations.push(h3MigAssetAcceptance2NegativeObservation_(
+    'unsatisfiable_range_416',
     h3MigAssetAcceptance2Fetch_(
       audio, 'bytes=' + String(audio.size_bytes) + '-', 'REAL', 'NORMAL'
     ),
-    audio.size_bytes
-  );
-  h3MigAssetAcceptance2Require416_(
+    416, audio.size_bytes
+  ));
+  observations.push(h3MigAssetAcceptance2NegativeObservation_(
+    'multiple_range_416',
     h3MigAssetAcceptance2Fetch_(audio, 'bytes=0-0,1-1', 'REAL', 'NORMAL'),
-    audio.size_bytes
-  );
-  h3MigAssetAcceptance2RequireStatus_(
+    416, audio.size_bytes
+  ));
+  observations.push(h3MigAssetAcceptance2NegativeObservation_(
+    'image_range_400',
     h3MigAssetAcceptance2Fetch_(image, 'bytes=0-0', 'REAL', 'NORMAL'),
-    400, 'MIG_ASSET_ACCEPTANCE_2_IMAGE_RANGE_NEGATIVE_MISMATCH'
-  );
+    400, image.size_bytes
+  ));
 
+  var failed = observations.filter(function(item) {
+    return item.pass !== true;
+  }).map(function(item) {
+    return item.name;
+  });
   return {
     schema: H3_MIG_ASSET_ACCEPTANCE2_RESULT_SCHEMA_,
-    status: 'PASS',
+    status: failed.length ? 'FAIL_OBSERVED' : 'PASS',
     mode: 'NEGATIVE',
-    negative_checks: 8,
+    negative_checks: observations.length,
+    failed_cases: failed,
+    observations: observations,
     static_409_evidence_required: true,
     write_performed: false
   };

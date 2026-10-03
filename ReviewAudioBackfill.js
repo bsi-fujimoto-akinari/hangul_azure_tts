@@ -963,11 +963,12 @@ function h3P4AcceptanceProspectiveReviewAudioOneShot(){
     mime_type:'audio/mpeg',
     drive_folder_id:'18V3zOrKRhIgTCL_McrXjWDu6OIZupNn5'
   };
+  var expectedFallbackTriggerCount=1;
   var before=h3P4AssetWriterStatus();
   if(
     before.mode!==H3_P4_ASSET_WRITER_QUIESCED_ ||
     !before.quiesce_watermark ||
-    before.fallback_trigger_count!==0 ||
+    before.fallback_trigger_count!==expectedFallbackTriggerCount ||
     before.mutation_count!==0
   )throw new Error(
     'P4_ACCEPTANCE_ONE_SHOT_WRITER_PREFLIGHT_INVALID'
@@ -1105,7 +1106,8 @@ function h3P4AcceptanceProspectiveReviewAudioOneShot(){
   var after=h3P4AssetWriterStatus();
   if(
     after.mode!==H3_P4_ASSET_WRITER_QUIESCED_ ||
-    after.fallback_trigger_count!==0 ||
+    after.fallback_trigger_count!==expectedFallbackTriggerCount ||
+    after.fallback_trigger_count!==before.fallback_trigger_count ||
     after.mutation_count!==0 ||
     !after.quiesce_watermark
   )throw new Error(

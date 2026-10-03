@@ -167,10 +167,14 @@ function h3RuntimePrivateMediaRequest_(
   assetClass,identity,range,maxBytes
 ) {
   var spec=h3RuntimeR2AssetSpec_(assetClass);
+  var identityFields=
+    assetClass==='LISTENING_K1_IMAGE'
+      ? ['k1_ready_id','bound_listening_set_id']
+      : spec.identity_fields;
   var canonical=h3RuntimeR2CanonicalRecord_(
     identity,
     'MEDIA_IDENTITY_INVALID',
-    spec.identity_fields
+    identityFields
   );
   var props=PropertiesService.getScriptProperties();
   var baseUrl=props.getProperty(
@@ -187,7 +191,7 @@ function h3RuntimePrivateMediaRequest_(
   var query=[
     'asset_class='+encodeURIComponent(String(assetClass))
   ];
-  spec.identity_fields.forEach(function(field){
+  identityFields.forEach(function(field){
     query.push(
       encodeURIComponent(field)+'='+
       encodeURIComponent(canonical[field])
@@ -585,8 +589,7 @@ function h3RuntimeRetainedListening_(setId) {
   if (!k1Id) throw new Error('RETAINED_DRIVE_ASSET_INVALID');
   var kt = h3ProdSheetRows_(k1Sheet);
   h3ProdRequireColumns_(kt, [
-    'K1_READY_ID', 'BOUND_LISTENING_SET_ID', 'IMAGE_FILE_ID',
-    'IMAGE_URL', 'IMAGE_SHA256'
+    'K1_READY_ID', 'BOUND_LISTENING_SET_ID', 'IMAGE_SHA256'
   ], 'listening_k1_ready_v1');
   var imageRow = h3ProdOneRowBy_(
     kt, 'K1_READY_ID', k1Id, 'listening_k1_ready_v1'
@@ -595,13 +598,16 @@ function h3RuntimeRetainedListening_(setId) {
     throw new Error('ASSET_IDENTITY_MISMATCH');
   }
   var imageHash = String(imageRow[kt.map.IMAGE_SHA256] || '');
-  var imageId = String(imageRow[kt.map.IMAGE_FILE_ID] || '');
-  var imageUrl = String(imageRow[kt.map.IMAGE_URL] || '');
-  if (!/^[0-9a-f]{64}$/.test(imageHash) || !imageId || !imageUrl) {
-    throw new Error('RETAINED_DRIVE_ASSET_INVALID');
+  if (!/^[0-9a-f]{64}$/.test(imageHash)) {
+    throw new Error('RETAINED_R2_ASSET_INVALID');
   }
-  var image = h3DriveDataUri_(
-    imageId, 'image/jpeg', imageHash, 1024 * 1024
+  var image = h3RuntimePrivateMediaDataUri_(
+    'LISTENING_K1_IMAGE',
+    {
+      k1_ready_id: k1Id,
+      bound_listening_set_id: setId
+    },
+    1024 * 1024
   );
   var binding = h3ProdParseJson_(
     row[table.map.AUDIO_BINDING_JSON], 'RETAINED_AUDIO_BINDING_INVALID'
@@ -627,8 +633,9 @@ function h3RuntimeRetainedListening_(setId) {
   return {
     image: {
       set_id: setId, slot_key: 'K1_IMAGE', sha256: imageHash,
-      file_id: imageId, url: imageUrl,
-      data_uri: image.data_uri, size_bytes: image.size_bytes
+      file_id: '', url: '',
+      data_uri: image.data_uri, size_bytes: image.size_bytes,
+      storage_authority: 'CLOUDFLARE_R2_PRIVATE'
     },
     audio: audio,
     audio_binding_sha256: h3ReviewHash_(binding)

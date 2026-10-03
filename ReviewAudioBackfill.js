@@ -949,6 +949,93 @@ function h3ReviewAudioAssertR2AssetRow_(row,plan){
   return true;
 }
 
+function h3P4AcceptanceOneShotDiagnosticCode_(error){
+  var raw=String(error&&error.message||'');
+  var match=/^([A-Z0-9_]+)(?::[A-Z0-9_]+)?$/.exec(raw);
+  if(!match)return 'P4_ACCEPTANCE_ONE_SHOT_UNCLASSIFIED';
+  var code=match[1];
+  var prefixes=[
+    'P4_ACCEPTANCE_ONE_SHOT_',
+    'P4_ASSET_WRITER_',
+    'R2_PRIMARY_',
+    'H3_RUNTIME_',
+    'MEDIA_',
+    'REVIEW_AUDIO_'
+  ];
+  return prefixes.some(function(prefix){
+    return code.indexOf(prefix)===0;
+  })?code:'P4_ACCEPTANCE_ONE_SHOT_UNCLASSIFIED';
+}
+
+function h3P4AcceptanceOneShotDiagnosticStage_(code){
+  var value=String(code||'');
+  if(value==='P4_ACCEPTANCE_ONE_SHOT_WRITER_PREFLIGHT_INVALID'){
+    return 'WRITER_PREFLIGHT';
+  }
+  if(
+    value==='P4_ACCEPTANCE_ONE_SHOT_PLAN_INVALID' ||
+    value==='P4_ACCEPTANCE_ONE_SHOT_PLAN_IDENTITY_MISMATCH' ||
+    value.indexOf('REVIEW_AUDIO_')===0
+  )return 'PLAN_OR_BINDING_PREFLIGHT';
+  if(
+    value==='P4_ACCEPTANCE_ONE_SHOT_R2_PREFLIGHT_MISMATCH' ||
+    value.indexOf('MEDIA_')===0
+  )return 'R2_PREFLIGHT';
+  if(value.indexOf('P4_ACCEPTANCE_ONE_SHOT_DRIVE_')===0){
+    return 'DRIVE_PREFLIGHT';
+  }
+  if(
+    value==='P4_ACCEPTANCE_ONE_SHOT_SWITCH_INVALID' ||
+    value.indexOf('P4_ASSET_WRITER_R2_PRIMARY_')===0
+  )return 'WRITER_SWITCH';
+  if(value==='P4_ACCEPTANCE_ONE_SHOT_FIRST_RECEIPT_INVALID'){
+    return 'FIRST_RECEIPT_VALIDATION';
+  }
+  if(value==='P4_ACCEPTANCE_ONE_SHOT_IDEMPOTENCY_MISMATCH'){
+    return 'SECOND_RECEIPT_VALIDATION';
+  }
+  if(value.indexOf('R2_PRIMARY_')===0)return 'R2_RECEIPT_WRITE';
+  if(value.indexOf('P4_ACCEPTANCE_ONE_SHOT_REQUIESCE_')===0){
+    return 'REQUIESCE';
+  }
+  if(value==='P4_ACCEPTANCE_ONE_SHOT_FINAL_STATE_INVALID'){
+    return 'FINAL_STATE';
+  }
+  if(value.indexOf('H3_RUNTIME_')===0)return 'RUNTIME_RPC_OR_MEDIA';
+  return 'UNCLASSIFIED';
+}
+
+function h3P4AcceptanceProspectiveReviewAudioOneShotDiagnostic(){
+  try{
+    return h3P4AcceptanceProspectiveReviewAudioOneShot();
+  }catch(error){
+    var code=h3P4AcceptanceOneShotDiagnosticCode_(error);
+    var stage=h3P4AcceptanceOneShotDiagnosticStage_(code);
+    var cleanup=h3P4AssetWriterRequiesceFromR2Primary();
+    var after=h3P4AssetWriterStatus();
+    if(
+      !cleanup ||
+      cleanup.schema!=='H3_P4_ASSET_WRITER_CONTROL_V1' ||
+      after.mode!==H3_P4_ASSET_WRITER_QUIESCED_ ||
+      after.fallback_trigger_count!==1 ||
+      after.mutation_count!==0
+    )throw new Error(
+      'P4_ACCEPTANCE_ONE_SHOT_DIAGNOSTIC_CLEANUP_INVALID'
+    );
+    return{
+      schema:'H3_MIG_ASSET_PROSPECTIVE_ONE_SHOT_DIAGNOSTIC_V1',
+      status:'FAIL',
+      diagnostic_stage:stage,
+      diagnostic_code:code,
+      writer_after:{
+        mode:after.mode,
+        fallback_trigger_count:after.fallback_trigger_count,
+        mutation_count:after.mutation_count
+      }
+    };
+  }
+}
+
 function h3P4AcceptanceProspectiveReviewAudioOneShot(){
   var target={
     surface_family:'2R',
@@ -1098,8 +1185,7 @@ function h3P4AcceptanceProspectiveReviewAudioOneShot(){
     requiesced=h3P4AssetWriterRequiesceFromR2Primary();
   }catch(error){
     throw new Error(
-      'P4_ACCEPTANCE_ONE_SHOT_REQUIESCE_FAILED:'+
-      String(error&&error.message||error)
+      'P4_ACCEPTANCE_ONE_SHOT_REQUIESCE_FAILED'
     );
   }
 

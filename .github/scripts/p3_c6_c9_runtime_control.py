@@ -95,7 +95,23 @@ def main() -> None:
         if (len(source_digest) != 64 or
                 any(c not in "0123456789abcdef" for c in source_digest)):
             fail("P4 prospective one-shot requires exact attested source digest")
-        result = call("h3P4AcceptanceProspectiveReviewAudioOneShot")
+        def ensure_requiesced():
+            control = call("h3P4AssetWriterRequiesceFromR2Primary")
+            status = call("h3P4AssetWriterStatus")
+            if not isinstance(control, dict):
+                fail("P4 prospective cleanup control is not an object")
+            if not isinstance(status, dict) or status.get("mode") != "QUIESCED":
+                fail("P4 prospective cleanup did not restore QUIESCED mode")
+            if status.get("fallback_trigger_count") != 0:
+                fail("P4 prospective cleanup fallback trigger mismatch")
+            return control, status
+
+        try:
+            result = call("h3P4AcceptanceProspectiveReviewAudioOneShot")
+        except SystemExit:
+            ensure_requiesced()
+            raise
+        cleanup_control, cleanup_status = ensure_requiesced()
         if not isinstance(result, dict):
             fail("P4 prospective one-shot result is not an object")
         if result.get("schema") != "H3_MIG_ASSET_PROSPECTIVE_ONE_SHOT_V1":
@@ -121,6 +137,8 @@ def main() -> None:
             fail("P4 prospective one-shot writer pre-state mismatch")
         if not isinstance(after, dict) or after.get("mode") != "QUIESCED":
             fail("P4 prospective one-shot writer final-state mismatch")
+        if cleanup_status.get("mode") != "QUIESCED":
+            fail("P4 prospective one-shot cleanup readback mismatch")
         if before.get("fallback_trigger_count") != 0 or after.get("fallback_trigger_count") != 0:
             fail("P4 prospective one-shot fallback trigger isolation mismatch")
         first = result.get("first_receipt")

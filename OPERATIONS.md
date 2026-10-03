@@ -1058,7 +1058,7 @@ Apps Script HEAD source attestation, and the single frozen Review-audio
 identity `2R / H3-20260921-R001 / PASSAGE_COMPLETE`.
 
 The wrapper `h3P4AcceptanceProspectiveReviewAudioOneShot()` must begin with
-the asset writer in `QUIESCED` and with zero fallback audio triggers. Before
+the asset writer in `QUIESCED` and with the frozen baseline fallback trigger count `1`. Before
 any writer-mode mutation it must verify the existing `DONE_R2` binding,
 fresh-read the exact private R2 object, and verify the frozen retained Drive
 source bytes, size, MIME, parent folder, and SHA-256. The exact source identity
@@ -1077,7 +1077,7 @@ object is not allowed.
 
 The wrapper must directly re-quiesce through
 `h3P4AssetWriterRequiesceFromR2Primary()` in all success/failure paths and
-finish with writer mode `QUIESCED` and zero fallback triggers. It must never
+finish with writer mode `QUIESCED` and the same frozen fallback trigger count `1`. It must never
 pass through `DRIVE_PRIMARY`. This control does not authorize general writer
 resume, a second asset, P4 closure, P5 entry, rollback execution, or stage
 advance. Preparation or merge of this control does not authorize dispatch.

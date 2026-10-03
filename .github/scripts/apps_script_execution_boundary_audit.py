@@ -106,7 +106,7 @@ missing_alignment_helper = [
 ]
 
 required_c6_c9_helper = [
-    'ALLOWED = {"PRE_C6_READBACK", "C6_ACTIVATE", "C9_READBACK", "O1_RESUME"}',
+    'ALLOWED = {"PRE_C6_READBACK", "C6_ACTIVATE", "C9_READBACK", "P4_ACCEPTANCE5_READBACK", "O1_RESUME"}',
     'EVENT_NAME',
     'INTENDED_SMOKE_SHA',
     'SOURCE_ATTESTED',
@@ -114,6 +114,10 @@ required_c6_c9_helper = [
     'h3RuntimePreC6Readback',
     'h3RuntimeC6Activate',
     'h3RuntimeC9Readback',
+    'P4_ACCEPTANCE5_READBACK',
+    'SOURCE_DIGEST',
+    'h3P4AssetWriterStatus',
+    'H3_MIG_ASSET_ACCEPTANCE_5_STATE_READBACK_V1',
     'h3MonitoringProductionTriggerEnsure',
     'O1_BACKGROUND_TRIGGER_STATUS=READY',
     '"mutation_count": 0',
@@ -360,10 +364,12 @@ for token in [
     "if: steps.smoke_boundary.outputs.ready == 'true'",
     'MIGRATION_RUNTIME_CONTROL:',
     'SOURCE_SHA:',
+    'SOURCE_DIGEST:',
     'SOURCE_ATTESTED:',
     'INTENDED_SMOKE_SHA:',
     'RUN_ATTEMPT:',
     'EVENT_NAME:',
+    'P4_ACCEPTANCE5_READBACK',
     'p3_c6_c9_runtime_control.py',
 ]:
     if token not in c6_c9_block:

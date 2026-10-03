@@ -6,7 +6,7 @@ import json
 import os
 import subprocess
 
-ALLOWED = {"PRE_C6_READBACK", "C6_ACTIVATE", "C9_READBACK", "O1_RESUME"}
+ALLOWED = {"PRE_C6_READBACK", "C6_ACTIVATE", "C9_READBACK", "P4_ACCEPTANCE5_READBACK", "O1_RESUME"}
 
 
 def fail(message: str) -> None:
@@ -81,6 +81,47 @@ def main() -> None:
     if mode == "C9_READBACK":
         print("C9_RUNTIME_READBACK=PASS")
         print("C9_RUNTIME_MUTATION_COUNT=0")
+        return
+
+    if mode == "P4_ACCEPTANCE5_READBACK":
+        source_digest = os.environ.get("SOURCE_DIGEST", "")
+        if (len(source_digest) != 64 or
+                any(c not in "0123456789abcdef" for c in source_digest)):
+            fail("P4 acceptance readback requires exact attested source digest")
+        writer = call("h3P4AssetWriterStatus")
+        if not isinstance(writer, dict):
+            fail("P4 asset-writer status is not an object")
+        if writer.get("schema") != "H3_P4_ASSET_WRITER_STATUS_V1":
+            fail("P4 asset-writer status schema mismatch")
+        if writer.get("mode") != "QUIESCED":
+            fail("P4 asset writer is not QUIESCED")
+        if writer.get("mutation_count") != 0:
+            fail("P4 asset-writer readback mutation_count is not zero")
+        fallback_count = writer.get("fallback_trigger_count")
+        if (not isinstance(fallback_count, int) or
+                isinstance(fallback_count, bool) or fallback_count < 0):
+            fail("P4 asset-writer fallback trigger count is invalid")
+        for key in ("quiesce_watermark", "transition_watermark"):
+            if not isinstance(writer.get(key), str):
+                fail("P4 asset-writer watermark is invalid: " + key)
+        evidence = {
+            "schema": "H3_MIG_ASSET_ACCEPTANCE_5_STATE_READBACK_V1",
+            "status": "PASS_READ_ONLY",
+            "source_sha": source,
+            "source_digest": source_digest,
+            "authority": response,
+            "asset_writer": writer,
+            "write_performed": False,
+        }
+        with open(
+            "/tmp/mig-asset-acceptance-5-state-readback.json",
+            "w", encoding="utf-8",
+        ) as fh:
+            json.dump(evidence, fh, separators=(",", ":"), sort_keys=True)
+            fh.write("\n")
+        print("P4_ACCEPTANCE5_RUNTIME_READBACK=PASS")
+        print("P4_ACCEPTANCE5_WRITER_MODE=QUIESCED")
+        print("P4_ACCEPTANCE5_MUTATION_COUNT=0")
         return
 
     trigger = call("h3MonitoringProductionTriggerEnsure")

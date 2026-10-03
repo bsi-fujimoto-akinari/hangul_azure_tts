@@ -1,5 +1,11 @@
 {
   "schema": "H3_REPO_WRITE_LOCK_V1",
   "repository": "bsi-fujimoto-akinari/hangul_legacy",
-  "lock": null
+  "lock": {
+    "lock_id": "MIG-ASSET-ACCEPTANCE-2B-MERGE-RETRY-20261003T122239Z",
+    "holder": "CHAT",
+    "base_sha": "e7a0359ddd22fe79c5dba9d96a151f0c51a3f3b7",
+    "acquired_at": "2026-10-03T12:22:39.000Z",
+    "expires_at": "2026-10-03T12:32:39.000Z"
+  }
 }

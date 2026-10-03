@@ -1207,3 +1207,309 @@ function h3RuntimeSetAuthority_(expectedMode, nextMode, expectedLock, nextLock) 
     lock.releaseLock();
   }
 }
+
+/* =========================================================
+ * MIG-ASSET-ACCEPTANCE-2 bounded read-only private-media audit.
+ * Manual smoke only. Never returns bearer tokens or media bytes.
+ * =======================================================*/
+var H3_MIG_ASSET_ACCEPTANCE2_REQUEST_SCHEMA_ =
+  'H3_MIG_ASSET_ACCEPTANCE_2_REQUEST_V1';
+var H3_MIG_ASSET_ACCEPTANCE2_RESULT_SCHEMA_ =
+  'H3_MIG_ASSET_ACCEPTANCE_2_RESULT_V1';
+var H3_MIG_ASSET_ACCEPTANCE2_SOURCE_DIGEST_ =
+  '36856256b637778475b0454ba469ac32f08d61cc1814b6f87cffb63f8c753f92';
+var H3_MIG_ASSET_ACCEPTANCE2_MAX_BATCH_ = 12;
+
+function h3MigAssetAcceptance2Fail_(code) {
+  throw new Error(String(code || 'MIG_ASSET_ACCEPTANCE_2_FAILED'));
+}
+
+function h3MigAssetAcceptance2ExactKeys_(value, expected, code) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    h3MigAssetAcceptance2Fail_(code);
+  }
+  var actual = Object.keys(value).sort();
+  var wanted = expected.slice().sort();
+  if (JSON.stringify(actual) !== JSON.stringify(wanted)) {
+    h3MigAssetAcceptance2Fail_(code);
+  }
+}
+
+function h3MigAssetAcceptance2Fields_(assetClass) {
+  var map = {
+    REVIEW_AUDIO: ['surface_family','set_id','slot_key'],
+    LISTENING_AUDIO_INDIVIDUAL: ['set_id','slot_key','listen_gen_id'],
+    LISTENING_AUDIO_COMBINED: ['set_id','slot_key','parent_set_id'],
+    LISTENING_K1_IMAGE: ['k1_ready_id','bound_listening_set_id']
+  };
+  var fields = map[String(assetClass || '')];
+  if (!fields) h3MigAssetAcceptance2Fail_('MIG_ASSET_ACCEPTANCE_2_CLASS_INVALID');
+  return fields;
+}
+
+function h3MigAssetAcceptance2Target_(value) {
+  h3MigAssetAcceptance2ExactKeys_(
+    value,
+    ['asset_class','identity','mime_type','size_bytes','source_byte_sha256'],
+    'MIG_ASSET_ACCEPTANCE_2_TARGET_SHAPE_INVALID'
+  );
+  var assetClass = String(value.asset_class || '');
+  var fields = h3MigAssetAcceptance2Fields_(assetClass);
+  h3MigAssetAcceptance2ExactKeys_(
+    value.identity,
+    fields,
+    'MIG_ASSET_ACCEPTANCE_2_IDENTITY_SHAPE_INVALID'
+  );
+  var identity = {};
+  fields.forEach(function(field) {
+    var v = String(value.identity[field] || '');
+    if (!v) h3MigAssetAcceptance2Fail_('MIG_ASSET_ACCEPTANCE_2_IDENTITY_INVALID');
+    identity[field] = v;
+  });
+  var sha = String(value.source_byte_sha256 || '');
+  if (!/^[0-9a-f]{64}$/.test(sha)) {
+    h3MigAssetAcceptance2Fail_('MIG_ASSET_ACCEPTANCE_2_SHA_INVALID');
+  }
+  var size = Number(value.size_bytes);
+  if (!Number.isInteger(size) || size < 1) {
+    h3MigAssetAcceptance2Fail_('MIG_ASSET_ACCEPTANCE_2_SIZE_INVALID');
+  }
+  var mime = String(value.mime_type || '');
+  var allowed = assetClass === 'LISTENING_K1_IMAGE'
+    ? ['image/png','image/jpeg','image/webp']
+    : ['audio/mpeg'];
+  if (allowed.indexOf(mime) < 0) {
+    h3MigAssetAcceptance2Fail_('MIG_ASSET_ACCEPTANCE_2_MIME_INVALID');
+  }
+  return {
+    asset_class: assetClass,
+    identity: identity,
+    source_byte_sha256: sha,
+    size_bytes: size,
+    mime_type: mime
+  };
+}
+
+function h3MigAssetAcceptance2Fetch_(target, range, authMode, variant) {
+  var props = PropertiesService.getScriptProperties();
+  var baseUrl = String(props.getProperty('H3_RUNTIME_BACKEND_BASE_URL') || '');
+  if (baseUrl !== H3_RUNTIME_EXPECTED_WORKER_URL_) {
+    h3MigAssetAcceptance2Fail_('MIG_ASSET_ACCEPTANCE_2_BACKEND_INVALID');
+  }
+  var token = String(props.getProperty('H3_RUNTIME_BEARER_TOKEN') || '');
+  if (!token) h3MigAssetAcceptance2Fail_('MIG_ASSET_ACCEPTANCE_2_TOKEN_MISSING');
+
+  var fields = h3MigAssetAcceptance2Fields_(target.asset_class);
+  var query = ['asset_class=' + encodeURIComponent(target.asset_class)];
+  fields.forEach(function(field, index) {
+    if (variant === 'MISSING_FIELD' && index === 0) return;
+    var value = target.identity[field];
+    if (variant === 'NOT_FOUND' && index === 0) {
+      value += '__H3_ACCEPTANCE2_MISSING__';
+    }
+    query.push(
+      encodeURIComponent(field) + '=' +
+      encodeURIComponent(value)
+    );
+  });
+  if (variant === 'UNKNOWN_FIELD') {
+    query.push('unexpected_acceptance_2=1');
+  }
+
+  var headers = {};
+  if (authMode === 'REAL') {
+    headers.Authorization = 'Bearer ' + token;
+  } else if (authMode === 'INVALID') {
+    headers.Authorization = 'Bearer H3_ACCEPTANCE2_INVALID_TOKEN';
+  } else if (authMode !== 'NONE') {
+    h3MigAssetAcceptance2Fail_('MIG_ASSET_ACCEPTANCE_2_AUTH_MODE_INVALID');
+  }
+  if (range !== null && range !== undefined) headers.Range = String(range);
+
+  var response = UrlFetchApp.fetch(
+    baseUrl + H3_RUNTIME_PRIVATE_MEDIA_PATH_ + '?' + query.join('&'),
+    {
+      method: 'get',
+      headers: headers,
+      muteHttpExceptions: true
+    }
+  );
+  return {
+    status: response.getResponseCode(),
+    headers: h3RuntimePrivateMediaHeaders_(response),
+    bytes: response.getContent()
+  };
+}
+
+function h3MigAssetAcceptance2RequireStatus_(response, expected, code) {
+  if (!response || Number(response.status) !== Number(expected)) {
+    h3MigAssetAcceptance2Fail_(code);
+  }
+}
+
+function h3MigAssetAcceptance2Require416_(response, size) {
+  h3MigAssetAcceptance2RequireStatus_(
+    response, 416, 'MIG_ASSET_ACCEPTANCE_2_RANGE_STATUS_MISMATCH'
+  );
+  if (
+    h3RuntimePrivateMediaHeader_(response.headers,'Accept-Ranges') !== 'bytes' ||
+    h3RuntimePrivateMediaHeader_(response.headers,'Content-Range') !==
+      'bytes */' + String(size) ||
+    h3RuntimePrivateMediaHeader_(response.headers,'Content-Length') !== '0'
+  ) {
+    h3MigAssetAcceptance2Fail_('MIG_ASSET_ACCEPTANCE_2_RANGE_HEADERS_MISMATCH');
+  }
+}
+
+function h3MigAssetAcceptance2Batch_(request) {
+  if (!Array.isArray(request.targets) ||
+      request.targets.length < 1 ||
+      request.targets.length > H3_MIG_ASSET_ACCEPTANCE2_MAX_BATCH_) {
+    h3MigAssetAcceptance2Fail_('MIG_ASSET_ACCEPTANCE_2_BATCH_INVALID');
+  }
+  var checked = 0;
+  var audioRangeChecked = 0;
+  var imageRangeChecked = 0;
+
+  request.targets.forEach(function(rawTarget) {
+    var target = h3MigAssetAcceptance2Target_(rawTarget);
+    var full = h3MigAssetAcceptance2Fetch_(target, null, 'REAL', 'NORMAL');
+    h3MigAssetAcceptance2RequireStatus_(
+      full, 200, 'MIG_ASSET_ACCEPTANCE_2_FULL_STATUS_MISMATCH'
+    );
+    var mime = h3RuntimePrivateMediaHeader_(
+      full.headers, 'Content-Type'
+    ).split(';')[0].trim();
+    if (
+      full.bytes.length !== target.size_bytes ||
+      h3RuntimeR2Sha256Bytes_(full.bytes) !== target.source_byte_sha256 ||
+      mime !== target.mime_type ||
+      h3RuntimePrivateMediaHeader_(full.headers,'Content-Length') !==
+        String(target.size_bytes) ||
+      h3RuntimePrivateMediaHeader_(full.headers,'Cache-Control') !==
+        'private, max-age=31536000, immutable'
+    ) {
+      h3MigAssetAcceptance2Fail_('MIG_ASSET_ACCEPTANCE_2_FULL_BODY_MISMATCH');
+    }
+
+    if (target.asset_class === 'LISTENING_K1_IMAGE') {
+      var imageRange = h3MigAssetAcceptance2Fetch_(
+        target, 'bytes=0-0', 'REAL', 'NORMAL'
+      );
+      h3MigAssetAcceptance2RequireStatus_(
+        imageRange, 400, 'MIG_ASSET_ACCEPTANCE_2_IMAGE_RANGE_STATUS_MISMATCH'
+      );
+      imageRangeChecked += 1;
+    } else {
+      if (h3RuntimePrivateMediaHeader_(full.headers,'Accept-Ranges') !== 'bytes') {
+        h3MigAssetAcceptance2Fail_('MIG_ASSET_ACCEPTANCE_2_ACCEPT_RANGES_MISSING');
+      }
+      var range = h3MigAssetAcceptance2Fetch_(
+        target, 'bytes=0-0', 'REAL', 'NORMAL'
+      );
+      h3MigAssetAcceptance2RequireStatus_(
+        range, 206, 'MIG_ASSET_ACCEPTANCE_2_RANGE_206_STATUS_MISMATCH'
+      );
+      if (
+        range.bytes.length !== 1 ||
+        range.bytes[0] !== full.bytes[0] ||
+        h3RuntimePrivateMediaHeader_(range.headers,'Accept-Ranges') !== 'bytes' ||
+        h3RuntimePrivateMediaHeader_(range.headers,'Content-Range') !==
+          'bytes 0-0/' + String(target.size_bytes) ||
+        h3RuntimePrivateMediaHeader_(range.headers,'Content-Length') !== '1'
+      ) {
+        h3MigAssetAcceptance2Fail_('MIG_ASSET_ACCEPTANCE_2_RANGE_206_MISMATCH');
+      }
+      audioRangeChecked += 1;
+    }
+    checked += 1;
+  });
+
+  return {
+    schema: H3_MIG_ASSET_ACCEPTANCE2_RESULT_SCHEMA_,
+    status: 'PASS',
+    mode: 'BATCH',
+    checked_count: checked,
+    audio_range_checked: audioRangeChecked,
+    image_range_checked: imageRangeChecked,
+    write_performed: false
+  };
+}
+
+function h3MigAssetAcceptance2Negative_(request) {
+  var audio = h3MigAssetAcceptance2Target_(request.audio_target);
+  var image = h3MigAssetAcceptance2Target_(request.image_target);
+  if (audio.asset_class === 'LISTENING_K1_IMAGE' ||
+      image.asset_class !== 'LISTENING_K1_IMAGE') {
+    h3MigAssetAcceptance2Fail_('MIG_ASSET_ACCEPTANCE_2_NEGATIVE_TARGET_INVALID');
+  }
+
+  h3MigAssetAcceptance2RequireStatus_(
+    h3MigAssetAcceptance2Fetch_(audio, null, 'INVALID', 'NORMAL'),
+    401, 'MIG_ASSET_ACCEPTANCE_2_401_MISMATCH'
+  );
+  h3MigAssetAcceptance2RequireStatus_(
+    h3MigAssetAcceptance2Fetch_(audio, null, 'REAL', 'UNKNOWN_FIELD'),
+    400, 'MIG_ASSET_ACCEPTANCE_2_UNKNOWN_FIELD_MISMATCH'
+  );
+  h3MigAssetAcceptance2RequireStatus_(
+    h3MigAssetAcceptance2Fetch_(audio, null, 'REAL', 'MISSING_FIELD'),
+    400, 'MIG_ASSET_ACCEPTANCE_2_MISSING_FIELD_MISMATCH'
+  );
+  h3MigAssetAcceptance2RequireStatus_(
+    h3MigAssetAcceptance2Fetch_(audio, null, 'REAL', 'NOT_FOUND'),
+    404, 'MIG_ASSET_ACCEPTANCE_2_404_MISMATCH'
+  );
+
+  h3MigAssetAcceptance2Require416_(
+    h3MigAssetAcceptance2Fetch_(audio, 'bytes=x-y', 'REAL', 'NORMAL'),
+    audio.size_bytes
+  );
+  h3MigAssetAcceptance2Require416_(
+    h3MigAssetAcceptance2Fetch_(
+      audio, 'bytes=' + String(audio.size_bytes) + '-', 'REAL', 'NORMAL'
+    ),
+    audio.size_bytes
+  );
+  h3MigAssetAcceptance2Require416_(
+    h3MigAssetAcceptance2Fetch_(audio, 'bytes=0-0,1-1', 'REAL', 'NORMAL'),
+    audio.size_bytes
+  );
+  h3MigAssetAcceptance2RequireStatus_(
+    h3MigAssetAcceptance2Fetch_(image, 'bytes=0-0', 'REAL', 'NORMAL'),
+    400, 'MIG_ASSET_ACCEPTANCE_2_IMAGE_RANGE_NEGATIVE_MISMATCH'
+  );
+
+  return {
+    schema: H3_MIG_ASSET_ACCEPTANCE2_RESULT_SCHEMA_,
+    status: 'PASS',
+    mode: 'NEGATIVE',
+    negative_checks: 8,
+    static_409_evidence_required: true,
+    write_performed: false
+  };
+}
+
+function h3MigAssetAcceptance2ReadOnly(request) {
+  h3MigAssetAcceptance2ExactKeys_(
+    request,
+    request && request.mode === 'BATCH'
+      ? ['schema','mode','source_binding_digest','targets']
+      : ['audio_target','image_target','mode','schema','source_binding_digest'],
+    'MIG_ASSET_ACCEPTANCE_2_REQUEST_SHAPE_INVALID'
+  );
+  if (
+    request.schema !== H3_MIG_ASSET_ACCEPTANCE2_REQUEST_SCHEMA_ ||
+    request.source_binding_digest !== H3_MIG_ASSET_ACCEPTANCE2_SOURCE_DIGEST_
+  ) {
+    h3MigAssetAcceptance2Fail_('MIG_ASSET_ACCEPTANCE_2_REQUEST_IDENTITY_INVALID');
+  }
+  if (request.mode === 'BATCH') {
+    return h3MigAssetAcceptance2Batch_(request);
+  }
+  if (request.mode === 'NEGATIVE') {
+    return h3MigAssetAcceptance2Negative_(request);
+  }
+  h3MigAssetAcceptance2Fail_('MIG_ASSET_ACCEPTANCE_2_MODE_INVALID');
+}
+

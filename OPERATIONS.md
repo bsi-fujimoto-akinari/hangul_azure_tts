@@ -1047,3 +1047,37 @@ During the explicitly authorized H3 Cloudflare P3 3D-POST O1 step, the fixed `mi
 The control must first call the existing read-only `h3RuntimeC9Readback()` and require exact D1/locked backend, HEALTH/database, Worker/D1 route, bearer-presence boolean, and `mutation_count=0` evidence. Only after that proof may it call `h3MonitoringProductionTriggerEnsure()`. The only trigger that O1 may ensure is the canonical hourly CLOCK trigger for `h3MonitoringObserverEmailRun`, with one matching trigger, metadata match, cadence=1 hour, nearMinute(0), and timezone `Asia/Tokyo`. An already READY trigger is a no-op; an exact ABSENT state may create the one canonical trigger and must immediately read back READY.
 
 O1 does not re-enable any legacy learner/runtime writer, does not alter D1 authority or the cutover lock, does not change asset authority, does not create or modify the fallback `processLatestPendingAudioJob()` trigger, and does not authorize O2, O3, O4, P4, rollback, learner/history/score/pointer/counter mutation, or versioned Apps Script deployment changes.
+
+
+### P4 MIG-ASSET prospective one-shot acceptance
+
+The manual-only `migration_runtime_control=P4_PROSPECTIVE_ONE_SHOT`
+control is the bounded post-acceptance receipt validation surface. It is
+restricted to `run_attempt=1`, exact current audited `main`, immediate
+Apps Script HEAD source attestation, and the single frozen Review-audio
+identity `2R / H3-20260921-R001 / PASSAGE_COMPLETE`.
+
+The wrapper `h3P4AcceptanceProspectiveReviewAudioOneShot()` must begin with
+the asset writer in `QUIESCED` and with zero fallback audio triggers. Before
+any writer-mode mutation it must verify the existing `DONE_R2` binding,
+fresh-read the exact private R2 object, and verify the frozen retained Drive
+source bytes, size, MIME, parent folder, and SHA-256. The exact source identity
+is file `1T2NtwcwPpp0kIymvow-EZbPEkWc-5nzH`, byte SHA-256
+`ce0a44fa94997affd15017c62ac9353702d115e9481037cff79e8ca9f3f83826`,
+size 652800, MIME `audio/mpeg`.
+
+Only after those checks may it perform the temporary
+`QUIESCED -> R2_PRIMARY` transition. It invokes the existing authenticated
+`ASSET_WRITE_R2` path twice with the same exact request, requires the first
+returned receipt to be newly committed at the request timestamp, and requires
+the second receipt to be byte-for-byte equivalent as the idempotency proof.
+Because the exact R2 object is verified before the mode switch, the accepted
+production mutation is the new D1 receipt row only; a new or replacement R2
+object is not allowed.
+
+The wrapper must directly re-quiesce through
+`h3P4AssetWriterRequiesceFromR2Primary()` in all success/failure paths and
+finish with writer mode `QUIESCED` and zero fallback triggers. It must never
+pass through `DRIVE_PRIMARY`. This control does not authorize general writer
+resume, a second asset, P4 closure, P5 entry, rollback execution, or stage
+advance. Preparation or merge of this control does not authorize dispatch.

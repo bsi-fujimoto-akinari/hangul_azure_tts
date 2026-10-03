@@ -165,6 +165,73 @@ function h3P4AssetWriterSwitchToR2Primary(){
   }
 }
 
+function h3P4AssetWriterRequiesceFromR2Primary(){
+  var lock=LockService.getScriptLock();
+  lock.waitLock(30000);
+  try{
+    var props=PropertiesService.getScriptProperties();
+    var before=h3P4AssetWriterMode_();
+    var previousQuiesceWatermark=String(
+      props.getProperty(H3_P4_ASSET_WRITER_WATERMARK_KEY_) || ''
+    );
+    var previousTransitionWatermark=String(
+      props.getProperty(H3_P4_ASSET_WRITER_TRANSITION_WATERMARK_KEY_) || ''
+    );
+    if(before===H3_P4_ASSET_WRITER_QUIESCED_){
+      var existing=h3P4AssetWriterStatus();
+      return{
+        schema:'H3_P4_ASSET_WRITER_CONTROL_V1',
+        action:'REQUIESCE_R2_PRIMARY',
+        before:before,
+        after:existing.mode,
+        quiesce_watermark:existing.quiesce_watermark,
+        transition_watermark:existing.transition_watermark,
+        previous_quiesce_watermark:previousQuiesceWatermark,
+        previous_transition_watermark:previousTransitionWatermark,
+        fallback_trigger_count:existing.fallback_trigger_count,
+        mutation_count:0,
+        idempotent:true
+      };
+    }
+    if(before!==H3_P4_ASSET_WRITER_R2_PRIMARY_){
+      throw new Error(
+        'P4_ASSET_WRITER_REQUIESCE_PRECONDITION:'+before
+      );
+    }
+    var watermark=new Date().toISOString();
+    props.setProperties((function(){
+      var x={};
+      x[H3_P4_ASSET_WRITER_MODE_KEY_]=H3_P4_ASSET_WRITER_QUIESCED_;
+      x[H3_P4_ASSET_WRITER_WATERMARK_KEY_]=watermark;
+      x[H3_P4_ASSET_WRITER_TRANSITION_WATERMARK_KEY_]=watermark;
+      return x;
+    })(),false);
+    var after=h3P4AssetWriterStatus();
+    if(
+      after.mode!==H3_P4_ASSET_WRITER_QUIESCED_ ||
+      after.quiesce_watermark!==watermark ||
+      after.transition_watermark!==watermark
+    )throw new Error(
+      'P4_ASSET_WRITER_REQUIESCE_READBACK_MISMATCH'
+    );
+    return{
+      schema:'H3_P4_ASSET_WRITER_CONTROL_V1',
+      action:'REQUIESCE_R2_PRIMARY',
+      before:before,
+      after:after.mode,
+      quiesce_watermark:watermark,
+      transition_watermark:watermark,
+      previous_quiesce_watermark:previousQuiesceWatermark,
+      previous_transition_watermark:previousTransitionWatermark,
+      fallback_trigger_count:after.fallback_trigger_count,
+      mutation_count:1,
+      idempotent:false
+    };
+  }finally{
+    lock.releaseLock();
+  }
+}
+
 function h3P4AssetWriterResumeDrivePrimary(){
   var lock=LockService.getScriptLock();
   lock.waitLock(30000);

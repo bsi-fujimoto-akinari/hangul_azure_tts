@@ -23,6 +23,7 @@ on:
           - "C6_ACTIVATE"
           - "C9_READBACK"
           - "P4_ACCEPTANCE5_READBACK"
+          - "P4_PROSPECTIVE_ONE_SHOT"
           - "O1_RESUME"
       mig_asset_acceptance_2:
         description: "MIG-ASSET-ACCEPTANCE-2 bounded private-media read-only validation"
@@ -932,7 +933,7 @@ jobs:
         run: python3 .github/scripts/p3_c1_runtime_control.py
 
       - name: P3 pre-C6/C6/C9/O1 bounded runtime control
-        if: steps.smoke_boundary.outputs.ready == 'true' && (github.event.inputs.migration_runtime_control == 'PRE_C6_READBACK' || github.event.inputs.migration_runtime_control == 'C6_ACTIVATE' || github.event.inputs.migration_runtime_control == 'C9_READBACK' || github.event.inputs.migration_runtime_control == 'P4_ACCEPTANCE5_READBACK' || github.event.inputs.migration_runtime_control == 'O1_RESUME')
+        if: steps.smoke_boundary.outputs.ready == 'true' && (github.event.inputs.migration_runtime_control == 'PRE_C6_READBACK' || github.event.inputs.migration_runtime_control == 'C6_ACTIVATE' || github.event.inputs.migration_runtime_control == 'C9_READBACK' || github.event.inputs.migration_runtime_control == 'P4_ACCEPTANCE5_READBACK' || github.event.inputs.migration_runtime_control == 'P4_PROSPECTIVE_ONE_SHOT' || github.event.inputs.migration_runtime_control == 'O1_RESUME')
         shell: bash
         env:
           MIGRATION_RUNTIME_CONTROL: ${{ github.event.inputs.migration_runtime_control }}
@@ -942,7 +943,19 @@ jobs:
           INTENDED_SMOKE_SHA: ${{ github.event.inputs.intended_smoke_sha || '' }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
           EVENT_NAME: ${{ github.event_name }}
+          MIG_ASSET_ACCEPTANCE_2: ${{ github.event.inputs.mig_asset_acceptance_2 || 'NONE' }}
+          REM09_VALIDATION: ${{ github.event.inputs.rem09_review_open_validation || 'NO' }}
+          REM09_REPAIR: ${{ github.event.inputs.rem09_d4_audio_parity_repair || 'NONE' }}
         run: python3 .github/scripts/p3_c6_c9_runtime_control.py
+
+      - name: Upload MIG-ASSET prospective one-shot evidence
+        if: steps.smoke_boundary.outputs.ready == 'true' && github.event.inputs.migration_runtime_control == 'P4_PROSPECTIVE_ONE_SHOT'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mig-asset-prospective-one-shot-${{ steps.source.outputs.sha }}
+          path: /tmp/mig-asset-prospective-one-shot.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload MIG-ASSET-ACCEPTANCE-5 state readback evidence
         if: steps.smoke_boundary.outputs.ready == 'true' && github.event.inputs.migration_runtime_control == 'P4_ACCEPTANCE5_READBACK'

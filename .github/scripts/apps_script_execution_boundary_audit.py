@@ -9,12 +9,16 @@ alignment_helper_path = Path('.github/scripts/production_trigger_alignment.py')
 c6_c9_helper_path = Path('.github/scripts/p3_c6_c9_runtime_control.py')
 rem09_d4_helper_path = Path('.github/scripts/rem09_d4_audio_parity_repair.py')
 runtime_path = Path('WebAppCloudflareRuntime.js')
+review_audio_path = Path('ReviewAudioBackfill.js')
+writer_control_path = Path('P4AssetWriterControl.js')
 sync = sync_path.read_text(encoding='utf-8')
 ops = ops_path.read_text(encoding='utf-8')
 alignment_helper = alignment_helper_path.read_text(encoding='utf-8')
 c6_c9_helper = c6_c9_helper_path.read_text(encoding='utf-8')
 rem09_d4_helper = rem09_d4_helper_path.read_text(encoding='utf-8')
 runtime = runtime_path.read_text(encoding='utf-8')
+review_audio = review_audio_path.read_text(encoding='utf-8')
+writer_control = writer_control_path.read_text(encoding='utf-8')
 github_attempt_token = '$' + '{{ github.run_attempt }}'
 command = 'run-' + 'function'
 
@@ -106,7 +110,7 @@ missing_alignment_helper = [
 ]
 
 required_c6_c9_helper = [
-    'ALLOWED = {"PRE_C6_READBACK", "C6_ACTIVATE", "C9_READBACK", "P4_ACCEPTANCE5_READBACK", "O1_RESUME"}',
+    'ALLOWED = {"PRE_C6_READBACK", "C6_ACTIVATE", "C9_READBACK", "P4_ACCEPTANCE5_READBACK", "P4_PROSPECTIVE_ONE_SHOT", "O1_RESUME"}',
     'EVENT_NAME',
     'INTENDED_SMOKE_SHA',
     'SOURCE_ATTESTED',
@@ -118,6 +122,11 @@ required_c6_c9_helper = [
     'SOURCE_DIGEST',
     'h3P4AssetWriterStatus',
     'H3_MIG_ASSET_ACCEPTANCE_5_STATE_READBACK_V1',
+    'P4_PROSPECTIVE_ONE_SHOT',
+    'h3P4AcceptanceProspectiveReviewAudioOneShot',
+    'h3P4AssetWriterRequiesceFromR2Primary',
+    'ensure_requiesced',
+    'H3_MIG_ASSET_PROSPECTIVE_ONE_SHOT_EVIDENCE_V1',
     'h3MonitoringProductionTriggerEnsure',
     'O1_BACKGROUND_TRIGGER_STATUS=READY',
     '"mutation_count": 0',
@@ -170,6 +179,54 @@ for token in [
         raise SystemExit('P3 pre-C6/C6/C9 safe runtime wrapper missing: ' + token)
 if 'H3_RUNTIME_BEARER_TOKEN:' in runtime:
     raise SystemExit('P3 C9 runtime wrapper must not return bearer property')
+
+required_one_shot_review = [
+    'function h3P4AcceptanceProspectiveReviewAudioOneShot()',
+    "'H3-20260921-R001'",
+    "'PASSAGE_COMPLETE'",
+    "'1T2NtwcwPpp0kIymvow-EZbPEkWc-5nzH'",
+    "'ce0a44fa94997affd15017c62ac9353702d115e9481037cff79e8ca9f3f83826'",
+    'h3ReviewAudioAssertR2AssetRow_(',
+    'h3RuntimePrivateMediaRequest_(',
+    'h3RuntimeR2Sha256Bytes_(',
+    'h3P4AssetWriterSwitchToR2Primary()',
+    'h3RuntimeAssetWriteR2_(request)',
+    'first.written_at!==writtenAt',
+    'h3P4AssetWriterRequiesceFromR2Primary()',
+    'idempotent_receipt_match:true',
+    'receipt_created:true',
+    'r2_object_mutation:false',
+]
+missing_one_shot_review = [
+    token for token in required_one_shot_review
+    if token not in review_audio
+]
+if missing_one_shot_review:
+    raise SystemExit(
+        'P4 prospective one-shot Review-audio wrapper missing: '
+        + ', '.join(missing_one_shot_review)
+    )
+if review_audio.count('h3RuntimeAssetWriteR2_(request)') < 2:
+    raise SystemExit(
+        'P4 prospective one-shot must execute the exact receipt path twice.'
+    )
+
+required_requiesce = [
+    'function h3P4AssetWriterRequiesceFromR2Primary()',
+    "'REQUIESCE_R2_PRIMARY'",
+    'before!==H3_P4_ASSET_WRITER_R2_PRIMARY_',
+    'H3_P4_ASSET_WRITER_QUIESCED_',
+    'P4_ASSET_WRITER_REQUIESCE_READBACK_MISMATCH',
+]
+missing_requiesce = [
+    token for token in required_requiesce
+    if token not in writer_control
+]
+if missing_requiesce:
+    raise SystemExit(
+        'P4 direct re-quiesce control missing: '
+        + ', '.join(missing_requiesce)
+    )
 if missing_alignment_helper:
     raise SystemExit(
         'Production trigger alignment helper contract missing: '
@@ -359,7 +416,7 @@ c6_c9_step = sync.find('P3 pre-C6/C6/C9/O1 bounded runtime control')
 manual_boundary_pos = sync.find('Validate one-revision read-only smoke boundary')
 if not (0 <= manual_boundary_pos < c6_c9_step):
     raise SystemExit('P3 pre-C6/C6/C9 control must follow the exact manual smoke boundary.')
-c6_c9_block = sync[c6_c9_step:c6_c9_step + 1500]
+c6_c9_block = sync[c6_c9_step:c6_c9_step + 2200]
 for token in [
     "if: steps.smoke_boundary.outputs.ready == 'true'",
     'MIGRATION_RUNTIME_CONTROL:',
@@ -370,6 +427,10 @@ for token in [
     'RUN_ATTEMPT:',
     'EVENT_NAME:',
     'P4_ACCEPTANCE5_READBACK',
+    'P4_PROSPECTIVE_ONE_SHOT',
+    'MIG_ASSET_ACCEPTANCE_2:',
+    'REM09_VALIDATION:',
+    'REM09_REPAIR:',
     'p3_c6_c9_runtime_control.py',
 ]:
     if token not in c6_c9_block:

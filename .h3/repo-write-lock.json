@@ -1,11 +1,5 @@
 {
   "schema": "H3_REPO_WRITE_LOCK_V1",
   "repository": "bsi-fujimoto-akinari/hangul_legacy",
-  "lock": {
-    "lock_id": "MIG-ASSET-ACCEPTANCE-5-PREP-RDC-LEGACY-20261004",
-    "holder": "NORMAL_CHAT_RDC",
-    "base_sha": "44bdbef903ae725722edbce8639e0a9891638ad3",
-    "acquired_at": "2026-10-03T16:12:58Z",
-    "expires_at": "2026-10-03T16:24:58Z"
-  }
+  "lock": null
 }

@@ -949,6 +949,194 @@ function h3ReviewAudioAssertR2AssetRow_(row,plan){
   return true;
 }
 
+function h3P4AcceptanceProspectiveReviewAudioOneShot(){
+  var target={
+    surface_family:'2R',
+    set_id:'H3-20260921-R001',
+    slot_key:'PASSAGE_COMPLETE',
+    source_file_id:'1T2NtwcwPpp0kIymvow-EZbPEkWc-5nzH',
+    source_byte_sha256:
+      'ce0a44fa94997affd15017c62ac9353702d115e9481037cff79e8ca9f3f83826',
+    audio_text_sha256:
+      'f54462b6f484e7df06caf7de591c275aedaa2945a14ef07faf6a1963e2d7e2ea',
+    size_bytes:652800,
+    mime_type:'audio/mpeg',
+    drive_folder_id:'18V3zOrKRhIgTCL_McrXjWDu6OIZupNn5'
+  };
+  var before=h3P4AssetWriterStatus();
+  if(
+    before.mode!==H3_P4_ASSET_WRITER_QUIESCED_ ||
+    !before.quiesce_watermark ||
+    before.fallback_trigger_count!==0 ||
+    before.mutation_count!==0
+  )throw new Error(
+    'P4_ACCEPTANCE_ONE_SHOT_WRITER_PREFLIGHT_INVALID'
+  );
+
+  var ss=h3ReviewAudioRuntimeSpreadsheet_();
+  var plans=h3ReviewAudioPlanForSet_(
+    ss,target.surface_family,target.set_id
+  ).filter(function(item){
+    return item.slot_key===target.slot_key;
+  });
+  if(plans.length!==1){
+    throw new Error('P4_ACCEPTANCE_ONE_SHOT_PLAN_INVALID');
+  }
+  var plan=plans[0];
+  if(
+    plan.audio_text_sha256!==target.audio_text_sha256 ||
+    plan.drive_folder_id!==target.drive_folder_id
+  )throw new Error(
+    'P4_ACCEPTANCE_ONE_SHOT_PLAN_IDENTITY_MISMATCH'
+  );
+
+  var sheet=h3ReviewAudioAssetSheet_(ss);
+  var row=h3ReviewAudioFindAssetRow_(sheet,plan);
+  h3ReviewAudioAssertR2AssetRow_(row,plan);
+
+  var identity={
+    surface_family:target.surface_family,
+    set_id:target.set_id,
+    slot_key:target.slot_key
+  };
+  var r2=h3RuntimePrivateMediaRequest_(
+    'REVIEW_AUDIO',identity,'',target.size_bytes
+  );
+  if(
+    r2.mime_type!==target.mime_type ||
+    r2.size_bytes!==target.size_bytes ||
+    h3RuntimeR2Sha256Bytes_(r2.bytes)!==
+      target.source_byte_sha256
+  )throw new Error(
+    'P4_ACCEPTANCE_ONE_SHOT_R2_PREFLIGHT_MISMATCH'
+  );
+
+  var source=DriveApp.getFileById(target.source_file_id);
+  if(
+    source.isTrashed() ||
+    source.getMimeType()!==target.mime_type ||
+    source.getSize()!==target.size_bytes
+  )throw new Error(
+    'P4_ACCEPTANCE_ONE_SHOT_DRIVE_SOURCE_INVALID'
+  );
+  var parentIds=[];
+  var parents=source.getParents();
+  while(parents.hasNext())parentIds.push(parents.next().getId());
+  if(parentIds.indexOf(target.drive_folder_id)<0){
+    throw new Error(
+      'P4_ACCEPTANCE_ONE_SHOT_DRIVE_PARENT_MISMATCH'
+    );
+  }
+  var driveBytes=source.getBlob().getBytes();
+  if(
+    driveBytes.length!==target.size_bytes ||
+    h3RuntimeR2Sha256Bytes_(driveBytes)!==
+      target.source_byte_sha256
+  )throw new Error(
+    'P4_ACCEPTANCE_ONE_SHOT_DRIVE_HASH_MISMATCH'
+  );
+
+  var writtenAt=new Date().toISOString();
+  var request={
+    asset_class:'REVIEW_AUDIO',
+    logical_binding_identity:identity,
+    bytes:r2.bytes,
+    mime_type:target.mime_type,
+    written_at:writtenAt,
+    pre_cutover_or_previous_drive_binding_snapshot:{
+      schema:'H3_P4_DRIVE_ROLLBACK_TARGET_V1',
+      target_mode:'CREATE_OR_REUSE_EXACT_FILE',
+      drive_folder_id:target.drive_folder_id,
+      drive_file_name:h3ReviewAudioFilename_(plan),
+      binding_store:'GOOGLE_SHEETS',
+      binding_table:H3_REVIEW_AUDIO_ASSET_SHEET_,
+      binding_key_json:JSON.stringify(identity),
+      expected_r2_state:
+        'STATUS=DONE_R2;AUDIO_FILE_ID=;AUDIO_URL=;DRIVE_FOLDER_ID='
+    },
+    drive_rollback_target_class:'REVIEW_AUDIO'
+  };
+
+  var switched=null;
+  var first=null;
+  var second=null;
+  var failure=null;
+  var requiesced=null;
+  try{
+    switched=h3P4AssetWriterSwitchToR2Primary();
+    if(
+      switched.before!==H3_P4_ASSET_WRITER_QUIESCED_ ||
+      switched.after!==H3_P4_ASSET_WRITER_R2_PRIMARY_ ||
+      switched.mutation_count!==1
+    )throw new Error(
+      'P4_ACCEPTANCE_ONE_SHOT_SWITCH_INVALID'
+    );
+    first=h3RuntimeAssetWriteR2_(request);
+    if(
+      first.schema!=='H3_R2_PRIMARY_ASSET_WRITE_RECEIPT_V1' ||
+      first.status!=='COMMITTED' ||
+      first.asset_class!=='REVIEW_AUDIO' ||
+      first.source_byte_sha256!==target.source_byte_sha256 ||
+      first.size_bytes!==target.size_bytes ||
+      first.mime_type!==target.mime_type ||
+      first.written_at!==writtenAt
+    )throw new Error(
+      'P4_ACCEPTANCE_ONE_SHOT_FIRST_RECEIPT_INVALID'
+    );
+    second=h3RuntimeAssetWriteR2_(request);
+    if(
+      JSON.stringify(first)!==JSON.stringify(second)
+    )throw new Error(
+      'P4_ACCEPTANCE_ONE_SHOT_IDEMPOTENCY_MISMATCH'
+    );
+  }catch(error){
+    failure=error;
+  }
+
+  try{
+    requiesced=h3P4AssetWriterRequiesceFromR2Primary();
+  }catch(error){
+    throw new Error(
+      'P4_ACCEPTANCE_ONE_SHOT_REQUIESCE_FAILED:'+
+      String(error&&error.message||error)
+    );
+  }
+
+  var after=h3P4AssetWriterStatus();
+  if(
+    after.mode!==H3_P4_ASSET_WRITER_QUIESCED_ ||
+    after.fallback_trigger_count!==0 ||
+    after.mutation_count!==0 ||
+    !after.quiesce_watermark
+  )throw new Error(
+    'P4_ACCEPTANCE_ONE_SHOT_FINAL_STATE_INVALID'
+  );
+  if(failure)throw failure;
+
+  return{
+    schema:'H3_MIG_ASSET_PROSPECTIVE_ONE_SHOT_V1',
+    status:'PASS',
+    target:{
+      asset_class:'REVIEW_AUDIO',
+      surface_family:target.surface_family,
+      set_id:target.set_id,
+      slot_key:target.slot_key,
+      source_byte_sha256:target.source_byte_sha256,
+      size_bytes:target.size_bytes,
+      mime_type:target.mime_type
+    },
+    writer_before:before,
+    writer_switch:switched,
+    first_receipt:first,
+    second_receipt:second,
+    idempotent_receipt_match:true,
+    receipt_created:true,
+    r2_object_mutation:false,
+    writer_requiesce:requiesced,
+    writer_after:after
+  };
+}
+
 function h3ReviewAudioGeneratePlannedR2Asset_(
   ss,plan,repairMode
 ){

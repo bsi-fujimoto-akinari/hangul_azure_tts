@@ -124,6 +124,8 @@ required_c6_c9_helper = [
     'H3_MIG_ASSET_ACCEPTANCE_5_STATE_READBACK_V1',
     'P4_PROSPECTIVE_ONE_SHOT',
     'h3P4AcceptanceProspectiveReviewAudioOneShot',
+    'h3P4AssetWriterRequiesceFromR2Primary',
+    'ensure_requiesced',
     'H3_MIG_ASSET_PROSPECTIVE_ONE_SHOT_EVIDENCE_V1',
     'h3MonitoringProductionTriggerEnsure',
     'O1_BACKGROUND_TRIGGER_STATUS=READY',

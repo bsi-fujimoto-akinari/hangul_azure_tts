@@ -11,7 +11,7 @@ on:
         required: false
         type: string
       migration_runtime_control:
-        description: "P3 migration runtime control: bounded C1/C6/C9/O1 controls only"
+        description: "P3/P4 migration runtime control: bounded C1/C6/C9/O1/P4 acceptance controls only"
         required: false
         default: "NONE"
         type: choice
@@ -22,6 +22,7 @@ on:
           - "PRE_C6_READBACK"
           - "C6_ACTIVATE"
           - "C9_READBACK"
+          - "P4_ACCEPTANCE5_READBACK"
           - "O1_RESUME"
       mig_asset_acceptance_2:
         description: "MIG-ASSET-ACCEPTANCE-2 bounded private-media read-only validation"
@@ -31,14 +32,6 @@ on:
         options:
           - "NONE"
           - "AUTHORIZE_MIG_ASSET_ACCEPTANCE_2_READONLY"
-      mig_asset_acceptance_5_readback:
-        description: "MIG-ASSET-ACCEPTANCE-5 exact read-only runtime-authority and asset-writer-state readback"
-        required: false
-        default: "NONE"
-        type: choice
-        options:
-          - "NONE"
-          - "AUTHORIZE_MIG_ASSET_ACCEPTANCE_5_READONLY_STATE"
       rem09_review_open_validation:
         description: "REM-09 exact-main 28 Review open validation"
         required: false
@@ -886,51 +879,6 @@ jobs:
       #   if: steps.smoke_boundary.outputs.ready == 'true'
       # Repository audit rejects run-function usage that does not use this boundary.
 
-      - name: Validate MIG-ASSET-ACCEPTANCE-5 read-only state isolation
-        if: steps.smoke_boundary.outputs.ready == 'true' && github.event.inputs.mig_asset_acceptance_5_readback == 'AUTHORIZE_MIG_ASSET_ACCEPTANCE_5_READONLY_STATE'
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event.inputs.migration_runtime_control || 'NONE' }}" != "NONE" ] || \
-             [ "${{ github.event.inputs.mig_asset_acceptance_2 || 'NONE' }}" != "NONE" ] || \
-             [ "${{ github.event.inputs.rem09_review_open_validation || 'NO' }}" != "NO" ] || \
-             [ "${{ github.event.inputs.rem09_d4_audio_parity_repair || 'NONE' }}" != "NONE" ]; then
-            echo "::error::MIG-ASSET-ACCEPTANCE-5 readback must run in isolation."
-            exit 1
-          fi
-
-      - name: Read MIG-ASSET-ACCEPTANCE-5 runtime authority
-        if: steps.smoke_boundary.outputs.ready == 'true' && github.event.inputs.mig_asset_acceptance_5_readback == 'AUTHORIZE_MIG_ASSET_ACCEPTANCE_5_READONLY_STATE'
-        shell: bash
-        run: npx -y @google/clasp@3.4.0 --json run-function h3RuntimeC9Readback > /tmp/mig-asset-acceptance-5-authority.json
-
-      - name: Read MIG-ASSET-ACCEPTANCE-5 asset-writer state
-        if: steps.smoke_boundary.outputs.ready == 'true' && github.event.inputs.mig_asset_acceptance_5_readback == 'AUTHORIZE_MIG_ASSET_ACCEPTANCE_5_READONLY_STATE'
-        shell: bash
-        run: npx -y @google/clasp@3.4.0 --json run-function h3P4AssetWriterStatus > /tmp/mig-asset-acceptance-5-writer.json
-
-      - name: Validate MIG-ASSET-ACCEPTANCE-5 state readback
-        if: steps.smoke_boundary.outputs.ready == 'true' && github.event.inputs.mig_asset_acceptance_5_readback == 'AUTHORIZE_MIG_ASSET_ACCEPTANCE_5_READONLY_STATE'
-        shell: bash
-        env:
-          SOURCE_SHA: ${{ steps.source.outputs.sha }}
-          SOURCE_DIGEST: ${{ steps.source_attestation.outputs.source_digest }}
-        run: >-
-          python3 .github/scripts/mig_asset_acceptance_5_state_readback_validate.py
-          /tmp/mig-asset-acceptance-5-authority.json
-          /tmp/mig-asset-acceptance-5-writer.json
-          "$SOURCE_SHA" "$SOURCE_DIGEST"
-          /tmp/mig-asset-acceptance-5-state-readback.json
-
-      - name: Upload MIG-ASSET-ACCEPTANCE-5 state readback evidence
-        if: steps.smoke_boundary.outputs.ready == 'true' && github.event.inputs.mig_asset_acceptance_5_readback == 'AUTHORIZE_MIG_ASSET_ACCEPTANCE_5_READONLY_STATE'
-        uses: actions/upload-artifact@v4
-        with:
-          name: mig-asset-acceptance-5-state-readback-${{ steps.source.outputs.sha }}
-          path: /tmp/mig-asset-acceptance-5-state-readback.json
-          if-no-files-found: error
-          retention-days: 7
-
       - name: Validate MIG-ASSET-ACCEPTANCE-2 bounded request fixture
         if: steps.smoke_boundary.outputs.ready == 'true' && github.event.inputs.mig_asset_acceptance_2 == 'AUTHORIZE_MIG_ASSET_ACCEPTANCE_2_READONLY'
         shell: bash
@@ -984,16 +932,26 @@ jobs:
         run: python3 .github/scripts/p3_c1_runtime_control.py
 
       - name: P3 pre-C6/C6/C9/O1 bounded runtime control
-        if: steps.smoke_boundary.outputs.ready == 'true' && (github.event.inputs.migration_runtime_control == 'PRE_C6_READBACK' || github.event.inputs.migration_runtime_control == 'C6_ACTIVATE' || github.event.inputs.migration_runtime_control == 'C9_READBACK' || github.event.inputs.migration_runtime_control == 'O1_RESUME')
+        if: steps.smoke_boundary.outputs.ready == 'true' && (github.event.inputs.migration_runtime_control == 'PRE_C6_READBACK' || github.event.inputs.migration_runtime_control == 'C6_ACTIVATE' || github.event.inputs.migration_runtime_control == 'C9_READBACK' || github.event.inputs.migration_runtime_control == 'P4_ACCEPTANCE5_READBACK' || github.event.inputs.migration_runtime_control == 'O1_RESUME')
         shell: bash
         env:
           MIGRATION_RUNTIME_CONTROL: ${{ github.event.inputs.migration_runtime_control }}
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          SOURCE_DIGEST: ${{ steps.source_attestation.outputs.source_digest || '' }}
           SOURCE_ATTESTED: ${{ steps.source_attestation.outputs.attested || '' }}
           INTENDED_SMOKE_SHA: ${{ github.event.inputs.intended_smoke_sha || '' }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
           EVENT_NAME: ${{ github.event_name }}
         run: python3 .github/scripts/p3_c6_c9_runtime_control.py
+
+      - name: Upload MIG-ASSET-ACCEPTANCE-5 state readback evidence
+        if: steps.smoke_boundary.outputs.ready == 'true' && github.event.inputs.migration_runtime_control == 'P4_ACCEPTANCE5_READBACK'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mig-asset-acceptance-5-state-readback-${{ steps.source.outputs.sha }}
+          path: /tmp/mig-asset-acceptance-5-state-readback.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Read deployment inventory
         if: steps.impact.outputs.changed == 'true' && steps.auth.outputs.ready == 'true'

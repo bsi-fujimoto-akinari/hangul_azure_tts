@@ -206,6 +206,64 @@ function body(text,name,next){
 }
 assert.match(body(code,'processPendingAudioForSet','processLatestPendingAudioJob'),/h3P4AssetWriterRequireDrivePrimary_\(\)/);
 assert.match(body(code,'processLatestPendingAudioJob','idle_'),/h3P4AssetWriterRequireDrivePrimary_\(\)/);
+const diagnosticCode=body(
+  review,
+  'h3P4AcceptanceOneShotDiagnosticCode_',
+  'h3P4AcceptanceOneShotDiagnosticStage_'
+);
+const diagnosticStage=body(
+  review,
+  'h3P4AcceptanceOneShotDiagnosticStage_',
+  'h3P4AcceptanceProspectiveReviewAudioOneShotDiagnostic'
+);
+const diagnosticWrapper=body(
+  review,
+  'h3P4AcceptanceProspectiveReviewAudioOneShotDiagnostic',
+  'h3P4AcceptanceProspectiveReviewAudioOneShot'
+);
+const diagnosticContext=vm.createContext({
+  String,Array,Error,RegExp
+});
+vm.runInContext(diagnosticCode+diagnosticStage,diagnosticContext);
+assert.equal(
+  diagnosticContext.h3P4AcceptanceOneShotDiagnosticCode_(
+    new Error('R2_PRIMARY_WRITER_ENV_INVALID')
+  ),
+  'R2_PRIMARY_WRITER_ENV_INVALID'
+);
+assert.equal(
+  diagnosticContext.h3P4AcceptanceOneShotDiagnosticCode_(
+    new Error('Exception: secret material')
+  ),
+  'P4_ACCEPTANCE_ONE_SHOT_UNCLASSIFIED'
+);
+assert.equal(
+  diagnosticContext.h3P4AcceptanceOneShotDiagnosticStage_(
+    'R2_PRIMARY_LOGICAL_BINDING_CONFLICT'
+  ),
+  'R2_RECEIPT_WRITE'
+);
+assert.equal(
+  diagnosticContext.h3P4AcceptanceOneShotDiagnosticStage_(
+    'P4_ACCEPTANCE_ONE_SHOT_DRIVE_HASH_MISMATCH'
+  ),
+  'DRIVE_PREFLIGHT'
+);
+assert.match(
+  diagnosticWrapper,
+  /H3_MIG_ASSET_PROSPECTIVE_ONE_SHOT_DIAGNOSTIC_V1/
+);
+assert.match(
+  diagnosticWrapper,
+  /h3P4AssetWriterRequiesceFromR2Primary\(\)/
+);
+assert.match(
+  diagnosticWrapper,
+  /after\.fallback_trigger_count!==1/
+);
+assert.doesNotMatch(diagnosticWrapper,/error\.message/);
+assert.doesNotMatch(diagnosticWrapper,/diagnostic_message/);
+
 const oneShot=body(
   review,
   'h3P4AcceptanceProspectiveReviewAudioOneShot',

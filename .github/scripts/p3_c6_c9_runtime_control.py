@@ -4,6 +4,7 @@
 from __future__ import annotations
 import json
 import os
+import re
 import subprocess
 
 ALLOWED = {"PRE_C6_READBACK", "C6_ACTIVATE", "C9_READBACK", "P4_ACCEPTANCE5_READBACK", "P4_PROSPECTIVE_ONE_SHOT", "O1_RESUME"}
@@ -109,13 +110,63 @@ def main() -> None:
             return control, status
 
         try:
-            result = call("h3P4AcceptanceProspectiveReviewAudioOneShot")
+            result = call("h3P4AcceptanceProspectiveReviewAudioOneShotDiagnostic")
         except SystemExit:
             ensure_requiesced()
             raise
         cleanup_control, cleanup_status = ensure_requiesced()
         if not isinstance(result, dict):
             fail("P4 prospective one-shot result is not an object")
+        if (result.get("schema") ==
+                "H3_MIG_ASSET_PROSPECTIVE_ONE_SHOT_DIAGNOSTIC_V1" and
+                result.get("status") == "FAIL"):
+            diagnostic_stage = str(result.get("diagnostic_stage") or "")
+            diagnostic_code = str(result.get("diagnostic_code") or "")
+            allowed_stages = {
+                "WRITER_PREFLIGHT",
+                "PLAN_OR_BINDING_PREFLIGHT",
+                "R2_PREFLIGHT",
+                "DRIVE_PREFLIGHT",
+                "WRITER_SWITCH",
+                "FIRST_RECEIPT_VALIDATION",
+                "SECOND_RECEIPT_VALIDATION",
+                "R2_RECEIPT_WRITE",
+                "REQUIESCE",
+                "FINAL_STATE",
+                "RUNTIME_RPC_OR_MEDIA",
+                "UNCLASSIFIED",
+            }
+            allowed_prefixes = (
+                "P4_ACCEPTANCE_ONE_SHOT_",
+                "P4_ASSET_WRITER_",
+                "R2_PRIMARY_",
+                "H3_RUNTIME_",
+                "MEDIA_",
+                "REVIEW_AUDIO_",
+            )
+            if diagnostic_stage not in allowed_stages:
+                fail("P4 prospective diagnostic stage invalid")
+            if (re.fullmatch(r"[A-Z0-9_]{1,96}", diagnostic_code) is None or
+                    not diagnostic_code.startswith(allowed_prefixes)):
+                fail("P4 prospective diagnostic code invalid")
+            writer_after = result.get("writer_after")
+            if (not isinstance(writer_after, dict) or
+                    writer_after.get("mode") != "QUIESCED" or
+                    writer_after.get("fallback_trigger_count") !=
+                        expected_fallback_trigger_count or
+                    writer_after.get("mutation_count") != 0):
+                fail("P4 prospective diagnostic writer readback invalid")
+            print("P4_PROSPECTIVE_ONE_SHOT=FAIL")
+            print(
+                "P4_PROSPECTIVE_ONE_SHOT_DIAGNOSTIC_STAGE=" +
+                diagnostic_stage
+            )
+            print(
+                "P4_PROSPECTIVE_ONE_SHOT_DIAGNOSTIC_CODE=" +
+                diagnostic_code
+            )
+            print("P4_PROSPECTIVE_ONE_SHOT_FINAL_WRITER_MODE=QUIESCED")
+            fail("P4 prospective one-shot sanitized diagnostic failure")
         if result.get("schema") != "H3_MIG_ASSET_PROSPECTIVE_ONE_SHOT_V1":
             fail("P4 prospective one-shot schema mismatch")
         if result.get("status") != "PASS":

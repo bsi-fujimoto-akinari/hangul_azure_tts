@@ -1081,3 +1081,14 @@ finish with writer mode `QUIESCED` and the same frozen fallback trigger count `1
 pass through `DRIVE_PRIMARY`. This control does not authorize general writer
 resume, a second asset, P4 closure, P5 entry, rollback execution, or stage
 advance. Preparation or merge of this control does not authorize dispatch.
+
+For diagnostic failures, the public wrapper
+`h3P4AcceptanceProspectiveReviewAudioOneShotDiagnostic()` may return only
+`H3_MIG_ASSET_PROSPECTIVE_ONE_SHOT_DIAGNOSTIC_V1` with a bounded
+`diagnostic_stage` and allowlisted uppercase `diagnostic_code`. Raw
+exception text, backend responses, tokens, URLs, and arbitrary messages must
+not be returned or printed. Unknown errors collapse to
+`P4_ACCEPTANCE_ONE_SHOT_UNCLASSIFIED`. The diagnostic wrapper must directly
+re-quiesce and read back `QUIESCED`, fallback trigger count `1`, and
+mutation count `0` before returning a failure result. Diagnostic reporting
+does not authorize redispatch or any additional production mutation.

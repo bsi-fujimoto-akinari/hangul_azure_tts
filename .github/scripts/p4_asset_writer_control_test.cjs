@@ -218,6 +218,19 @@ assert.match(
   oneShot,
   /ce0a44fa94997affd15017c62ac9353702d115e9481037cff79e8ca9f3f83826/
 );
+assert.match(oneShot,/expectedFallbackTriggerCount=1/);
+assert.match(
+  oneShot,
+  /before\.fallback_trigger_count!==expectedFallbackTriggerCount/
+);
+assert.match(
+  oneShot,
+  /after\.fallback_trigger_count!==expectedFallbackTriggerCount/
+);
+assert.match(
+  oneShot,
+  /after\.fallback_trigger_count!==before\.fallback_trigger_count/
+);
 assert.match(oneShot,/h3ReviewAudioAssertR2AssetRow_\(/);
 assert.match(oneShot,/h3RuntimePrivateMediaRequest_\(/);
 assert.match(oneShot,/DriveApp\.getFileById/);

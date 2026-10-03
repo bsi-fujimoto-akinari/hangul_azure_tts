@@ -133,6 +133,27 @@ assert.equal(r2Again.mutation_count,0);
 assert.equal(r2Again.idempotent,true);
 assert.equal(r2Again.transition_watermark,r2.transition_watermark);
 
+const requiesce=context.h3P4AssetWriterRequiesceFromR2Primary();
+assert.equal(requiesce.before,'R2_PRIMARY');
+assert.equal(requiesce.after,'QUIESCED');
+assert.equal(requiesce.mutation_count,1);
+assert.equal(requiesce.idempotent,false);
+assert.ok(requiesce.quiesce_watermark);
+assert.equal(requiesce.transition_watermark,requiesce.quiesce_watermark);
+status=context.h3P4AssetWriterStatus();
+assert.equal(status.mode,'QUIESCED');
+assert.equal(status.quiesce_watermark,requiesce.quiesce_watermark);
+
+const requiesceAgain=context.h3P4AssetWriterRequiesceFromR2Primary();
+assert.equal(requiesceAgain.after,'QUIESCED');
+assert.equal(requiesceAgain.mutation_count,0);
+assert.equal(requiesceAgain.idempotent,true);
+
+const r2AfterRequiesce=context.h3P4AssetWriterSwitchToR2Primary();
+assert.equal(r2AfterRequiesce.before,'QUIESCED');
+assert.equal(r2AfterRequiesce.after,'R2_PRIMARY');
+assert.equal(r2AfterRequiesce.mutation_count,1);
+
 const resume=context.h3P4AssetWriterResumeDrivePrimary();
 assert.equal(resume.before,'R2_PRIMARY');
 assert.equal(resume.after,'DRIVE_PRIMARY');
@@ -157,8 +178,8 @@ assert.throws(()=>context.h3P4AssetWriterStatus(),/P4_ASSET_WRITER_MODE_INVALID:
 props.delete('H3_P4_ASSET_WRITER_MODE');
 assert.equal(context.h3P4AssetWriterMode_(),'DRIVE_PRIMARY');
 
-assert.equal(waitCount,7);
-assert.equal(releaseCount,7);
+assert.equal(waitCount,10);
+assert.equal(releaseCount,10);
 assert.equal(held,false);
 
 props.set('REVIEW_AUDIO_SHEET_ID','SHEET');
@@ -185,6 +206,33 @@ function body(text,name,next){
 }
 assert.match(body(code,'processPendingAudioForSet','processLatestPendingAudioJob'),/h3P4AssetWriterRequireDrivePrimary_\(\)/);
 assert.match(body(code,'processLatestPendingAudioJob','idle_'),/h3P4AssetWriterRequireDrivePrimary_\(\)/);
+const oneShot=body(
+  review,
+  'h3P4AcceptanceProspectiveReviewAudioOneShot',
+  'h3ReviewAudioGeneratePlannedR2Asset_'
+);
+assert.match(oneShot,/H3-20260921-R001/);
+assert.match(oneShot,/PASSAGE_COMPLETE/);
+assert.match(oneShot,/1T2NtwcwPpp0kIymvow-EZbPEkWc-5nzH/);
+assert.match(
+  oneShot,
+  /ce0a44fa94997affd15017c62ac9353702d115e9481037cff79e8ca9f3f83826/
+);
+assert.match(oneShot,/h3ReviewAudioAssertR2AssetRow_\(/);
+assert.match(oneShot,/h3RuntimePrivateMediaRequest_\(/);
+assert.match(oneShot,/DriveApp\.getFileById/);
+assert.equal(
+  (oneShot.match(/h3RuntimeAssetWriteR2_\(request\)/g)||[]).length,
+  2
+);
+assert.match(oneShot,/first\.written_at!==writtenAt/);
+assert.match(oneShot,/h3P4AssetWriterSwitchToR2Primary\(\)/);
+assert.match(oneShot,/h3P4AssetWriterRequiesceFromR2Primary\(\)/);
+assert.match(oneShot,/idempotent_receipt_match:true/);
+assert.match(oneShot,/receipt_created:true/);
+assert.match(oneShot,/r2_object_mutation:false/);
+assert.doesNotMatch(oneShot,/h3ReviewAudioWriteR2AssetRow_\(/);
+
 const reviewR2=body(
   review,
   'h3ReviewAudioGeneratePlannedR2Asset_',

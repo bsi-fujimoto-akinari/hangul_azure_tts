@@ -915,73 +915,12 @@ jobs:
         env:
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
           SOURCE_DIGEST: ${{ steps.source_attestation.outputs.source_digest }}
-        run: |
-          set -euo pipefail
-          python3 - /tmp/mig-asset-acceptance-5-authority.json /tmp/mig-asset-acceptance-5-writer.json "$SOURCE_SHA" "$SOURCE_DIGEST" /tmp/mig-asset-acceptance-5-state-readback.json <<'PY'
-          import json
-          import re
-          import sys
-
-          authority_path, writer_path, source_sha, source_digest, evidence_path = sys.argv[1:6]
-          if re.fullmatch(r'[0-9a-f]{40}', source_sha) is None:
-              raise SystemExit('Invalid source SHA.')
-          if re.fullmatch(r'[0-9a-f]{64}', source_digest) is None:
-              raise SystemExit('Invalid source digest.')
-
-          authority_env = json.load(open(authority_path, encoding='utf-8'))
-          writer_env = json.load(open(writer_path, encoding='utf-8'))
-          if authority_env.get('error') is not None:
-              raise SystemExit('Authority readback returned an Apps Script error.')
-          if writer_env.get('error') is not None:
-              raise SystemExit('Writer-state readback returned an Apps Script error.')
-
-          authority = authority_env.get('response')
-          writer = writer_env.get('response')
-          expected_authority = {
-              'status': 'PASS',
-              'authority_mode': 'D1',
-              'cutover_locked': True,
-              'expected_backend_url': True,
-              'bearer_present': True,
-              'health_status': 'PASS',
-              'database_status': 'AVAILABLE',
-              'worker_d1_route_verified': True,
-              'mutation_count': 0,
-          }
-          if not isinstance(authority, dict):
-              raise SystemExit('Authority readback response is not an object.')
-          for key, value in expected_authority.items():
-              if authority.get(key) != value:
-                  raise SystemExit(f'Authority readback mismatch for {key}: {authority.get(key)!r} != {value!r}')
-
-          if not isinstance(writer, dict):
-              raise SystemExit('Writer-state readback response is not an object.')
-          if writer.get('schema') != 'H3_P4_ASSET_WRITER_STATUS_V1':
-              raise SystemExit('Unexpected asset-writer status schema.')
-          if writer.get('mode') != 'QUIESCED':
-              raise SystemExit(f"Asset writer is not QUIESCED: {writer.get('mode')!r}")
-          if writer.get('mutation_count') != 0:
-              raise SystemExit('Asset-writer readback mutation_count is not zero.')
-          if not isinstance(writer.get('fallback_trigger_count'), int) or writer['fallback_trigger_count'] < 0:
-              raise SystemExit('Asset-writer fallback_trigger_count is invalid.')
-          for key in ('quiesce_watermark', 'transition_watermark'):
-              if not isinstance(writer.get(key), str):
-                  raise SystemExit(f'Asset-writer {key} is not a string.')
-
-          evidence = {
-              'schema': 'H3_MIG_ASSET_ACCEPTANCE_5_STATE_READBACK_V1',
-              'status': 'PASS_READ_ONLY',
-              'source_sha': source_sha,
-              'source_digest': source_digest,
-              'authority': authority,
-              'asset_writer': writer,
-              'write_performed': False,
-          }
-          with open(evidence_path, 'w', encoding='utf-8') as fh:
-              json.dump(evidence, fh, separators=(',', ':'), sort_keys=True)
-              fh.write('\n')
-          print('MIG-ASSET-ACCEPTANCE-5 state readback PASS')
-          PY
+        run: >-
+          python3 .github/scripts/mig_asset_acceptance_5_state_readback_validate.py
+          /tmp/mig-asset-acceptance-5-authority.json
+          /tmp/mig-asset-acceptance-5-writer.json
+          "$SOURCE_SHA" "$SOURCE_DIGEST"
+          /tmp/mig-asset-acceptance-5-state-readback.json
 
       - name: Upload MIG-ASSET-ACCEPTANCE-5 state readback evidence
         if: steps.smoke_boundary.outputs.ready == 'true' && github.event.inputs.mig_asset_acceptance_5_readback == 'AUTHORIZE_MIG_ASSET_ACCEPTANCE_5_READONLY_STATE'

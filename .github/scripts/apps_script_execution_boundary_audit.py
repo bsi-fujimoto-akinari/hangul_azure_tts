@@ -123,9 +123,11 @@ required_c6_c9_helper = [
     'h3P4AssetWriterStatus',
     'H3_MIG_ASSET_ACCEPTANCE_5_STATE_READBACK_V1',
     'P4_PROSPECTIVE_ONE_SHOT',
-    'h3P4AcceptanceProspectiveReviewAudioOneShot',
+    'h3P4AcceptanceProspectiveReviewAudioOneShotDiagnostic',
     'h3P4AssetWriterRequiesceFromR2Primary',
     'expected_fallback_trigger_count = 1',
+    'P4_PROSPECTIVE_ONE_SHOT_DIAGNOSTIC_STAGE=',
+    'P4_PROSPECTIVE_ONE_SHOT_DIAGNOSTIC_CODE=',
     'ensure_requiesced',
     'H3_MIG_ASSET_PROSPECTIVE_ONE_SHOT_EVIDENCE_V1',
     'h3MonitoringProductionTriggerEnsure',
@@ -182,6 +184,12 @@ if 'H3_RUNTIME_BEARER_TOKEN:' in runtime:
     raise SystemExit('P3 C9 runtime wrapper must not return bearer property')
 
 required_one_shot_review = [
+    'function h3P4AcceptanceOneShotDiagnosticCode_(error)',
+    'function h3P4AcceptanceOneShotDiagnosticStage_(code)',
+    'function h3P4AcceptanceProspectiveReviewAudioOneShotDiagnostic()',
+    'H3_MIG_ASSET_PROSPECTIVE_ONE_SHOT_DIAGNOSTIC_V1',
+    'P4_ACCEPTANCE_ONE_SHOT_UNCLASSIFIED',
+    'P4_ACCEPTANCE_ONE_SHOT_DIAGNOSTIC_CLEANUP_INVALID',
     'function h3P4AcceptanceProspectiveReviewAudioOneShot()',
     "'H3-20260921-R001'",
     "'PASSAGE_COMPLETE'",
@@ -214,6 +222,15 @@ if missing_one_shot_review:
 if review_audio.count('h3RuntimeAssetWriteR2_(request)') < 2:
     raise SystemExit(
         'P4 prospective one-shot must execute the exact receipt path twice.'
+    )
+
+if 'diagnostic_message' in review_audio:
+    raise SystemExit(
+        'P4 prospective diagnostic must not expose arbitrary error messages.'
+    )
+if "P4_ACCEPTANCE_ONE_SHOT_REQUIESCE_FAILED:'+" in review_audio:
+    raise SystemExit(
+        'P4 prospective diagnostic must not append raw re-quiesce errors.'
     )
 
 required_requiesce = [

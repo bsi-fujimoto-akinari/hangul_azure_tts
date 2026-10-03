@@ -175,6 +175,99 @@ function context(mode,locked){
   assert.match(body,/h3RuntimeRpc_\('ASSET_WRITE_R2'/);
   assert.doesNotMatch(body,/UrlFetchApp\.fetch/);
 }
+{
+  const {x,values}=context('D1','1');
+  const setId='H3-20261002-L01';
+  const k1Id='H3-K1R-20261002-001';
+  const imageHash='a'.repeat(64);
+  const binding={individual:{}};
+  ['K1','K2','K3','K4','K5'].forEach(section=>{
+    binding.individual[section]={
+      payload_hash:'b'.repeat(64),
+      listen_gen_id:'GEN-'+section,
+      storage_authority:'CLOUDFLARE_R2_PRIVATE',
+      audio_file_id:'',
+      audio_url:''
+    };
+  });
+  values.H3_RUNTIME_BACKEND_BASE_URL=x.H3_RUNTIME_EXPECTED_WORKER_URL_;
+  values.H3_RUNTIME_BEARER_TOKEN='media-token';
+  const payloadTable={
+    map:{K1_READY_ID:0,AUDIO_BINDING_JSON:1}
+  };
+  const k1Table={
+    map:{BOUND_LISTENING_SET_ID:0,IMAGE_SHA256:1,K1_READY_ID:2}
+  };
+  x.SpreadsheetApp={
+    openById:()=>({
+      getSheetByName:name=>({name})
+    })
+  };
+  x.h3ProdSheetRows_=sheet=>
+    sheet.name==='listening_set_payload_v1'
+      ? payloadTable
+      : k1Table;
+  x.h3ProdRequireColumns_=()=>{};
+  x.h3ProdOneRowBy_=(_table,key)=>{
+    if(key==='LISTENING_SET_ID'){
+      return{row:[k1Id,JSON.stringify(binding)]};
+    }
+    if(key==='K1_READY_ID'){
+      return{row:[setId,imageHash,k1Id]};
+    }
+    throw new Error('UNEXPECTED_LOOKUP');
+  };
+  x.h3ProdParseJson_=value=>JSON.parse(value);
+  x.h3ReviewHash_=()=> 'c'.repeat(64);
+  x.h3DriveDataUri_=()=>{
+    throw new Error('DRIVE_HOT_PATH_USED');
+  };
+  let observed=null;
+  x.UrlFetchApp={
+    fetch:(url,options)=>{
+      observed={url,options};
+      return{
+        getResponseCode:()=>200,
+        getAllHeaders:()=>({'Content-Type':'image/jpeg'}),
+        getContent:()=>[1,2,3]
+      };
+    }
+  };
+
+  const retained=x.h3RuntimeRetainedListening_(setId);
+  assert.equal(retained.image.sha256,imageHash);
+  assert.equal(retained.image.file_id,'');
+  assert.equal(retained.image.url,'');
+  assert.equal(retained.image.storage_authority,'CLOUDFLARE_R2_PRIVATE');
+  assert.equal(retained.image.data_uri,'data:image/jpeg;base64,AQID');
+  assert.equal(retained.image.size_bytes,3);
+  const mediaUrl=new URL(observed.url);
+  assert.equal(
+    mediaUrl.pathname,
+    '/__internal/h3/media/v1'
+  );
+  assert.equal(
+    mediaUrl.searchParams.get('asset_class'),
+    'LISTENING_K1_IMAGE'
+  );
+  assert.equal(mediaUrl.searchParams.get('k1_ready_id'),k1Id);
+  assert.equal(
+    mediaUrl.searchParams.get('bound_listening_set_id'),
+    setId
+  );
+  assert.equal(observed.options.method,'get');
+  assert.equal(
+    observed.options.headers.Authorization,
+    'Bearer media-token'
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(
+      x.h3RuntimeR2AssetSpec_('LISTENING_K1_IMAGE').identity_fields
+    )),
+    ['k1_ready_id']
+  );
+}
+
 for(const [file,fn] of [
  ['WebAppProduction.js','h3ProdSubmit_'],
  ['WebAppWrittenProduction.js','h3WrittenSubmit_'],

@@ -6,7 +6,7 @@ import json
 import os
 import subprocess
 
-ALLOWED = {"PRE_C6_READBACK", "C6_ACTIVATE", "C9_READBACK", "P4_ACCEPTANCE5_READBACK", "O1_RESUME"}
+ALLOWED = {"PRE_C6_READBACK", "C6_ACTIVATE", "C9_READBACK", "P4_ACCEPTANCE5_READBACK", "P4_PROSPECTIVE_ONE_SHOT", "O1_RESUME"}
 
 
 def fail(message: str) -> None:
@@ -81,6 +81,83 @@ def main() -> None:
     if mode == "C9_READBACK":
         print("C9_RUNTIME_READBACK=PASS")
         print("C9_RUNTIME_MUTATION_COUNT=0")
+        return
+
+    if mode == "P4_PROSPECTIVE_ONE_SHOT":
+        for key, expected_value in (
+            ("MIG_ASSET_ACCEPTANCE_2", "NONE"),
+            ("REM09_VALIDATION", "NO"),
+            ("REM09_REPAIR", "NONE"),
+        ):
+            if os.environ.get(key, expected_value) != expected_value:
+                fail("P4 prospective one-shot requires isolated manual dispatch")
+        source_digest = os.environ.get("SOURCE_DIGEST", "")
+        if (len(source_digest) != 64 or
+                any(c not in "0123456789abcdef" for c in source_digest)):
+            fail("P4 prospective one-shot requires exact attested source digest")
+        result = call("h3P4AcceptanceProspectiveReviewAudioOneShot")
+        if not isinstance(result, dict):
+            fail("P4 prospective one-shot result is not an object")
+        if result.get("schema") != "H3_MIG_ASSET_PROSPECTIVE_ONE_SHOT_V1":
+            fail("P4 prospective one-shot schema mismatch")
+        if result.get("status") != "PASS":
+            fail("P4 prospective one-shot status is not PASS")
+        target = result.get("target")
+        expected_target = {
+            "asset_class": "REVIEW_AUDIO",
+            "surface_family": "2R",
+            "set_id": "H3-20260921-R001",
+            "slot_key": "PASSAGE_COMPLETE",
+            "source_byte_sha256":
+                "ce0a44fa94997affd15017c62ac9353702d115e9481037cff79e8ca9f3f83826",
+            "size_bytes": 652800,
+            "mime_type": "audio/mpeg",
+        }
+        if target != expected_target:
+            fail("P4 prospective one-shot target mismatch")
+        before = result.get("writer_before")
+        after = result.get("writer_after")
+        if not isinstance(before, dict) or before.get("mode") != "QUIESCED":
+            fail("P4 prospective one-shot writer pre-state mismatch")
+        if not isinstance(after, dict) or after.get("mode") != "QUIESCED":
+            fail("P4 prospective one-shot writer final-state mismatch")
+        if before.get("fallback_trigger_count") != 0 or after.get("fallback_trigger_count") != 0:
+            fail("P4 prospective one-shot fallback trigger isolation mismatch")
+        first = result.get("first_receipt")
+        second = result.get("second_receipt")
+        if not isinstance(first, dict) or first != second:
+            fail("P4 prospective one-shot receipt idempotency mismatch")
+        if (first.get("schema") != "H3_R2_PRIMARY_ASSET_WRITE_RECEIPT_V1" or
+                first.get("status") != "COMMITTED" or
+                first.get("source_byte_sha256") != expected_target["source_byte_sha256"] or
+                first.get("size_bytes") != expected_target["size_bytes"] or
+                first.get("mime_type") != expected_target["mime_type"]):
+            fail("P4 prospective one-shot committed receipt mismatch")
+        if result.get("receipt_created") is not True:
+            fail("P4 prospective one-shot did not prove a new receipt")
+        if result.get("idempotent_receipt_match") is not True:
+            fail("P4 prospective one-shot did not prove idempotency")
+        if result.get("r2_object_mutation") is not False:
+            fail("P4 prospective one-shot unexpectedly mutated R2 bytes")
+        evidence = {
+            "schema": "H3_MIG_ASSET_PROSPECTIVE_ONE_SHOT_EVIDENCE_V1",
+            "status": "PASS",
+            "source_sha": source,
+            "source_digest": source_digest,
+            "result": result,
+            "writer_resume_authorized": False,
+            "p4_closure_authorized": False,
+            "stage_advance_authorized": False,
+        }
+        with open(
+            "/tmp/mig-asset-prospective-one-shot.json",
+            "w", encoding="utf-8",
+        ) as fh:
+            json.dump(evidence, fh, separators=(",", ":"), sort_keys=True)
+            fh.write("\n")
+        print("P4_PROSPECTIVE_ONE_SHOT=PASS")
+        print("P4_PROSPECTIVE_ONE_SHOT_RECEIPT_ID=" + str(first.get("receipt_id", "")))
+        print("P4_PROSPECTIVE_ONE_SHOT_FINAL_WRITER_MODE=QUIESCED")
         return
 
     if mode == "P4_ACCEPTANCE5_READBACK":
